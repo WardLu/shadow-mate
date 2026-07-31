@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+email="$(git config --get user.email || true)"
+case "$email" in
+  *@users.noreply.github.com) ;;
+  *)
+    echo "Commit blocked: configure this repository with your GitHub noreply email."
+    exit 1
+    ;;
+esac
+
+npm run security:check

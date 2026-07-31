@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+
+SECURITY_CHECK_HISTORY=1 npm run verify
