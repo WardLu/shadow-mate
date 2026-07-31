@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
@@ -161,7 +161,7 @@ function renderSignedOut() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+        emailRedirectTo: window.location.origin,
       },
     });
     if (error) {
