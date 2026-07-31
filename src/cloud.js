@@ -162,6 +162,7 @@ function renderSignedOut() {
       options: {
         shouldCreateUser: true,
         emailRedirectTo: window.location.origin,
+        data: { product_name: "影伴 Shadow Mate" },
       },
     });
     if (error) {
