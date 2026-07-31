@@ -1,0 +1,184 @@
+.account-button {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 13px;
+  background: #fff;
+  color: var(--green-deep);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.account-button[data-state="online"] {
+  background: var(--green);
+  color: #fff;
+}
+
+.sync-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 80;
+  width: min(360px, calc(100vw - 32px));
+  transform: translate(-50%, 24px);
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: #243024;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: .2s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+}
+
+.sync-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.cloud-dialog {
+  width: min(430px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+  border: 0;
+  border-radius: 24px;
+  padding: 0;
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgba(31, 70, 42, .28);
+}
+
+.cloud-dialog::backdrop {
+  background: rgba(24, 40, 28, .52);
+  backdrop-filter: blur(4px);
+}
+
+.cloud-panel {
+  padding: 22px;
+  overflow: auto;
+}
+
+.cloud-panel h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.cloud-panel p {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.cloud-field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-soft);
+}
+
+.cloud-field input,
+.cloud-field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 13px;
+  background: #fbfefc;
+  color: var(--ink);
+  font: inherit;
+}
+
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.cloud-action {
+  flex: 1 1 130px;
+  border: 0;
+  border-radius: 14px;
+  padding: 11px 13px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cloud-action.secondary {
+  background: var(--green-soft);
+  color: var(--green-deep);
+}
+
+.cloud-action.danger {
+  background: #fff0f0;
+  color: #b64242;
+}
+
+.cloud-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--green-soft);
+  font-size: 12px;
+  color: var(--green-deep);
+}
+
+.learner-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.learner-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 11px 12px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.learner-choice.active {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.learner-choice strong {
+  display: block;
+}
+
+.learner-choice small {
+  color: var(--ink-soft);
+}
+
+@media (min-width: 820px) {
+  .app {
+    max-width: 980px;
+  }
+
+  .nav {
+    width: 92px;
+  }
+
+  .main {
+    padding-inline: 24px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

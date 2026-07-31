@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="面向家庭的儿童学习打卡与成长记录 PWA">
+<title>Lucas学习台</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lucas学习台">
+<meta name="theme-color" content="#2fa84f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+<link rel="stylesheet" href="/src/cloud.css">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232fa84f'/><rect x='16' y='62' width='60' height='18' rx='9' fill='%231f7a39'/><rect x='20' y='38' width='36' height='28' rx='7' fill='%23ffc83d'/><rect x='26' y='43' width='15' height='13' rx='3' fill='%23cfeeff'/><path d='M54 50 L76 30 L86 38 L64 60 Z' fill='%23ffc83d' stroke='%231f7a39' stroke-width='2' stroke-linejoin='round'/><path d='M76 30 q12 3 9 16 l-9 -3 q-1 -9 0 -13 Z' fill='%231f7a39'/></svg>">
+<style>
+  :root{
+    --green:#2fa84f;
+    --green-deep:#1f7a39;
+    --green-soft:#e8f7ec;
+    --green-light:#d4f0db;
+    --yellow:#ffc83d;
+    --yellow-soft:#fff4d6;
+    --ink:#243024;
+    --ink-soft:#5b6b5b;
+    --card:#ffffff;
+    --bg:#f1f7f2;
+    --line:#e2efe5;
+    --shadow:0 6px 18px rgba(31,122,57,.12);
+    --radius:22px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);
+    overscroll-behavior:none;
+  }
+  /* 竖屏手机容器，桌面端居中模拟 iPad 竖屏 */
+  .app{
+    max-width:460px;margin:0 auto;min-height:100vh;
+    display:flex;flex-direction:column;
+    background:linear-gradient(180deg,#eafaf0 0%,#f1f7f2 220px);
+  }
+  /* 顶部品牌条 */
+  .topbar{
+    display:flex;align-items:center;gap:10px;padding:14px 16px 10px;
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg,#eafaf0, rgba(234,250,240,.85));
+    backdrop-filter:blur(6px);
+  }
+  .logo{
+    width:42px;height:42px;border-radius:14px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--green),var(--green-deep));
+    display:flex;align-items:center;justify-content:center;font-size:24px;
+    box-shadow:var(--shadow);
+  }
+  .topbar h1{font-size:18px;margin:0;font-weight:800;letter-spacing:.5px;}
+  .topbar .sub{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+  .datepill{
+    margin-left:auto;font-size:12px;color:var(--green-deep);
+    background:var(--green-soft);padding:6px 10px;border-radius:999px;font-weight:700;
+  }
+
+  .body{flex:1;display:flex;min-height:0;}
+  /* 左侧竖版导航 */
+  .nav{
+    width:74px;flex:0 0 auto;display:flex;flex-direction:column;gap:8px;
+    padding:10px 8px;background:linear-gradient(180deg,#ffffff, #f6fbf7);
+    border-right:1px solid var(--line);
+  }
+  .navbtn{
+    border:none;background:transparent;cursor:pointer;border-radius:16px;
+    padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;
+    color:var(--ink-soft);font-size:11px;font-weight:700;transition:.18s;
+  }
+  .navbtn .ic{font-size:22px;line-height:1;}
+  .navbtn.active{background:var(--green);color:#fff;box-shadow:var(--shadow);}
+  .navbtn:active{transform:scale(.94);}
+
+  /* 右侧主体 */
+  .main{flex:1;min-width:0;overflow-y:auto;padding:12px 14px 24px;}
+  .module-title{display:flex;align-items:center;gap:8px;margin:2px 2px 12px;}
+  .module-title .em{font-size:22px;}
+  .module-title h2{font-size:17px;margin:0;font-weight:800;}
+
+  /* 圆角卡片 */
+  .card{
+    background:var(--card);border-radius:var(--radius);padding:16px;
+    box-shadow:var(--shadow);margin-bottom:14px;border:1px solid var(--line);
+  }
+  .card h3{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:6px;}
+  .card .desc{font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin:6px 0 12px;}
+
+  /* 打卡按钮 */
+  .checkin{
+    width:100%;border:none;cursor:pointer;border-radius:16px;padding:13px;
+    font-size:15px;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,var(--green),var(--green-deep));
+    box-shadow:var(--shadow);transition:.18s;
+  }
+  .checkin:active{transform:scale(.97);}
+  .checkin.done{background:#cfd8cf;color:#fff;box-shadow:none;}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .pill{
+    font-size:12px;background:var(--green-soft);color:var(--green-deep);
+    padding:4px 10px;border-radius:999px;font-weight:700;
+  }
+
+  /* 识字卡片 */
+  .hanzi-card{display:flex;flex-direction:column;align-items:center;padding:14px 8px;}
+  .hanzi-big{font-size:72px;font-weight:800;color:var(--ink);line-height:1;}
+  .hanzi-py{font-size:18px;color:var(--green-deep);font-weight:700;margin:8px 0 4px;}
+  .hanzi-word{font-size:15px;color:var(--ink-soft);}
+  .hanzi-meaning{font-size:13px;color:var(--ink-soft);margin-top:4px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .mini-card{background:var(--green-soft);border-radius:18px;padding:14px;text-align:center;}
+  .mini-card .big{font-size:46px;font-weight:800;color:var(--ink);}
+  .mini-card .py{font-size:14px;color:var(--green-deep);font-weight:700;margin-top:4px;}
+  .mini-card .label{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+
+  /* 古诗词 */
+  .poem-title{font-size:18px;font-weight:800;text-align:center;}
+  .poem-meta{text-align:center;font-size:12px;color:var(--ink-soft);margin:2px 0 14px;}
+  .poem-body{font-size:18px;line-height:2.1;text-align:center;letter-spacing:2px;}
+  .video-link{
+    display:inline-flex;align-items:center;gap:6px;margin-top:12px;
+    color:var(--green-deep);font-size:13px;font-weight:700;text-decoration:none;
+    background:var(--yellow-soft);padding:8px 12px;border-radius:999px;
+  }
+
+  /* 写字 田字格 */
+  .tian{
+    width:60px;height:60px;border:2px solid var(--green);border-radius:8px;position:relative;
+    display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;
+    background:
+      linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+      linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+      linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%) ,
+      linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);
+  }
+  .write-grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+  .stroke-list{display:flex;flex-wrap:wrap;gap:8px;}
+  .stroke-chip{background:var(--green-soft);border-radius:14px;padding:8px 12px;font-size:14px;font-weight:700;color:var(--green-deep);}
+
+  /* 数学口算 */
+  .quiz-box{text-align:center;padding:10px 0;}
+  .quiz-q{font-size:40px;font-weight:800;margin:6px 0 14px;letter-spacing:2px;}
+  .quiz-input{
+    width:120px;font-size:30px;text-align:center;font-weight:800;border:2px solid var(--green);
+    border-radius:14px;padding:8px;color:var(--ink);outline:none;
+  }
+  .lvl-row{display:flex;gap:8px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;}
+  .lvl-btn{border:2px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;}
+  .lvl-btn.active{border-color:var(--green);background:var(--green-soft);color:var(--green-deep);}
+  .feedback{font-size:14px;font-weight:700;margin-top:10px;min-height:20px;}
+  .feedback.ok{color:var(--green-deep);}
+  .feedback.no{color:#d9534f;}
+
+  /* 数感游戏 */
+  .num-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+  .num-cell{
+    aspect-ratio:1;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    font-size:20px;font-weight:800;background:var(--green-soft);color:var(--green-deep);
+    cursor:pointer;border:2px solid transparent;
+  }
+  .num-cell.miss{background:#fff;border-color:var(--yellow);color:var(--ink);}
+  .num-cell.found{background:var(--yellow);color:var(--ink);}
+
+  /* 数独 */
+  .sudoku{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-width:240px;margin:0 auto;}
+  .sudoku div{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    font-size:22px;font-weight:800;border-radius:8px;background:var(--green-soft);color:var(--ink);
+  }
+  .sudoku div.fixed{background:#d7ead6;color:var(--green-deep);}
+  .sudoku input{
+    width:100%;height:100%;border:none;background:transparent;text-align:center;
+    font-size:22px;font-weight:800;color:var(--green-deep);outline:none;
+  }
+
+  /* 英语单词 */
+  .word-card{display:flex;flex-direction:column;align-items:center;text-align:center;padding:14px 6px;}
+  .word-en{font-size:34px;font-weight:800;color:var(--green-deep);}
+  .word-ph{font-size:15px;color:var(--ink-soft);margin:4px 0;}
+  .word-cn{font-size:16px;font-weight:700;}
+  .speak-btn{border:none;background:var(--yellow);color:var(--ink);border-radius:999px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer;margin-top:10px;}
+  .month-review{display:flex;flex-wrap:wrap;gap:6px;}
+  .mr-chip{font-size:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:5px 9px;color:var(--ink-soft);}
+
+  /* 首页统计 */
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .stat{background:linear-gradient(135deg,var(--green),var(--green-deep));color:#fff;border-radius:20px;padding:16px;text-align:center;box-shadow:var(--shadow);}
+  .stat .n{font-size:32px;font-weight:800;line-height:1;}
+  .stat .t{font-size:12px;opacity:.9;margin-top:4px;}
+  .progressbar{height:12px;background:var(--green-light);border-radius:999px;overflow:hidden;margin-top:10px;}
+  .progressbar i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--yellow));border-radius:999px;}
+
+  .banner{
+    background:linear-gradient(135deg,#fff4d6,#ffe7a8);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px;border:1px solid #ffe1a0;
+  }
+  .banner .t{font-size:15px;font-weight:800;color:#9a6b00;display:flex;align-items:center;gap:6px;}
+  .banner .d{font-size:12.5px;color:#8a6a1f;margin-top:6px;line-height:1.6;}
+
+  .footer{text-align:center;font-size:11px;color:var(--ink-soft);padding:8px 0 18px;}
+
+  /* 积分打卡 · 绿色挖掘机主题（卡片化 / 圆角活泼） */
+  .exc-banner{
+    background:linear-gradient(135deg,#eafaf0,#d4f0db);
+    border:2px solid var(--green-light);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;
+    box-shadow:var(--shadow);
+  }
+  .exc-banner .em{font-size:36px;filter:drop-shadow(0 3px 3px rgba(31,122,57,.25));}
+  .exc-banner .t{font-size:15px;font-weight:800;color:var(--green-deep);}
+  .exc-banner .d{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .exc-banner .badge{margin-left:auto;font-size:12px;background:var(--yellow);color:var(--ink);font-weight:800;padding:6px 12px;border-radius:999px;box-shadow:0 2px 6px rgba(255,200,61,.5);}
+
+  .pts-sec{font-size:14px;font-weight:800;color:var(--green-deep);margin:2px 2px 10px;display:flex;align-items:center;gap:6px;}
+  .pts-card{display:flex;align-items:center;gap:12px;background:#fff;border:2px solid var(--green-light);border-radius:20px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);transition:transform .15s,background .15s,border-color .15s;}
+  .pts-card:active{transform:scale(.98);}
+  .pts-card.done{background:var(--green-soft);border-color:var(--green);}
+  .pts-card.sub{border-color:#f3c9c9;}
+  .pts-card.sub.done{background:#fde8e8;border-color:#e08a8a;}
+  .pts-ic{width:48px;height:48px;border-radius:16px;background:var(--green-soft);display:flex;align-items:center;justify-content:center;font-size:26px;flex:0 0 auto;}
+  .pts-card.sub .pts-ic{background:#fde8e8;}
+  .pts-info{flex:1;min-width:0;}
+  .pts-name{font-size:15px;font-weight:800;color:var(--ink);}
+  .pts-desc{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .pts-badge{margin-left:auto;font-size:13px;font-weight:800;color:var(--green-deep);background:var(--green-light);border-radius:999px;padding:4px 11px;white-space:nowrap;}
+  .pts-card.sub .pts-badge{color:#d9534f;background:#fde8e8;}
+  .pts-toggle{width:44px;height:44px;border-radius:50%;border:none;background:var(--green);color:#fff;font-size:22px;cursor:pointer;flex:0 0 auto;box-shadow:var(--shadow);transition:transform .15s,background .15s;}
+  .pts-toggle:active{transform:scale(.88);}
+  .pts-card.done .pts-toggle{background:var(--yellow);color:var(--ink);}
+  .pts-card.sub .pts-toggle{background:#e08a8a;}
+  .pts-card.sub.done .pts-toggle{background:#d9534f;}
+
+  .cal{display:flex;flex-wrap:wrap;gap:8px;}
+  .cal-chip{width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:#f1f7f2;border:2px solid transparent;cursor:pointer;color:var(--ink-soft);transition:transform .15s,background .15s,border-color .15s;}
+  .cal-chip:active{transform:scale(.9);}
+  .cal-chip.active{border-color:var(--yellow);background:var(--yellow-soft);color:var(--ink);transform:scale(1.12);}
+  .cal-chip.pos{background:var(--green-soft);color:var(--green-deep);}
+  .cal-chip.neg{background:#fde8e8;color:#d9534f;}
+
+  /* 小花生APP读物 · 阅读记录 */
+  .peanut-form{background:var(--green-soft);border-radius:16px;padding:12px;margin-top:4px;}
+  .peanut-input{width:100%;border:2px solid #fff;border-radius:12px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;}
+  .peanut-stars{margin:10px 0 2px;font-size:24px;color:var(--yellow);cursor:pointer;letter-spacing:3px;user-select:none;}
+  .pstar{transition:transform .1s;}
+  .pstar:active{transform:scale(1.25);}
+  .peanut-log{margin-top:12px;}
+  .log-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:8px;}
+  .log-main{font-size:14px;font-weight:700;}
+  .log-stars{color:var(--yellow);margin-left:6px;letter-spacing:1px;}
+  .log-meta{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;}
+  .log-del{cursor:pointer;}
+
+  /* 打印区 */
+  @media print{
+    .app{max-width:none;}
+    .nav,.topbar,.checkin,.video-link,.speak-btn,.footer,.no-print{display:none !important;}
+    body{background:#fff;}
+    .card{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
+    .tian{break-inside:avoid;}
+  }
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo"><svg viewBox="0 0 100 100" width="30" height="30" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="62" width="60" height="18" rx="9" fill="#1f7a39"/><rect x="20" y="38" width="36" height="28" rx="7" fill="#ffc83d"/><rect x="26" y="43" width="15" height="13" rx="3" fill="#cfeeff"/><path d="M54 50 L76 30 L86 38 L64 60 Z" fill="#ffc83d" stroke="#1f7a39" stroke-width="2" stroke-linejoin="round"/><path d="M76 30 q12 3 9 16 l-9 -3 q-1 -9 0 -13 Z" fill="#1f7a39"/></svg></div>
+    <div>
+      <h1>Lucas学习台</h1>
+      <div class="sub">绿色挖掘机 · 每日成长打卡</div>
+    </div>
+    <div class="datepill" id="datepill">今天</div>
+    <button class="account-button" id="accountButton" type="button" aria-label="账户与云端同步" title="本机模式">○</button>
+  </div>
+
+  <div class="body">
+    <nav class="nav" id="nav">
+      <button class="navbtn active" data-mod="home"><span class="ic">🏠</span>首页</button>
+      <button class="navbtn" data-mod="chinese"><span class="ic">📖</span>语文</button>
+      <button class="navbtn" data-mod="math"><span class="ic">🔢</span>数学</button>
+      <button class="navbtn" data-mod="english"><span class="ic">🔤</span>英语</button>
+      <button class="navbtn" data-mod="book"><span class="ic">📚</span>绘本</button>
+      <button class="navbtn" data-mod="points"><span class="ic">⭐</span>积分</button>
+      <button class="navbtn" data-mod="grow"><span class="ic">🌱</span>成长</button>
+    </nav>
+
+    <main class="main" id="main"><!-- 动态渲染 --></main>
+  </div>
+</div>
+
+<dialog class="cloud-dialog" id="cloudDialog" aria-label="账户与云端同步">
+  <div class="cloud-panel" id="cloudPanel"></div>
+</dialog>
+<div class="sync-toast" id="syncToast" role="status" aria-live="polite"></div>
+
+<script>
+/* =========================================================
+   lucas 学习任务台 —— 数据层
+   ========================================================= */
+const HANZI = [
+  ["一","yī","一个"],["二","èr","二月"],["三","sān","三天"],["十","shí","十天"],["人","rén","大人"],
+  ["口","kǒu","口水"],["手","shǒu","小手"],["日","rì","日子"],["月","yuè","月儿"],["水","shuǐ","水果"],
+  ["火","huǒ","火山"],["木","mù","木头"],["山","shān","大山"],["石","shí","石头"],["田","tián","田地"],
+  ["土","tǔ","土地"],["上","shàng","上下"],["下","xià","下雨"],["大","dà","大门"],["小","xiǎo","小猫"],
+  ["中","zhōng","中间"],["天","tiān","天空"],["王","wáng","王子"],["马","mǎ","马车"],["牛","niú","水牛"],
+  ["羊","yáng","山羊"],["鸟","niǎo","小鸟"],["虫","chóng","虫子"],["云","yún","白云"],["雨","yǔ","下雨"],
+  ["风","fēng","大风"],["花","huā","花朵"],["草","cǎo","小草"],["树","shù","大树"],["叶","yè","叶子"],
+  ["米","mǐ","大米"],["牙","yá","牙齿"],["目","mù","目光"],["耳","ěr","耳朵"],["足","zú","足球"],
+  ["心","xīn","开心"],["头","tóu","头发"],["力","lì","力气"],["刀","dāo","小刀"],["尺","chǐ","尺子"],
+  ["书","shū","书本"],["笔","bǐ","铅笔"],["学","xué","学习"],["生","shēng","学生"],["门","mén","大门"],
+  ["车","chē","火车"],["飞","fēi","飞机"],["鱼","yú","小鱼"],["瓜","guā","西瓜"],["果","guǒ","水果"],
+  ["豆","dòu","红豆"],["红","hóng","红色"],["白","bái","白云"],["黑","hēi","黑夜"],["黄","huáng","黄色"],
+  ["开","kāi","开门"],["关","guān","关门"],["来","lái","来去"],["去","qù","回去"],["多","duō","多少"],
+  ["少","shǎo","多少"],["前","qián","前面"],["后","hòu","后面"],["左","zuǒ","左边"],["右","yòu","右边"],
+  ["里","lǐ","里面"],["外","wài","外面"],["东","dōng","东西"],["西","xī","东西"],["南","nán","南方"],
+  ["北","běi","北方"],["春","chūn","春天"],["夏","xià","夏天"],["秋","qiū","秋天"],["冬","dōng","冬天"],
+  ["早","zǎo","早上"],["晚","wǎn","晚上"],["明","míng","明天"],["年","nián","新年"],["时","shí","时间"],
+  ["走","zǒu","走路"],["跑","pǎo","跑步"],["跳","tiào","跳高"],["笑","xiào","笑话"],["哭","kū","哭声"],
+  ["好","hǎo","好人"],["坏","huài","坏事"],["高","gāo","高山"],["低","dī","低头"],["长","cháng","长河"],
+  ["短","duǎn","短发"],["方","fāng","方块"],["圆","yuán","圆圈"]
+];
+
+const POEMS = [
+  {g:"一年级上",t:"咏鹅",a:"骆宾王",c:["鹅，鹅，鹅，","曲项向天歌。","白毛浮绿水，","红掌拨清波。"]},
+  {g:"一年级上",t:"静夜思",a:"李白",c:["床前明月光，","疑是地上霜。","举头望明月，","低头思故乡。"]},
+  {g:"一年级上",t:"悯农（其二）",a:"李绅",c:["锄禾日当午，","汗滴禾下土。","谁知盘中餐，","粒粒皆辛苦。"]},
+  {g:"一年级上",t:"画",a:"王维",c:["远看山有色，","近听水无声。","春去花还在，","人来鸟不惊。"]},
+  {g:"一年级上",t:"风",a:"李峤",c:["解落三秋叶，","能开二月花。","过江千尺浪，","入竹万竿斜。"]},
+  {g:"一年级上",t:"古朗月行（节选）",a:"李白",c:["小时不识月，","呼作白玉盘。","又疑瑶台镜，","飞在青云端。"]},
+  {g:"一年级下",t:"春晓",a:"孟浩然",c:["春眠不觉晓，","处处闻啼鸟。","夜来风雨声，","花落知多少。"]},
+  {g:"一年级下",t:"村居",a:"高鼎",c:["草长莺飞二月天，","拂堤杨柳醉春烟。","儿童散学归来早，","忙趁东风放纸鸢。"]},
+  {g:"一年级下",t:"所见",a:"袁枚",c:["牧童骑黄牛，","歌声振林樾。","意欲捕鸣蝉，","忽然闭口立。"]},
+  {g:"一年级下",t:"小池",a:"杨万里",c:["泉眼无声惜细流，","树阴照水爱晴柔。","小荷才露尖尖角，","早有蜻蜓立上头。"]},
+  {g:"二年级上",t:"登鹳雀楼",a:"王之涣",c:["白日依山尽，","黄河入海流。","欲穷千里目，","更上一层楼。"]},
+  {g:"二年级上",t:"望庐山瀑布",a:"李白",c:["日照香炉生紫烟，","遥看瀑布挂前川。","飞流直下三千尺，","疑是银河落九天。"]},
+  {g:"二年级上",t:"夜宿山寺",a:"李白",c:["危楼高百尺，","手可摘星辰。","不敢高声语，","恐惊天上人。"]},
+  {g:"二年级上",t:"敕勒歌",a:"北朝民歌",c:["敕勒川，阴山下，","天似穹庐，笼盖四野。","天苍苍，野茫茫，","风吹草低见牛羊。"]},
+  {g:"二年级下",t:"赋得古原草送别（节选）",a:"白居易",c:["离离原上草，","一岁一枯荣。","野火烧不尽，","春风吹又生。"]},
+  {g:"三年级上",t:"山行",a:"杜牧",c:["远上寒山石径斜，","白云生处有人家。","停车坐爱枫林晚，","霜叶红于二月花。"]}
+];
+
+const STROKES = ["点","横","竖","撇","捺","提","折","钩"];
+const WRITE_WORDS = ["一二三人","上下大","口手日","月水火","木山中","田土石","天王马","牛羊鸟"];
+
+const ENGLISH = [
+  ["apple","/ˈæp.əl/","苹果","水果"],["banana","/bəˈnɑː.nə/","香蕉","水果"],["orange","/ˈɒr.ɪndʒ/","橙子","水果"],
+  ["red","/red/","红色","颜色"],["yellow","/ˈjel.əʊ/","黄色","颜色"],["blue","/bluː/","蓝色","颜色"],
+  ["green","/ɡriːn/","绿色","颜色"],["cat","/kæt/","猫","动物"],["dog","/dɒɡ/","狗","动物"],["fish","/fɪʃ/","鱼","动物"],
+  ["bird","/bɜːd/","鸟","动物"],["duck","/dʌk/","鸭子","动物"],["cow","/kaʊ/","奶牛","动物"],["pig","/pɪɡ/","猪","动物"],
+  ["rabbit","/ˈræb.ɪt/","兔子","动物"],["tiger","/ˈtaɪ.ɡər/","老虎","动物"],["elephant","/ˈel.ɪ.fənt/","大象","动物"],
+  ["monkey","/ˈmʌŋ.ki/","猴子","动物"],["mom","/mɒm/","妈妈","家人"],["dad","/dæd/","爸爸","家人"],
+  ["brother","/ˈbrʌð.ər/","兄弟","家人"],["sister","/ˈsɪs.tər/","姐妹","家人"],["grandma","/ˈɡræn.mɑː/","奶奶","家人"],
+  ["grandpa","/ˈɡræn.pɑː/","爷爷","家人"],["eye","/aɪ/","眼睛","身体"],["ear","/ɪər/","耳朵","身体"],
+  ["nose","/nəʊz/","鼻子","身体"],["mouth","/maʊθ/","嘴巴","身体"],["hand","/hænd/","手","身体"],
+  ["foot","/fʊt/","脚","身体"],["head","/hed/","头","身体"],["book","/bʊk/","书","学习"],
+  ["pen","/pen/","钢笔","学习"],["bag","/bæɡ/","书包","学习"],["desk","/desk/","书桌","学习"],
+  ["sun","/sʌn/","太阳","自然"],["moon","/muːn/","月亮","自然"],["star","/stɑːr/","星星","自然"],
+  ["flower","/ˈflaʊ.ər/","花","自然"],["tree","/triː/","树","自然"],["water","/ˈwɔː.tər/","水","自然"],
+  ["eat","/iːt/","吃","动作"],["drink","/drɪŋk/","喝","动作"],["run","/rʌn/","跑","动作"],
+  ["jump","/dʒʌmp/","跳","动作"],["read","/riːd/","读","动作"],["write","/raɪt/","写","动作"],
+  ["sing","/sɪŋ/","唱","动作"],["play","/pleɪ/","玩","动作"],["sleep","/sliːp/","睡觉","动作"],
+  ["big","/bɪɡ/","大的","形容词"],["small","/smɔːl/","小的","形容词"],["hot","/hɒt/","热的","形容词"],
+  ["cold","/kəʊld/","冷的","形容词"],["happy","/ˈhæp.i/","开心","形容词"],["one","/wʌn/","一","数字"],
+  ["two","/tuː/","二","数字"],["three","/θriː/","三","数字"],["four","/fɔːr/","四","数字"],
+  ["five","/faɪv/","五","数字"],["six","/sɪks/","六","数字"],["seven","/ˈsev.ən/","七","数字"],
+  ["eight","/eɪt/","八","数字"],  ["nine","/naɪn/","九","数字"],["ten","/ten/","十","数字"]
+];
+
+/* 积分打卡：加分项 / 减分项目（取自文档第 2 页） */
+const POINT_ITEMS = [
+  {group:"加分项",   name:"一起做家务",   desc:"收拾/洗碗",     pts:2},
+  {group:"加分项",   name:"认真完成学习", desc:"",              pts:3},
+  {group:"加分项",   name:"帮带带弟弟",   desc:"",              pts:2},
+  {group:"加分项",   name:"古诗词跟读",   desc:"",              pts:3},
+  {group:"减分项目", name:"撒谎",         desc:"",              pts:-10},
+  {group:"减分项目", name:"白天摸当众摸鸡鸡", desc:"",          pts:-2},
+  {group:"减分项目", name:"不收玩具",     desc:"",              pts:-3}
+];
+
+/* 小花生APP 热门书单（绘本读物模块展示用，结构参照小花生书库） */
+const PEANUT_BOOKS = [
+  {t:"牛津阅读树 Oxford Reading Tree", a:"Roderick Hunt", tag:"分级 L1-9"},
+  {t:"红火箭 Red Rocket Readers",       a:"Pam Holden",    tag:"分级 入门"},
+  {t:"培生儿童英语分级阅读",            a:"Pearson",       tag:"分级"},
+  {t:"饼干狗 Biscuit",                  a:"A. S. Capucilli",tag:"绘本"},
+  {t:"苍蝇小子 Fly Guy",                a:"Tedd Arnold",   tag:"桥梁"},
+  {t:"小猪小象 Elephant&Piggie",        a:"Mo Willems",    tag:"绘本"},
+  {t:"棕色的熊 Brown Bear",             a:"Bill Martin Jr.",tag:"绘本"},
+  {t:"好饿的毛毛虫 The Very Hungry Caterpillar", a:"Eric Carle", tag:"绘本"},
+  {t:"廖彩杏书单",                      a:"廖彩杏",        tag:"英文书单"},
+  {t:"汪培珽书单",                      a:"汪培珽",        tag:"英文书单"},
+  {t:"吴敏兰书单",                      a:"吴敏兰",        tag:"英文书单"},
+  {t:"I Can Read 分级",                 a:"HarperCollins", tag:"分级"}
+];
+
+/* =========================================================
+   状态 / 存档层（localStorage 永久存档）
+   ========================================================= */
+const STORE_KEY = "lucas_workbench_v1";
+let store = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+if(!store.checkins) store.checkins = {};   // {date: {module:true}}
+if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
+if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
+if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
+if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
+if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
+
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  window.cloudSync?.schedule();
+}
+
+function todayKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function dayIndex(){
+  const d = new Date(); d.setHours(0,0,0,0);
+  const start = new Date(d.getFullYear(),0,1);
+  return Math.floor((d - start)/86400000);
+}
+function dateKeyOffset(off){
+  const d = new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-off);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function isChecked(mod){
+  const t = todayKey();
+  return !!(store.checkins[t] && store.checkins[t][mod]);
+}
+function doCheck(mod){
+  const t = todayKey();
+  if(!store.checkins[t]) store.checkins[t] = {};
+  store.checkins[t][mod] = true;
+  save();
+}
+function streak(mod){
+  let s = 0;
+  for(let i=0;i<400;i++){
+    const k = dateKeyOffset(i);
+    if(store.checkins[k] && store.checkins[k][mod]) s++;
+    else if(i>0) break;
+  }
+  return s;
+}
+function totalChecked(mod){
+  let n = 0;
+  for(const k in store.checkins) if(store.checkins[k][mod]) n++;
+  return n;
+}
+
+/* 积分打卡辅助 */
+function ymKey(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1); }
+function pointOn(itemIdx, day){
+  const ym = ymKey();
+  return !!(store.points[ym] && store.points[ym][itemIdx] && store.points[ym][itemIdx][day]);
+}
+function togglePoint(itemIdx, day){
+  const ym = ymKey();
+  if(!store.points[ym]) store.points[ym] = {};
+  if(!store.points[ym][itemIdx]) store.points[ym][itemIdx] = {};
+  if(store.points[ym][itemIdx][day]) delete store.points[ym][itemIdx][day];
+  else store.points[ym][itemIdx][day] = 1;
+  save();
+}
+function itemMonthTotal(itemIdx){
+  const ym = ymKey();
+  const rec = store.points[ym] && store.points[ym][itemIdx];
+  if(!rec) return 0;
+  return POINT_ITEMS[itemIdx].pts * Object.keys(rec).length;
+}
+function monthTotal(){
+  let s = 0;
+  for(let i=0;i<POINT_ITEMS.length;i++) s += itemMonthTotal(i);
+  return s;
+}
+function dayTotal(day){
+  let s = 0;
+  for(let i=0;i<POINT_ITEMS.length;i++) if(pointOn(i,day)) s += POINT_ITEMS[i].pts;
+  return s;
+}
+
+/* =========================================================
+   工具
+   ========================================================= */
+function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
+function el(id){ return document.getElementById(id); }
+function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.lang="en-US"; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(e){} }
+function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
+
+/* =========================================================
+   渲染：首页
+   ========================================================= */
+function renderHome(){
+  const di = dayIndex();
+  const hz = HANZI[(di*2)%HANZI.length];
+  const poem = POEMS[di%POEMS.length];
+  const en = ENGLISH[di%ENGLISH.length];
+  const checkedToday = ["chinese","math","english"].filter(isChecked).length;
+  const m = new Date().getMonth()+1;
+  const main = el("main");
+  main.innerHTML = "";
+  main.appendChild($(`
+    <div class="banner">
+      <div class="t">⛏️ 挖掘机小队长 lucas，今天也要加油哦！</div>
+      <div class="d">今日已打卡 ${checkedToday}/3 个模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」</div>
+    </div>
+  `));
+
+  const stat = $(`
+    <div class="card">
+      <h3>📊 今日成长数据</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">${checkedToday}/3</div><div class="t">今日打卡</div></div>
+        <div class="stat"><div class="n">${streak("chinese")}</div><div class="t">语文连续(天)</div></div>
+        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计打卡</div></div>
+        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计打卡</div></div>
+      </div>
+      <div class="progressbar"><i style="width:${checkedToday/3*100}%"></i></div>
+    </div>
+  `);
+  main.appendChild(stat);
+
+  // 三大模块快捷入口
+  const mk = (mod,em,t,d)=>$(`
+    <div class="card" data-go="${mod}" style="cursor:pointer">
+      <h3>${em} ${t}</h3>
+      <div class="desc">${d}</div>
+      <span class="pill">${isChecked(mod)?"✅ 今日已打卡":"今日待打卡"}</span>
+    </div>
+  `);
+  main.appendChild(mk("chinese","📖","语文学习","识字·古诗词·写字 每日打卡"));
+  main.appendChild(mk("math","🔢","数学与数感","口算·数感游戏·数独 每日打卡"));
+  main.appendChild(mk("english","🔤","英语学习","主题单词 每日推送与朗读打卡"));
+  main.appendChild(mk("book","📚","绘本读物","多地优质绘本 · 跟读+思考题"));
+  main.appendChild(mk("points","⭐","积分打卡","加分减分 · 月度行为积分表"));
+  main.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
+  main.appendChild($(`<div class="footer">🚜 本机离线保存 · 家长登录后自动同步云端</div>`));
+}
+
+/* =========================================================
+   渲染：语文
+   ========================================================= */
+function renderChinese(){
+  const di = dayIndex();
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("📖","语文学习"));
+
+  // 识字打卡（每日2新字 + 复习昨日）
+  const i1 = (di*2)%HANZI.length, i2=(di*2+1)%HANZI.length;
+  const c1=HANZI[i1], c2=HANZI[i2];
+  const ri = ((di-1)*2)%HANZI.length; const rc=HANZI[(ri+1)%HANZI.length];
+  const card1 = $(`
+    <div class="card">
+      <h3>✏️ 识字打卡 <span class="pill">每日 2 新字 + 复习</span></h3>
+      <div class="desc">3000 常用字按频次排序，每天学 2 个新字并复习旧字。今日新字：</div>
+      <div class="grid2">
+        <div class="mini-card"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
+        <div class="mini-card"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
+      </div>
+      <div class="desc" style="margin-top:12px">🔁 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
+      <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">▶ B站教学视频</a>
+      <div style="height:12px"></div>
+      ${checkinBtn("chinese","识字")}
+    </div>
+  `);
+  main.appendChild(card1);
+
+  // 古诗词
+  const p = POEMS[di%POEMS.length];
+  const card2 = $(`
+    <div class="card">
+      <h3>📜 背诵古诗词 <span class="pill">${p.g}</span></h3>
+      <div class="poem-title">《${p.t}》</div>
+      <div class="poem-meta">${p.a} · 人教版</div>
+      <div class="poem-body">${p.c.join("<br>")}</div>
+      <div style="text-align:center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">▶ 跟读视频</a></div>
+      <div style="height:12px"></div>
+      ${checkinBtn("chinese","古诗")}
+    </div>
+  `);
+  main.appendChild(card2);
+
+  // 写字打卡
+  const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
+  const wordsHtml = WRITE_WORDS.slice(0,4).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div style="height:8px"></div>');
+  const card3 = $(`
+    <div class="card">
+      <h3>✍️ 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
+      <div class="desc">8 个基础笔画：${strokesHtml}</div>
+      <div class="desc">今日练习汉字（从简到难，控笔临摹）：</div>
+      ${wordsHtml}
+      <div style="height:12px"></div>
+      <button class="checkin" onclick="window.print()">🖨️ 打印 A4 字帖</button>
+      <div style="height:10px"></div>
+      ${checkinBtn("chinese","写字")}
+    </div>
+  `);
+  main.appendChild(card3);
+}
+
+/* =========================================================
+   渲染：数学与数感
+   ========================================================= */
+let mathLevel = 10, mathAns = 0;
+function genQuiz(){
+  const a = Math.floor(Math.random()*(mathLevel+1));
+  const b = Math.floor(Math.random()*(mathLevel+1));
+  const op = Math.random()<0.5 ? "+" : "−";
+  if(op==="+"){ mathAns=a+b; return `${a} ${op} ${b} = ?`; }
+  else { const big=Math.max(a,b), small=Math.min(a,b); mathAns=big-small; return `${big} ${op} ${small} = ?`; }
+}
+function renderMath(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("🔢","数学与数感"));
+
+  // 口算
+  const q = genQuiz();
+  const lvls = [10,20,50,100];
+  const lvlHtml = lvls.map(n=>`<button class="lvl-btn ${n===mathLevel?'active':''}" data-lvl="${n}">${n}以内</button>`).join("");
+  const card1 = $(`
+    <div class="card">
+      <h3>🧮 口算打卡 <span class="pill">10/20/50/100 以内加减</span></h3>
+      <div class="lvl-row">${lvlHtml}</div>
+      <div class="quiz-box">
+        <div class="quiz-q" id="qq">${q}</div>
+        <input class="quiz-input" id="qa" type="number" inputmode="numeric" placeholder="?">
+        <div class="feedback" id="qf"></div>
+      </div>
+      <button class="checkin" id="qsubmit">✔ 提交答案</button>
+      <div style="height:8px"></div>
+      ${checkinBtn("math","口算")}
+    </div>
+  `);
+  main.appendChild(card1);
+  card1.querySelectorAll("[data-lvl]").forEach(b=>b.onclick=()=>{ mathLevel=+b.dataset.lvl; renderMath(); });
+  el("qsubmit").onclick=()=>{
+    const v = el("qa").value;
+    const f = el("qf");
+    if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
+    if(+v===mathAns){ f.textContent="🎉 答对啦，真棒！"; f.className="feedback ok"; }
+    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
+  };
+
+  // 数感：数字填写 1-100 找缺失
+  const miss = Math.floor(Math.random()*100)+1;
+  let cells="";
+  for(let k=1;k<=20;k++){
+    const num = (k===10)? miss : (k<10? k : k+1);
+    cells += `<div class="num-cell ${k===10?'miss':''}" data-num="${k===10?miss:0}">${k===10?'?':num}</div>`;
+  }
+  const card2 = $(`
+    <div class="card">
+      <h3>🔢 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
+      <div class="desc">点击问号格，说出它应该是哪个数字（按 1 递增顺序）。</div>
+      <div class="num-grid">${cells}</div>
+      <div class="feedback" id="nf" style="text-align:center"></div>
+    </div>
+  `);
+  main.appendChild(card2);
+  const missCell = card2.querySelector(".num-cell.miss");
+  missCell.onclick=()=>{ const nf=el("nf"); const ans=prompt("这个格子应该是数字几？"); if(ans!==null){ if(+ans===miss){ nf.textContent="✅ 正确！数列规律是每次 +1"; nf.className="feedback ok"; missCell.classList.add("found"); missCell.textContent=miss; } else { nf.textContent=`不对哦，看看前后数字～`; nf.className="feedback no"; } } };
+
+  // 数独 4x4
+  const card3 = $(`
+    <div class="card">
+      <h3>♟️ 数独游戏 <span class="pill">数感阶段</span></h3>
+      <div class="desc">把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</div>
+      <div class="sudoku" id="sudoku"></div>
+      <div class="feedback" id="sf" style="text-align:center"></div>
+      <div style="height:10px"></div>
+      ${checkinBtn("math","数感")}
+    </div>
+  `);
+  main.appendChild(card3);
+  buildSudoku();
+}
+
+function buildSudoku(){
+  // 固定一个合法解，挖空部分
+  const sol = [
+    [1,2,3,4],
+    [3,4,1,2],
+    [2,1,4,3],
+    [4,3,2,1]
+  ];
+  const blanks = new Set([1,4,6,9,11,14]); // 挖空位置(0-indexed)
+  const box = el("sudoku"); if(!box) return;
+  box.innerHTML="";
+  let idx=0;
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++){
+    const v=sol[r][c];
+    if(blanks.has(idx)){
+      const inp=document.createElement("div");
+      inp.innerHTML=`<input type="number" min="1" max="4" data-r="${r}" data-c="${c}" style="width:100%">`;
+      box.appendChild(inp.firstChild);
+    } else {
+      const d=document.createElement("div");
+      d.className="fixed"; d.textContent=v;
+      box.appendChild(d);
+    }
+    idx++;
+  }
+  const sf=el("sf");
+  box.querySelectorAll("input").forEach(inp=>inp.onchange=()=>{
+    // 简单校验行/列/宫
+    const r=+inp.dataset.r, c=+inp.dataset.c, val=+inp.value;
+    let ok=true;
+    if(val<1||val>4) ok=false;
+    // 检查同行
+    for(let cc=0;cc<4;cc++){ const cell=box.children[r*4+cc]; const cv=cell.querySelector? (cell.querySelector("input")?+cell.querySelector("input").value: +cell.textContent):null; if(cc!==c && cv===val){ok=false;} }
+    if(ok) sf.textContent="继续加油，把空格都填完吧！"; else sf.textContent="这一格和别处重复啦～";
+  });
+}
+
+/* =========================================================
+   渲染：英语
+   ========================================================= */
+function renderEnglish(){
+  const di = dayIndex();
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("🔤","英语学习"));
+  // 每日推送 1~2 词
+  const w1 = ENGLISH[di%ENGLISH.length];
+  const w2 = ENGLISH[(di+1)%ENGLISH.length];
+  const card1 = $(`
+    <div class="card">
+      <h3>🔤 今日主题单词 <span class="pill">每日推送</span></h3>
+      <div class="desc">拼读并朗读下面的单词，读完点「完成今日打卡」。</div>
+      <div class="word-card">
+        <div class="word-en">${w1[0]}</div>
+        <div class="word-ph">${w1[1]}</div>
+        <div class="word-cn">${w1[2]} · ${w1[3]}</div>
+        <button class="speak-btn" onclick="speak('${w1[0]}')">🔊 听发音</button>
+      </div>
+      <div class="word-card">
+        <div class="word-en">${w2[0]}</div>
+        <div class="word-ph">${w2[1]}</div>
+        <div class="word-cn">${w2[2]} · ${w2[3]}</div>
+        <button class="speak-btn" onclick="speak('${w2[0]}')">🔊 听发音</button>
+      </div>
+      <div style="height:10px"></div>
+      ${checkinBtn("english","单词")}
+    </div>
+  `);
+  main.appendChild(card1);
+
+  // 按月回看往期单词
+  const m = new Date().getMonth();
+  let chips="";
+  for(let d=1; d<=Math.min(28,new Date().getDate()+0); d++){
+    const k = (m*31 + d*2)%ENGLISH.length; // 与推送算法一致的近似回看
+    const w = ENGLISH[(di - d + ENGLISH.length*10)%ENGLISH.length];
+    chips += `<span class="mr-chip">${w[0]}</span>`;
+  }
+  const card2 = $(`
+    <div class="card">
+      <h3>📅 往期单词回看 <span class="pill">本月</span></h3>
+      <div class="desc">按月回看之前朗读过的单词（最近 ${Math.min(28,new Date().getDate())} 天）：</div>
+      <div class="month-review">${chips}</div>
+    </div>
+  `);
+  main.appendChild(card2);
+}
+
+/* =========================================================
+   渲染：成长
+   ========================================================= */
+function renderGrow(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("🌱","成长记录"));
+  const total = totalChecked("chinese")+totalChecked("math")+totalChecked("english");
+  const card = $(`
+    <div class="card">
+      <h3>🏆 打卡总览</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">${totalChecked("chinese")}</div><div class="t">语文累计(天)</div></div>
+        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计(天)</div></div>
+        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计(天)</div></div>
+        <div class="stat"><div class="n">${total}</div><div class="t">总打卡(次)</div></div>
+      </div>
+      <div class="desc" style="margin-top:14px">🔥 连续打卡：语文 ${streak("chinese")} 天 · 数学 ${streak("math")} 天 · 英语 ${streak("english")} 天</div>
+      <div class="progressbar"><i style="width:${Math.min(100,total/30*100)}%"></i></div>
+      <div class="desc" style="margin-top:6px;font-size:11px">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
+    </div>
+  `);
+  main.appendChild(card);
+
+  // 日历式最近记录
+  let cells="";
+  for(let i=29;i>=0;i--){
+    const k=dateKeyOffset(i);
+    const c=store.checkins[k];
+    const n = c? Object.keys(c).length:0;
+    const color = n>=3? "var(--green)": n===2? "var(--green-light)": n===1? "var(--yellow-soft)":"#eef3ef";
+    cells += `<div style="aspect-ratio:1;border-radius:8px;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;color:${n?'var(--ink)':'#bcc'}">${n||""}</div>`;
+  }
+  const cal = $(`
+    <div class="card">
+      <h3>📆 近 30 天打卡日历</h3>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${cells}</div>
+      <div class="desc" style="margin-top:10px;font-size:11px">🟩 全勤 · 🟩浅 2项 · 🟨 1项 · ⬜ 未打卡</div>
+    </div>
+  `);
+  main.appendChild(cal);
+  main.appendChild($(`<div class="footer">🚜 本机离线保存 · 登录后跨设备同步</div>`));
+}
+
+/* =========================================================
+   渲染：积分打卡
+   ========================================================= */
+/* 积分卡片辅助 */
+const PTS_ICON = {"一起做家务":"🧹","认真完成学习":"📚","帮带带弟弟":"🤝","古诗词跟读":"📜","撒谎":"🚫","白天摸当众摸鸡鸡":"🙈","不收玩具":"🧸"};
+let PT_DAY = null;
+function ptsCardHTML(it, i, day){
+  const done = pointOn(i, day);
+  const sub = it.pts < 0;
+  const icon = PTS_ICON[it.name] || (sub ? "⚠️" : "🌟");
+  return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
+    <div class="pts-ic">${icon}</div>
+    <div class="pts-info">
+      <div class="pts-name">${it.name}</div>
+      ${it.desc?`<div class="pts-desc">${it.desc}</div>`:""}
+    </div>
+    <div class="pts-badge">${it.pts>0?'+':'-'}${Math.abs(it.pts)}分</div>
+    <button class="pts-toggle" data-i="${i}">${done?'✓':'＋'}</button>
+  </div>`;
+}
+
+function renderPoints(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("⭐","积分打卡"));
+  const today = new Date().getDate();
+  const ymLabel = new Date().getFullYear()+"年"+(new Date().getMonth()+1)+"月";
+  if(PT_DAY===null) PT_DAY = today;
+  const activeDay = PT_DAY;
+  const mt = monthTotal();
+  const dt = dayTotal(activeDay);
+
+  // 挖掘机主题横幅
+  main.appendChild($(`<div class="exc-banner">
+      <div class="em">🚜</div>
+      <div><div class="t">挖掘机小队长 · 积分打卡榜</div><div class="d">完成好习惯就点亮小星星，绿挖挖帮你攒积分！</div></div>
+      <div class="badge">⭐ ${mt>0?'+':''}${mt} 分</div>
+    </div>`));
+
+  // 顶部统计
+  main.appendChild($(`<div class="card">
+      <h3>🚜 本月积分</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">${mt>0?'+':''}${mt}</div><div class="t">本月累计</div></div>
+        <div class="stat"><div class="n">${dt>0?'+':''}${dt}</div><div class="t">${activeDay}日积分</div></div>
+      </div>
+    </div>`));
+
+  // 积分日历（圆角 chip，可补打卡）
+  let chips="";
+  for(let d=1;d<=31;d++){
+    const v=dayTotal(d);
+    const cls=(d===activeDay?"active ":"")+(v>0?"pos":v<0?"neg":"");
+    chips+=`<div class="cal-chip ${cls}" data-d="${d}">${d}</div>`;
+  }
+  const calCard=$(`<div class="card">
+      <h3>📅 积分日历 <span class="pill">${ymLabel}</span></h3>
+      <div class="desc">点日期可以给过去的某一天补打卡～绿色=有加分，红色=有扣分。</div>
+      <div class="cal">${chips}</div>
+    </div>`);
+  main.appendChild(calCard);
+  calCard.querySelectorAll(".cal-chip").forEach(c=>c.onclick=()=>{PT_DAY=+c.dataset.d; renderPoints();});
+
+  // 打卡区（卡片化）
+  const isToday = activeDay===today;
+  const head = $(`<div class="card">
+      <div class="pts-sec">✨ 为 ${new Date().getMonth()+1}月${activeDay}日 打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
+      ${isToday?"":'<button class="checkin" id="backtoday" style="background:#cd5c5c;margin-bottom:12px">↩ 回到今天</button>'}
+      <div class="pts-sec">🌟 加分项</div>
+      ${POINT_ITEMS.filter(it=>it.group==="加分项").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+      <div class="pts-sec">⚠️ 减分项目</div>
+      ${POINT_ITEMS.filter(it=>it.group==="减分项目").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+    </div>`);
+  main.appendChild(head);
+  head.querySelectorAll(".pts-toggle").forEach(b=>b.onclick=()=>{ togglePoint(+b.dataset.i, activeDay); renderPoints(); });
+  const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
+
+  // 清空
+  main.appendChild($(`<div class="card"><button class="checkin" id="ptclear" style="background:#cd5c5c">🧹 清空本月积分</button></div>`));
+  el("ptclear").onclick=()=>{
+    if(confirm("确定清空本月所有积分打卡记录？")){
+      delete store.points[ymKey()]; save(); PT_DAY=today; renderPoints();
+    }
+  };
+  main.appendChild($(`<div class="footer">⭐ 每日按日期记录 · 本机离线保存并可同步云端</div>`));
+}
+
+/* =========================================================
+   渲染：绘本读物（独立栏目）
+   ========================================================= */
+function renderBook(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("📚","绘本读物"));
+
+  const BOOKS = [
+    {t:"好饿的毛毛虫",   r:"美国",  a:"艾瑞·卡尔"},
+    {t:"棕色的熊，棕色的熊", r:"美国", a:"比尔·马丁"},
+    {t:"猜猜我有多爱你", r:"欧盟(英)", a:"山姆·麦克布雷尼"},
+    {t:"逃家小兔",       r:"美国",  a:"玛格丽特·怀兹·布朗"},
+    {t:"小熊宝宝",       r:"日本",  a:"佐佐木洋子"},
+    {t:"点点点",         r:"法国",  a:"埃尔维·杜莱"},
+    {t:"是谁嗯嗯在我头上", r:"台湾", a:"维尔纳·霍尔茨瓦特"},
+    {t:"爷爷一定有办法", r:"加拿大", a:"菲比·吉尔曼"}
+  ];
+  const di = dayIndex();
+  const b = BOOKS[di % BOOKS.length];
+
+  // 今日绘本 + 打卡
+  const card1 = $(`
+    <div class="card">
+      <h3>📖 今日绘本 <span class="pill">${b.r}</span></h3>
+      <div class="desc">《${b.t}》— ${b.a}</div>
+      <div class="desc">raza 绘本跟读 · 读后完成思考题；26 个字母口语对练、英语句子书写造句每日推送（3-6 岁）。</div>
+      <div class="row">
+        <span class="pill">跟读</span><span class="pill">读后思考题</span><span class="pill">句子书写</span><span class="pill">每日推送</span>
+      </div>
+      <div style="height:10px"></div>
+      ${checkinBtn("book","绘本")}
+    </div>
+  `);
+  main.appendChild(card1);
+
+  // 我的小书架（已读标记，永久存档）
+  let shelf = BOOKS.map((bk,i)=>{
+    const read = !!store.bookShelf[i];
+    return `<div class="mini-card" data-bk="${i}" style="cursor:pointer;opacity:${read?1:.55}">
+      <div class="big" style="font-size:22px">${read?'✅':'📕'}</div>
+      <div class="py" style="font-size:13px;margin-top:6px">${bk.t}</div>
+      <div class="label">${bk.r}</div>
+    </div>`;
+  }).join("");
+  const readN = Object.keys(store.bookShelf).length;
+  const card2 = $(`
+    <div class="card">
+      <h3>📚 我的小书架 <span class="pill">点击标记已读</span></h3>
+      <div class="desc">欧盟、美国、日本、台湾等多地优质绘本，读完并完成思考题后点一下即可标记。</div>
+      <div class="grid2">${shelf}</div>
+      <div class="desc" style="margin-top:12px">已读 <b>${readN}</b> / ${BOOKS.length} 本</div>
+    </div>
+  `);
+  main.appendChild(card2);
+  card2.querySelectorAll("[data-bk]").forEach(c=>{
+    c.onclick=()=>{
+      const i=+c.dataset.bk;
+      if(store.bookShelf[i]) delete store.bookShelf[i]; else store.bookShelf[i]=1;
+      save(); renderBook();
+    };
+  });
+
+  // 小花生APP读物：热门书单 + 我的阅读记录
+  const peanutRead = PEANUT_BOOKS.map((b,i)=>{
+    const on = !!store.peanutRead[i];
+    return `<div class="mini-card" data-pb="${i}" style="cursor:pointer;opacity:${on?1:.6}">
+      <div class="big" style="font-size:20px">${on?'✅':'🥜'}</div>
+      <div class="py" style="font-size:12px;margin-top:6px">${b.t}</div>
+      <div class="label">${b.tag}</div>
+    </div>`;
+  }).join("");
+  const logRows = store.peanutLog.slice().reverse().map((r,idx)=>{
+    const stars = "★".repeat(r.rating)+"☆".repeat(5-r.rating);
+    return `<div class="log-row">
+      <div class="log-main">${r.title}<span class="log-stars">${stars}</span></div>
+      <div class="log-meta">${r.date} <span class="log-del" data-del="${idx}">🗑️</span></div>
+    </div>`;
+  }).join("");
+
+  const card3 = $(`
+    <div class="card">
+      <h3>🥜 小花生APP读物 <span class="pill">热门书单</span></h3>
+      <div class="desc">小花生热门童书与英文分级书单（牛津树 / 红火箭 / 廖彩杏等），点一下标记已读；下方可手记你自己的阅读记录。</div>
+      <div class="grid2">${peanutRead}</div>
+      <div style="height:12px"></div>
+      <div class="pts-sec" style="color:var(--green-deep)">📒 我的阅读记录</div>
+      <div class="peanut-form">
+        <input class="peanut-input" id="pbTitle" placeholder="输入书名（如：牛津阅读树 L3）">
+        <div class="peanut-stars" id="pbStars">
+          ${[1,2,3,4,5].map(n=>`<span class="pstar" data-n="${n}">${n<=3?'★':'☆'}</span>`).join("")}
+        </div>
+        <button class="checkin" id="pbAdd" style="margin-top:8px">＋ 添加阅读记录</button>
+      </div>
+      <div class="peanut-log">${logRows || '<div class="desc">还没有记录，添加一本吧～</div>'}</div>
+    </div>
+  `);
+  main.appendChild(card3);
+
+  // 绑定：书单已读标记
+  card3.querySelectorAll("[data-pb]").forEach(c=>c.onclick=()=>{
+    const i=+c.dataset.pb;
+    if(store.peanutRead[i]) delete store.peanutRead[i]; else store.peanutRead[i]=1;
+    save(); renderBook();
+  });
+  // 绑定：评分星
+  let rating = 3;
+  const starEls = card3.querySelectorAll(".pstar");
+  const paintStars = (n)=>starEls.forEach(s=>{ s.textContent = (+s.dataset.n<=n?"★":"☆"); });
+  starEls.forEach(s=>s.onclick=()=>{ rating=+s.dataset.n; paintStars(rating); });
+  // 绑定：添加记录
+  el("pbAdd").onclick=()=>{
+    const title = el("pbTitle").value.trim();
+    if(!title){ alert("请先输入书名"); return; }
+    const d = new Date();
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    store.peanutLog.push({title, date:ds, rating});
+    save(); renderBook();
+  };
+  // 绑定：删除记录
+  card3.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
+    const i = +x.dataset.del;
+    store.peanutLog.splice(store.peanutLog.length-1-i, 1);
+    save(); renderBook();
+  });
+
+  main.appendChild($(`<div class="footer">📚 本机离线保存 · 登录后跨设备同步</div>`));
+}
+
+/* =========================================================
+   公共组件
+   ========================================================= */
+function modTitle(em,t){
+  return $(`<div class="module-title"><span class="em">${em}</span><h2>${t}</h2></div>`);
+}
+function checkinBtn(mod,label){
+  const done = isChecked(mod);
+  return `<button class="checkin ${done?'done':''}" data-cmod="${mod}" data-clabel="${label}">${done?'✅ 今日已打卡 · '+label:'✔ 完成今日打卡 · '+label}</button>`;
+}
+
+/* =========================================================
+   导航切换
+   ========================================================= */
+let CURRENT_MOD = "home";
+function switchMod(mod){
+  CURRENT_MOD = mod;
+  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active", b.dataset.mod===mod));
+  if(mod==="home") renderHome();
+  else if(mod==="chinese") renderChinese();
+  else if(mod==="math") renderMath();
+  else if(mod==="english") renderEnglish();
+  else if(mod==="book") renderBook();
+  else if(mod==="points") renderPoints();
+  else if(mod==="grow") renderGrow();
+  // 绑定打卡按钮
+  el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
+    btn.onclick=()=>{
+      const m=btn.dataset.cmod;
+      if(!isChecked(m)){ doCheck(m); switchMod(mod); }
+    };
+  });
+  el("main").scrollTop=0;
+}
+
+document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod));
+
+// 日期显示
+(function(){
+  const d=new Date();
+  const wk=["日","一","二","三","四","五","六"][d.getDay()];
+  el("datepill").textContent=`${d.getMonth()+1}月${d.getDate()}日 周${wk}`;
+})();
+
+// 初始渲染
+switchMod("home");
+
+window.learningDesk = {
+  getState(){
+    return JSON.parse(JSON.stringify(store));
+  },
+  replaceState(next, options = {}){
+    store = next && typeof next === "object" ? next : {};
+    if(!store.checkins) store.checkins = {};
+    if(!store.extra) store.extra = {};
+    if(!store.points) store.points = {};
+    if(!store.bookShelf) store.bookShelf = {};
+    if(!store.peanutLog) store.peanutLog = [];
+    if(!store.peanutRead) store.peanutRead = {};
+    if(options.persist) localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    switchMod(CURRENT_MOD);
+  }
+};
+</script>
+<script type="module" src="/src/cloud.js"></script>
+</body>
+</html>
