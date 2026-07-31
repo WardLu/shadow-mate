@@ -10,6 +10,7 @@ const requiredFiles = [
   "SECURITY.md",
   "PRIVACY.md",
   "CONTRIBUTING.md",
+  ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
 ];
 
@@ -128,6 +129,25 @@ const headerNames = new Set(
 );
 for (const name of ["content-security-policy", "strict-transport-security", "x-frame-options"]) {
   if (!headerNames.has(name)) throw new Error(`Vercel headers are missing ${name}`);
+}
+
+const vercelIgnore = new Set(
+  (await readFile(".vercelignore", "utf8"))
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+);
+for (const pattern of [
+  ".vercel/",
+  ".env*",
+  ".security-local-denylist",
+  "node_modules/",
+  "dist/",
+  "supabase/",
+]) {
+  if (!vercelIgnore.has(pattern)) {
+    throw new Error(`Vercel upload exclusions are missing ${pattern}`);
+  }
 }
 
 console.log("Static checks passed.");

@@ -26,7 +26,7 @@ Use this order for every production release. Do not skip ahead after a failed ga
 
 1. Run `npm run verify`, the Supabase pgTAP suite, and database lint locally.
 2. Link the working directory to the intended existing Vercel project and verify its project and organization IDs. Keep `.vercel/` and `.env.local` ignored.
-3. Create a Vercel Preview from the reviewed PR commit with the CLI.
+3. Run a Vercel dry-run and reject the deployment if the upload manifest contains `.env*`, `.vercel/`, `.security-local-denylist`, `supabase/`, local database files, or generated secrets. Then create a Preview from the reviewed PR commit with the CLI.
 4. Accept the Preview only after checking page rendering, console and network errors, login, household isolation, offline behavior, service worker behavior, and security headers.
 5. Dry-run and then apply only the reviewed pending migrations to the linked production Supabase project. Never use remote reset or production seed data.
 6. Recheck migration history, RLS, grants, representative anonymous and authenticated access, and Supabase Security Advisor findings.
