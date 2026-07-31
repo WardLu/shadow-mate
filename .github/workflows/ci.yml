@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm ci
+
+      - name: Verify source and build
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm run verify
+        env:
+          SECURITY_CHECK_HISTORY: "1"
+
+      - name: Audit dependencies
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm audit --audit-level=high
