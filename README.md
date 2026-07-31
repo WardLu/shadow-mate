@@ -2,6 +2,8 @@
 
 An open-source AI learning companion for K12 students.
 
+**v1.0.0** · 2026-08-01 · MIT License
+
 Your child's first AI learning partner.
 
 ## 产品概述
@@ -70,6 +72,21 @@ supabase db lint --local --schema public --level warning --fail-on error
 
 详细的数据范围、保留和删除方式见 [隐私说明](PRIVACY.md)。安全问题请按 [安全政策](SECURITY.md) 私下报告。提交代码前请阅读 [贡献指南](CONTRIBUTING.md)。
 
+
+## 文档
+
+| 文档 | 说明 |
+| --- | --- |
+| [Release Notes](RELEASE_NOTES.md) | 版本发布说明 |
+| [Changelog](CHANGELOG.md) | 详细变更记录 |
+| [Roadmap](ROADMAP.md) | 路线图 |
+| [TODO](TODO.md) | 待办与已知问题 |
+| [架构文档](docs/architecture.md) | 架构设计与实施方案 |
+| [Auth 配置](docs/auth-setup.md) | Supabase Auth 服务端配置指南 |
+| [安全基线](docs/security-baseline.md) | 安全与发布闸门 |
+| [隐私说明](PRIVACY.md) | 数据隐私 |
+| [安全政策](SECURITY.md) | 漏洞报告流程 |
+| [贡献指南](CONTRIBUTING.md) | 开发环境与规范 |
 ## 开源边界
 
 代码采用 MIT License。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容或商标的使用权。对外运营前应完成内容授权、隐私政策、儿童数据合规和支付条款审查。
