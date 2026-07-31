@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+﻿import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
@@ -33,6 +33,7 @@ const secretRules = [
 const allowedEmailDomains = new Set([
   "example.com",
   "example.test",
+  "shadow.wang",
   "users.noreply.github.com",
   "github.com",
 ]);

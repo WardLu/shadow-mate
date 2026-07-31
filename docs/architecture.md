@@ -1,7 +1,7 @@
 # Shadow Mate（影伴）架构与实施方案
 
-版本：2.0
-日期：2026-07-31
+版本：2.1
+日期：2026-08-01
 状态：核心架构与第一阶段已实施
 
 ## 1. 结论
@@ -207,11 +207,13 @@ erDiagram
 - 原功能和视觉保留；
 - 单独的 `src/cloud.js` 云同步层；
 - 单独的 `src/cloud.css` 响应式和账户 UI；
+- `src/app.js` 与 `src/app.css` 从 index.html 拆出，CSP 不再依赖 `unsafe-inline`；
 - `manifest.json` 与 192/512/maskable 图标；
 - Service Worker 应用壳和运行时缓存；
 - 宽屏下扩大布局，不再锁死 460 px；
 - 静态构建脚本，无 npm 依赖下载；
 - Supabase JS 固定到 `2.111.0`。
+- CSP 的 `script-src` 和 `style-src` 均为 `'self'`，不含 `unsafe-inline`。
 
 若未来管理后台、内容编辑器、支付和服务端页面成为主体，再迁移到 TypeScript + React/Next.js；不为“可能有一天”提前承担框架成本。
 
@@ -232,10 +234,11 @@ erDiagram
 - Output Directory：`dist`
 - 生产分支：`main`
 - Preview：所有非 main 分支
-- Supabase Auth URL Configuration 必须加入：
-  - Vercel 生产域名
-  - 自有域名
-  - 必要的 Preview URL 模式
+- Supabase Auth URL Configuration 已配置：
+  - Site URL: `https://shadow.wang`（共享项目主域名）
+  - Redirect URLs: `https://*.shadow.wang`、`https://shadow.wang`、`https://*-wardlus-projects.vercel.app`、各项目 Vercel 生产域名、`http://localhost:5173`
+  - 邮件模板：中文，标题「影伴 Shadow Mate 登录验证」
+  - 发件人名称：`Shadow Nexus`（共享 SMTP `noreply@shadow.wang`）
 
 当前 `src/config.js` 中的 Supabase publishable key 可公开。RLS 是数据安全边界。禁止提交 secret/service role key。
 
@@ -284,6 +287,8 @@ erDiagram
 - 云端状态版本控制与冲突合并
 - 共用 Supabase 数据库迁移
 - 静态构建与 Vercel 配置
+- CSP 移除 `unsafe-inline`（内联样式与脚本外置为 `app.css` / `app.js`）
+- 登录邮件中文化与品牌定制（标题、正文、发件人名称）
 
 ### 下一阶段
 

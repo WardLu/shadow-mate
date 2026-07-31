@@ -1,6 +1,6 @@
 # Security and privacy baseline
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-01
 
 ## Repository controls
 
@@ -15,7 +15,8 @@ Last reviewed: 2026-07-31
 
 - Supabase dependencies are bundled from the pinned lockfile, not loaded from a runtime CDN.
 - Browser sessions use session storage; local learning data has a visible deletion action.
-- Security headers include CSP, HSTS, framing protection, a restrictive permissions policy, and no-referrer behavior.
+- Security headers include CSP (script-src and style-src 'self', no unsafe-inline), HSTS, framing protection, a restrictive permissions policy, and no-referrer behavior.
+- Auth email templates are localized (Chinese) with the product name; the sender display name is configurable for the shared project.
 - The public product registry exposes only product ID and display name columns.
 - Learning tables deny anonymous access and enforce family membership through RLS.
 - Privileged database helper functions live outside the exposed schema and have explicit execution grants.
