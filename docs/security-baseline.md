@@ -22,14 +22,17 @@ Last reviewed: 2026-07-31
 
 ## Release gate
 
-Before production deployment:
+Use this order for every production release. Do not skip ahead after a failed gate:
 
-1. `npm run verify` passes.
-2. Supabase pgTAP tests and database lint pass locally.
-3. A Vercel Preview is tested for login, household isolation, offline behavior, and security headers.
-4. Supabase Security Advisor findings are reviewed.
-5. GitHub required checks pass and all review conversations are resolved.
-6. Production migration and deployment are performed only after the preview is accepted.
+1. Run `npm run verify`, the Supabase pgTAP suite, and database lint locally.
+2. Link the working directory to the intended existing Vercel project and verify its project and organization IDs. Keep `.vercel/` and `.env.local` ignored.
+3. Create a Vercel Preview from the reviewed PR commit with the CLI.
+4. Accept the Preview only after checking page rendering, console and network errors, login, household isolation, offline behavior, service worker behavior, and security headers.
+5. Dry-run and then apply only the reviewed pending migrations to the linked production Supabase project. Never use remote reset or production seed data.
+6. Recheck migration history, RLS, grants, representative anonymous and authenticated access, and Supabase Security Advisor findings.
+7. Confirm GitHub required checks pass and review conversations are resolved, then merge the PR.
+8. Deploy Production from the merged `main` commit. Prefer promoting the accepted artifact when it represents the same commit; otherwise build and deploy the merged commit explicitly.
+9. Verify the production URL, security headers, browser console, Supabase connectivity, and recent error logs. Record the Preview URL, Production URL, commit, migration versions, checks, and rollback target.
 
 ## Incident record
 
