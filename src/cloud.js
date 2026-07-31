@@ -106,8 +106,8 @@ function setAccountState() {
     accountButton.title = "已登录，待选择学习者";
   } else {
     accountButton.dataset.state = "local";
-    accountButton.textContent = "○";
-    accountButton.title = "本机模式 · 点此登录同步";
+    accountButton.textContent = "登录";
+    accountButton.title = "点击登录，开启云端跨设备同步";
   }
 }
 
@@ -123,7 +123,7 @@ function closeDialog() {
 function renderSignedOut() {
   panel.innerHTML = `
     <h2>☁️ 跨设备同步</h2>
-    <p>平时可以继续离线使用。家长用邮箱登录后，学习记录会同步到 Supabase；孩子不需要单独注册邮箱。</p>
+    <p>平时可以继续离线使用。家长用邮箱登录后，学习记录会同步到云端，孩子不需要单独注册邮箱。登录后可以添加多个孩子并随时切换。</p>
     <form id="emailLoginForm">
       <label class="cloud-field">
         家长邮箱
@@ -135,10 +135,11 @@ function renderSignedOut() {
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
       </div>
     </form>
+    <p class="cloud-hint">💡 输入邮箱后，我们会发送一个登录链接到你的邮箱，在同一设备打开即可登录，无需密码。</p>
     ${
       cloudEnabled
         ? ""
-        : '<div class="cloud-status">⚠️ 尚未配置 Supabase 环境变量，当前只能使用本机模式。</div>'
+        : '<div class="cloud-status">⚠️ 尚未配置云端环境，当前只能使用本机模式。</div>'
     }
   `;
 
@@ -152,7 +153,7 @@ function renderSignedOut() {
   panel.querySelector("#emailLoginForm").onsubmit = async (event) => {
     event.preventDefault();
     if (!cloudEnabled) {
-      showToast("请先配置 Supabase 环境变量");
+      showToast("请先配置云端环境");
       return;
     }
     const email = new FormData(event.currentTarget).get("email").trim();
