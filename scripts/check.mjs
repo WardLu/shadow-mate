@@ -7,6 +7,8 @@ const requiredFiles = [
   "public/sw.js",
   "src/config.js",
   "src/cloud.js",
+  "src/app.js",
+  "src/app.css",
   "SECURITY.md",
   "PRIVACY.md",
   "CONTRIBUTING.md",
@@ -36,13 +38,31 @@ for (const marker of [
   'id="accountButton"',
   'id="cloudDialog"',
   'src="/src/cloud.js"',
-  'const STORE_KEY = "shadow_mate_workbench_v1"',
-  "clearLocalData()",
+  'src="/src/app.js"',
 ]) {
   if (!html.includes(marker)) throw new Error(`index.html is missing ${marker}`);
 }
+if (/<style[\s>]/i.test(html)) {
+  throw new Error("Inline <style> blocks are not allowed; use external CSS");
+}
+if (/\sstyle=["']/i.test(html)) {
+  throw new Error("Inline style attributes are not allowed");
+}
+if (/<script(?![^>]*\ssrc=)[^>]*>/i.test(html)) {
+  throw new Error("Inline <script> blocks are not allowed; use external modules");
+}
 if (/\sonclick\s*=/i.test(html)) {
   throw new Error("Inline event handlers are not allowed");
+}
+
+const appJs = await readFile("src/app.js", "utf8");
+for (const marker of [
+  'const STORE_KEY = "shadow_mate_workbench_v1"',
+  "clearLocalData()",
+  "window.learningDesk",
+  "window.cloudSync?.schedule()",
+]) {
+  if (!appJs.includes(marker)) throw new Error(`src/app.js is missing ${marker}`);
 }
 
 const config = await readFile("src/config.js", "utf8");
@@ -129,6 +149,10 @@ const headerNames = new Set(
 );
 for (const name of ["content-security-policy", "strict-transport-security", "x-frame-options"]) {
   if (!headerNames.has(name)) throw new Error(`Vercel headers are missing ${name}`);
+}
+const cspHeader = vercel.headers?.flatMap((rule) => rule.headers || []).find((h) => h.key.toLowerCase() === "content-security-policy");
+if (cspHeader && /unsafe-inline/i.test(cspHeader.value)) {
+  throw new Error("Content-Security-Policy must not allow unsafe-inline");
 }
 
 const vercelIgnore = new Set(
