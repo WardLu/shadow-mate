@@ -40,9 +40,14 @@ jobs:
       - name: Audit dependencies
         if: ${{ hashFiles('package-lock.json') != '' }}
         run: npm audit --audit-level=high
+      - name: Start local Supabase
+        run: npx supabase start
+      - name: Run database tests
+        run: npm run test:db
+      - name: Lint database schema
+        run: npx supabase db lint --local --schema public --level warning --fail-on error
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
         run: npm run test:e2e
-

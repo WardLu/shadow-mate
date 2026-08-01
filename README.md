@@ -32,7 +32,19 @@ npm.cmd run dev
 
 ```powershell
 npm.cmd run verify
+npm.cmd run test:e2e
 ```
+
+## 测试
+
+```powershell
+npm.cmd run test:unit
+npm.cmd run test:coverage
+npm.cmd run test:e2e
+npm.cmd run test:db
+```
+
+`test:coverage` 覆盖核心纯函数和学习状态机，语句、分支、函数和行覆盖率门槛均为 80%。`test:db` 需要 Docker Desktop；GitHub Actions 会自动启动本地 Supabase、执行 pgTAP 和 schema lint。
 
 构建结果在 `dist/`。
 
@@ -53,7 +65,7 @@ npm.cmd run verify
 
 ```powershell
 supabase start
-supabase test db --local
+npm.cmd run test:db
 supabase db lint --local --schema public --level warning --fail-on error
 ```
 

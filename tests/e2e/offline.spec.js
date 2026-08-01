@@ -182,9 +182,37 @@ test.describe("Offline mode (no login)", () => {
     await page.click('[data-mod="book"]');
     const card = page.locator("[data-bk]").first();
     await expect(card).toBeVisible();
+    await expect(card).toHaveCSS("opacity", "0.55");
     await card.click();
-    // Toggle should change opacity (read/unread)
-    await expect(card).toBeVisible();
+    await expect(card).toHaveCSS("opacity", "1");
+    await card.click();
+    await expect(card).toHaveCSS("opacity", "0.55");
+  });
+
+  test("reading log can be added and deleted", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="book"]');
+    await page.fill("#pbTitle", "E2E Test Book");
+    await page.locator('.pstar[data-n="5"]').click();
+    await page.click("#pbAdd");
+
+    const logRow = page.locator(".log-row").first();
+    await expect(logRow).toContainText("E2E Test Book");
+    await expect(logRow.locator(".log-stars")).toContainText("★★★★★");
+    await logRow.locator("[data-del]").click();
+    await expect(page.locator(".log-row")).toHaveCount(0);
+  });
+
+  test("points can be cleared for the current month", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="points"]');
+    const toggle = page.locator(".pts-toggle").first();
+    const card = page.locator(".pts-card").first();
+    await toggle.click();
+    await expect(card).toHaveClass(/done/);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.click("#ptclear");
+    await expect(card).not.toHaveClass(/done/);
   });
 
   test("state persists across navigation", async ({ page }) => {
@@ -200,5 +228,15 @@ test.describe("Offline mode (no login)", () => {
     // Checkin should still be done
     const btn2 = page.locator('[data-cmod="chinese-literacy"]');
     await expect(btn2).toHaveClass(/done/);
+  });
+
+  test("state persists across a reload", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="chinese"]');
+    const btn = page.locator('[data-cmod="chinese-literacy"]');
+    if (!(await btn.evaluate((el) => el.classList.contains("done")))) await btn.click();
+    await page.reload();
+    await page.click('[data-mod="chinese"]');
+    await expect(page.locator('[data-cmod="chinese-literacy"]')).toHaveClass(/done/);
   });
 });

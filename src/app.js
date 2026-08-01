@@ -1,5 +1,11 @@
 
 import { buildMissingSequence } from "./lib.js";
+import {
+  createLearningState,
+  hasCheckin,
+  isPointMarked,
+  transitionLearningState,
+} from "./learning-state.js";
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -117,7 +123,7 @@ function readStoredState(){
   return {};
 }
 
-let store = readStoredState();
+let store = createLearningState(readStoredState());
 if(!store.checkins) store.checkins = {};   // {date: {module:true}}
 if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
 if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
@@ -149,37 +155,12 @@ function isChecked(mod){
   return hasCheckin(store.checkins[t], mod);
 }
 
-const CHECKIN_GROUPS = {
-  chinese: ["chinese-literacy", "chinese-poem", "chinese-writing"],
-  math: ["math-mental", "math-sense"],
-  english: ["english-vocabulary"],
-  book: ["book-reading"],
-};
-const CHECKIN_GROUP_BY_KEY = Object.fromEntries(
-  Object.entries(CHECKIN_GROUPS).flatMap(([group, keys]) => keys.map((key) => [key, group]))
-);
-
-function hasCheckin(day, key){
-  if(!day) return false;
-  if(day[key]) return true;
-  const group = CHECKIN_GROUP_BY_KEY[key];
-  if(group && day[group]) return true; // legacy aggregate record
-  const keys = CHECKIN_GROUPS[key];
-  return !!keys?.some((item) => day[item]);
-}
-
 function toggleCheckin(mod){
-  const t = todayKey();
-  if(!store.checkins[t]) store.checkins[t] = {};
-  const group = CHECKIN_GROUP_BY_KEY[mod];
-  if(group && store.checkins[t][group]){
-    // Upgrade an old module-level record before toggling one task.
-    delete store.checkins[t][group];
-    for(const key of CHECKIN_GROUPS[group]) store.checkins[t][key] = true;
-  }
-  if(store.checkins[t][mod]) delete store.checkins[t][mod];
-  else store.checkins[t][mod] = true;
-  if(!Object.keys(store.checkins[t]).length) delete store.checkins[t];
+  store = transitionLearningState(store, {
+    type: "CHECKIN_TOGGLED",
+    date: todayKey(),
+    key: mod,
+  });
   save();
 }
 function streak(mod){
@@ -201,14 +182,15 @@ function totalChecked(mod){
 function ymKey(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1); }
 function pointOn(itemIdx, day){
   const ym = ymKey();
-  return !!(store.points[ym] && store.points[ym][itemIdx] && store.points[ym][itemIdx][day]);
+  return isPointMarked(store, ym, itemIdx, day);
 }
 function togglePoint(itemIdx, day){
-  const ym = ymKey();
-  if(!store.points[ym]) store.points[ym] = {};
-  if(!store.points[ym][itemIdx]) store.points[ym][itemIdx] = {};
-  if(store.points[ym][itemIdx][day]) delete store.points[ym][itemIdx][day];
-  else store.points[ym][itemIdx][day] = 1;
+  store = transitionLearningState(store, {
+    type: "POINT_TOGGLED",
+    month: ymKey(),
+    itemIndex: itemIdx,
+    day,
+  });
   save();
 }
 function itemMonthTotal(itemIdx){
@@ -713,7 +695,8 @@ function renderPoints(){
   main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">🧹 清空本月积分</button></div>`));
   el("ptclear").onclick=()=>{
     if(confirm("确定清空本月所有积分打卡记录？")){
-      delete store.points[ymKey()]; save(); PT_DAY=today; renderPoints();
+      store = transitionLearningState(store, { type: "POINTS_CLEARED", month: ymKey() });
+      save(); PT_DAY=today; renderPoints();
     }
   };
   main.appendChild($(`<div class="footer">⭐ 每日按日期记录 · 本机离线保存并可同步云端</div>`));
@@ -777,7 +760,7 @@ function renderBook(){
     c.style.opacity = store.bookShelf[+c.dataset.bk] ? 1 : 0.55;
     c.onclick=()=>{
       const i=+c.dataset.bk;
-      if(store.bookShelf[i]) delete store.bookShelf[i]; else store.bookShelf[i]=1;
+      store = transitionLearningState(store, { type: "SHELF_TOGGLED", bookIndex: i });
       save(); renderBook();
     };
   });
@@ -823,7 +806,7 @@ function renderBook(){
     c.style.opacity = store.peanutRead[+c.dataset.pb] ? 1 : 0.6;
     c.onclick=()=>{
     const i=+c.dataset.pb;
-    if(store.peanutRead[i]) delete store.peanutRead[i]; else store.peanutRead[i]=1;
+    store = transitionLearningState(store, { type: "PEANUT_READ_TOGGLED", bookIndex: i });
     save(); renderBook();
     };
   });
@@ -838,13 +821,19 @@ function renderBook(){
     if(!title){ alert("请先输入书名"); return; }
     const d = new Date();
     const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    store.peanutLog.push({title, date:ds, rating});
+    store = transitionLearningState(store, {
+      type: "READING_LOG_ADDED",
+      record: { title, date: ds, rating },
+    });
     save(); renderBook();
   };
   // 绑定：删除记录
   card3.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
     const i = +x.dataset.del;
-    store.peanutLog.splice(store.peanutLog.length-1-i, 1);
+    store = transitionLearningState(store, {
+      type: "READING_LOG_REMOVED",
+      index: store.peanutLog.length - 1 - i,
+    });
     save(); renderBook();
   });
 
@@ -955,13 +944,7 @@ window.learningDesk = {
     return JSON.parse(JSON.stringify(store));
   },
   replaceState(next, options = {}){
-    store = next && typeof next === "object" ? next : {};
-    if(!store.checkins) store.checkins = {};
-    if(!store.extra) store.extra = {};
-    if(!store.points) store.points = {};
-    if(!store.bookShelf) store.bookShelf = {};
-    if(!store.peanutLog) store.peanutLog = [];
-    if(!store.peanutRead) store.peanutRead = {};
+    store = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
     if(options.persist) localStorage.setItem(STORE_KEY, JSON.stringify(store));
     switchMod(CURRENT_MOD);
   },
