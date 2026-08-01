@@ -52,13 +52,19 @@ create table if not exists public.learning_household_members (
 create index if not exists learning_members_user_household_idx
   on public.learning_household_members (user_id, household_id);
 
+-- Learner fields are guardian-provided nicknames and learning metadata only.
+-- Purpose, retention, deletion, and consent requirements live in
+-- docs/learner-data-lifecycle.md and must be updated with schema changes.
 create table if not exists public.learning_profiles (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null
     references public.learning_households(id) on delete cascade,
+  -- Guardian-selected nickname; do not use a legal name.
   display_name text not null check (char_length(display_name) between 1 and 30),
+  -- Used only to select age-appropriate learning content.
   grade_level smallint not null default 1
     check (grade_level between 1 and 12),
+  -- Optional predefined icon key; never an uploaded image or URL.
   avatar_key text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

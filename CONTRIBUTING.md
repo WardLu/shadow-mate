@@ -24,4 +24,4 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 
 ## Privacy review
 
-Any new learner field must document why it is necessary, where it is stored, its retention period, its deletion path, and whether explicit parent/guardian consent is required.
+Any new learner field must document why it is necessary, where it is stored, its retention period, its deletion path, and whether explicit parent/guardian consent is required. Keep the field inventory in [docs/learner-data-lifecycle.md](docs/learner-data-lifecycle.md) and update it in the same change.

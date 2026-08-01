@@ -276,11 +276,14 @@ function renderAccount() {
           </form>
         </div>`;
       }
-      return `<button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
-        <span>${profile.id === activeProfile?.id ? "✅" : "👦"}</span>
-        <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
-        <span class="learner-edit-btn" data-edit="${profile.id}" title="编辑">✏️</span>
-      </button>`;
+      return `<div class="learner-choice-row">
+        <button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
+          <span>${profile.id === activeProfile?.id ? "✅" : "👦"}</span>
+          <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
+          <span class="learner-edit-btn" data-edit="${profile.id}" title="编辑">✏️</span>
+        </button>
+        <button class="cloud-action danger learner-delete" type="button" data-delete-profile="${profile.id}">删除学习者</button>
+      </div>`;
     })
     .join("");
   const hhDisplay = editingHousehold
@@ -323,6 +326,30 @@ function renderAccount() {
   });
   panel.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.onclick = (e) => { e.stopPropagation(); editingProfileId = btn.dataset.edit; renderAccount(); };
+  });
+  panel.querySelectorAll("[data-delete-profile]").forEach((button) => {
+    button.onclick = async () => {
+      const profile = profiles.find((item) => item.id === button.dataset.deleteProfile);
+      if (!profile) return;
+      const confirmed = window.confirm(`将删除 ${profile.display_name} 的云端学习记录和本机缓存，此操作不可撤销。是否继续？`);
+      if (!confirmed) return;
+      const { error } = await supabase.from("learning_profiles").delete().eq("id", profile.id);
+      if (error) {
+        showToast(`删除失败：${error.message}`, 5000);
+        return;
+      }
+      const deletingActive = activeProfile?.id === profile.id;
+      profiles = profiles.filter((item) => item.id !== profile.id);
+      if (deletingActive) {
+        activeProfile = null;
+        cloudVersion = null;
+        localStorage.removeItem(ACTIVE_PROFILE_KEY);
+        window.learningDesk.replaceState({}, { persist: true });
+      }
+      await loadWorkspace();
+      renderAccount();
+      showToast("学习者及其学习记录已删除");
+    };
   });
   panel.querySelector("[data-edit-household]")?.addEventListener("click", () => { editingHousehold = true; renderAccount(); });
   panel.querySelector("[data-cancel-edit]")?.addEventListener("click", () => { editingProfileId = null; renderAccount(); });

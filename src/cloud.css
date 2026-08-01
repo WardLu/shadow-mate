@@ -197,6 +197,19 @@
   cursor: pointer;
 }
 
+.learner-choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.learner-delete {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
 .learner-choice.active {
   border-color: var(--green);
   background: var(--green-soft);
