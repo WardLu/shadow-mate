@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { escapeHtml, stateHasData, mergeObjects, mergeState, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
+import { escapeHtml, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
@@ -30,17 +30,59 @@ let saveTimer = null;
 let saveInFlight = false;
 let saveQueued = false;
 let toastTimer = null;
+let lastSyncAt = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
 const panel = document.querySelector("#cloudPanel");
 const toast = document.querySelector("#syncToast");
 
+function restoreToastLocation() {
+  if (!toast?.classList.contains("show")) return;
+  if (dialog?.open) {
+    panel?.prepend(toast);
+    toast.classList.add("in-dialog");
+  } else {
+    document.body.append(toast);
+    toast.classList.remove("in-dialog");
+  }
+}
+
+function hideToast() {
+  toast?.classList.remove("show", "in-dialog");
+  if (toast && toast.parentElement !== document.body) document.body.append(toast);
+}
+
 function showToast(message, duration = 2800) {
+  if (!toast) return;
   toast.textContent = message;
+  if (dialog?.open) {
+    panel?.prepend(toast);
+    toast.classList.add("in-dialog");
+  } else {
+    document.body.append(toast);
+    toast.classList.remove("in-dialog");
+  }
   toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), duration);
+  toastTimer = setTimeout(hideToast, duration);
+}
+
+function formatSyncTime(value) {
+  if (!value) return "尚未同步";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "尚未同步";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function updateSyncStatus() {
+  const status = panel?.querySelector("[data-last-sync]");
+  if (status) status.textContent = `家庭空间最近同步：${formatSyncTime(lastSyncAt)}`;
 }
 
 // escapeHtml imported from lib.js
@@ -78,6 +120,7 @@ function openDialog() {
 
 function closeDialog() {
   if (dialog.open) dialog.close();
+  hideToast();
 }
 
 function renderSignedOut() {
@@ -102,6 +145,7 @@ function renderSignedOut() {
         : '<div class="cloud-status">⚠️ 尚未配置云端环境，当前只能使用本机模式。</div>'
     }
   `;
+  restoreToastLocation();
 
   panel.querySelector("[data-close]").onclick = closeDialog;
   panel.querySelector("[data-clear-local]").onclick = () => {
@@ -165,6 +209,7 @@ function renderSetup() {
       </div>
     </form>
   `;
+  restoreToastLocation();
   panel.querySelector("[data-close]").onclick = closeDialog;
   panel.querySelector("#householdSetupForm").onsubmit = async (event) => {
     event.preventDefault();
@@ -247,6 +292,8 @@ function renderAccount() {
     <div class="cloud-status">☁️ ${
       activeProfile ? `${escapeHtml(activeProfile.display_name)} 的记录已连接云端` : "请选择学习者"
     }</div>
+    <div class="cloud-sync-meta" data-last-sync>家庭空间最近同步：${formatSyncTime(lastSyncAt)}</div>
+    <p class="cloud-sync-copy">家庭空间统一管理，学习记录按孩子分别同步。切换孩子后会加载对应的学习记录。</p>
     <div class="learner-list">${choices}</div>
     <form id="addLearnerForm">
       <label class="cloud-field">
@@ -267,6 +314,7 @@ function renderAccount() {
       </div>
     </form>
   `;
+  restoreToastLocation();
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await selectProfile(button.dataset.profile);
@@ -347,6 +395,7 @@ function renderPanel() {
 }
 
 async function fetchWorkspace() {
+  lastSyncAt = null;
   const { data: memberRows, error: memberError } = await supabase
     .from("learning_household_members")
     .select("household_id, role")
@@ -366,6 +415,13 @@ async function fetchWorkspace() {
     .order("created_at");
   if (profileError) throw profileError;
   profiles = profileRows || [];
+  if (profiles.length) {
+    const { data: stateRows, error: stateMetaError } = await supabase
+      .from("learning_profile_states")
+      .select("profile_id, updated_at")
+      .in("profile_id", profiles.map((profile) => profile.id));
+    if (!stateMetaError) lastSyncAt = latestUpdatedAt(stateRows || []);
+  }
   if (householdIds.length) {
     const { data: hhRows } = await supabase.from("learning_households").select("name").in("id", householdIds);
     householdName = hhRows?.[0]?.name || "";
@@ -391,7 +447,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
   const localState = window.learningDesk.getState();
   const { data, error } = await supabase
     .from("learning_profile_states")
-    .select("state, version")
+    .select("state, version, updated_at")
     .eq("profile_id", profile.id)
     .maybeSingle();
   if (error) {
@@ -404,6 +460,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
       await saveCloudState(true);
     }
   } else {
+    lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
     cloudVersion = data.version;
     const merged = stateHasData(localState) ? mergeState(localState, data.state) : data.state;
     window.learningDesk.replaceState(merged, { persist: true });
@@ -445,6 +502,8 @@ async function saveCloudState(manual = false) {
   } else {
     const row = Array.isArray(data) ? data[0] : data;
     cloudVersion = row?.version ?? cloudVersion;
+    lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+    updateSyncStatus();
     if (manual) showToast("云端记录已更新");
   }
   if (saveQueued) {
@@ -466,6 +525,7 @@ async function onAuthChange(nextSession) {
   profiles = [];
   activeProfile = null;
   cloudVersion = null;
+  lastSyncAt = null;
   setAccountState();
   if (session) {
     try {
@@ -482,6 +542,7 @@ accountButton?.addEventListener("click", openDialog);
 dialog?.addEventListener("click", (event) => {
   if (event.target === dialog) closeDialog();
 });
+dialog?.addEventListener("close", hideToast);
 
 if (cloudEnabled) {
   // Register onAuthStateChange BEFORE getSession to avoid missing the

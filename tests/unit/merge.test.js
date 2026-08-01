@@ -9,7 +9,21 @@ import {
   gradeLabel,
   gradeOptionsSelected,
   buildMissingSequence,
+  latestUpdatedAt,
 } from "../../src/lib.js";
+
+describe("family sync metadata", () => {
+  it("uses the newest child state timestamp for the family workspace", () => {
+    expect(latestUpdatedAt([
+      { profile_id: "older", updated_at: "2026-08-01T01:00:00.000Z" },
+      { profile_id: "newer", updated_at: "2026-08-01T02:30:00.000Z" },
+    ])).toBe("2026-08-01T02:30:00.000Z");
+  });
+
+  it("ignores missing or invalid timestamps", () => {
+    expect(latestUpdatedAt([{ updated_at: "not-a-date" }, {}])).toBeNull();
+  });
+});
 
 describe("grade labels", () => {
   it("covers K12 plus preschool", () => {

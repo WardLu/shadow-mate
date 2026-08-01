@@ -54,6 +54,26 @@
   transform: translate(-50%, 0);
 }
 
+/* Native dialogs render in the browser's top layer, above fixed body-level
+   elements. When a toast belongs to an open dialog, render it inline so the
+   message remains visible instead of being hidden behind the backdrop. */
+.sync-toast.in-dialog {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: auto;
+  max-width: none;
+  margin: 0 0 14px;
+  transform: none;
+  opacity: 1;
+  pointer-events: none;
+  transition: none;
+}
+
+.sync-toast.in-dialog.show {
+  transform: none;
+}
+
 .cloud-dialog {
   width: min(430px, calc(100vw - 28px));
   max-height: min(760px, calc(100vh - 28px));
@@ -144,6 +164,17 @@
   background: var(--green-soft);
   font-size: 12px;
   color: var(--green-deep);
+}
+
+.cloud-sync-meta {
+  margin: -5px 0 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.cloud-sync-copy {
+  margin-bottom: 12px !important;
+  font-size: 12px !important;
 }
 
 .learner-list {

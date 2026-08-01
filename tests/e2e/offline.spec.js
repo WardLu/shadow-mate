@@ -19,6 +19,24 @@ test.describe("Offline mode (no login)", () => {
     await expect(btn).toContainText("登录");
   });
 
+  test("cloud error toast stays visible inside the open account dialog", async ({ page }) => {
+    await page.goto("/");
+    await page.route("**/auth/v1/otp**", async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "invalid_request", error_description: "测试失败" }),
+      });
+    });
+    await page.click("#accountButton");
+    await page.fill('#emailLoginForm input[name="email"]', "test@example.com");
+    await page.click('#emailLoginForm button[type="submit"]');
+    const toast = page.locator("#syncToast");
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveClass(/in-dialog/);
+    await expect(toast.evaluate((element) => element.parentElement?.id)).resolves.toBe("cloudPanel");
+  });
+
   test("navigation switches between modules", async ({ page }) => {
     await page.goto("/");
     for (const [mod, label] of [

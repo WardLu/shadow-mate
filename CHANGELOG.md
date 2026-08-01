@@ -6,6 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- 修复家庭空间弹窗内 Toast 被原生 dialog 遮挡的问题；新增家庭空间最近同步时间，并明确家庭统一管理、学习记录按孩子隔离同步。
 - 修复英语单词发音按钮无反馈：增加浏览器能力检测、播放中状态和失败回退提示。
 - 修复数感星球缺失数字生成逻辑，避免问号前后跳过两个数字。
 - 修复绘本打卡首次点击状态不更新的问题。
