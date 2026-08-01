@@ -259,11 +259,11 @@ erDiagram
 - 4 张 `learning_*` 表均已启用 RLS；
 - 共 12 条针对 authenticated 的策略；
 - `learning_save_state` 为 security invoker；
-- pgTAP 20 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回；
+- pgTAP 30 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回，并覆盖账户与家庭删除权限；
 - 数据库 lint 无 schema 错误；
 - 已从空数据库验证产品 ID、外键、默认值、检查约束和家庭级 RLS。
 
-截至本次本地验收，线上共享 Supabase 尚未执行改名迁移；必须先完成浏览器测试和 Vercel Preview 验收，再应用线上迁移并重新运行 Security/Performance Advisor。此顺序避免把未经端到端验证的结构直接发布到生产。
+截至本次验收，线上共享 Supabase 已应用本次 4 个新增迁移，并完成函数权限、项目隔离和远端对象存在性检查。后续生产发布仍需完成浏览器测试和 Vercel Preview 验收，并重新运行 Security/Performance Advisor，避免未经端到端验证的前端版本直接发布到生产。
 
 共享数据库的 Advisor 仍报告其他历史对象存在 security-definer view、可变 search path、重复策略等问题。这些不由本次迁移产生，也没有在本项目中擅自修改；应另开数据库安全清理任务，逐项评估现有产品影响。
 

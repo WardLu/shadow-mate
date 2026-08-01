@@ -1,11 +1,15 @@
 
-import { buildMissingSequence } from "./lib.js";
+import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { icon, hydrateIcons } from "./icons.js";
 import {
+  CHECKIN_GROUPS,
   createLearningState,
   hasCheckin,
   isPointMarked,
   transitionLearningState,
 } from "./learning-state.js";
+
+const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -204,10 +208,26 @@ function monthTotal(){
   for(let i=0;i<POINT_ITEMS.length;i++) s += itemMonthTotal(i);
   return s;
 }
+function pointDayState(day){
+  let total = 0;
+  let positive = false;
+  let negative = false;
+  for(let i=0;i<POINT_ITEMS.length;i++){
+    if(!pointOn(i,day)) continue;
+    const points = POINT_ITEMS[i].pts;
+    total += points;
+    if(points > 0) positive = true;
+    if(points < 0) negative = true;
+  }
+  return {
+    total,
+    positive,
+    negative,
+    kind: positive && negative ? "mixed" : positive ? "pos" : negative ? "neg" : "",
+  };
+}
 function dayTotal(day){
-  let s = 0;
-  for(let i=0;i<POINT_ITEMS.length;i++) if(pointOn(i,day)) s += POINT_ITEMS[i].pts;
-  return s;
+  return pointDayState(day).total;
 }
 
 /* =========================================================
@@ -215,10 +235,11 @@ function dayTotal(day){
    ========================================================= */
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
+function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
 function speak(t, button){
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
-  const originalLabel = button?.dataset.label || button?.textContent || "🔊 听发音";
+  const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
   const showSpeechGuide = () => {
     if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
@@ -235,7 +256,7 @@ function speak(t, button){
   };
   const restore = () => {
     if (!button) return;
-    button.textContent = originalLabel;
+    button.innerHTML = buttonContent("volume", originalLabel);
     button.disabled = false;
     button.removeAttribute("aria-busy");
     button.removeAttribute("data-speech-failure");
@@ -243,7 +264,7 @@ function speak(t, button){
   const fail = (message) => {
     restore();
     if (!button) return;
-    button.textContent = `⚠️ ${message}`;
+    button.innerHTML = buttonContent("alert", message);
     button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
     button.dataset.speechFailure = "true";
     showSpeechGuide();
@@ -257,7 +278,7 @@ function speak(t, button){
   }
   if (button) {
     button.dataset.label = originalLabel;
-    button.textContent = "🔊 播放中…";
+    button.innerHTML = buttonContent("volume", "播放中…");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
   }
@@ -295,22 +316,22 @@ function renderHome(){
   const hz = HANZI[(di*2)%HANZI.length];
   const poem = POEMS[di%POEMS.length];
   const en = ENGLISH[di%ENGLISH.length];
-  const checkedToday = ["chinese","math","english"].filter(isChecked).length;
+  const checkedToday = CHECKIN_MODULES.filter(isChecked).length;
   const m = new Date().getMonth()+1;
   const main = el("main");
   main.innerHTML = "";
   main.appendChild($(`
     <div class="banner">
-      <div class="t">⛏️ 挖掘机小队长，今天也要加油哦！</div>
-      <div class="d">今日已打卡 ${checkedToday}/3 个模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」</div>
+      <div class="t">${icon("construction")} 挖掘机小队长，今天也要加油哦！</div>
+      <div class="d">今日已打卡 ${checkedToday}/${CHECKIN_MODULES.length} 个学习模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」</div>
     </div>
   `));
 
   const stat = $(`
     <div class="card">
-      <h3>📊 今日成长数据</h3>
+      <h3>${icon("chart")} 今日成长数据</h3>
       <div class="stat-grid">
-        <div class="stat"><div class="n">${checkedToday}/3</div><div class="t">今日打卡</div></div>
+        <div class="stat"><div class="n">${checkedToday}/${CHECKIN_MODULES.length}</div><div class="t">今日打卡</div></div>
         <div class="stat"><div class="n">${streak("chinese")}</div><div class="t">语文连续(天)</div></div>
         <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计打卡</div></div>
         <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计打卡</div></div>
@@ -319,23 +340,23 @@ function renderHome(){
     </div>
   `);
   main.appendChild(stat);
-  stat.querySelector(".progressbar i").style.width = (checkedToday/3*100)+"%";
+  stat.querySelector(".progressbar i").style.width = (checkedToday/CHECKIN_MODULES.length*100)+"%";
 
   // 三大模块快捷入口
-  const mk = (mod,em,t,d)=>$(`
-    <div class="card" data-go="${mod}">
-      <h3>${em} ${t}</h3>
+  const mk = (mod,iconName,t,d)=>$(`
+    <button class="card card-action" type="button" data-go="${mod}">
+      <h3>${icon(iconName)} ${t}</h3>
       <div class="desc">${d}</div>
-      <span class="pill">${isChecked(mod)?"✅ 今日已打卡":"今日待打卡"}</span>
-    </div>
+      <span class="pill">${isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡"}</span>
+    </button>
   `);
-  main.appendChild(mk("chinese","📖","语文学习","识字·古诗词·写字 每日打卡"));
-  main.appendChild(mk("math","🔢","数学与数感","口算·数感游戏·数独 每日打卡"));
-  main.appendChild(mk("english","🔤","英语学习","主题单词 每日推送与朗读打卡"));
-  main.appendChild(mk("book","📚","绘本读物","多地优质绘本 · 跟读+思考题"));
-  main.appendChild(mk("points","⭐","积分打卡","加分减分 · 月度行为积分表"));
+  main.appendChild(mk("chinese","book","语文学习","识字·古诗词·写字 每日打卡"));
+  main.appendChild(mk("math","calculator","数学与数感","口算·数感游戏·数独 每日打卡"));
+  main.appendChild(mk("english","languages","英语学习","主题单词 每日推送与朗读打卡"));
+  main.appendChild(mk("book","library","绘本读物","多地优质绘本 · 跟读+思考题"));
+  main.appendChild(mk("points","star","积分打卡","加分减分 · 月度行为积分表"));
   main.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
-  main.appendChild($(`<div class="footer">🚜 本机离线保存 · 家长登录后自动同步云端</div>`));
+  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 家长登录后自动同步云端</div>`));
 }
 
 /* =========================================================
@@ -344,7 +365,7 @@ function renderHome(){
 function renderChinese(){
   const di = dayIndex();
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("📖","语文学习"));
+  main.appendChild(modTitle("book","语文学习"));
 
   // 识字打卡（每日2新字 + 复习昨日）
   const i1 = (di*2)%HANZI.length, i2=(di*2+1)%HANZI.length;
@@ -352,14 +373,14 @@ function renderChinese(){
   const ri = ((di-1)*2)%HANZI.length; const rc=HANZI[(ri+1)%HANZI.length];
   const card1 = $(`
     <div class="card">
-      <h3>✏️ 识字打卡 <span class="pill">每日 2 新字 + 复习</span></h3>
+      <h3>${icon("pen")} 识字打卡 <span class="pill">每日 2 新字 + 复习</span></h3>
       <div class="desc">3000 常用字按频次排序，每天学 2 个新字并复习旧字。今日新字：</div>
       <div class="grid2">
         <div class="mini-card"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
         <div class="mini-card"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
       </div>
-      <div class="desc mt-12">🔁 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
-      <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">▶ B站教学视频</a>
+      <div class="desc mt-12">${icon("rotate")} 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
+      <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">${icon("play")} B站教学视频</a>
       <div class="spacer-12"></div>
       ${checkinBtn("chinese-literacy","识字")}
     </div>
@@ -370,11 +391,11 @@ function renderChinese(){
   const p = POEMS[di%POEMS.length];
   const card2 = $(`
     <div class="card">
-      <h3>📜 背诵古诗词 <span class="pill">${p.g}</span></h3>
+      <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${p.g}</span></h3>
       <div class="poem-title">《${p.t}》</div>
       <div class="poem-meta">${p.a} · 人教版</div>
       <div class="poem-body">${p.c.join("<br>")}</div>
-      <div class="text-center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">▶ 跟读视频</a></div>
+      <div class="text-center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">${icon("play")} 跟读视频</a></div>
       <div class="spacer-12"></div>
       ${checkinBtn("chinese-poem","古诗")}
     </div>
@@ -386,12 +407,12 @@ function renderChinese(){
   const wordsHtml = WRITE_WORDS.slice(0,4).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
   const card3 = $(`
     <div class="card">
-      <h3>✍️ 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
+      <h3>${icon("pen")} 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
       <div class="desc">8 个基础笔画：${strokesHtml}</div>
       <div class="desc">今日练习汉字（从简到难，控笔临摹）：</div>
       ${wordsHtml}
       <div class="spacer-12"></div>
-      <button class="checkin" type="button" data-print>🖨️ 打印 A4 字帖</button>
+      <button class="checkin" type="button" data-print>${icon("download")} 打印 A4 字帖</button>
       <div class="spacer-10"></div>
       ${checkinBtn("chinese-writing","写字")}
     </div>
@@ -413,7 +434,7 @@ function genQuiz(){
 }
 function renderMath(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("🔢","数学与数感"));
+  main.appendChild(modTitle("calculator","数学与数感"));
 
   // 口算
   const q = genQuiz();
@@ -421,14 +442,14 @@ function renderMath(){
   const lvlHtml = lvls.map(n=>`<button class="lvl-btn ${n===mathLevel?'active':''}" data-lvl="${n}">${n}以内</button>`).join("");
   const card1 = $(`
     <div class="card">
-      <h3>🧮 口算打卡 <span class="pill">10/20/50/100 以内加减</span></h3>
+      <h3>${icon("calculator")} 口算打卡 <span class="pill">10/20/50/100 以内加减</span></h3>
       <div class="lvl-row">${lvlHtml}</div>
       <div class="quiz-box">
         <div class="quiz-q" id="qq">${q}</div>
-        <input class="quiz-input" id="qa" type="number" inputmode="numeric" placeholder="?">
+        <input class="quiz-input" id="qa" type="number" inputmode="numeric" aria-labelledby="qq" placeholder="?">
         <div class="feedback" id="qf"></div>
       </div>
-      <button class="checkin" id="qsubmit">✔ 提交答案</button>
+      <button class="checkin" id="qsubmit">${icon("check")} 提交答案</button>
       <div class="spacer-8"></div>
       ${checkinBtn("math-mental","口算")}
     </div>
@@ -439,7 +460,7 @@ function renderMath(){
     const v = el("qa").value;
     const f = el("qf");
     if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.textContent="🎉 答对啦，真棒！"; f.className="feedback ok"; }
+    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
     else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
   };
 
@@ -451,11 +472,13 @@ function renderMath(){
   });
   const miss = sequence.answer;
   const cells = sequence.values
-    .map((num) => `<div class="num-cell ${num === null ? "miss" : ""}" data-num="${num ?? miss}">${num ?? "?"}</div>`)
+    .map((num) => num === null
+      ? `<button class="num-cell miss" type="button" data-num="${miss}" aria-label="填写缺失数字">?</button>`
+      : `<div class="num-cell">${num}</div>`)
     .join("");
   const card2 = $(`
     <div class="card">
-      <h3>🔢 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
+      <h3>${icon("brain")} 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
       <div class="desc">点击问号格，说出它应该是哪个数字（按 1 递增顺序）。</div>
       <div class="num-grid">${cells}</div>
       <div class="feedback text-center" id="nf"></div>
@@ -463,12 +486,12 @@ function renderMath(){
   `);
   main.appendChild(card2);
   const missCell = card2.querySelector(".num-cell.miss");
-  missCell.onclick=()=>{ const nf=el("nf"); const ans=prompt("这个格子应该是数字几？"); if(ans!==null){ if(+ans===miss){ nf.textContent="✅ 正确！数列规律是每次 +1"; nf.className="feedback ok"; missCell.classList.add("found"); missCell.textContent=miss; } else { nf.textContent=`不对哦，看看前后数字～`; nf.className="feedback no"; } } };
+  missCell.onclick=()=>{ const nf=el("nf"); const ans=prompt("这个格子应该是数字几？"); if(ans!==null){ if(+ans===miss){ nf.innerHTML=`${icon("checkCircle")} 正确！数列规律是每次 +1`; nf.className="feedback ok"; missCell.classList.add("found"); missCell.innerHTML=`${icon("check")} ${miss}`; missCell.setAttribute("aria-label", `缺失数字为 ${miss}`); missCell.disabled=true; } else { nf.textContent=`不对哦，看看前后数字～`; nf.className="feedback no"; } } };
 
   // 数独 4x4
   const card3 = $(`
     <div class="card">
-      <h3>♟️ 数独游戏 <span class="pill">数感阶段</span></h3>
+      <h3>${icon("grid")} 数独游戏 <span class="pill">数感阶段</span></h3>
       <div class="desc">把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</div>
       <div class="sudoku" id="sudoku"></div>
       <div class="feedback text-center" id="sf"></div>
@@ -496,7 +519,7 @@ function buildSudoku(){
     const v=sol[r][c];
     if(blanks.has(idx)){
       const inp=document.createElement("div");
-      inp.innerHTML=`<input type="number" min="1" max="4" data-r="${r}" data-c="${c}">`;
+      inp.innerHTML=`<input type="number" min="1" max="4" inputmode="numeric" aria-label="第${r+1}行第${c+1}列" data-r="${r}" data-c="${c}">`;
       box.appendChild(inp.firstChild);
     } else {
       const d=document.createElement("div");
@@ -523,25 +546,25 @@ function buildSudoku(){
 function renderEnglish(){
   const di = dayIndex();
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("🔤","英语学习"));
+  main.appendChild(modTitle("languages","英语学习"));
   // 每日推送 1~2 词
   const w1 = ENGLISH[di%ENGLISH.length];
   const w2 = ENGLISH[(di+1)%ENGLISH.length];
   const card1 = $(`
     <div class="card">
-      <h3>🔤 今日主题单词 <span class="pill">每日推送</span></h3>
+      <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
       <div class="desc">拼读并朗读下面的单词，读完点「完成今日打卡」。</div>
       <div class="word-card">
         <div class="word-en">${w1[0]}</div>
         <div class="word-ph">${w1[1]}</div>
         <div class="word-cn">${w1[2]} · ${w1[3]}</div>
-        <button class="speak-btn" type="button" data-speak="0">🔊 听发音</button>
+        <button class="speak-btn" type="button" data-speak="0" data-label="听发音">${buttonContent("volume", "听发音")}</button>
       </div>
       <div class="word-card">
         <div class="word-en">${w2[0]}</div>
         <div class="word-ph">${w2[1]}</div>
         <div class="word-cn">${w2[2]} · ${w2[3]}</div>
-        <button class="speak-btn" type="button" data-speak="1">🔊 听发音</button>
+        <button class="speak-btn" type="button" data-speak="1" data-label="听发音">${buttonContent("volume", "听发音")}</button>
       </div>
       <div class="spacer-10"></div>
       ${checkinBtn("english-vocabulary","单词")}
@@ -563,7 +586,7 @@ function renderEnglish(){
   }
   const card2 = $(`
     <div class="card">
-      <h3>📅 往期单词回看 <span class="pill">本月</span></h3>
+      <h3>${icon("calendar")} 往期单词回看 <span class="pill">本月</span></h3>
       <div class="desc">按月回看之前朗读过的单词（最近 ${Math.min(28,new Date().getDate())} 天）：</div>
       <div class="month-review">${chips}</div>
     </div>
@@ -576,18 +599,19 @@ function renderEnglish(){
    ========================================================= */
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("🌱","成长记录"));
-  const total = totalChecked("chinese")+totalChecked("math")+totalChecked("english");
+  main.appendChild(modTitle("sprout","成长记录"));
+  const total = CHECKIN_MODULES.reduce((sum, module) => sum + totalChecked(module), 0);
   const card = $(`
     <div class="card">
-      <h3>🏆 打卡总览</h3>
+      <h3>${icon("trophy")} 打卡总览</h3>
       <div class="stat-grid">
         <div class="stat"><div class="n">${totalChecked("chinese")}</div><div class="t">语文累计(天)</div></div>
         <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计(天)</div></div>
         <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计(天)</div></div>
-        <div class="stat"><div class="n">${total}</div><div class="t">总打卡(次)</div></div>
+        <div class="stat"><div class="n">${totalChecked("book")}</div><div class="t">绘本累计(天)</div></div>
       </div>
-      <div class="desc mt-14">🔥 连续打卡：语文 ${streak("chinese")} 天 · 数学 ${streak("math")} 天 · 英语 ${streak("english")} 天</div>
+      <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
+      <div class="desc mt-14">${icon("flame")} 连续打卡：语文 ${streak("chinese")} 天 · 数学 ${streak("math")} 天 · 英语 ${streak("english")} 天 · 绘本 ${streak("book")} 天</div>
       <div class="progressbar"><i></i></div>
       <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
     </div>
@@ -600,62 +624,76 @@ function renderGrow(){
   for(let i=29;i>=0;i--){
     const k=dateKeyOffset(i);
     const c=store.checkins[k];
-    const n = c? Object.keys(c).length:0;
-    const lvl = n>=3?3:n===2?2:n===1?1:0;
-    cells += `<div class="cal-cell lvl-${lvl}">${n||""}</div>`;
+    const n = CHECKIN_MODULES.filter((module) => hasCheckin(c, module)).length;
+    const lvl = n;
+    const day = Number(k.slice(-2));
+    const label = `${k}，${n ? `已完成 ${n}/${CHECKIN_MODULES.length} 个学习模块` : "未打卡"}`;
+    cells += `<div class="cal-cell lvl-${lvl}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${CHECKIN_MODULES.length}</span></div>`;
   }
   const cal = $(`
     <div class="card">
-      <h3>📆 近 30 天打卡日历</h3>
+      <h3>${icon("calendar")} 近 30 天打卡日历</h3>
       <div class="cal-grid">${cells}</div>
-      <div class="desc mt-10 note-sm">🟩 全勤 · 🟩浅 2项 · 🟨 1项 · ⬜ 未打卡</div>
+      <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${CHECKIN_MODULES.length} 个模块，边框表示今天。</div>
+      <div class="cal-legend" aria-label="成长日历图例">
+        <span class="cal-legend-item"><i class="cal-swatch lvl-0" aria-hidden="true"></i>0/${CHECKIN_MODULES.length} 未打卡</span>
+        <span class="cal-legend-item"><i class="cal-swatch lvl-1" aria-hidden="true"></i>1/${CHECKIN_MODULES.length} 模块</span>
+        <span class="cal-legend-item"><i class="cal-swatch lvl-2" aria-hidden="true"></i>2/${CHECKIN_MODULES.length} 模块</span>
+        <span class="cal-legend-item"><i class="cal-swatch lvl-3" aria-hidden="true"></i>3/${CHECKIN_MODULES.length} 模块</span>
+        <span class="cal-legend-item"><i class="cal-swatch lvl-4" aria-hidden="true"></i>${CHECKIN_MODULES.length}/${CHECKIN_MODULES.length} 全部完成</span>
+        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+      </div>
     </div>
   `);
   main.appendChild(cal);
-  main.appendChild($(`<div class="footer">🚜 本机离线保存 · 登录后跨设备同步</div>`));
+  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
 /* =========================================================
    渲染：积分打卡
    ========================================================= */
 /* 积分卡片辅助 */
-const PTS_ICON = {"一起做家务":"🧹","认真完成学习":"📚","帮带带弟弟":"🤝","古诗词跟读":"📜","撒谎":"🚫","白天摸当众摸鸡鸡":"🙈","不收玩具":"🧸"};
+const PTS_ICON = {"一起做家务":"house","认真完成学习":"bookCheck","帮带带弟弟":"learner","古诗词跟读":"bookMarked","撒谎":"circleX","白天摸当众摸鸡鸡":"alert","不收玩具":"eraser"};
 let PT_DAY = null;
 function ptsCardHTML(it, i, day){
   const done = pointOn(i, day);
   const sub = it.pts < 0;
-  const icon = PTS_ICON[it.name] || (sub ? "⚠️" : "🌟");
+  const ptsIcon = PTS_ICON[it.name] || (sub ? "alert" : "star");
   return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
-    <div class="pts-ic">${icon}</div>
+    <div class="pts-ic">${icon(ptsIcon)}</div>
     <div class="pts-info">
       <div class="pts-name">${it.name}</div>
       ${it.desc?`<div class="pts-desc">${it.desc}</div>`:""}
     </div>
     <div class="pts-badge">${it.pts>0?'+':'-'}${Math.abs(it.pts)}分</div>
-    <button class="pts-toggle" data-i="${i}">${done?'✓':'＋'}</button>
+    <button class="pts-toggle" type="button" data-i="${i}" aria-pressed="${done}" aria-label="${done?"取消":"记录"}${it.name}">${done?icon("check"):icon("plus")}</button>
   </div>`;
 }
 
 function renderPoints(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("⭐","积分打卡"));
-  const today = new Date().getDate();
-  const ymLabel = new Date().getFullYear()+"年"+(new Date().getMonth()+1)+"月";
-  if(PT_DAY===null) PT_DAY = today;
+  main.appendChild(modTitle("star","积分打卡"));
+  const currentDate = new Date();
+  const today = currentDate.getDate();
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const ymLabel = year+"年"+(month+1)+"月";
+  if(PT_DAY===null || PT_DAY > daysInMonth) PT_DAY = Math.min(today, daysInMonth);
   const activeDay = PT_DAY;
   const mt = monthTotal();
   const dt = dayTotal(activeDay);
 
   // 挖掘机主题横幅
   main.appendChild($(`<div class="exc-banner">
-      <div class="em">🚜</div>
+      <div class="em">${icon("construction")}</div>
       <div><div class="t">挖掘机小队长 · 积分打卡榜</div><div class="d">完成好习惯就点亮小星星，绿挖挖帮你攒积分！</div></div>
-      <div class="badge">⭐ ${mt>0?'+':''}${mt} 分</div>
+      <div class="badge">${icon("star")} ${mt>0?'+':''}${mt} 分</div>
     </div>`));
 
   // 顶部统计
   main.appendChild($(`<div class="card">
-      <h3>🚜 本月积分</h3>
+      <h3>${icon("construction")} 本月积分</h3>
       <div class="stat-grid">
         <div class="stat"><div class="n">${mt>0?'+':''}${mt}</div><div class="t">本月累计</div></div>
         <div class="stat"><div class="n">${dt>0?'+':''}${dt}</div><div class="t">${activeDay}日积分</div></div>
@@ -664,14 +702,23 @@ function renderPoints(){
 
   // 积分日历（圆角 chip，可补打卡）
   let chips="";
-  for(let d=1;d<=31;d++){
-    const v=dayTotal(d);
-    const cls=(d===activeDay?"active ":"")+(v>0?"pos":v<0?"neg":"");
-    chips+=`<div class="cal-chip ${cls}" data-d="${d}">${d}</div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const state=pointDayState(d);
+    const stateText=state.kind==="pos"?"有加分":state.kind==="neg"?"有扣分":state.kind==="mixed"?"有加分和扣分":"无积分";
+    const cls=[d===activeDay?"active":"",state.kind].filter(Boolean).join(" ");
+    const selectedText=d===activeDay?"，当前选中":"";
+    chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
   }
   const calCard=$(`<div class="card">
-      <h3>📅 积分日历 <span class="pill">${ymLabel}</span></h3>
-      <div class="desc">点日期可以给过去的某一天补打卡～绿色=有加分，红色=有扣分。</div>
+      <h3>${icon("calendar")} 积分日历 <span class="pill">${ymLabel}</span></h3>
+      <div class="cal-helper">点击日期选择要补打卡的日期；边框表示当前选中日期。</div>
+      <div class="cal-legend" aria-label="积分日历图例">
+        <span class="cal-legend-item"><i class="cal-swatch neutral" aria-hidden="true"></i>无积分</span>
+        <span class="cal-legend-item"><i class="cal-swatch pos" aria-hidden="true"></i>有加分</span>
+        <span class="cal-legend-item"><i class="cal-swatch neg" aria-hidden="true"></i>有扣分</span>
+        <span class="cal-legend-item"><i class="cal-swatch mixed" aria-hidden="true"></i>加分和扣分</span>
+        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>当前选中</span>
+      </div>
       <div class="cal">${chips}</div>
     </div>`);
   main.appendChild(calCard);
@@ -680,11 +727,11 @@ function renderPoints(){
   // 打卡区（卡片化）
   const isToday = activeDay===today;
   const head = $(`<div class="card">
-      <div class="pts-sec">✨ 为 ${new Date().getMonth()+1}月${activeDay}日 打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
-      ${isToday?"":'<button class="checkin danger mb-12" id="backtoday">↩ 回到今天</button>'}
-      <div class="pts-sec">🌟 加分项</div>
+      <div class="pts-sec">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
+      ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
+      <div class="pts-sec">${icon("plus")} 加分项</div>
       ${POINT_ITEMS.filter(it=>it.group==="加分项").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
-      <div class="pts-sec">⚠️ 减分项目</div>
+      <div class="pts-sec">${icon("minus")} 减分项目</div>
       ${POINT_ITEMS.filter(it=>it.group==="减分项目").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
     </div>`);
   main.appendChild(head);
@@ -692,14 +739,14 @@ function renderPoints(){
   const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
 
   // 清空
-  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">🧹 清空本月积分</button></div>`));
+  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 清空本月积分</button></div>`));
   el("ptclear").onclick=()=>{
     if(confirm("确定清空本月所有积分打卡记录？")){
       store = transitionLearningState(store, { type: "POINTS_CLEARED", month: ymKey() });
       save(); PT_DAY=today; renderPoints();
     }
   };
-  main.appendChild($(`<div class="footer">⭐ 每日按日期记录 · 本机离线保存并可同步云端</div>`));
+  main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
 }
 
 /* =========================================================
@@ -707,7 +754,7 @@ function renderPoints(){
    ========================================================= */
 function renderBook(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("📚","绘本读物"));
+  main.appendChild(modTitle("library","绘本读物"));
 
   const BOOKS = [
     {t:"好饿的毛毛虫",   r:"美国",  a:"艾瑞·卡尔"},
@@ -725,7 +772,7 @@ function renderBook(){
   // 今日绘本 + 打卡
   const card1 = $(`
     <div class="card">
-      <h3>📖 今日绘本 <span class="pill">${b.r}</span></h3>
+      <h3>${icon("book")} 今日绘本 <span class="pill">${b.r}</span></h3>
       <div class="desc">《${b.t}》— ${b.a}</div>
       <div class="desc">raza 绘本跟读 · 读后完成思考题；26 个字母口语对练、英语句子书写造句每日推送（3-6 岁）。</div>
       <div class="row">
@@ -740,16 +787,16 @@ function renderBook(){
   // 我的小书架（已读标记，永久存档）
   let shelf = BOOKS.map((bk,i)=>{
     const read = !!store.bookShelf[i];
-    return `<div class="mini-card shelf-card" data-bk="${i}">
-      <div class="big">${read?'✅':'📕'}</div>
+    return `<button class="mini-card shelf-card" type="button" data-bk="${i}" aria-pressed="${read}" aria-label="标记《${bk.t}》已读">
+      <div class="big">${read?icon("checkCircle"):icon("book")}</div>
       <div class="py">${bk.t}</div>
       <div class="label">${bk.r}</div>
-    </div>`;
+    </button>`;
   }).join("");
   const readN = Object.keys(store.bookShelf).length;
   const card2 = $(`
     <div class="card">
-      <h3>📚 我的小书架 <span class="pill">点击标记已读</span></h3>
+      <h3>${icon("bookMarked")} 我的小书架 <span class="pill">点击标记已读</span></h3>
       <div class="desc">欧盟、美国、日本、台湾等多地优质绘本，读完并完成思考题后点一下即可标记。</div>
       <div class="grid2">${shelf}</div>
       <div class="desc mt-12">已读 <b>${readN}</b> / ${BOOKS.length} 本</div>
@@ -768,33 +815,34 @@ function renderBook(){
   // 小花生APP读物：热门书单 + 我的阅读记录
   const peanutRead = PEANUT_BOOKS.map((b,i)=>{
     const on = !!store.peanutRead[i];
-    return `<div class="mini-card peanut-card" data-pb="${i}">
-      <div class="big">${on?'✅':'🥜'}</div>
+    return `<button class="mini-card peanut-card" type="button" data-pb="${i}" aria-pressed="${on}" aria-label="标记《${b.t}》已读">
+      <div class="big">${on?icon("checkCircle"):icon("bookOpenCheck")}</div>
       <div class="py">${b.t}</div>
       <div class="label">${b.tag}</div>
-    </div>`;
+    </button>`;
   }).join("");
   const logRows = store.peanutLog.slice().reverse().map((r,idx)=>{
-    const stars = "★".repeat(r.rating)+"☆".repeat(5-r.rating);
+    const stars = Array.from({ length: 5 }, (_, starIndex) => icon("star", { filled: starIndex < r.rating })).join("");
     return `<div class="log-row">
       <div class="log-main">${r.title}<span class="log-stars">${stars}</span></div>
-      <div class="log-meta">${r.date} <span class="log-del" data-del="${idx}">🗑️</span></div>
+      <div class="log-meta">${r.date} <button class="log-del" type="button" data-del="${idx}" aria-label="删除阅读记录 ${escapeHtml(r.title)}">${icon("trash")}</button></div>
     </div>`;
   }).join("");
 
   const card3 = $(`
     <div class="card">
-      <h3>🥜 小花生APP读物 <span class="pill">热门书单</span></h3>
+      <h3>${icon("bookOpenCheck")} 小花生APP读物 <span class="pill">热门书单</span></h3>
       <div class="desc">小花生热门童书与英文分级书单（牛津树 / 红火箭 / 廖彩杏等），点一下标记已读；下方可手记你自己的阅读记录。</div>
       <div class="grid2">${peanutRead}</div>
       <div class="spacer-12"></div>
-      <div class="pts-sec">📒 我的阅读记录</div>
+      <div class="pts-sec">${icon("notebook")} 我的阅读记录</div>
       <div class="peanut-form">
-        <input class="peanut-input" id="pbTitle" placeholder="输入书名（如：牛津阅读树 L3）">
-        <div class="peanut-stars" id="pbStars">
-          ${[1,2,3,4,5].map(n=>`<span class="pstar" data-n="${n}">${n<=3?'★':'☆'}</span>`).join("")}
+        <label class="peanut-label" for="pbTitle">阅读书名</label>
+        <input class="peanut-input" id="pbTitle" aria-label="阅读书名" placeholder="输入书名（如：牛津阅读树 L3）">
+        <div class="peanut-stars" id="pbStars" role="group" aria-label="阅读评分">
+          ${[1,2,3,4,5].map(n=>`<button class="pstar" type="button" data-n="${n}" aria-label="${n}星">${icon("star", { filled: n <= 3 })}</button>`).join("")}
         </div>
-        <button class="checkin mt-8" id="pbAdd">＋ 添加阅读记录</button>
+        <button class="checkin mt-8" id="pbAdd">${icon("plus")} 添加阅读记录</button>
       </div>
       <div class="peanut-log">${logRows || '<div class="desc">还没有记录，添加一本吧～</div>'}</div>
     </div>
@@ -813,7 +861,12 @@ function renderBook(){
   // 绑定：评分星
   let rating = 3;
   const starEls = card3.querySelectorAll(".pstar");
-  const paintStars = (n)=>starEls.forEach(s=>{ s.textContent = (+s.dataset.n<=n?"★":"☆"); });
+  const paintStars = (n)=>starEls.forEach(s=>{
+    const active = +s.dataset.n <= n;
+    s.innerHTML = icon("star", { filled: active });
+    s.setAttribute("aria-pressed", String(active));
+  });
+  paintStars(rating);
   starEls.forEach(s=>s.onclick=()=>{ rating=+s.dataset.n; paintStars(rating); });
   // 绑定：添加记录
   el("pbAdd").onclick=()=>{
@@ -837,7 +890,7 @@ function renderBook(){
     save(); renderBook();
   });
 
-  main.appendChild($(`<div class="footer">📚 本机离线保存 · 登录后跨设备同步</div>`));
+  main.appendChild($(`<div class="footer">${icon("library")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
 function renderGuide(){
@@ -893,12 +946,12 @@ function renderGuide(){
 /* =========================================================
    公共组件
    ========================================================= */
-function modTitle(em,t){
-  return $(`<div class="module-title"><span class="em">${em}</span><h2>${t}</h2></div>`);
+function modTitle(iconName,t){
+  return $(`<div class="module-title"><span class="em">${icon(iconName)}</span><h2>${t}</h2></div>`);
 }
 function checkinBtn(mod,label){
   const done = isChecked(mod);
-  return `<button class="checkin ${done?'done':''}" data-cmod="${mod}" data-clabel="${label}">${done?'✅ 今日已打卡 · '+label+'（点击取消）':'✔ 完成今日打卡 · '+label}</button>`;
+  return `<button class="checkin ${done?'done':''}" type="button" data-cmod="${mod}" data-clabel="${label}" aria-pressed="${done}">${done?`${icon("checkCircle")} 今日已打卡 · ${label}（点击取消）`:`${icon("check")} 完成今日打卡 · ${label}`}</button>`;
 }
 
 /* =========================================================
@@ -907,7 +960,12 @@ function checkinBtn(mod,label){
 let CURRENT_MOD = "home";
 function switchMod(mod){
   CURRENT_MOD = mod;
-  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active", b.dataset.mod===mod));
+  document.querySelectorAll(".navbtn").forEach(b=>{
+    const active = b.dataset.mod === mod;
+    b.classList.toggle("active", active);
+    if(active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
   if(mod==="home") renderHome();
   else if(mod==="chinese") renderChinese();
   else if(mod==="math") renderMath();
@@ -928,6 +986,7 @@ function switchMod(mod){
 }
 
 document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod));
+hydrateIcons();
 
 // 日期显示
 (function(){

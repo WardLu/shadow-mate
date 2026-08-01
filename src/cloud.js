@@ -1,6 +1,7 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
 import { escapeHtml, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
+import { icon } from "./icons.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
@@ -34,6 +35,7 @@ let saveInFlight = false;
 let saveQueued = false;
 let toastTimer = null;
 let lastSyncAt = null;
+let workspaceLoading = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -107,17 +109,20 @@ function setAccountState() {
   const subEl = document.querySelector(".topbar .sub");
   if (session && activeProfile) {
     accountButton.dataset.state = "online";
-    accountButton.textContent = "☁";
+    accountButton.innerHTML = `${icon("cloud")}<span>云端</span>`;
+    accountButton.setAttribute("aria-label", "账户与云端同步，当前已连接");
     accountButton.title = `${activeProfile.display_name} · 云端已连接`;
-    if (subEl) subEl.textContent = `👦 ${activeProfile.display_name} · ${gradeLabel(activeProfile.grade_level)}`;
+    if (subEl) subEl.innerHTML = `${icon("learner")} ${escapeHtml(activeProfile.display_name)} · ${gradeLabel(activeProfile.grade_level)}`;
   } else if (session) {
     accountButton.dataset.state = "online";
-    accountButton.textContent = "👤";
+    accountButton.innerHTML = `${icon("learner")}<span>账户</span>`;
+    accountButton.setAttribute("aria-label", "账户与云端同步，选择学习者");
     accountButton.title = "已登录，待选择学习者";
     if (subEl) subEl.textContent = "已登录 · 点击右上角选择孩子";
   } else {
     accountButton.dataset.state = "local";
-    accountButton.textContent = "登录";
+    accountButton.innerHTML = `${icon("learner")}<span>登录</span>`;
+    accountButton.setAttribute("aria-label", "账户与云端同步，登录");
     accountButton.title = "点击登录，开启云端跨设备同步";
     if (subEl) subEl.textContent = "绿色挖掘机 · 每日成长打卡";
   }
@@ -126,6 +131,9 @@ function setAccountState() {
 function openDialog() {
   renderPanel();
   if (!dialog.open) dialog.showModal();
+  workspaceLoading?.then(() => {
+    if (dialog.open) renderPanel();
+  }).catch(() => {});
 }
 
 function closeDialog() {
@@ -135,7 +143,7 @@ function closeDialog() {
 
 function renderSignedOut() {
   panel.innerHTML = `
-    <h2>☁️ 跨设备同步</h2>
+    <h2>${icon("cloud")} 跨设备同步</h2>
     <p>平时可以继续离线使用。家长用邮箱登录后，学习记录会同步到云端，孩子不需要单独注册邮箱。登录后可以添加多个孩子并随时切换。</p>
     <form id="emailLoginForm">
       <label class="cloud-field">
@@ -148,11 +156,11 @@ function renderSignedOut() {
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
       </div>
     </form>
-    <p class="cloud-hint">💡 输入邮箱后，我们会发送一个登录链接到你的邮箱，在同一设备打开即可登录，无需密码。</p>
+    <p class="cloud-hint">${icon("hint")} 输入邮箱后，我们会发送一个登录链接到你的邮箱，在同一设备打开即可登录，无需密码。</p>
     ${
       cloudEnabled
         ? ""
-        : '<div class="cloud-status">⚠️ 尚未配置云端环境，当前只能使用本机模式。</div>'
+        : `<div class="cloud-status">${icon("alert")} 尚未配置云端环境，当前只能使用本机模式。</div>`
     }
   `;
   restoreToastLocation();
@@ -184,7 +192,7 @@ function renderSignedOut() {
       return;
     }
     panel.innerHTML = `
-      <h2>📨 请查收邮件</h2>
+      <h2>${icon("checkCircle")} 请查收邮件</h2>
       <p>登录链接已发送到 <b>${escapeHtml(email)}</b>。在这台设备上打开邮件里的链接即可完成登录。</p>
       <div class="cloud-actions">
         <button class="cloud-action secondary" type="button" data-close>知道了</button>
@@ -278,8 +286,8 @@ function renderAccount() {
       if (editingProfileId === profile.id) {
         return `<div class="learner-choice active">
           <form class="learner-edit-form" data-edit-profile="${profile.id}">
-            <input name="name" value="${escapeHtml(profile.display_name)}" maxlength="30" required class="peanut-input" placeholder="昵称">
-            <select name="grade" class="peanut-input learner-edit-grade">${gradeOptionsSelected(profile.grade_level)}</select>
+            <label class="cloud-field">学习者昵称<input name="name" value="${escapeHtml(profile.display_name)}" maxlength="30" required class="peanut-input" placeholder="昵称"></label>
+            <label class="cloud-field">年级<select name="grade" class="peanut-input learner-edit-grade">${gradeOptionsSelected(profile.grade_level)}</select></label>
             <div class="cloud-actions">
               <button class="cloud-action" type="submit">保存</button>
               <button class="cloud-action secondary" type="button" data-cancel-edit>取消</button>
@@ -288,22 +296,24 @@ function renderAccount() {
         </div>`;
       }
       return `<div class="learner-choice-row">
-        <button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
-          <span>${profile.id === activeProfile?.id ? "✅" : "👦"}</span>
-          <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
-          <span class="learner-edit-btn" data-edit="${profile.id}" title="编辑">✏️</span>
-        </button>
+        <div class="learner-choice-group">
+          <button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
+            <span class="learner-avatar">${profile.id === activeProfile?.id ? icon("checkCircle") : icon("learner")}</span>
+            <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
+          </button>
+          <button class="icon-button learner-edit-btn" type="button" data-edit="${profile.id}" aria-label="编辑${escapeHtml(profile.display_name)}">${icon("pencil")}</button>
+        </div>
         <button class="cloud-action danger learner-delete" type="button" data-delete-profile="${profile.id}">删除学习者</button>
       </div>`;
     })
     .join("");
   const hhDisplay = editingHousehold
-    ? `<form id="householdEditForm" class="cloud-field">家庭空间名称<input name="household" value="${escapeHtml(householdName)}" maxlength="40" required class="peanut-input household-edit-input"><div class="cloud-actions"><button class="cloud-action" type="submit">保存</button><button class="cloud-action secondary" type="button" data-cancel-hh>取消</button></div></form>`
-    : `<p>${escapeHtml(session.user.email || "已登录")} · ${escapeHtml(householdName || "家庭")} · 数据按家庭隔离 <span class="learner-edit-btn" data-edit-household title="编辑家庭名称">✏️</span></p>`;
+    ? `<form id="householdEditForm"><label class="cloud-field">家庭空间名称<input name="household" value="${escapeHtml(householdName)}" maxlength="40" required class="peanut-input household-edit-input"></label><div class="cloud-actions"><button class="cloud-action" type="submit">保存</button><button class="cloud-action secondary" type="button" data-cancel-hh>取消</button></div></form>`
+    : `<p>${escapeHtml(session.user.email || "已登录")} · ${escapeHtml(householdName || "家庭")} · 数据按家庭隔离 <button class="icon-button learner-edit-btn" type="button" data-edit-household aria-label="编辑家庭名称">${icon("pencil")}</button></p>`;
   panel.innerHTML = `
-    <h2>家庭学习空间</h2>
+    <div class="cloud-heading"><h2>${icon("house")} 家庭学习空间</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭账户面板">${icon("close")}</button></div>
     ${hhDisplay}
-    <div class="cloud-status">☁️ ${
+    <div class="cloud-status">${icon("cloudCheck")} ${
       activeProfile ? `${escapeHtml(activeProfile.display_name)} 的记录已连接云端` : "请选择学习者"
     }</div>
     <div class="cloud-sync-meta" data-last-sync>家庭空间最近同步：${formatSyncTime(lastSyncAt)}</div>
@@ -332,6 +342,7 @@ function renderAccount() {
     </form>
   `;
   restoreToastLocation();
+  panel.querySelector("[data-close-dialog]")?.addEventListener("click", closeDialog);
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await selectProfile(button.dataset.profile);
@@ -647,11 +658,14 @@ async function onAuthChange(nextSession) {
   lastSyncAt = null;
   setAccountState();
   if (session) {
+    workspaceLoading = loadWorkspace();
     try {
-      await loadWorkspace();
+      await workspaceLoading;
       showToast("已连接云端学习空间");
     } catch (error) {
       showToast(`登录成功，但读取学习空间失败：${error.message}`, 5000);
+    } finally {
+      workspaceLoading = null;
     }
   }
   if (dialog.open) renderPanel();

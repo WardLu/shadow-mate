@@ -17,7 +17,8 @@
     "test:e2e": "node scripts/run-e2e.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.111.0"
+    "@supabase/supabase-js": "2.111.0",
+    "lucide": "^1.28.0"
   },
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.3",

@@ -15,6 +15,7 @@ begin
     select 1
     from public.learning_households household
     where household.id = p_household_id
+      and household.project_id = 'shadow-mate'
       and household.owner_user_id = (select auth.uid())
   ) then
     raise exception 'learning_household_delete_forbidden'
@@ -22,7 +23,8 @@ begin
   end if;
 
   delete from public.learning_households
-  where id = p_household_id;
+  where id = p_household_id
+    and project_id = 'shadow-mate';
 end;
 $function$;
 

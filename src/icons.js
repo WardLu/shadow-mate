@@ -1,0 +1,120 @@
+import {
+  Award,
+  BadgeCheck,
+  BookMarked,
+  BookCopy,
+  BookOpen,
+  BookOpenCheck,
+  Brain,
+  Calculator,
+  CalendarDays,
+  ChartNoAxesColumnIncreasing,
+  Check,
+  CircleAlert,
+  CircleCheck,
+  CircleX,
+  CircleHelp,
+  CloudCheck,
+  Compass,
+  Construction,
+  createElement,
+  Download,
+  Eraser,
+  Flame,
+  GraduationCap,
+  Grid2X2,
+  HardHat,
+  Home,
+  House,
+  Languages,
+  Lightbulb,
+  ListChecks,
+  LogOut,
+  NotebookPen,
+  PartyPopper,
+  Pencil,
+  PenLine,
+  Play,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Sprout,
+  Star,
+  Trash2,
+  Trophy,
+  UserRound,
+  Volume2,
+  X,
+} from "lucide";
+
+const ICONS = {
+  award: Award,
+  badge: BadgeCheck,
+  book: BookOpen,
+  bookCheck: BookOpenCheck,
+  bookMarked: BookMarked,
+  brain: Brain,
+  calculator: Calculator,
+  calendar: CalendarDays,
+  chart: ChartNoAxesColumnIncreasing,
+  check: Check,
+  checkCircle: CircleCheck,
+  circleX: CircleX,
+  alert: CircleAlert,
+  help: CircleHelp,
+  compass: Compass,
+  construction: Construction,
+  cloudCheck: CloudCheck,
+  download: Download,
+  eraser: Eraser,
+  flame: Flame,
+  graduation: GraduationCap,
+  grid: Grid2X2,
+  hardHat: HardHat,
+  home: Home,
+  house: House,
+  languages: Languages,
+  library: BookCopy,
+  hint: Lightbulb,
+  list: ListChecks,
+  logout: LogOut,
+  notebook: NotebookPen,
+  party: PartyPopper,
+  pencil: Pencil,
+  pen: PenLine,
+  play: Play,
+  plus: Plus,
+  refresh: RefreshCw,
+  rotate: RotateCcw,
+  sprout: Sprout,
+  star: Star,
+  trash: Trash2,
+  trophy: Trophy,
+  learner: UserRound,
+  volume: Volume2,
+  close: X,
+};
+
+export function icon(name, { className = "", label = "", filled = false } = {}) {
+  const iconNode = ICONS[name];
+  if (!iconNode) return "";
+  const svg = createElement(iconNode, {
+    class: `ui-icon ${className}`.trim(),
+    focusable: "false",
+    ...(filled ? { fill: "currentColor" } : {}),
+    ...(label
+      ? { role: "img", "aria-label": label, "aria-hidden": "false" }
+      : { "aria-hidden": "true" }),
+  });
+  return svg.outerHTML;
+}
+
+export function hydrateIcons(root = document) {
+  root.querySelectorAll("[data-icon]").forEach((placeholder) => {
+    const markup = icon(placeholder.dataset.icon, {
+      className: placeholder.className,
+      label: placeholder.dataset.iconLabel || "",
+    });
+    if (markup) placeholder.outerHTML = markup;
+  });
+}
