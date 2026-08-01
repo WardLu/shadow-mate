@@ -71,6 +71,13 @@ function showToast(message, duration = 2800) {
   toastTimer = setTimeout(hideToast, duration);
 }
 
+async function clearLocalAccountState() {
+  await supabase.auth.signOut({ scope: "local" });
+  if (AUTH_STORAGE_KEY) sessionStorage.clear();
+  localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  window.learningDesk.clearLocalData();
+}
+
 function formatSyncTime(value) {
   if (!value) return "尚未同步";
   const date = new Date(value);
@@ -320,6 +327,7 @@ function renderAccount() {
         <button class="cloud-action danger" type="button" data-signout>退出登录</button>
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
         <button class="cloud-action danger" type="button" data-delete-household>删除全部家庭数据</button>
+        ${CLOUD_CONFIG.authAccountDeletionEnabled ? '<button class="cloud-action danger" type="button" data-delete-account>注销账号并删除全部数据</button>' : ""}
       </div>
     </form>
   `;
@@ -393,10 +401,7 @@ function renderAccount() {
   panel.querySelector("[data-clear-local]")?.addEventListener("click", async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录并退出登录。云端数据不会删除。是否继续？");
     if (!confirmed) return;
-    await supabase.auth.signOut({ scope: "local" });
-    if (AUTH_STORAGE_KEY) sessionStorage.clear();
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    window.learningDesk.clearLocalData();
+    await clearLocalAccountState();
   });
   panel.querySelector("[data-delete-household]")?.addEventListener("click", async () => {
     const householdId = memberships[0]?.household_id;
@@ -408,10 +413,17 @@ function renderAccount() {
       showToast(`删除家庭失败：${error.message}`, 5000);
       return;
     }
-    await supabase.auth.signOut({ scope: "local" });
-    if (AUTH_STORAGE_KEY) sessionStorage.clear();
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    window.learningDesk.clearLocalData();
+    await clearLocalAccountState();
+  });
+  panel.querySelector("[data-delete-account]")?.addEventListener("click", async () => {
+    const confirmed = window.confirm("将注销当前登录账号，并删除 Shadow Mate 家庭数据。此操作不可恢复。是否继续？");
+    if (!confirmed) return;
+    const { data, error } = await supabase.functions.invoke("delete-account", { body: {} });
+    if (error || data?.code || !data?.deleted) {
+      showToast(`注销失败：${data?.message || error?.message || "服务端未完成注销"}`, 6000);
+      return;
+    }
+    await clearLocalAccountState();
   });
   panel.querySelector("#addLearnerForm").onsubmit = async (event) => {
     event.preventDefault();

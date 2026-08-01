@@ -13,6 +13,7 @@
     "test:unit": "vitest run tests/unit",
     "test:coverage": "vitest run --coverage",
     "test:db": "supabase test db --local",
+    "test:functions": "node scripts/test-delete-account-guard.mjs",
     "test:e2e": "node scripts/run-e2e.mjs"
   },
   "dependencies": {

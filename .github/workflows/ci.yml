@@ -57,6 +57,20 @@ jobs:
         run: npm run test:db
       - name: Lint database schema
         run: npx supabase db lint --local --schema public --level warning --fail-on error
+      - name: Serve account deletion function
+        shell: bash
+        run: |
+          npx supabase functions serve delete-account > "$RUNNER_TEMP/delete-account-function.log" 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /dev/null -X OPTIONS http://127.0.0.1:54321/functions/v1/delete-account; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/delete-account-function.log"
+          exit 1
+      - name: Test account deletion isolation guard
+        run: npm run test:functions
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
