@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - 新增应用内“使用指南”：覆盖登录、家庭空间、单项打卡、同步、主屏幕安装及 Windows/macOS/iPhone/iPad/Android 语音包下载指引。
+- 新增邮箱验证码登录：未注册用户可在 Shadow Mate 内输入 Confirm signup 验证码完成注册，已注册用户也可使用同一流程登录。
 
 ### Fixed
 - 修复同一模块多个任务共用打卡状态的问题；取消单项打卡不会再影响同模块的其他任务。
@@ -17,6 +18,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - 修复绘本打卡首次点击状态不更新的问题。
 
 ### Changed
+- 统一 Confirm signup 与 Magic Link 邮件配置，支持验证码和应用内验证链接，并将多项目模板与本地 Supabase 配置纳入仓库。
 - 今日打卡支持再次点击取消，按钮会明确提示“点击取消”。
 - 成长统计统一按语文、数学、英语、绘本四个学习模块计算；首页和成长日历使用 `已完成/4`，不再把同一模块的多个任务误计为多个模块。
 - 积分日历补充状态图例与日期网格间距，并明确区分无积分、加分、扣分、混合积分和当前选中日期。
