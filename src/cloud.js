@@ -436,13 +436,19 @@ dialog?.addEventListener("click", (event) => {
 });
 
 if (cloudEnabled) {
-  const {
-    data: { session: initialSession },
-  } = await supabase.auth.getSession();
-  await onAuthChange(initialSession);
+  // Register onAuthStateChange BEFORE getSession to avoid missing the
+  // INITIAL_SESSION event when the client detects a magic-link session from URL.
   supabase.auth.onAuthStateChange((_event, nextSession) => {
     queueMicrotask(() => onAuthChange(nextSession));
   });
+  const {
+    data: { session: initialSession },
+  } = await supabase.auth.getSession();
+  if (initialSession) {
+    await onAuthChange(initialSession);
+  } else {
+    setAccountState();
+  }
 } else {
   setAccountState();
 }
