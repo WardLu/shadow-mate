@@ -99,6 +99,7 @@ grant select, insert, update, delete on table public.learning_household_members 
 grant select, insert, update, delete on table public.learning_profiles to authenticated;
 grant select, insert, update, delete on table public.learning_profile_states to authenticated;
 
+drop policy if exists "learning households: members can read" on public.learning_households;
 create policy "learning households: members can read"
 on public.learning_households
 for select
@@ -113,6 +114,7 @@ using (
   )
 );
 
+drop policy if exists "learning households: users create their own" on public.learning_households;
 create policy "learning households: users create their own"
 on public.learning_households
 for insert
@@ -122,6 +124,7 @@ with check (
   and project_id = 'shadow-mate'
 );
 
+drop policy if exists "learning households: owners can update" on public.learning_households;
 create policy "learning households: owners can update"
 on public.learning_households
 for update
@@ -132,6 +135,7 @@ with check (
   and project_id = 'shadow-mate'
 );
 
+drop policy if exists "learning members: users can read self" on public.learning_household_members;
 create policy "learning members: users can read self"
 on public.learning_household_members
 for select
@@ -164,6 +168,7 @@ revoke all on function private.learning_is_household_owner(uuid) from anon;
 grant execute on function private.learning_is_household_owner(uuid)
   to authenticated;
 
+drop policy if exists "learning members: owner creates self membership" on public.learning_household_members;
 create policy "learning members: owner creates self membership"
 on public.learning_household_members
 for insert
@@ -174,6 +179,7 @@ with check (
   and private.learning_is_household_owner(household_id)
 );
 
+drop policy if exists "learning profiles: household members can read" on public.learning_profiles;
 create policy "learning profiles: household members can read"
 on public.learning_profiles
 for select
@@ -187,6 +193,7 @@ using (
   )
 );
 
+drop policy if exists "learning profiles: guardians can create" on public.learning_profiles;
 create policy "learning profiles: guardians can create"
 on public.learning_profiles
 for insert
@@ -201,6 +208,7 @@ with check (
   )
 );
 
+drop policy if exists "learning profiles: guardians can update" on public.learning_profiles;
 create policy "learning profiles: guardians can update"
 on public.learning_profiles
 for update
@@ -224,6 +232,7 @@ with check (
   )
 );
 
+drop policy if exists "learning profiles: guardians can delete" on public.learning_profiles;
 create policy "learning profiles: guardians can delete"
 on public.learning_profiles
 for delete
@@ -238,6 +247,7 @@ using (
   )
 );
 
+drop policy if exists "learning state: household members can read" on public.learning_profile_states;
 create policy "learning state: household members can read"
 on public.learning_profile_states
 for select
@@ -253,6 +263,7 @@ using (
   )
 );
 
+drop policy if exists "learning state: guardians can create" on public.learning_profile_states;
 create policy "learning state: guardians can create"
 on public.learning_profile_states
 for insert
@@ -269,6 +280,7 @@ with check (
   )
 );
 
+drop policy if exists "learning state: guardians can update" on public.learning_profile_states;
 create policy "learning state: guardians can update"
 on public.learning_profile_states
 for update
