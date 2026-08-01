@@ -71,3 +71,18 @@ export function gradeOptionsSelected(selected) {
     .map(([v, label]) => `<option value="${v}"${Number(v) === selected ? " selected" : ""}>${label}</option>`)
     .join("");
 }
+
+export function buildMissingSequence({ start = 1, length = 20, missingIndex = 9 } = {}) {
+  const safeLength = Math.max(2, Math.floor(Number(length) || 20));
+  const safeStart = Math.max(1, Math.floor(Number(start) || 1));
+  const safeMissingIndex = Math.min(
+    safeLength - 1,
+    Math.max(1, Math.floor(Number(missingIndex) || 1))
+  );
+  const answer = safeStart + safeMissingIndex;
+  const values = Array.from({ length: safeLength }, (_, index) => {
+    if (index === safeMissingIndex) return null;
+    return safeStart + index;
+  });
+  return { answer, values };
+}

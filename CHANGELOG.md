@@ -3,6 +3,16 @@
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+- 修复英语单词发音按钮无反馈：增加浏览器能力检测、播放中状态和失败回退提示。
+- 修复数感星球缺失数字生成逻辑，避免问号前后跳过两个数字。
+- 修复绘本打卡首次点击状态不更新的问题。
+
+### Changed
+- 今日打卡支持再次点击取消，按钮会明确提示“点击取消”。
+
 ## [1.0.0] - 2026-08-01
 
 ### Added

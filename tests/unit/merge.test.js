@@ -8,6 +8,7 @@ import {
   GRADE_OPTIONS,
   gradeLabel,
   gradeOptionsSelected,
+  buildMissingSequence,
 } from "../../src/lib.js";
 
 describe("grade labels", () => {
@@ -21,6 +22,14 @@ describe("grade labels", () => {
     expect(GRADE_OPTIONS).toContain('<option value="7">七年级</option>');
     expect(gradeOptionsSelected(10)).toContain('<option value="10" selected>十年级</option>');
     expect(gradeOptionsSelected(99)).not.toContain(" selected");
+  });
+});
+
+describe("number sense sequence", () => {
+  it("leaves one missing value without skipping the following number", () => {
+    const sequence = buildMissingSequence({ start: 1, length: 20, missingIndex: 9 });
+    expect(sequence.answer).toBe(10);
+    expect(sequence.values.slice(7, 12)).toEqual([8, 9, null, 11, 12]);
   });
 });
 

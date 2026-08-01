@@ -62,6 +62,9 @@ for (const marker of [
   "clearLocalData()",
   "window.learningDesk",
   "window.cloudSync?.schedule()",
+  "buildMissingSequence",
+  "toggleCheckin",
+  "speechSynthesis",
 ]) {
   if (!appJs.includes(marker)) throw new Error(`src/app.js is missing ${marker}`);
 }

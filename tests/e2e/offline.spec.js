@@ -35,6 +35,36 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
+  test("speech button sends the displayed word to the browser speech API", async ({ page }) => {
+    await page.addInitScript(() => {
+      const calls = [];
+      Object.defineProperty(window, "__speechCalls", { value: calls, writable: false });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance(text) { this.text = text; },
+      });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { cancel() {}, speak(utterance) { calls.push(utterance.text); } },
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="english"]');
+    const word = await page.locator(".word-en").first().textContent();
+    await page.locator("[data-speak]").first().click();
+    await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
+  });
+
+  test("number sense keeps exactly one missing number in sequence", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="math"]');
+    const cells = await page.locator(".num-grid .num-cell").allTextContents();
+    const missingIndex = cells.indexOf("?");
+    expect(missingIndex).toBeGreaterThan(0);
+    expect(missingIndex).toBeLessThan(cells.length - 1);
+    expect(Number(cells[missingIndex + 1])).toBe(Number(cells[missingIndex - 1]) + 2);
+  });
+
   test("checkin marks module as done", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="chinese"]');
@@ -44,6 +74,19 @@ test.describe("Offline mode (no login)", () => {
       await btn.click();
       await expect(btn).toHaveClass(/done/);
     }
+  });
+
+  test("checkin can be cancelled by clicking again", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="book"]');
+    const btn = page.locator('[data-cmod="book"]');
+    const initiallyDone = await btn.evaluate((el) => el.classList.contains("done"));
+    if (initiallyDone) await btn.click();
+    await expect(btn).not.toHaveClass(/done/);
+    await btn.click();
+    await expect(btn).toHaveClass(/done/);
+    await btn.click();
+    await expect(btn).not.toHaveClass(/done/);
   });
 
   test("points toggle changes card state", async ({ page }) => {

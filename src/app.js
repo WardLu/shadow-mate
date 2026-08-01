@@ -1,4 +1,6 @@
 
+import { buildMissingSequence } from "./lib.js";
+
 /* =========================================================
    影伴学习任务台 —— 数据层
    ========================================================= */
@@ -146,10 +148,12 @@ function isChecked(mod){
   const t = todayKey();
   return !!(store.checkins[t] && store.checkins[t][mod]);
 }
-function doCheck(mod){
+function toggleCheckin(mod){
   const t = todayKey();
   if(!store.checkins[t]) store.checkins[t] = {};
-  store.checkins[t][mod] = true;
+  if(store.checkins[t][mod]) delete store.checkins[t][mod];
+  else store.checkins[t][mod] = true;
+  if(!Object.keys(store.checkins[t]).length) delete store.checkins[t];
   save();
 }
 function streak(mod){
@@ -203,7 +207,43 @@ function dayTotal(day){
    ========================================================= */
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
-function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.lang="en-US"; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(e){} }
+function speak(t, button){
+  const synth = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  const originalLabel = button?.dataset.label || button?.textContent || "🔊 听发音";
+  const restore = () => {
+    if (!button) return;
+    button.textContent = originalLabel;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  };
+  if (!synth || typeof Utterance !== "function") {
+    if (button) {
+      button.textContent = "⚠️ 浏览器不支持发音";
+      button.title = "请更换支持网页语音的浏览器";
+    }
+    return;
+  }
+  const utterance = new Utterance(t);
+  utterance.lang = "en-US";
+  utterance.rate = 0.9;
+  utterance.onend = restore;
+  utterance.onerror = restore;
+  if (button) {
+    button.dataset.label = originalLabel;
+    button.textContent = "🔊 播放中…";
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  try {
+    synth.cancel();
+    window.setTimeout(() => {
+      try { synth.speak(utterance); } catch (_) { restore(); }
+    }, 0);
+  } catch (_) {
+    restore();
+  }
+}
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
 /* =========================================================
@@ -363,12 +403,15 @@ function renderMath(){
   };
 
   // 数感：数字填写 1-100 找缺失
-  const miss = Math.floor(Math.random()*100)+1;
-  let cells="";
-  for(let k=1;k<=20;k++){
-    const num = (k===10)? miss : (k<10? k : k+1);
-    cells += `<div class="num-cell ${k===10?'miss':''}" data-num="${k===10?miss:0}">${k===10?'?':num}</div>`;
-  }
+  const sequence = buildMissingSequence({
+    start: Math.floor(Math.random() * 80) + 1,
+    length: 20,
+    missingIndex: 9,
+  });
+  const miss = sequence.answer;
+  const cells = sequence.values
+    .map((num) => `<div class="num-cell ${num === null ? "miss" : ""}" data-num="${num ?? miss}">${num ?? "?"}</div>`)
+    .join("");
   const card2 = $(`
     <div class="card">
       <h3>🔢 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
@@ -466,7 +509,7 @@ function renderEnglish(){
   main.appendChild(card1);
   const spokenWords = [w1[0], w2[0]];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
-    button.onclick = () => speak(spokenWords[Number(button.dataset.speak)]);
+    button.onclick = () => speak(spokenWords[Number(button.dataset.speak)], button);
   });
 
   // 按月回看往期单词
@@ -757,7 +800,7 @@ function modTitle(em,t){
 }
 function checkinBtn(mod,label){
   const done = isChecked(mod);
-  return `<button class="checkin ${done?'done':''}" data-cmod="${mod}" data-clabel="${label}">${done?'✅ 今日已打卡 · '+label:'✔ 完成今日打卡 · '+label}</button>`;
+  return `<button class="checkin ${done?'done':''}" data-cmod="${mod}" data-clabel="${label}">${done?'✅ 今日已打卡 · '+label+'（点击取消）':'✔ 完成今日打卡 · '+label}</button>`;
 }
 
 /* =========================================================
@@ -778,7 +821,8 @@ function switchMod(mod){
   el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
     btn.onclick=()=>{
       const m=btn.dataset.cmod;
-      if(!isChecked(m)){ doCheck(m); switchMod(mod); }
+      toggleCheckin(m);
+      switchMod(mod);
     };
   });
   el("main").scrollTop=0;
