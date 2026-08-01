@@ -140,7 +140,7 @@ function renderSetup() {
     <form id="householdSetupForm">
       <label class="cloud-field">
         家庭空间名称
-        <input name="household" maxlength="40" required value="我的家庭">
+        <input name="household" maxlength="40" required placeholder="我的家庭">
       </label>
       <label class="cloud-field">
         第一个学习者
@@ -179,6 +179,7 @@ function renderSetup() {
       .from("learning_households")
       .insert(payload);
     if (householdError) {
+      console.error("Household error:", householdError);
       showToast(`创建家庭失败：${householdError.message}`, 5000);
       return;
     }
@@ -190,6 +191,7 @@ function renderSetup() {
         role: "owner",
       });
     if (memberError) {
+      console.error("Member error:", memberError);
       showToast(`创建成员失败：${memberError.message}`, 5000);
       return;
     }
@@ -202,6 +204,7 @@ function renderSetup() {
         grade_level: Number(form.get("grade")),
       });
     if (profileError) {
+      console.error("Profile error:", profileError);
       showToast(`创建学习者失败：${profileError.message}`, 5000);
       return;
     }
