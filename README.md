@@ -85,6 +85,7 @@ supabase db lint --local --schema public --level warning --fail-on error
 | [Changelog](CHANGELOG.md) | 详细变更记录 |
 | [Roadmap](ROADMAP.md) | 路线图 |
 | [TODO](TODO.md) | 待办与已知问题 |
+| [使用指南](docs/user-guide.md) | 家长操作、设备语音与安装说明 |
 | [架构文档](docs/architecture.md) | 架构设计与实施方案 |
 | [Auth 配置](docs/auth-setup.md) | Supabase Auth 服务端配置指南 |
 | [安全基线](docs/security-baseline.md) | 安全与发布闸门 |
