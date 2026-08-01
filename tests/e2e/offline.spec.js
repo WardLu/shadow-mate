@@ -73,6 +73,28 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
+  test("speech button explains when Windows has no usable voice", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: {
+          cancel() {},
+          speak() {},
+          getVoices() { return []; },
+        },
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="english"]');
+    const button = page.locator("[data-speak]").first();
+    await button.click();
+    await expect(button).toContainText("安装英语语音");
+  });
+
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="math"]');
@@ -86,7 +108,7 @@ test.describe("Offline mode (no login)", () => {
   test("checkin marks module as done", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="chinese"]');
-    const btn = page.locator('[data-cmod="chinese"]').first();
+    const btn = page.locator('[data-cmod="chinese-literacy"]');
     const wasDone = await btn.evaluate((el) => el.classList.contains("done"));
     if (!wasDone) {
       await btn.click();
@@ -97,7 +119,7 @@ test.describe("Offline mode (no login)", () => {
   test("checkin can be cancelled by clicking again", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="book"]');
-    const btn = page.locator('[data-cmod="book"]');
+    const btn = page.locator('[data-cmod="book-reading"]');
     const initiallyDone = await btn.evaluate((el) => el.classList.contains("done"));
     if (initiallyDone) await btn.click();
     await expect(btn).not.toHaveClass(/done/);
@@ -105,6 +127,22 @@ test.describe("Offline mode (no login)", () => {
     await expect(btn).toHaveClass(/done/);
     await btn.click();
     await expect(btn).not.toHaveClass(/done/);
+  });
+
+  test("cancelling one checkin does not cancel other tasks in the module", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="chinese"]');
+    const buttons = page.locator('[data-cmod^="chinese-"]');
+    await expect(buttons).toHaveCount(3);
+    for (const button of await buttons.all()) {
+      if (await button.evaluate((el) => el.classList.contains("done"))) await button.click();
+    }
+    await buttons.first().click();
+    await expect(buttons.first()).toHaveClass(/done/);
+    await expect(buttons.nth(1)).not.toHaveClass(/done/);
+    await expect(buttons.nth(2)).not.toHaveClass(/done/);
+    await buttons.first().click();
+    await expect(buttons.first()).not.toHaveClass(/done/);
   });
 
   test("points toggle changes card state", async ({ page }) => {
@@ -146,14 +184,14 @@ test.describe("Offline mode (no login)", () => {
     await page.goto("/");
     // Do a checkin on chinese
     await page.click('[data-mod="chinese"]');
-    const btn = page.locator('[data-cmod="chinese"]').first();
+    const btn = page.locator('[data-cmod="chinese-literacy"]');
     const wasDone = await btn.evaluate((el) => el.classList.contains("done"));
     if (!wasDone) await btn.click();
     // Navigate away and back
     await page.click('[data-mod="math"]');
     await page.click('[data-mod="chinese"]');
     // Checkin should still be done
-    const btn2 = page.locator('[data-cmod="chinese"]').first();
+    const btn2 = page.locator('[data-cmod="chinese-literacy"]');
     await expect(btn2).toHaveClass(/done/);
   });
 });

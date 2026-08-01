@@ -146,11 +146,37 @@ function dateKeyOffset(off){
 }
 function isChecked(mod){
   const t = todayKey();
-  return !!(store.checkins[t] && store.checkins[t][mod]);
+  return hasCheckin(store.checkins[t], mod);
 }
+
+const CHECKIN_GROUPS = {
+  chinese: ["chinese-literacy", "chinese-poem", "chinese-writing"],
+  math: ["math-mental", "math-sense"],
+  english: ["english-vocabulary"],
+  book: ["book-reading"],
+};
+const CHECKIN_GROUP_BY_KEY = Object.fromEntries(
+  Object.entries(CHECKIN_GROUPS).flatMap(([group, keys]) => keys.map((key) => [key, group]))
+);
+
+function hasCheckin(day, key){
+  if(!day) return false;
+  if(day[key]) return true;
+  const group = CHECKIN_GROUP_BY_KEY[key];
+  if(group && day[group]) return true; // legacy aggregate record
+  const keys = CHECKIN_GROUPS[key];
+  return !!keys?.some((item) => day[item]);
+}
+
 function toggleCheckin(mod){
   const t = todayKey();
   if(!store.checkins[t]) store.checkins[t] = {};
+  const group = CHECKIN_GROUP_BY_KEY[mod];
+  if(group && store.checkins[t][group]){
+    // Upgrade an old module-level record before toggling one task.
+    delete store.checkins[t][group];
+    for(const key of CHECKIN_GROUPS[group]) store.checkins[t][key] = true;
+  }
   if(store.checkins[t][mod]) delete store.checkins[t][mod];
   else store.checkins[t][mod] = true;
   if(!Object.keys(store.checkins[t]).length) delete store.checkins[t];
@@ -160,14 +186,14 @@ function streak(mod){
   let s = 0;
   for(let i=0;i<400;i++){
     const k = dateKeyOffset(i);
-    if(store.checkins[k] && store.checkins[k][mod]) s++;
+    if(hasCheckin(store.checkins[k], mod)) s++;
     else if(i>0) break;
   }
   return s;
 }
 function totalChecked(mod){
   let n = 0;
-  for(const k in store.checkins) if(store.checkins[k][mod]) n++;
+  for(const k in store.checkins) if(hasCheckin(store.checkins[k], mod)) n++;
   return n;
 }
 
@@ -211,38 +237,57 @@ function speak(t, button){
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   const originalLabel = button?.dataset.label || button?.textContent || "🔊 听发音";
+  const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
   const restore = () => {
     if (!button) return;
     button.textContent = originalLabel;
     button.disabled = false;
     button.removeAttribute("aria-busy");
+    button.removeAttribute("data-speech-failure");
+  };
+  const fail = (message) => {
+    restore();
+    if (!button) return;
+    button.textContent = `⚠️ ${message}`;
+    button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
+    button.dataset.speechFailure = "true";
+    window.setTimeout(() => {
+      if (button.dataset.speechFailure === "true") restore();
+    }, 5000);
   };
   if (!synth || typeof Utterance !== "function") {
-    if (button) {
-      button.textContent = "⚠️ 浏览器不支持发音";
-      button.title = "请更换支持网页语音的浏览器";
-    }
+    fail("浏览器不支持发音");
     return;
   }
-  const utterance = new Utterance(t);
-  utterance.lang = "en-US";
-  utterance.rate = 0.9;
-  utterance.onend = restore;
-  utterance.onerror = restore;
   if (button) {
     button.dataset.label = originalLabel;
     button.textContent = "🔊 播放中…";
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
   }
-  try {
-    synth.cancel();
-    window.setTimeout(() => {
-      try { synth.speak(utterance); } catch (_) { restore(); }
-    }, 0);
-  } catch (_) {
-    restore();
-  }
+  const speakNow = () => {
+    const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+    const utterance = new Utterance(t);
+    utterance.lang = "en-US";
+    utterance.rate = 0.9;
+    const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
+    if (voice) utterance.voice = voice;
+    utterance.onend = restore;
+    utterance.onerror = () => fail("发音失败，请检查系统音量和语音设置");
+    try {
+      synth.cancel();
+      // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
+      synth.speak(utterance);
+      window.setTimeout(() => {
+        if (button?.disabled) {
+          fail("发音未响应，请检查系统语音设置或安装英语语音");
+        }
+      }, 3000);
+    } catch (_) {
+      fail("发音失败，请检查系统音量和语音设置");
+    }
+  };
+  speakNow();
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
@@ -320,7 +365,7 @@ function renderChinese(){
       <div class="desc mt-12">🔁 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
       <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">▶ B站教学视频</a>
       <div class="spacer-12"></div>
-      ${checkinBtn("chinese","识字")}
+      ${checkinBtn("chinese-literacy","识字")}
     </div>
   `);
   main.appendChild(card1);
@@ -335,7 +380,7 @@ function renderChinese(){
       <div class="poem-body">${p.c.join("<br>")}</div>
       <div class="text-center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">▶ 跟读视频</a></div>
       <div class="spacer-12"></div>
-      ${checkinBtn("chinese","古诗")}
+      ${checkinBtn("chinese-poem","古诗")}
     </div>
   `);
   main.appendChild(card2);
@@ -352,7 +397,7 @@ function renderChinese(){
       <div class="spacer-12"></div>
       <button class="checkin" type="button" data-print>🖨️ 打印 A4 字帖</button>
       <div class="spacer-10"></div>
-      ${checkinBtn("chinese","写字")}
+      ${checkinBtn("chinese-writing","写字")}
     </div>
   `);
   main.appendChild(card3);
@@ -389,7 +434,7 @@ function renderMath(){
       </div>
       <button class="checkin" id="qsubmit">✔ 提交答案</button>
       <div class="spacer-8"></div>
-      ${checkinBtn("math","口算")}
+      ${checkinBtn("math-mental","口算")}
     </div>
   `);
   main.appendChild(card1);
@@ -432,7 +477,7 @@ function renderMath(){
       <div class="sudoku" id="sudoku"></div>
       <div class="feedback text-center" id="sf"></div>
       <div class="spacer-10"></div>
-      ${checkinBtn("math","数感")}
+      ${checkinBtn("math-sense","数感")}
     </div>
   `);
   main.appendChild(card3);
@@ -503,7 +548,7 @@ function renderEnglish(){
         <button class="speak-btn" type="button" data-speak="1">🔊 听发音</button>
       </div>
       <div class="spacer-10"></div>
-      ${checkinBtn("english","单词")}
+      ${checkinBtn("english-vocabulary","单词")}
     </div>
   `);
   main.appendChild(card1);
@@ -690,7 +735,7 @@ function renderBook(){
         <span class="pill">跟读</span><span class="pill">读后思考题</span><span class="pill">句子书写</span><span class="pill">每日推送</span>
       </div>
       <div class="spacer-10"></div>
-      ${checkinBtn("book","绘本")}
+      ${checkinBtn("book-reading","绘本")}
     </div>
   `);
   main.appendChild(card1);
