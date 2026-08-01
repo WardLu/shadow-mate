@@ -42,6 +42,28 @@ const userHeaders = {
   ...publicHeaders,
   Authorization: `Bearer ${session.access_token}`,
 };
+
+// `supabase functions serve` can report a healthy OPTIONS response before the
+// Edge Function bundle has finished compiling. Warm it up with an invalid token
+// first so the guarded deletion request is never retried after a transient 502.
+for (let attempt = 1; attempt <= 30; attempt += 1) {
+  const warmupResponse = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
+    method: "POST",
+    headers: { ...publicHeaders, Authorization: "Bearer invalid-warmup-token" },
+    body: "{}",
+  });
+
+  if (![502, 503, 504].includes(warmupResponse.status)) {
+    break;
+  }
+
+  if (attempt === 30) {
+    throw new Error(`Account deletion function did not become ready: ${warmupResponse.status}`);
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+}
+
 const householdResponse = await fetch(`${supabaseUrl}/rest/v1/learning_households`, {
   method: "POST",
   headers: { ...userHeaders, Prefer: "return=representation" },
