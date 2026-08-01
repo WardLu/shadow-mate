@@ -6,6 +6,7 @@ const requiredFiles = [
   "public/manifest.json",
   "public/sw.js",
   "src/config.js",
+  "src/lib.js",
   "src/cloud.js",
   "src/app.js",
   "src/app.css",
@@ -86,6 +87,7 @@ for (const marker of [
   "readRememberedProfileId()",
   '"serviceWorker" in navigator && window.isSecureContext',
   'if (document.readyState === "complete") registerServiceWorker()',
+  "gradeOptionsSelected",
 ]) {
   if (!cloud.includes(marker)) throw new Error(`cloud.js is missing ${marker}`);
 }

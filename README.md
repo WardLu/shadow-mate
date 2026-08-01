@@ -70,6 +70,8 @@ supabase db lint --local --schema public --level warning --fail-on error
 3. 云端使用版本号做乐观并发控制；发生冲突时重新拉取、合并并重试。
 4. 本机数据不会在同步后自动删除，仍可离线使用；账号面板提供“清除本机数据”。
 
+本机学习记录使用浏览器 `localStorage` 的 `shadow_mate_workbench_v1` 键保存，当前孩子使用 `shadow_mate_active_profile` 键保存。它通常会跨浏览器重启保留，但清除网站数据、无痕模式、浏览器自动清理或更换域名都会影响本机缓存；登录同步后的云端数据用于跨设备恢复。
+
 详细的数据范围、保留和删除方式见 [隐私说明](PRIVACY.md)。安全问题请按 [安全政策](SECURITY.md) 私下报告。提交代码前请阅读 [贡献指南](CONTRIBUTING.md)。
 
 

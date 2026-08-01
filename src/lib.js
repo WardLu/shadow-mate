@@ -65,3 +65,9 @@ export const GRADE_OPTIONS = Object.entries(GRADE_LABELS)
 export function gradeLabel(level) {
   return GRADE_LABELS[level] || "一年级";
 }
+
+export function gradeOptionsSelected(selected) {
+  return Object.entries(GRADE_LABELS)
+    .map(([v, label]) => `<option value="${v}"${Number(v) === selected ? " selected" : ""}>${label}</option>`)
+    .join("");
+}

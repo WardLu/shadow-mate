@@ -196,3 +196,27 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.learner-edit-btn {
+  margin-left: auto;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.learner-edit-btn:hover { opacity: 1; }
+.learner-edit-form {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+.learner-edit-form .peanut-input {
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.learner-edit-grade {
+  margin: 6px 0;
+}
+.household-edit-input {
+  margin-top: 6px;
+}

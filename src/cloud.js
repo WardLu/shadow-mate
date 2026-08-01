@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { escapeHtml, stateHasData, mergeObjects, mergeState, GRADE_OPTIONS, gradeLabel } from "./lib.js";
+import { escapeHtml, stateHasData, mergeObjects, mergeState, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
@@ -22,6 +22,9 @@ let session = null;
 let memberships = [];
 let profiles = [];
 let activeProfile = null;
+let editingProfileId = null;
+let editingHousehold = false;
+let householdName = "";
 let cloudVersion = null;
 let saveTimer = null;
 let saveInFlight = false;
@@ -49,18 +52,22 @@ function readRememberedProfileId() {
 
 function setAccountState() {
   if (!accountButton) return;
+  const subEl = document.querySelector(".topbar .sub");
   if (session && activeProfile) {
     accountButton.dataset.state = "online";
     accountButton.textContent = "☁";
     accountButton.title = `${activeProfile.display_name} · 云端已连接`;
+    if (subEl) subEl.textContent = `👦 ${activeProfile.display_name} · ${gradeLabel(activeProfile.grade_level)}`;
   } else if (session) {
     accountButton.dataset.state = "online";
     accountButton.textContent = "👤";
     accountButton.title = "已登录，待选择学习者";
+    if (subEl) subEl.textContent = "已登录 · 点击右上角选择孩子";
   } else {
     accountButton.dataset.state = "local";
     accountButton.textContent = "登录";
     accountButton.title = "点击登录，开启云端跨设备同步";
+    if (subEl) subEl.textContent = "绿色挖掘机 · 每日成长打卡";
   }
 }
 
@@ -211,18 +218,32 @@ function renderSetup() {
 
 function renderAccount() {
   const choices = profiles
-    .map(
-      (profile) => `
-      <button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
+    .map((profile) => {
+      if (editingProfileId === profile.id) {
+        return `<div class="learner-choice active">
+          <form class="learner-edit-form" data-edit-profile="${profile.id}">
+            <input name="name" value="${escapeHtml(profile.display_name)}" maxlength="30" required class="peanut-input" placeholder="昵称">
+            <select name="grade" class="peanut-input learner-edit-grade">${gradeOptionsSelected(profile.grade_level)}</select>
+            <div class="cloud-actions">
+              <button class="cloud-action" type="submit">保存</button>
+              <button class="cloud-action secondary" type="button" data-cancel-edit>取消</button>
+            </div>
+          </form>
+        </div>`;
+      }
+      return `<button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
         <span>${profile.id === activeProfile?.id ? "✅" : "👦"}</span>
         <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
-      </button>
-    `
-    )
+        <span class="learner-edit-btn" data-edit="${profile.id}" title="编辑">✏️</span>
+      </button>`;
+    })
     .join("");
+  const hhDisplay = editingHousehold
+    ? `<form id="householdEditForm" class="cloud-field">家庭空间名称<input name="household" value="${escapeHtml(householdName)}" maxlength="40" required class="peanut-input household-edit-input"><div class="cloud-actions"><button class="cloud-action" type="submit">保存</button><button class="cloud-action secondary" type="button" data-cancel-hh>取消</button></div></form>`
+    : `<p>${escapeHtml(session.user.email || "已登录")} · ${escapeHtml(householdName || "家庭")} · 数据按家庭隔离 <span class="learner-edit-btn" data-edit-household title="编辑家庭名称">✏️</span></p>`;
   panel.innerHTML = `
     <h2>家庭学习空间</h2>
-    <p>${escapeHtml(session.user.email || "已登录")} · 数据按家庭隔离</p>
+    ${hhDisplay}
     <div class="cloud-status">☁️ ${
       activeProfile ? `${escapeHtml(activeProfile.display_name)} 的记录已连接云端` : "请选择学习者"
     }</div>
@@ -252,20 +273,48 @@ function renderAccount() {
       renderAccount();
     };
   });
-  panel.querySelector("[data-sync]").onclick = async () => {
-    await saveCloudState(true);
-  };
-  panel.querySelector("[data-signout]").onclick = async () => {
-    await supabase.auth.signOut();
-    closeDialog();
-  };
-  panel.querySelector("[data-clear-local]").onclick = async () => {
+  panel.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.onclick = (e) => { e.stopPropagation(); editingProfileId = btn.dataset.edit; renderAccount(); };
+  });
+  panel.querySelector("[data-edit-household]")?.addEventListener("click", () => { editingHousehold = true; renderAccount(); });
+  panel.querySelector("[data-cancel-edit]")?.addEventListener("click", () => { editingProfileId = null; renderAccount(); });
+  panel.querySelector("[data-cancel-hh]")?.addEventListener("click", () => { editingHousehold = false; renderAccount(); });
+  panel.querySelector("#householdEditForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = new FormData(e.currentTarget).get("household").trim();
+    const hhId = memberships[0]?.household_id;
+    if (!hhId) return;
+    const { error } = await supabase.from("learning_households").update({ name }).eq("id", hhId);
+    if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
+    householdName = name; editingHousehold = false; renderAccount();
+    showToast("家庭名称已更新");
+  });
+  panel.querySelectorAll("[data-edit-profile]").forEach((form) => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget);
+      const pid = form.dataset.editProfile;
+      const { error } = await supabase.from("learning_profiles").update({
+        display_name: fd.get("name").trim(), grade_level: Number(fd.get("grade")),
+      }).eq("id", pid);
+      if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
+      const p = profiles.find((x) => x.id === pid);
+      if (p) { p.display_name = fd.get("name").trim(); p.grade_level = Number(fd.get("grade")); }
+      editingProfileId = null;
+      if (activeProfile?.id === pid) setAccountState();
+      renderAccount();
+      showToast("孩子信息已更新");
+    };
+  });
+  panel.querySelector("[data-sync]")?.addEventListener("click", async () => { await saveCloudState(true); });
+  panel.querySelector("[data-signout]")?.addEventListener("click", async () => { await supabase.auth.signOut(); closeDialog(); });
+  panel.querySelector("[data-clear-local]")?.addEventListener("click", async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录并退出登录。云端数据不会删除。是否继续？");
     if (!confirmed) return;
     await supabase.auth.signOut();
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
     window.learningDesk.clearLocalData();
-  };
+  });
   panel.querySelector("#addLearnerForm").onsubmit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -317,6 +366,10 @@ async function fetchWorkspace() {
     .order("created_at");
   if (profileError) throw profileError;
   profiles = profileRows || [];
+  if (householdIds.length) {
+    const { data: hhRows } = await supabase.from("learning_households").select("name").in("id", householdIds);
+    householdName = hhRows?.[0]?.name || "";
+  }
 }
 
 async function loadWorkspace(preferredProfileId = null, options = {}) {

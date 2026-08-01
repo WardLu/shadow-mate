@@ -1,5 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { escapeHtml, stateHasData, mergeObjects, mergeState } from "../../src/lib.js";
+import {
+  escapeHtml,
+  stateHasData,
+  mergeObjects,
+  mergeState,
+  GRADE_LABELS,
+  GRADE_OPTIONS,
+  gradeLabel,
+  gradeOptionsSelected,
+} from "../../src/lib.js";
+
+describe("grade labels", () => {
+  it("covers K12 plus preschool", () => {
+    expect(Object.keys(GRADE_LABELS)).toHaveLength(13);
+    expect(gradeLabel(0)).toBe("学前");
+    expect(gradeLabel(12)).toBe("十二年级");
+  });
+
+  it("renders an independently selectable option for every grade", () => {
+    expect(GRADE_OPTIONS).toContain('<option value="7">七年级</option>');
+    expect(gradeOptionsSelected(10)).toContain('<option value="10" selected>十年级</option>');
+    expect(gradeOptionsSelected(99)).not.toContain(" selected");
+  });
+});
 
 describe("escapeHtml", () => {
   it("escapes all HTML special characters", () => {
