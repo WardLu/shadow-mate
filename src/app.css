@@ -274,3 +274,37 @@
   .mini-card.peanut-card{cursor:pointer;}
   .mini-card.peanut-card .big{font-size:20px;}
   .mini-card.peanut-card .py{font-size:12px;margin-top:6px;}
+
+  /* 使用指南：像家长操作路线一样可扫描，而不是堆成帮助文档 */
+  .guide-page{display:grid;gap:12px;padding-bottom:16px;}
+  .guide-hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f7a39 0%,#2fa84f 60%,#62c86f 100%);color:#fff;border-radius:24px;padding:20px;box-shadow:0 12px 28px rgba(31,122,57,.22);}
+  .guide-hero::after{content:"✦";position:absolute;right:18px;top:8px;font-size:86px;line-height:1;color:rgba(255,255,255,.16);transform:rotate(12deg);}
+  .guide-kicker{font-size:11px;font-weight:800;letter-spacing:1px;opacity:.8;text-transform:uppercase;}
+  .guide-hero h2{margin:7px 0 6px;font-size:26px;letter-spacing:.5px;}
+  .guide-hero p{position:relative;z-index:1;max-width:310px;margin:0;color:rgba(255,255,255,.9);font-size:13px;line-height:1.7;}
+  .guide-badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;position:relative;z-index:1;}
+  .guide-badges span{padding:5px 9px;border:1px solid rgba(255,255,255,.35);border-radius:999px;font-size:11px;font-weight:700;background:rgba(255,255,255,.12);}
+  .guide-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:var(--shadow);}
+  .guide-section-heading{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;}
+  .guide-section-heading>span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex:0 0 auto;border-radius:10px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:900;}
+  .guide-section-heading h3{margin:1px 0 3px;font-size:16px;}
+  .guide-section-heading p{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.6;}
+  .guide-steps{display:grid;gap:8px;}
+  .guide-step{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:11px;border-radius:15px;background:var(--green-soft);}
+  .guide-step-no{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:9px;background:var(--green);color:#fff;font-size:12px;font-weight:900;}
+  .guide-step h4,.guide-device h4{margin:1px 0 3px;font-size:13px;}
+  .guide-step p,.guide-device p{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.6;}
+  .guide-device-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .guide-device{padding:12px;border-radius:16px;background:#f7fbf8;border:1px solid var(--line);}
+  .guide-link{display:inline-flex;margin-top:8px;color:var(--green-deep);font-size:11px;font-weight:800;text-decoration:none;}
+  .guide-link:hover{text-decoration:underline;}
+  .guide-note{margin-top:10px;padding:10px 11px;border-radius:13px;background:var(--yellow-soft);color:#7d5b10;font-size:11px;line-height:1.6;}
+  .guide-facts,.guide-install-grid{display:grid;gap:8px;}
+  .guide-facts>div,.guide-install-grid>div{display:grid;gap:2px;padding:10px 11px;border-left:3px solid var(--green);background:#f7fbf8;border-radius:0 12px 12px 0;}
+  .guide-facts strong,.guide-install-grid strong{font-size:12px;color:var(--green-deep);}
+  .guide-facts span,.guide-install-grid span{font-size:12px;color:var(--ink-soft);line-height:1.5;}
+  .guide-help-card{background:linear-gradient(135deg,#fffaf0,#fff4d6);border-color:#ffe1a0;}
+  .guide-help-card h3{margin:0 0 5px;font-size:15px;color:#7d5b10;}
+  .guide-help-card p{margin:0;color:#8a6a1f;font-size:12px;line-height:1.6;}
+  .speech-guide-link{display:block;margin:6px auto 0;border:0;background:transparent;color:var(--green-deep);font-size:12px;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
+  @media (max-width:360px){.guide-device-grid{grid-template-columns:1fr;}.guide-card{padding:14px;}}

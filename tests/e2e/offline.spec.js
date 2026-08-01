@@ -53,6 +53,18 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
+  test("usage guide explains setup and speech downloads", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="guide"]');
+    await expect(page.locator(".guide-page")).toBeVisible();
+    await expect(page.locator(".guide-page h2")).toContainText("使用指南");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
+    await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
+    await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
+    await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
+    await expect(page.locator('[data-guide-section="sync"]')).toContainText("按孩子分别同步");
+  });
+
   test("speech button sends the displayed word to the browser speech API", async ({ page }) => {
     await page.addInitScript(() => {
       const calls = [];
@@ -74,25 +86,20 @@ test.describe("Offline mode (no login)", () => {
   });
 
   test("speech button explains when Windows has no usable voice", async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(window, "SpeechSynthesisUtterance", {
-        configurable: true,
-        value: function SpeechSynthesisUtterance() {},
-      });
-      Object.defineProperty(window, "speechSynthesis", {
-        configurable: true,
-        value: {
-          cancel() {},
-          speak() {},
-          getVoices() { return []; },
-        },
-      });
-    });
     await page.goto("/");
+    await page.evaluate(() => {
+      const synth = window.speechSynthesis;
+      Object.defineProperty(synth, "speak", { configurable: true, value() {} });
+      Object.defineProperty(synth, "getVoices", { configurable: true, value() { return []; } });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
+    });
     await page.click('[data-mod="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
     await expect(button).toContainText("安装英语语音");
+    await expect(page.locator("[data-speech-guide]")).toBeVisible();
+    await page.click("[data-speech-guide]");
+    await expect(page.locator(".guide-page")).toBeVisible();
   });
 
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {

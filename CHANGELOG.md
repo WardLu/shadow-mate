@@ -5,6 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- 新增应用内“使用指南”：覆盖登录、家庭空间、单项打卡、同步、主屏幕安装及 Windows/macOS/iPhone/iPad/Android 语音包下载指引。
+
 ### Fixed
 - 修复同一模块多个任务共用打卡状态的问题；取消单项打卡不会再影响同模块的其他任务。
 - 增强英语发音兼容性：等待异步加载的系统语音、优先选择英语语音，并在 Windows、macOS、iPadOS、iOS、Android 无可用语音或播放失败时给出可操作提示。
