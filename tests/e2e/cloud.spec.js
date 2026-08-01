@@ -15,6 +15,8 @@ const emptyState = {
 };
 
 async function seedAuthenticatedSession(page) {
+  const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
+  const projectRef = new URL(configuredUrl).hostname.split(".")[0];
   await page.addInitScript(({ projectRef, userId }) => {
     localStorage.clear();
     sessionStorage.clear();
@@ -35,7 +37,7 @@ async function seedAuthenticatedSession(page) {
         },
       }),
     );
-  }, { projectRef: PROJECT_REF, userId: USER_ID });
+  }, { projectRef, userId: USER_ID });
 }
 
 async function mockCloudApi(page, { remoteState = emptyState, rpcResponses = ["success"] } = {}) {
@@ -44,7 +46,12 @@ async function mockCloudApi(page, { remoteState = emptyState, rpcResponses = ["s
   let rpcIndex = 0;
   const rpcPayloads = [];
   const deletedProfiles = [];
+  const deletedHouseholds = [];
   let profileExists = true;
+
+  await page.route("**/auth/v1/logout", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
 
   await page.route("**/rest/v1/**", async (route) => {
     const request = route.request();
@@ -70,6 +77,12 @@ async function mockCloudApi(page, { remoteState = emptyState, rpcResponses = ["s
         contentType: "application/json",
         body: JSON.stringify({ version, updated_at: "2026-08-01T09:00:00.000Z" }),
       });
+      return;
+    }
+
+    if (path.endsWith("/rpc/learning_delete_household")) {
+      deletedHouseholds.push(JSON.parse(request.postData() || "{}"));
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
       return;
     }
 
@@ -126,6 +139,7 @@ async function mockCloudApi(page, { remoteState = emptyState, rpcResponses = ["s
   return {
     rpcPayloads,
     deletedProfiles,
+    deletedHouseholds,
     getState: () => state,
   };
 }
@@ -174,5 +188,24 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.deletedProfiles.length).toBe(1);
     await expect(page.locator("#cloudPanel .learner-choice")).toHaveCount(0);
     await expect(page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").checkins)).resolves.toEqual({});
+  });
+
+  test("exports family data and lets the owner delete the family workspace", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    const downloadPromise = page.waitForEvent("download");
+    await page.click("[data-export]");
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^shadow-mate-family-\d{4}-\d{2}-\d{2}\.json$/);
+
+    await page.click("[data-delete-household]");
+    await expect.poll(() => api.deletedHouseholds.length).toBe(1);
+    expect(api.deletedHouseholds[0]).toEqual({ p_household_id: HOUSEHOLD_ID });
   });
 });

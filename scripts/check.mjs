@@ -73,7 +73,7 @@ const config = await readFile("src/config.js", "utf8");
 if (!config.includes('productId: "shadow-mate"')) {
   throw new Error("Cloud product ID must be shadow-mate");
 }
-if (!/supabasePublishableKey:\s*"sb_publishable_[^"]+"/.test(config)) {
+if (!/supabasePublishableKey:\s*(?:env\.VITE_SUPABASE_PUBLISHABLE_KEY\s*\|\|\s*)?"sb_publishable_[^"]+"/.test(config)) {
   throw new Error("Browser configuration must use a Supabase publishable key");
 }
 

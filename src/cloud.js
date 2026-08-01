@@ -6,6 +6,9 @@ const PRODUCT_ID = CLOUD_CONFIG.productId;
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
+const AUTH_STORAGE_KEY = supabaseUrl
+  ? `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`
+  : null;
 const cloudEnabled = Boolean(supabaseUrl && publishableKey);
 const supabase = cloudEnabled
   ? createClient(supabaseUrl, publishableKey, {
@@ -256,6 +259,7 @@ function renderSetup() {
       return;
     }
     await loadWorkspace(profileId, { migrateLocal: true });
+    renderPanel();
     closeDialog();
     showToast("家庭学习空间已建立，正在同步本机记录");
   };
@@ -312,8 +316,10 @@ function renderAccount() {
       <div class="cloud-actions">
         <button class="cloud-action" type="submit">添加</button>
         <button class="cloud-action secondary" type="button" data-sync>立即同步</button>
+        <button class="cloud-action secondary" type="button" data-export>导出家庭数据</button>
         <button class="cloud-action danger" type="button" data-signout>退出登录</button>
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
+        <button class="cloud-action danger" type="button" data-delete-household>删除全部家庭数据</button>
       </div>
     </form>
   `;
@@ -382,11 +388,28 @@ function renderAccount() {
     };
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async () => { await saveCloudState(true); });
+  panel.querySelector("[data-export]")?.addEventListener("click", async () => { await exportWorkspace(); });
   panel.querySelector("[data-signout]")?.addEventListener("click", async () => { await supabase.auth.signOut(); closeDialog(); });
   panel.querySelector("[data-clear-local]")?.addEventListener("click", async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录并退出登录。云端数据不会删除。是否继续？");
     if (!confirmed) return;
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
+    if (AUTH_STORAGE_KEY) sessionStorage.clear();
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    window.learningDesk.clearLocalData();
+  });
+  panel.querySelector("[data-delete-household]")?.addEventListener("click", async () => {
+    const householdId = memberships[0]?.household_id;
+    if (!householdId) return;
+    const confirmed = window.confirm("将删除整个家庭空间、所有学习者和云端学习记录；此操作不可撤销。是否继续？");
+    if (!confirmed) return;
+    const { error } = await supabase.rpc("learning_delete_household", { p_household_id: householdId });
+    if (error) {
+      showToast(`删除家庭失败：${error.message}`, 5000);
+      return;
+    }
+    await supabase.auth.signOut({ scope: "local" });
+    if (AUTH_STORAGE_KEY) sessionStorage.clear();
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
     window.learningDesk.clearLocalData();
   });
@@ -453,6 +476,63 @@ async function fetchWorkspace() {
     const { data: hhRows } = await supabase.from("learning_households").select("name").in("id", householdIds);
     householdName = hhRows?.[0]?.name || "";
   }
+}
+
+async function exportWorkspace() {
+  if (!memberships.length) {
+    showToast("还没有可导出的家庭空间");
+    return;
+  }
+  const householdIds = memberships.map((item) => item.household_id);
+  const { data: profileRows, error: profileError } = await supabase
+    .from("learning_profiles")
+    .select("id, household_id, display_name, grade_level, avatar_key, created_at, updated_at")
+    .in("household_id", householdIds)
+    .order("created_at");
+  if (profileError) {
+    showToast(`导出失败：${profileError.message}`, 5000);
+    return;
+  }
+  const profilesForExport = profileRows || [];
+  let stateRows = [];
+  if (profilesForExport.length) {
+    const { data, error: stateError } = await supabase
+      .from("learning_profile_states")
+      .select("profile_id, state, version, updated_at")
+      .in("profile_id", profilesForExport.map((profile) => profile.id));
+    if (stateError) {
+      showToast(`导出失败：${stateError.message}`, 5000);
+      return;
+    }
+    stateRows = data || [];
+  }
+  const statesByProfile = new Map(stateRows.map((row) => [row.profile_id, row]));
+  const household = {
+    id: householdIds[0],
+    name: householdName || "家庭",
+  };
+  const payload = {
+    schema_version: 1,
+    product_id: PRODUCT_ID,
+    exported_at: new Date().toISOString(),
+    household,
+    learners: profilesForExport.map((profile) => ({
+      ...profile,
+      state: statesByProfile.get(profile.id)?.state || {},
+      state_version: statesByProfile.get(profile.id)?.version || null,
+      state_updated_at: statesByProfile.get(profile.id)?.updated_at || null,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `shadow-mate-family-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  showToast("家庭数据已导出");
 }
 
 async function loadWorkspace(preferredProfileId = null, options = {}) {

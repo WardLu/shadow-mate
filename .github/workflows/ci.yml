@@ -42,6 +42,17 @@ jobs:
         run: npm audit --audit-level=high
       - name: Start local Supabase
         run: npx supabase start
+      - name: Configure local Supabase for E2E
+        shell: bash
+        run: |
+          status="$(npx supabase status -o env)"
+          api_url="$(printf '%s\n' "$status" | sed -n 's/^API_URL=//p' | tr -d '"')"
+          publishable_key="$(printf '%s\n' "$status" | sed -n 's/^ANON_KEY=//p' | tr -d '"')"
+          test -n "$api_url"
+          test -n "$publishable_key"
+          echo "VITE_SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$publishable_key" >> "$GITHUB_ENV"
+          echo "E2E_REAL_SUPABASE=1" >> "$GITHUB_ENV"
       - name: Run database tests
         run: npm run test:db
       - name: Lint database schema

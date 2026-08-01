@@ -1,5 +1,5 @@
 begin;
-select plan(23);
+select plan(30);
 
 -- Final product identity and migration state.
 select is(
@@ -75,6 +75,24 @@ select ok(
     'execute'
   ),
   'anonymous users cannot call learning_save_state'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.learning_delete_household(uuid)',
+    'execute'
+  ),
+  'authenticated owners can call learning_delete_household'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.learning_delete_household(uuid)',
+    'execute'
+  ),
+  'anonymous users cannot call learning_delete_household'
 );
 
 select ok(
@@ -196,6 +214,38 @@ select throws_ok(
   '42501',
   null,
   'another user cannot insert a profile into the first household'
+);
+
+select throws_ok(
+  $$select public.learning_delete_household('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')$$,
+  '42501',
+  'learning_household_delete_forbidden',
+  'another user cannot delete the first household'
+);
+
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $$select public.learning_delete_household('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')$$,
+  'the household owner can delete the complete family workspace'
+);
+
+select is(
+  (select count(*) from public.learning_households),
+  0::bigint,
+  'whole-family deletion removes the household'
+);
+
+select is(
+  (select count(*) from public.learning_profiles),
+  0::bigint,
+  'whole-family deletion removes learner profiles'
+);
+
+select is(
+  (select count(*) from public.learning_profile_states),
+  0::bigint,
+  'whole-family deletion removes learning state'
 );
 
 set local role anon;
