@@ -1,0 +1,10 @@
+.vercel/
+.env*
+.security-local-denylist
+node_modules/
+dist/
+supabase/
+legacy/
+.github/
+.githooks/
+docs/

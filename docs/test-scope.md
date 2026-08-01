@@ -1,0 +1,9 @@
+# Test scope and coverage gates
+
+The project uses separate gates for separate seams instead of presenting one unit-test percentage as full application coverage:
+
+- `npm.cmd run test:coverage` measures the deterministic state and utility seam in `src/lib.js` and `src/learning-state.js`. Statements, branches, functions, and lines must each be at least 80%.
+- `npm.cmd run test:e2e` exercises the user-facing application seam in a real Chromium browser, including offline flows, authenticated profile loading, manual sync, optimistic-concurrency retry, learner deletion, family export, and whole-family deletion with a deterministic Supabase API mock. CI additionally sets `E2E_REAL_SUPABASE=1` after `supabase start`, so `tests/e2e/cloud-real.spec.js` runs the same lifecycle against local Auth, REST, and RPC services.
+- `npm.cmd run test:db` exercises the database seam against local Supabase, including grants, RLS isolation, state-version conflicts, the save function, and owner-only whole-family deletion.
+
+The unit coverage number must therefore be read as the pure-logic coverage gate, not as a claim that every DOM or network statement is covered by V8. UI and cloud behavior is accepted only when the browser suite covers the corresponding user journey, and database behavior is accepted only when the pgTAP suite passes.
