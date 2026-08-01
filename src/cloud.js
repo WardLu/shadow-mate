@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { escapeHtml, stateHasData, mergeObjects, mergeState } from "./lib.js";
+import { escapeHtml, stateHasData, mergeObjects, mergeState, GRADE_OPTIONS, gradeLabel } from "./lib.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
@@ -149,12 +149,7 @@ function renderSetup() {
       <label class="cloud-field">
         当前年级
         <select name="grade">
-          <option value="1">一年级</option>
-          <option value="2">二年级</option>
-          <option value="3">三年级</option>
-          <option value="4">四年级</option>
-          <option value="5">五年级</option>
-          <option value="6">六年级</option>
+          ${GRADE_OPTIONS}
         </select>
       </label>
       <div class="cloud-actions">
@@ -220,7 +215,7 @@ function renderAccount() {
       (profile) => `
       <button class="learner-choice ${profile.id === activeProfile?.id ? "active" : ""}" type="button" data-profile="${profile.id}">
         <span>${profile.id === activeProfile?.id ? "✅" : "👦"}</span>
-        <span><strong>${escapeHtml(profile.display_name)}</strong><small>${profile.grade_level || 1} 年级</small></span>
+        <span><strong>${escapeHtml(profile.display_name)}</strong><small>${gradeLabel(profile.grade_level)}</small></span>
       </button>
     `
     )
@@ -240,7 +235,7 @@ function renderAccount() {
       <label class="cloud-field">
         年级
         <select name="grade">
-          ${[1, 2, 3, 4, 5, 6].map((grade) => `<option value="${grade}">${grade} 年级</option>`).join("")}
+          ${GRADE_OPTIONS}
         </select>
       </label>
       <div class="cloud-actions">
