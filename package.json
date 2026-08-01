@@ -13,10 +13,12 @@
     "test:unit": "vitest run tests/unit",
     "test:coverage": "vitest run --coverage",
     "test:db": "supabase test db --local",
+    "test:functions": "node scripts/test-delete-account-guard.mjs",
     "test:e2e": "node scripts/run-e2e.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.111.0"
+    "@supabase/supabase-js": "2.111.0",
+    "lucide": "^1.28.0"
   },
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.3",

@@ -167,6 +167,26 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
+  test("growth and points calendars explain their status colors", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".banner .d")).toContainText("/4");
+    await page.click('[data-mod="grow"]');
+    await expect(page.locator(".cal-legend")).toContainText("未打卡");
+    await expect(page.locator(".cal-legend")).toContainText("4/4");
+    await expect(page.locator(".cal-cell.today")).toBeVisible();
+
+    await page.click('[data-mod="points"]');
+    await expect(page.locator(".cal")).toHaveCSS("display", "grid");
+    await expect(page.locator(".cal-legend + .cal")).toHaveCSS("margin-top", "12px");
+    await expect(page.locator(".cal-legend")).toContainText("有加分");
+    await expect(page.locator(".cal-legend")).toContainText("有扣分");
+    await expect(page.locator(".cal-legend")).toContainText("当前选中");
+    await expect(page.locator(".cal-chip.active")).toHaveAttribute("aria-pressed", "true");
+
+    await page.locator(".pts-toggle").first().click();
+    await expect(page.locator(".cal-chip.active")).toHaveClass(/pos/);
+  });
+
   test("math quiz shows feedback", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="math"]');
@@ -198,7 +218,8 @@ test.describe("Offline mode (no login)", () => {
 
     const logRow = page.locator(".log-row").first();
     await expect(logRow).toContainText("E2E Test Book");
-    await expect(logRow.locator(".log-stars")).toContainText("★★★★★");
+    await expect(logRow.locator(".log-stars .ui-icon")).toHaveCount(5);
+    await expect(logRow.locator('.log-stars .ui-icon[fill="currentColor"]')).toHaveCount(5);
     await logRow.locator("[data-del]").click();
     await expect(page.locator(".log-row")).toHaveCount(0);
   });

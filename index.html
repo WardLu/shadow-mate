@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="/src/app.css">
 </head>
 <body>
+<a class="skip-link" href="#main">跳到主要内容</a>
 <div class="app">
   <div class="topbar">
     <div class="logo"><svg viewBox="0 0 100 100" width="30" height="30" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="62" width="60" height="18" rx="9" fill="#1f7a39"/><rect x="20" y="38" width="36" height="28" rx="7" fill="#ffc83d"/><rect x="26" y="43" width="15" height="13" rx="3" fill="#cfeeff"/><path d="M54 50 L76 30 L86 38 L64 60 Z" fill="#ffc83d" stroke="#1f7a39" stroke-width="2" stroke-linejoin="round"/><path d="M76 30 q12 3 9 16 l-9 -3 q-1 -9 0 -13 Z" fill="#1f7a39"/></svg></div>
@@ -25,22 +26,22 @@
       <div class="sub">绿色挖掘机 · 每日成长打卡</div>
     </div>
     <div class="datepill" id="datepill">今天</div>
-    <button class="account-button" id="accountButton" type="button" aria-label="账户与云端同步" title="本机模式">○</button>
+    <button class="account-button" id="accountButton" type="button" aria-label="账户与云端同步" title="本机模式">登录</button>
   </div>
 
   <div class="body">
     <nav class="nav" id="nav">
-      <button class="navbtn active" data-mod="home"><span class="ic">🏠</span>首页</button>
-      <button class="navbtn" data-mod="chinese"><span class="ic">📖</span>语文</button>
-      <button class="navbtn" data-mod="math"><span class="ic">🔢</span>数学</button>
-      <button class="navbtn" data-mod="english"><span class="ic">🔤</span>英语</button>
-      <button class="navbtn" data-mod="book"><span class="ic">📚</span>绘本</button>
-      <button class="navbtn" data-mod="points"><span class="ic">⭐</span>积分</button>
-      <button class="navbtn" data-mod="grow"><span class="ic">🌱</span>成长</button>
-      <button class="navbtn" data-mod="guide"><span class="ic">🧭</span>指南</button>
+      <button class="navbtn active" data-mod="home" aria-current="page"><span class="ic" data-icon="home"></span>首页</button>
+      <button class="navbtn" data-mod="chinese"><span class="ic" data-icon="book"></span>语文</button>
+      <button class="navbtn" data-mod="math"><span class="ic" data-icon="calculator"></span>数学</button>
+      <button class="navbtn" data-mod="english"><span class="ic" data-icon="languages"></span>英语</button>
+      <button class="navbtn" data-mod="book"><span class="ic" data-icon="library"></span>绘本</button>
+      <button class="navbtn" data-mod="points"><span class="ic" data-icon="star"></span>积分</button>
+      <button class="navbtn" data-mod="grow"><span class="ic" data-icon="sprout"></span>成长</button>
+      <button class="navbtn" data-mod="guide"><span class="ic" data-icon="compass"></span>指南</button>
     </nav>
 
-    <main class="main" id="main"><!-- 动态渲染 --></main>
+    <main class="main" id="main" tabindex="-1"><!-- 动态渲染 --></main>
   </div>
 </div>
 

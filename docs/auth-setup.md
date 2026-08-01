@@ -48,3 +48,16 @@ Magic Link 模板（Dashboard > Authentication > Email Templates > Magic Link）
 已关闭 SSO Protection（Vercel Dashboard > Project > Settings > Deployment Protection）。
 
 影伴是公开 PWA，Preview 和 Production 均需直接访问。如需恢复保护，在 Vercel 项目设置中重新启用。
+
+## Account deletion isolation
+
+The current `dutepjyocxcvecmsrtfp` project is shared by multiple products, so the `delete-account` Edge Function deliberately returns `auth_identity_deletion_not_isolated` and cannot delete a Supabase Auth identity there. Shadow Mate's product-data deletion remains available.
+
+To enable complete account deletion, deploy Shadow Mate against a dedicated Supabase project whose `public.projects` registry contains only `shadow-mate`, then set these Edge Function secrets/configuration values:
+
+```text
+SHADOW_MATE_AUTH_PROJECT_ISOLATED=true
+SHADOW_MATE_AUTH_PROJECT_REF=<dedicated-project-ref>
+```
+
+Set `VITE_SUPABASE_AUTH_ACCOUNT_DELETION=1` only for that isolated frontend deployment. The server function revokes sessions, deletes only Shadow Mate-owned household rows, and then deletes the Auth identity with the secret key. Never put the secret key in browser environment variables.

@@ -104,12 +104,18 @@ const registryMigrationName = migrations.find((name) => name.endsWith("_projects
 const registryRestrictionName = migrations.find((name) =>
   name.endsWith("_restrict_project_registry_access.sql")
 );
+const accountDeletionAccessName = migrations.find((name) =>
+  name.endsWith("_learning_account_deletion_service_access.sql")
+);
 const baseMigrationName = migrations.find((name) => name.endsWith("_learning_family_state.sql"));
-if (!registryMigrationName || !registryRestrictionName || !baseMigrationName) {
+if (!registryMigrationName || !registryRestrictionName || !accountDeletionAccessName || !baseMigrationName) {
   throw new Error("Required Supabase migrations are missing");
 }
 if (migrations.indexOf(registryMigrationName) >= migrations.indexOf(baseMigrationName)) {
   throw new Error("The standalone project registry migration must run before the base schema");
+}
+if (migrations.indexOf(accountDeletionAccessName) <= migrations.indexOf(baseMigrationName)) {
+  throw new Error("Account deletion service access must run after the learning schema");
 }
 
 const registryMigration = await readFile(join(migrationDir, registryMigrationName), "utf8");
@@ -131,6 +137,16 @@ for (const marker of [
 ]) {
   if (!registryRestriction.includes(marker)) {
     throw new Error(`Registry restriction migration is missing safety step: ${marker}`);
+  }
+}
+
+const accountDeletionAccess = await readFile(join(migrationDir, accountDeletionAccessName), "utf8");
+for (const marker of [
+  "grant select (project_id) on table public.projects to service_role",
+  "alter table public.learning_households enable row level security",
+]) {
+  if (!accountDeletionAccess.includes(marker)) {
+    throw new Error(`Account deletion service access is missing safety step: ${marker}`);
   }
 }
 
