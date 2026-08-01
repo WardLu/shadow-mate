@@ -209,3 +209,81 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.deletedHouseholds[0]).toEqual({ p_household_id: HOUSEHOLD_ID });
   });
 });
+
+test.describe("Email OTP sign-in", () => {
+  test("lets an unregistered user enter the signup code", async ({ page }) => {
+    let otpRequests = 0;
+    let verifyRequests = 0;
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "otp-e2e-access-token",
+      refresh_token: "otp-e2e-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: {
+        id: USER_ID,
+        aud: "authenticated",
+        role: "authenticated",
+        email: "otp-parent@example.test",
+      },
+    };
+
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await page.route("**/auth/v1/otp**", async (route) => {
+      otpRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) });
+    });
+    await page.route("**/auth/v1/verify**", async (route) => {
+      verifyRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
+    });
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator('#emailLoginForm input[name="email"]').fill("otp-parent@example.test");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect.poll(() => otpRequests).toBe(1);
+    await expect(page.locator("#emailOtpForm")).toBeVisible();
+    await page.locator('#emailOtpForm input[name="token"]').fill("123456");
+    await page.click('#emailOtpForm button[type="submit"]');
+
+    await expect.poll(() => verifyRequests).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+  });
+
+  test("accepts the custom email link without keeping the token in the URL", async ({ page }) => {
+    let verifyRequests = 0;
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "link-e2e-access-token",
+      refresh_token: "link-e2e-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: {
+        id: USER_ID,
+        aud: "authenticated",
+        role: "authenticated",
+        email: "link-parent@example.test",
+      },
+    };
+
+    await page.route("**/auth/v1/verify**", async (route) => {
+      verifyRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
+    });
+    await mockCloudApi(page);
+
+    await page.goto("/?token_hash=link-token-hash&type=email");
+
+    await expect.poll(() => verifyRequests).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.location.search)).toBe("");
+  });
+});

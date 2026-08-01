@@ -4,6 +4,7 @@ import { escapeHtml, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GR
 import { icon } from "./icons.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
+const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
@@ -97,6 +98,20 @@ function updateSyncStatus() {
   if (status) status.textContent = `家庭空间最近同步：${formatSyncTime(lastSyncAt)}`;
 }
 
+async function sendLoginOtp(email) {
+  return supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: window.location.origin,
+      data: {
+        product_id: PRODUCT_ID,
+        product_name: AUTH_PRODUCT_NAME,
+      },
+    },
+  });
+}
+
 // escapeHtml imported from lib.js
 function readRememberedProfileId() {
   return localStorage.getItem(ACTIVE_PROFILE_KEY);
@@ -141,6 +156,84 @@ function closeDialog() {
   hideToast();
 }
 
+function renderOtpVerification(email) {
+  panel.innerHTML = `
+    <h2>${icon("checkCircle")} 输入邮箱验证码</h2>
+    <p>验证码已发送到 <b>${escapeHtml(email)}</b>。输入邮件中的验证码完成注册或登录；如果邮件提供登录按钮，也可以直接点击。</p>
+    <form id="emailOtpForm">
+      <label class="cloud-field">
+        邮箱验证码
+        <input name="token" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" minlength="6" maxlength="8" required placeholder="请输入 6 位验证码">
+      </label>
+      <div class="cloud-actions">
+        <button class="cloud-action" type="submit">验证并登录</button>
+        <button class="cloud-action secondary" type="button" data-resend>重新发送</button>
+        <button class="cloud-action secondary" type="button" data-change-email>更换邮箱</button>
+        <button class="cloud-action secondary" type="button" data-close>稍后验证</button>
+      </div>
+    </form>
+    <p class="cloud-hint">验证码通常为 6 位数字，仅能使用一次。收不到邮件时请检查垃圾邮件夹，或等待片刻后重新发送。</p>
+  `;
+  restoreToastLocation();
+
+  const form = panel.querySelector("#emailOtpForm");
+  const input = form.querySelector("[name=token]");
+  const submitButton = form.querySelector("[type=submit]");
+  const resendButton = form.querySelector("[data-resend]");
+
+  input.focus();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const token = String(new FormData(event.currentTarget).get("token") || "").trim();
+    if (!/^\d{6,8}$/.test(token)) {
+      showToast("请输入 6-8 位数字验证码", 4000);
+      input.focus();
+      return;
+    }
+    submitButton.disabled = true;
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+    if (error) {
+      submitButton.disabled = false;
+      input.select();
+      showToast(`验证失败：${error.message}`, 5000);
+      return;
+    }
+    showToast("验证成功，正在连接云端…", 4000);
+  };
+
+  resendButton.onclick = async () => {
+    resendButton.disabled = true;
+    const { error } = await sendLoginOtp(email);
+    if (error) {
+      resendButton.disabled = false;
+      showToast(`重新发送失败：${error.message}`, 5000);
+      return;
+    }
+    showToast("新的验证码已发送", 4000);
+    window.setTimeout(() => {
+      if (resendButton.isConnected) resendButton.disabled = false;
+    }, 30000);
+  };
+
+  panel.querySelector("[data-change-email]").onclick = renderSignedOut;
+  panel.querySelector("[data-close]").onclick = closeDialog;
+}
+
+async function consumeAuthTokenHash() {
+  if (!cloudEnabled) return;
+  const url = new URL(window.location.href);
+  const tokenHash = url.searchParams.get("token_hash");
+  const type = url.searchParams.get("type");
+  if (!tokenHash || type !== "email") return;
+
+  url.searchParams.delete("token_hash");
+  url.searchParams.delete("type");
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+
+  const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
+  if (error) showToast(`邮件链接验证失败：${error.message}`, 6000);
+}
+
 function renderSignedOut() {
   panel.innerHTML = `
     <h2>${icon("cloud")} 跨设备同步</h2>
@@ -151,12 +244,12 @@ function renderSignedOut() {
         <input type="email" name="email" autocomplete="email" required placeholder="parent@example.com">
       </label>
       <div class="cloud-actions">
-        <button class="cloud-action" type="submit">发送登录链接</button>
+        <button class="cloud-action" type="submit">发送验证码</button>
         <button class="cloud-action secondary" type="button" data-close>继续本机使用</button>
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
       </div>
     </form>
-    <p class="cloud-hint">${icon("hint")} 输入邮箱后，我们会发送一个登录链接到你的邮箱，在同一设备打开即可登录，无需密码。</p>
+    <p class="cloud-hint">${icon("hint")} 输入邮箱后，我们会发送验证码；收到邮件中的验证码后即可注册或登录，也可以直接点击邮件里的登录按钮。</p>
     ${
       cloudEnabled
         ? ""
@@ -179,26 +272,12 @@ function renderSignedOut() {
       return;
     }
     const email = new FormData(event.currentTarget).get("email").trim();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: window.location.origin,
-        data: { product_name: "影伴 Shadow Mate" },
-      },
-    });
+    const { error } = await sendLoginOtp(email);
     if (error) {
       showToast(`发送失败：${error.message}`, 5000);
       return;
     }
-    panel.innerHTML = `
-      <h2>${icon("checkCircle")} 请查收邮件</h2>
-      <p>登录链接已发送到 <b>${escapeHtml(email)}</b>。在这台设备上打开邮件里的链接即可完成登录。</p>
-      <div class="cloud-actions">
-        <button class="cloud-action secondary" type="button" data-close>知道了</button>
-      </div>
-    `;
-    panel.querySelector("[data-close]").onclick = closeDialog;
+    renderOtpVerification(email);
   };
 }
 
@@ -691,6 +770,7 @@ if (cloudEnabled) {
   } else {
     setAccountState();
   }
+  await consumeAuthTokenHash();
 } else {
   setAccountState();
 }

@@ -156,6 +156,13 @@
   font-size: 16px;
 }
 
+.cloud-field input[name="token"] {
+  text-align: center;
+  letter-spacing: .35em;
+  font-size: 22px;
+  font-weight: 800;
+}
+
 .cloud-actions {
   display: flex;
   flex-wrap: wrap;
@@ -187,6 +194,11 @@
 .cloud-action.danger {
   background: #fff0f0;
   color: #b64242;
+}
+
+.cloud-action:disabled {
+  cursor: wait;
+  opacity: .58;
 }
 
 .cloud-status {

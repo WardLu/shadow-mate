@@ -28,12 +28,22 @@ http://localhost:3000
 
 ## 邮件模板
 
-Magic Link 模板（Dashboard > Authentication > Email Templates > Magic Link）：
+首次使用邮箱登录且用户尚未注册时，Supabase 会发送 **Confirm signup**；已有用户会发送 **Magic Link**。两套模板必须保持同一套品牌和验证方式，不能只修改 Magic Link。
 
-- 标题：`影伴 Shadow Mate 登录验证`
-- 正文：中文 HTML，含绿色「点击登录」按钮，引用 `{{ .ConfirmationURL }}`
+仓库已将两套本地模板固定在：
 
-> 注意：`{{ .Data.product_name }}` 在 Supabase Cloud 中不生效。产品名称目前硬编码在模板中。共享项目的其他产品如需自定义名称，需在此处修改。
+- `supabase/templates/confirmation.html`
+- `supabase/templates/magic_link.html`
+
+两套模板都提供：
+
+- `{{ .Token }}`：验证码，前端通过 `verifyOtp({ email, token, type: "email" })` 校验
+- 基于 `{{ .TokenHash }}` 的应用内验证按钮，避免邮件客户端预取 `{{ .ConfirmationURL }}` 导致链接提前失效
+- `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：共享项目下按产品显示名称；缺失时回退到 `Shadow Nexus`
+
+生产环境需要在 Dashboard > Authentication > Email Templates 中分别更新 **Confirm signup** 和 **Magic Link**。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步。
+
+> 注意：邮件模板和发件人仍是 Supabase 项目级配置。产品元数据适合区分首次注册邮件；如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目，避免单个共享身份的产品归属产生歧义。
 
 ## SMTP / 发件人
 
