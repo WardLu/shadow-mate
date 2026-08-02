@@ -44,12 +44,13 @@ const userHeaders = {
 };
 
 // `supabase functions serve` can report a healthy OPTIONS response before the
-// Edge Function bundle has finished compiling. Warm it up with an invalid token
-// first so the guarded deletion request is never retried after a transient 502.
+// Edge Function bundle has finished compiling. Warm it up with the authenticated
+// test token so it passes gateway JWT verification and reaches the function
+// runtime before the guarded deletion request.
 for (let attempt = 1; attempt <= 30; attempt += 1) {
   const warmupResponse = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
     method: "POST",
-    headers: { ...publicHeaders, Authorization: "Bearer invalid-warmup-token" },
+    headers: userHeaders,
     body: "{}",
   });
 
