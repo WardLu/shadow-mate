@@ -42,7 +42,7 @@ http://localhost:3000
 - `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名优先识别产品。当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`
 - `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：作为域名识别之外的产品元数据回退；缺失时回退到 `Shadow Nexus`
 
-生产环境需要在 Dashboard > Authentication > Email Templates 中分别更新 **Confirm signup** 和 **Magic Link**。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步。
+生产环境已在 Dashboard > Authentication > Email Templates 中分别更新 **Confirm signup** 和 **Magic Link**。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步；后续修改本地模板时，仍需在 Dashboard 手动同步并分别保存。
 
 > 注意：邮件模板和发件人仍是 Supabase 项目级配置。正文和主题可以使用 `RedirectTo` 区分本次请求来源，因此已有用户也能按产品显示；发件人显示名仍无法按单封邮件动态切换。如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目。
 
@@ -62,7 +62,7 @@ http://localhost:3000
 
 ## Account deletion isolation
 
-The current `dutepjyocxcvecmsrtfp` project is shared by multiple products, so the `delete-account` Edge Function deliberately returns `auth_identity_deletion_not_isolated` and cannot delete a Supabase Auth identity there. Shadow Mate's product-data deletion remains available.
+The current shared project deliberately rejects Auth identity deletion from the `delete-account` Edge Function. Shadow Mate's product-data deletion remains available, while identity deletion requires the isolated-project configuration below.
 
 To enable complete account deletion, deploy Shadow Mate against a dedicated Supabase project whose `public.projects` registry contains only `shadow-mate`, then set these Edge Function secrets/configuration values:
 

@@ -1,6 +1,6 @@
 # Security and privacy baseline
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 ## Repository controls
 
@@ -8,6 +8,7 @@ Last reviewed: 2026-08-01
 - Pull requests are required for `main`; force pushes and branch deletion are disabled.
 - Secret scanning and push protection are enabled.
 - CI runs source checks, a production build, artifact checks, and `npm audit`.
+- CI starts Supabase with output redirected to a runner-local file and extracts only the URL and publishable key; it never prints the full `supabase status` output.
 - Dependabot alerts, security updates, and weekly version updates are enabled.
 - Internal agent directories and local environment files are rejected by the repository security check.
 

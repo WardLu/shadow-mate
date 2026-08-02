@@ -237,7 +237,7 @@ erDiagram
 - Supabase Auth URL Configuration 已配置：
   - Site URL: `https://shadow.wang`（共享项目主域名）
   - Redirect URLs: `https://*.shadow.wang`、`https://shadow.wang`、`https://*-wardlus-projects.vercel.app`、各项目 Vercel 生产域名、`http://localhost:5173`
-  - 邮件模板：Confirm signup 与 Magic Link 均支持验证码输入和应用内验证链接；`https://sm.shadow.wang` 显示影伴 Shadow Mate，`https://sc.shadow.wang` / `https://sbc.shadow.wang` 显示影匣 Shadow Card，`https://ss.shadow.wang` 显示影裁 Shadow Size，其余来源再使用 `product_id/product_name` 元数据回退
+  - 邮件模板：Confirm signup 与 Magic Link/OTP 均支持验证码输入和应用内验证链接；`https://sm.shadow.wang` 显示影伴 Shadow Mate，`https://sc.shadow.wang` / `https://sbc.shadow.wang` 显示影匣 Shadow Card，`https://ss.shadow.wang` 显示影裁 Shadow Size，其余来源再使用 `product_id/product_name` 元数据回退
   - 发件人名称：`Shadow Nexus`（共享 SMTP `noreply@shadow.wang`）
 
 当前 `src/config.js` 中的 Supabase publishable key 可公开。RLS 是数据安全边界。禁止提交 secret/service role key。
@@ -259,11 +259,11 @@ erDiagram
 - 4 张 `learning_*` 表均已启用 RLS；
 - 共 12 条针对 authenticated 的策略；
 - `learning_save_state` 为 security invoker；
-- pgTAP 30 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回，并覆盖账户与家庭删除权限；
+- pgTAP 23 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回，并覆盖账户与家庭删除权限；
 - 数据库 lint 无 schema 错误；
 - 已从空数据库验证产品 ID、外键、默认值、检查约束和家庭级 RLS。
 
-截至本次验收，线上共享 Supabase 已应用本次 4 个新增迁移，并完成函数权限、项目隔离和远端对象存在性检查。后续生产发布仍需完成浏览器测试和 Vercel Preview 验收，并重新运行 Security/Performance Advisor，避免未经端到端验证的前端版本直接发布到生产。
+截至 v1.0.1 发布验收，线上共享 Supabase 已应用仓库中的 8 个迁移版本，与本地迁移清单一致，无待执行迁移；`delete-account` Edge Function 已部署并启用 JWT 校验，且在共享项目中拒绝删除 Auth 身份。Vercel Preview 已完成浏览器、服务连通性和安全响应头核验，并将同一构建提升到 Production（`https://sm.shadow.wang/`）。Confirm signup 与 Magic Link/OTP 生产模板也已同步。
 
 共享数据库的 Advisor 仍报告其他历史对象存在 security-definer view、可变 search path、重复策略等问题。这些不由本次迁移产生，也没有在本项目中擅自修改；应另开数据库安全清理任务，逐项评估现有产品影响。
 

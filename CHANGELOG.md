@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+暂无已发布版本之外的变更。
+
+## [1.0.1] - 2026-08-02
+
 ### Added
 - 新增应用内“使用指南”：覆盖登录、家庭空间、单项打卡、同步、主屏幕安装及 Windows/macOS/iPhone/iPad/Android 语音包下载指引。
 - 新增邮箱验证码登录：未注册用户可在 Shadow Mate 内输入 Confirm signup 验证码完成注册，已注册用户也可使用同一流程登录。
