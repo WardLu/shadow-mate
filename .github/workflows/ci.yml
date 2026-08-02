@@ -41,11 +41,17 @@ jobs:
         if: ${{ hashFiles('package-lock.json') != '' }}
         run: npm audit --audit-level=high
       - name: Start local Supabase
-        run: npx supabase start
+        shell: bash
+        run: |
+          if ! npx supabase start --output env > "$RUNNER_TEMP/supabase-start.env" 2> "$RUNNER_TEMP/supabase-start.log"; then
+            echo "Supabase failed to start."
+            exit 1
+          fi
+          echo "Local Supabase started."
       - name: Configure local Supabase for E2E
         shell: bash
         run: |
-          status="$(npx supabase status -o env)"
+          status="$(npx supabase status --output env 2>/dev/null)"
           api_url="$(printf '%s\n' "$status" | sed -n 's/^API_URL=//p' | tr -d '"')"
           publishable_key="$(printf '%s\n' "$status" | sed -n 's/^ANON_KEY=//p' | tr -d '"')"
           test -n "$api_url"
