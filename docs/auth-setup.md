@@ -39,11 +39,12 @@ http://localhost:3000
 
 - `{{ .Token }}`：验证码，前端通过 `verifyOtp({ email, token, type: "email" })` 校验
 - 基于 `{{ .TokenHash }}` 的应用内验证按钮，避免邮件客户端预取 `{{ .ConfirmationURL }}` 导致链接提前失效
-- `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：共享项目下按产品显示名称；缺失时回退到 `Shadow Nexus`
+- `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名优先识别产品。当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`
+- `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：作为域名识别之外的产品元数据回退；缺失时回退到 `Shadow Nexus`
 
 生产环境需要在 Dashboard > Authentication > Email Templates 中分别更新 **Confirm signup** 和 **Magic Link**。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步。
 
-> 注意：邮件模板和发件人仍是 Supabase 项目级配置。产品元数据适合区分首次注册邮件；如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目，避免单个共享身份的产品归属产生歧义。
+> 注意：邮件模板和发件人仍是 Supabase 项目级配置。正文和主题可以使用 `RedirectTo` 区分本次请求来源，因此已有用户也能按产品显示；发件人显示名仍无法按单封邮件动态切换。如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目。
 
 ## SMTP / 发件人
 

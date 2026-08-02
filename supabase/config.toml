@@ -249,11 +249,11 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.confirmation]
-subject = "邮箱验证码 · Shadow Nexus"
+subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴 Shadow Mate{{ else if eq .RedirectTo "https://shadow-mate.vercel.app" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://localhost:5173" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://127.0.0.1:5173" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://localhost:3000" }}影伴 Shadow Mate{{ else if eq .RedirectTo "https://sc.shadow.wang" }}影匣 Shadow Card{{ else if eq .RedirectTo "https://sbc.shadow.wang" }}影匣 Shadow Card{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁 Shadow Size{{ else if eq .Data.product_id "shadow-mate" }}影伴 Shadow Mate{{ else if .Data.product_name }}{{ .Data.product_name }}{{ else }}Shadow Nexus{{ end }} · 邮箱验证码'
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.magic_link]
-subject = "邮箱登录验证码 · Shadow Nexus"
+subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴 Shadow Mate{{ else if eq .RedirectTo "https://shadow-mate.vercel.app" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://localhost:5173" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://127.0.0.1:5173" }}影伴 Shadow Mate{{ else if eq .RedirectTo "http://localhost:3000" }}影伴 Shadow Mate{{ else if eq .RedirectTo "https://sc.shadow.wang" }}影匣 Shadow Card{{ else if eq .RedirectTo "https://sbc.shadow.wang" }}影匣 Shadow Card{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁 Shadow Size{{ else if eq .Data.product_id "shadow-mate" }}影伴 Shadow Mate{{ else if .Data.product_name }}{{ .Data.product_name }}{{ else }}Shadow Nexus{{ end }} · 邮箱登录验证码'
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize notification email template
