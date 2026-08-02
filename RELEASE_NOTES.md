@@ -1,5 +1,23 @@
 # Release Notes
 
+## v1.0.1 — 2026-08-02
+
+影伴 Shadow Mate 发布首个生产修订版本。
+
+### 修复与改进
+
+- 统一四个学习模块的打卡统计、成长日历图例和积分日历状态说明。
+- Confirm signup 与 Magic Link/OTP 支持验证码输入、应用内验证链接和多项目品牌识别。
+- 修复家庭删除函数在 CI 启动阶段的预热问题，并保留共享项目身份隔离保护。
+- CI 不再输出完整 `supabase status` 或敏感状态字段，只注入测试所需的环境变量。
+- 升级 jsdom 依赖并通过主分支 CI、CodeQL、数据库测试和 E2E 验证。
+
+### 发布验收
+
+- 生产 Supabase 与仓库中的 8 个迁移版本一致，无待执行迁移。
+- Vercel Preview 已验收并提升到 Production。
+- 生产地址：[sm.shadow.wang](https://sm.shadow.wang/)
+
 ## v1.0.0 — 2026-08-01
 
 影伴 Shadow Mate 首个开源版本。

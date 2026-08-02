@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.0.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.0.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 ## 先看产品
@@ -105,7 +105,7 @@ supabase db lint --local --schema public --level warning --fail-on error
 - 本机学习状态保存在浏览器 `localStorage`，当前学习者单独保存。
 - 云端状态以完整 JSONB 快照保存，使用版本号处理并发冲突，减少离线场景的迁移和回归风险。
 - 家庭、学习者和学习状态按家庭边界隔离；删除家庭时只作用于当前产品和当前家庭，不触碰其他项目身份。
-- 家庭空间支持导出家庭 JSON 数据、删除家庭数据；注销账号则由服务端删除当前产品范围内的关联身份和数据。
+- 家庭空间支持导出家庭 JSON 数据、删除家庭数据；当前共享 Supabase 项目中的服务端流程只删除影伴自己的关联数据，不删除共享 Auth 身份。完整身份删除仅在专用、隔离的 Supabase 项目中启用。
 
 ## 项目结构
 
@@ -149,7 +149,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系。生产发布仍需完成域名部署、儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [TODO](TODO.md) 与 [Roadmap](ROADMAP.md)。
+影伴 v1.0.1 已部署到 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系；公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [TODO](TODO.md) 与 [Roadmap](ROADMAP.md)。
 
 ## License
 
