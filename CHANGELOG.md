@@ -5,7 +5,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-暂无已发布版本之外的变更。
+- 修复共享 Supabase 项目中已有账号的登录邮件回退显示 `Shadow Nexus`：生产 Confirm signup 与 Magic Link/OTP 模板现按请求回跳域名识别产品，并兼容根域名尾斜杠。
 
 ## [1.0.1] - 2026-08-02
 

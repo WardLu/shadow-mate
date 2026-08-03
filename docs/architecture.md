@@ -237,7 +237,7 @@ erDiagram
 - Supabase Auth URL Configuration 已配置：
   - Site URL: `https://shadow.wang`（共享项目主域名）
   - Redirect URLs: `https://*.shadow.wang`、`https://shadow.wang`、`https://*-wardlus-projects.vercel.app`、各项目 Vercel 生产域名、`http://localhost:5173`
-  - 邮件模板：Confirm signup 与 Magic Link/OTP 均支持验证码输入和应用内验证链接；`https://sm.shadow.wang` 显示影伴 Shadow Mate，`https://sc.shadow.wang` / `https://sbc.shadow.wang` 显示影匣 Shadow Card，`https://ss.shadow.wang` 显示影裁 Shadow Size，其余来源再使用 `product_id/product_name` 元数据回退
+  - 邮件模板：Confirm signup 与 Magic Link/OTP 均支持验证码输入和应用内验证链接；按本次请求的 `RedirectTo`（兼容根域名尾斜杠）识别来源：`https://sm.shadow.wang` 显示影伴 Shadow Mate，`https://sc.shadow.wang` / `https://sbc.shadow.wang` 显示影匣 Shadow Card，`https://ss.shadow.wang` 显示影裁 Shadow Size，其余来源再使用 `product_id/product_name` 元数据回退
   - 发件人名称：`Shadow Nexus`（共享 SMTP `noreply@shadow.wang`）
 
 当前 `src/config.js` 中的 Supabase publishable key 可公开。RLS 是数据安全边界。禁止提交 secret/service role key。
