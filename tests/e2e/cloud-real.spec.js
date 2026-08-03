@@ -44,7 +44,7 @@ test.describe("Real local Supabase cloud lifecycle", () => {
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-    await page.click("#accountButton");
+    // A newly authenticated user without a household gets the setup dialog automatically.
     await expect(page.locator("#householdSetupForm")).toBeVisible();
     await page.locator('#householdSetupForm input[name="household"]').fill("Real E2E Family");
     await page.locator('#householdSetupForm input[name="learner"]').fill("Real E2E Learner");
