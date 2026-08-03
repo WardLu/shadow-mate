@@ -1,4 +1,4 @@
-﻿-- Fix: update learning_households product check to shadow-mate.
+-- Fix: update learning_households product check to shadow-mate.
 -- The table may have been created before the rebrand with a different product id.
 -- CREATE TABLE IF NOT EXISTS does not update constraints on existing tables.
 do $guard$

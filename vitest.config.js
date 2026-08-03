@@ -12,7 +12,7 @@ export default defineConfig({
     // This gate is intentionally the deterministic unit/state layer. Browser
     // behavior in app.js and cloud.js is verified by Playwright; database RLS
     // and optimistic concurrency are verified by Supabase pgTAP.
-    include: ["src/lib.js", "src/learning-state.js"],
+    include: ["src/lib.js", "src/learning-state.js", "src/version-guard.js"],
     all: true,
     thresholds: {
       statements: 80,

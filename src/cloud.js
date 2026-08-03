@@ -1,11 +1,15 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { escapeHtml, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
+import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
+import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
+const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
+const MAX_CONFLICT_RETRIES = 2;
+const CONFLICT_RETRY_DELAY_MS = 200;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -37,6 +41,11 @@ let saveQueued = false;
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
+let authChangeVersion = 0;
+let localResetInProgress = false;
+let lastAuthSessionKey = null;
+let passwordRecoveryActive = false;
+let passwordStatusCheckedForSession = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -75,10 +84,35 @@ function showToast(message, duration = 2800) {
 }
 
 async function clearLocalAccountState() {
-  await supabase.auth.signOut({ scope: "local" });
+  let signOutError = null;
+  try {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    signOutError = error;
+  } catch (error) {
+    signOutError = error;
+  }
   if (AUTH_STORAGE_KEY) sessionStorage.clear();
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
-  window.learningDesk.clearLocalData();
+  window.learningDesk.clearLocalData({ reload: false });
+  session = null;
+  memberships = [];
+  profiles = [];
+  activeProfile = null;
+  setAccountState();
+  return signOutError;
+}
+
+async function completeLocalAccountReset(successMessage) {
+  localResetInProgress = true;
+  const signOutError = await clearLocalAccountState();
+  closeDialog();
+  showToast(
+    signOutError
+      ? `${successMessage}；本机已退出登录，云端会话注销未完成，请稍后重试。`
+      : successMessage,
+    5000,
+  );
+  return true;
 }
 
 function formatSyncTime(value) {
@@ -99,6 +133,7 @@ function updateSyncStatus() {
 }
 
 async function sendLoginOtp(email) {
+  localResetInProgress = false;
   return supabase.auth.signInWithOtp({
     email,
     options: {
@@ -109,6 +144,168 @@ async function sendLoginOtp(email) {
         product_name: AUTH_PRODUCT_NAME,
       },
     },
+  });
+}
+
+function passwordPromptStorageKey() {
+  return session?.user?.id ? `${PASSWORD_PROMPT_KEY}:${session.user.id}` : PASSWORD_PROMPT_KEY;
+}
+
+async function fetchHasPassword() {
+  const { data, error } = await supabase.rpc("learning_has_password");
+  if (error) {
+    console.error("Password status error:", error);
+    return null;
+  }
+  return Boolean(data);
+}
+
+function strengthMarkup(value) {
+  const strength = passwordStrength(value);
+  return `
+    <div class="password-strength" data-score="${strength.score}" aria-live="polite">
+      <div class="password-strength-head"><span>密码强度</span><strong>${strength.label}</strong></div>
+      <div class="password-strength-bars" aria-hidden="true">
+        ${[1, 2, 3, 4].map((level) => `<span class="${level <= strength.score ? "active" : ""}"></span>`).join("")}
+      </div>
+      <p>${strength.valid ? "已满足至少 6 位要求；混合字母、数字和符号会更安全。" : "密码至少需要 6 位。"}</p>
+    </div>`;
+}
+
+function bindPasswordEditor(form) {
+  const passwordInput = form.querySelector("[name=newPassword]");
+  const strength = form.querySelector("[data-password-strength]");
+  const updateStrength = () => { strength.innerHTML = strengthMarkup(passwordInput.value); };
+  passwordInput.addEventListener("input", updateStrength);
+  updateStrength();
+  form.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = form.querySelector(`[name="${button.dataset.togglePassword}"]`);
+      if (!input) return;
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      button.textContent = showing ? "显示" : "隐藏";
+      button.setAttribute("aria-pressed", String(!showing));
+    });
+  });
+}
+
+function renderPasswordEditor({ mode = "setup" } = {}) {
+  const isChange = mode === "change";
+  const isRecovery = mode === "recovery";
+  const title = isChange ? "修改共享密码" : isRecovery ? "重设共享密码" : "设置共享密码";
+  panel.innerHTML = `
+    <div class="cloud-heading">
+      <h2>${icon("cloudCheck")} ${title}</h2>
+      ${isRecovery ? "" : `<button class="icon-button" type="button" data-password-close aria-label="关闭密码设置">${icon("close")}</button>`}
+    </div>
+    <p>此密码属于当前 Supabase 账号，适用于使用同一账号的 Shadow 系列产品。密码至少 6 位。</p>
+    <form id="passwordEditorForm">
+      ${isChange ? `<label class="cloud-field">当前密码<div class="password-input-row"><input name="currentPassword" type="password" autocomplete="current-password" required><button class="cloud-action secondary compact" type="button" data-toggle-password="currentPassword">显示</button></div></label>` : ""}
+      <label class="cloud-field">新密码<div class="password-input-row"><input name="newPassword" type="password" autocomplete="new-password" minlength="6" required><button class="cloud-action secondary compact" type="button" data-toggle-password="newPassword">显示</button></div></label>
+      <div data-password-strength></div>
+      <label class="cloud-field">确认新密码<div class="password-input-row"><input name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required><button class="cloud-action secondary compact" type="button" data-toggle-password="confirmPassword">显示</button></div></label>
+      <div class="cloud-actions">
+        <button class="cloud-action" type="submit">${isChange ? "保存新密码" : "设置密码"}</button>
+        ${mode === "setup" ? '<button class="cloud-action secondary" type="button" data-password-later>稍后设置</button>' : ""}
+        ${isChange ? '<button class="cloud-action secondary" type="button" data-password-cancel>取消</button>' : ""}
+      </div>
+    </form>
+  `;
+  restoreToastLocation();
+  const form = panel.querySelector("#passwordEditorForm");
+  bindPasswordEditor(form);
+
+  const leaveEditor = () => {
+    passwordRecoveryActive = false;
+    renderPanel();
+  };
+  panel.querySelector("[data-password-close]")?.addEventListener("click", leaveEditor);
+  panel.querySelector("[data-password-cancel]")?.addEventListener("click", leaveEditor);
+  panel.querySelector("[data-password-later]")?.addEventListener("click", () => {
+    sessionStorage.setItem(passwordPromptStorageKey(), "1");
+    renderPanel();
+    showToast("本次登录已跳过密码设置；下次使用验证码登录时会再次提醒。", 5000);
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitButton = form.querySelector("[type=submit]");
+    await runLockedAction(submitButton, async () => {
+      const values = new FormData(form);
+      const nextPassword = String(values.get("newPassword") || "");
+      const confirmation = String(values.get("confirmPassword") || "");
+      const strength = passwordStrength(nextPassword);
+      if (!strength.valid) {
+        showToast("密码至少需要 6 位。", 5000);
+        return;
+      }
+      if (nextPassword !== confirmation) {
+        showToast("两次输入的密码不一致。", 5000);
+        return;
+      }
+      if (isChange) {
+        const currentPassword = String(values.get("currentPassword") || "");
+        const email = session?.user?.email || "";
+        const { error: reauthenticationError } = await supabase.auth.signInWithPassword({
+          email,
+          password: currentPassword,
+        });
+        if (reauthenticationError) {
+          showToast(formatAuthError(reauthenticationError, "当前密码不正确。"), 6000);
+          return;
+        }
+      }
+      const { error } = await supabase.auth.updateUser({
+        password: nextPassword,
+        data: { shared_password_set: true },
+      });
+      if (error) {
+        showToast(formatAuthError(error, isChange ? "当前密码不正确或新密码无法保存。" : "密码设置失败，请稍后再试。"), 6000);
+        return;
+      }
+      sessionStorage.removeItem(passwordPromptStorageKey());
+      passwordRecoveryActive = false;
+      passwordStatusCheckedForSession = session?.access_token || null;
+      renderPanel();
+      showToast(isChange ? "共享密码已修改" : "共享密码已设置，可用于 Shadow 系列产品登录", 6000);
+    });
+  });
+}
+
+function renderPasswordRecoveryRequest(prefillEmail = "") {
+  panel.innerHTML = `
+    <div class="cloud-heading"><h2>${icon("cloud")} 找回密码</h2><button class="icon-button" type="button" data-recovery-back aria-label="返回登录">${icon("close")}</button></div>
+    <p>输入账号邮箱，我们会发送密码重设邮件。为了保护账号，无论邮箱是否存在，页面都会显示相同结果。</p>
+    <form id="passwordRecoveryForm">
+      <label class="cloud-field">账号邮箱<input name="email" type="email" autocomplete="email" required value="${escapeHtml(prefillEmail)}" placeholder="parent@example.com"></label>
+      <div class="cloud-actions"><button class="cloud-action" type="submit">发送重设邮件</button><button class="cloud-action secondary" type="button" data-recovery-cancel>返回登录</button></div>
+    </form>
+  `;
+  restoreToastLocation();
+  const goBack = () => renderSignedOut("password", prefillEmail);
+  panel.querySelector("[data-recovery-back]").addEventListener("click", goBack);
+  panel.querySelector("[data-recovery-cancel]").addEventListener("click", goBack);
+  const form = panel.querySelector("#passwordRecoveryForm");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitButton = form.querySelector("[type=submit]");
+    await runLockedAction(submitButton, async () => {
+      const email = String(new FormData(form).get("email") || "").trim();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。"), 6000);
+        return;
+      }
+      panel.innerHTML = `
+        <h2>${icon("cloudCheck")} 请检查邮箱</h2>
+        <p>如果该邮箱已注册，密码重设邮件已经发送。请点击邮件中的按钮返回当前产品并设置新密码。</p>
+        <div class="cloud-actions"><button class="cloud-action secondary" type="button" data-recovery-done>返回登录</button></div>
+      `;
+      panel.querySelector("[data-recovery-done]").addEventListener("click", () => renderSignedOut("password", email));
+    });
   });
 }
 
@@ -144,16 +341,25 @@ function setAccountState() {
 }
 
 function openDialog() {
-  renderPanel();
+  if (session && workspaceLoading) renderWorkspaceLoading();
+  else renderPanel();
   if (!dialog.open) dialog.showModal();
-  workspaceLoading?.then(() => {
-    if (dialog.open) renderPanel();
-  }).catch(() => {});
 }
 
 function closeDialog() {
   if (dialog.open) dialog.close();
   hideToast();
+}
+
+function renderWorkspaceLoading() {
+  panel.innerHTML = `
+    <div class="cloud-heading">
+      <h2>${icon("cloudCheck")} 家庭学习空间</h2>
+      <button class="icon-button" type="button" data-close-dialog aria-label="关闭账户面板">${icon("close")}</button>
+    </div>
+    <p class="cloud-sync-copy">正在连接云端学习空间，请稍候…</p>
+  `;
+  panel.querySelector("[data-close-dialog]")?.addEventListener("click", closeDialog);
 }
 
 function renderOtpVerification(email) {
@@ -190,33 +396,43 @@ function renderOtpVerification(email) {
       input.focus();
       return;
     }
-    submitButton.disabled = true;
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
-    if (error) {
-      submitButton.disabled = false;
-      input.select();
-      showToast(`验证失败：${error.message}`, 5000);
-      return;
-    }
-    showToast("验证成功，正在连接云端…", 4000);
+    await runLockedAction(submitButton, async () => {
+      const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+      if (error) {
+        input.select();
+        showToast(formatAuthError(error), 5000);
+        return;
+      }
+      showToast("验证成功，正在连接云端…", 4000);
+    }, { busyText: "正在验证…" });
   };
 
   resendButton.onclick = async () => {
-    resendButton.disabled = true;
-    const { error } = await sendLoginOtp(email);
-    if (error) {
-      resendButton.disabled = false;
-      showToast(`重新发送失败：${error.message}`, 5000);
-      return;
+    let sent = false;
+    await runLockedAction(resendButton, async () => {
+      const { error } = await sendLoginOtp(email);
+      if (error) {
+        showToast(formatAuthError(error, "重新发送失败，请稍后再试。"), 5000);
+        return;
+      }
+      sent = true;
+      showToast("新的验证码已发送", 4000);
+    }, { busyText: "正在发送…" });
+    if (sent && resendButton.isConnected) {
+      resendButton.disabled = true;
+      resendButton.textContent = "30 秒后可重发";
+      window.setTimeout(() => {
+        if (resendButton.isConnected) {
+          resendButton.disabled = false;
+          resendButton.textContent = "重新发送";
+        }
+      }, 30000);
     }
-    showToast("新的验证码已发送", 4000);
-    window.setTimeout(() => {
-      if (resendButton.isConnected) resendButton.disabled = false;
-    }, 30000);
   };
 
   panel.querySelector("[data-change-email]").onclick = renderSignedOut;
   panel.querySelector("[data-close]").onclick = closeDialog;
+
 }
 
 async function consumeAuthTokenHash() {
@@ -231,25 +447,32 @@ async function consumeAuthTokenHash() {
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
 
   const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
-  if (error) showToast(`邮件链接验证失败：${error.message}`, 6000);
+  if (error) showToast(formatAuthError(error, "邮件链接验证失败，请重新获取验证码。"), 6000);
 }
 
-function renderSignedOut() {
+function renderSignedOut(mode = "otp", prefillEmail = "") {
+  const otpMode = mode !== "password";
   panel.innerHTML = `
     <h2>${icon("cloud")} 跨设备同步</h2>
     <p>平时可以继续离线使用。家长用邮箱登录后，学习记录会同步到云端，孩子不需要单独注册邮箱。登录后可以添加多个孩子并随时切换。</p>
-    <form id="emailLoginForm">
+    <div class="auth-mode-switch" role="tablist" aria-label="选择登录方式">
+      <button class="${otpMode ? "active" : ""}" type="button" role="tab" aria-selected="${otpMode}" data-auth-mode="otp">邮箱验证码</button>
+      <button class="${otpMode ? "" : "active"}" type="button" role="tab" aria-selected="${!otpMode}" data-auth-mode="password">邮箱密码</button>
+    </div>
+    <form id="emailLoginForm" data-auth-form="${otpMode ? "otp" : "password"}">
       <label class="cloud-field">
         家长邮箱
-        <input type="email" name="email" autocomplete="email" required placeholder="parent@example.com">
+        <input type="email" name="email" autocomplete="email" required value="${escapeHtml(prefillEmail)}" placeholder="parent@example.com">
       </label>
+      ${otpMode ? "" : `<label class="cloud-field">密码<div class="password-input-row"><input type="password" name="password" autocomplete="current-password" minlength="6" required><button class="cloud-action secondary compact" type="button" data-toggle-login-password>显示</button></div></label>`}
       <div class="cloud-actions">
-        <button class="cloud-action" type="submit">发送验证码</button>
+        <button class="cloud-action" type="submit">${otpMode ? "发送验证码" : "登录"}</button>
+        ${otpMode ? "" : '<button class="cloud-action secondary" type="button" data-forgot-password>忘记密码</button>'}
         <button class="cloud-action secondary" type="button" data-close>继续本机使用</button>
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
       </div>
     </form>
-    <p class="cloud-hint">${icon("hint")} 输入邮箱后，我们会发送验证码；收到邮件中的验证码后即可注册或登录，也可以直接点击邮件里的登录按钮。</p>
+    <p class="cloud-hint">${icon("hint")} ${otpMode ? "验证码可用于首次注册或登录。" : "密码属于共享账号，可用于使用同一 Supabase Auth 的 Shadow 系列产品；尚未设置密码时请使用邮箱验证码。"}</p>
     ${
       cloudEnabled
         ? ""
@@ -258,6 +481,12 @@ function renderSignedOut() {
   `;
   restoreToastLocation();
 
+  panel.querySelectorAll("[data-auth-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const email = panel.querySelector("[name=email]")?.value || "";
+      renderSignedOut(button.dataset.authMode, email);
+    });
+  });
   panel.querySelector("[data-close]").onclick = closeDialog;
   panel.querySelector("[data-clear-local]").onclick = () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录。此操作不可撤销，是否继续？");
@@ -265,19 +494,43 @@ function renderSignedOut() {
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
     window.learningDesk.clearLocalData();
   };
+  panel.querySelector("[data-toggle-login-password]")?.addEventListener("click", (event) => {
+    const input = panel.querySelector("[name=password]");
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    event.currentTarget.textContent = showing ? "显示" : "隐藏";
+  });
+  panel.querySelector("[data-forgot-password]")?.addEventListener("click", () => {
+    renderPasswordRecoveryRequest(panel.querySelector("[name=email]")?.value || "");
+  });
   panel.querySelector("#emailLoginForm").onsubmit = async (event) => {
     event.preventDefault();
     if (!cloudEnabled) {
       showToast("请先配置云端环境");
       return;
     }
-    const email = new FormData(event.currentTarget).get("email").trim();
-    const { error } = await sendLoginOtp(email);
-    if (error) {
-      showToast(`发送失败：${error.message}`, 5000);
-      return;
-    }
-    renderOtpVerification(email);
+    const form = event.currentTarget;
+    const submitButton = form.querySelector("[type=submit]");
+    const values = new FormData(form);
+    const email = String(values.get("email") || "").trim();
+    await runLockedAction(submitButton, async () => {
+      if (form.dataset.authForm === "password") {
+        const password = String(values.get("password") || "");
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          showToast(formatAuthError(error, "邮箱或密码不正确；如果尚未设置密码，请改用邮箱验证码登录。"), 6000);
+          return;
+        }
+        showToast("登录成功，正在连接云端…", 4000);
+        return;
+      }
+      const { error } = await sendLoginOtp(email);
+      if (error) {
+        showToast(formatAuthError(error, "验证码发送失败，请稍后再试。"), 5000);
+        return;
+      }
+      renderOtpVerification(email);
+    }, { busyText: otpMode ? "正在发送…" : "正在登录…" });
   };
 }
 
@@ -288,7 +541,7 @@ function renderSetup() {
     <form id="householdSetupForm">
       <label class="cloud-field">
         家庭空间名称
-        <input name="household" maxlength="40" required placeholder="我的家庭">
+        <input name="household" maxlength="40" required value="家庭空间">
       </label>
       <label class="cloud-field">
         第一个学习者
@@ -308,54 +561,74 @@ function renderSetup() {
   `;
   restoreToastLocation();
   panel.querySelector("[data-close]").onclick = closeDialog;
+  const householdInput = panel.querySelector('input[name="household"]');
+  if (householdInput) {
+    householdInput.addEventListener('focus', () => {
+      if (householdInput.value === '家庭空间') {
+        householdInput.value = '';
+      }
+    });
+    householdInput.addEventListener('blur', () => {
+      if (!householdInput.value.trim()) {
+        householdInput.value = '家庭空间';
+      }
+    });
+  }
   panel.querySelector("#householdSetupForm").onsubmit = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const householdId = crypto.randomUUID();
-    const profileId = crypto.randomUUID();
-    const payload = {
-      id: householdId,
-      project_id: PRODUCT_ID,
-      name: form.get("household").trim(),
-      owner_user_id: session.user.id,
-    };
-    const { error: householdError } = await supabase
-      .from("learning_households")
-      .insert(payload);
-    if (householdError) {
-      console.error("Household error:", householdError);
-      showToast(`创建家庭失败：${householdError.message}`, 5000);
-      return;
-    }
-    const { error: memberError } = await supabase
-      .from("learning_household_members")
-      .insert({
-        household_id: householdId,
-        user_id: session.user.id,
-        role: "owner",
-      });
-    if (memberError) {
-      console.error("Member error:", memberError);
-      showToast(`创建成员失败：${memberError.message}`, 5000);
-      return;
-    }
-    const { error: profileError } = await supabase
-      .from("learning_profiles")
-      .insert({
-        id: profileId,
-        household_id: householdId,
-        display_name: form.get("learner").trim(),
-        grade_level: Number(form.get("grade")),
-      });
-    if (profileError) {
-      console.error("Profile error:", profileError);
-      showToast(`创建学习者失败：${profileError.message}`, 5000);
-      return;
-    }
-    await loadWorkspace(profileId, { migrateLocal: true });
-    renderPanel();
-    closeDialog();
-    showToast("家庭学习空间已建立，正在同步本机记录");
+    const formElement = event.currentTarget;
+    const submitButton = formElement.querySelector("[type=submit]");
+    await runLockedAction(submitButton, async () => {
+      const form = new FormData(formElement);
+      const householdId = crypto.randomUUID();
+      const profileId = crypto.randomUUID();
+      const payload = {
+        id: householdId,
+        project_id: PRODUCT_ID,
+        name: form.get("household").trim(),
+        owner_user_id: session.user.id,
+      };
+      const { error: householdError } = await supabase
+        .from("learning_households")
+        .insert(payload);
+      if (householdError) {
+        console.error("Household error:", householdError);
+        showToast(formatCloudError(householdError, "创建家庭失败，请稍后再试。"), 5000);
+        return;
+      }
+      const { error: memberError } = await supabase
+        .from("learning_household_members")
+        .insert({
+          household_id: householdId,
+          user_id: session.user.id,
+          role: "owner",
+        });
+      if (memberError) {
+        console.error("Member error:", memberError);
+        showToast(formatCloudError(memberError, "创建成员失败，请稍后再试。"), 5000);
+        return;
+      }
+      const { error: profileError } = await supabase
+        .from("learning_profiles")
+        .insert({
+          id: profileId,
+          household_id: householdId,
+          display_name: form.get("learner").trim(),
+          grade_level: Number(form.get("grade")),
+        });
+      if (profileError) {
+        console.error("Profile error:", profileError);
+        showToast(formatCloudError(profileError, "创建学习者失败，请稍后再试。"), 5000);
+        return;
+      }
+      await loadWorkspace(profileId, { migrateLocal: true });
+      showToast("家庭学习空间已建立，正在同步本机记录");
+      renderPanel();
+      const prompted = await maybePromptPasswordSetup({ force: true });
+      if (!prompted) {
+        closeDialog();
+      }
+    }, { busyText: "正在创建…" });
   };
 }
 
@@ -413,6 +686,7 @@ function renderAccount() {
         <button class="cloud-action" type="submit">添加</button>
         <button class="cloud-action secondary" type="button" data-sync>立即同步</button>
         <button class="cloud-action secondary" type="button" data-export>导出家庭数据</button>
+        <button class="cloud-action secondary" type="button" data-password-settings>密码设置</button>
         <button class="cloud-action danger" type="button" data-signout>退出登录</button>
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
         <button class="cloud-action danger" type="button" data-delete-household>删除全部家庭数据</button>
@@ -424,8 +698,10 @@ function renderAccount() {
   panel.querySelector("[data-close-dialog]")?.addEventListener("click", closeDialog);
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
-      await selectProfile(button.dataset.profile);
-      renderAccount();
+      await runLockedAction(button, async () => {
+        await selectProfile(button.dataset.profile);
+        renderAccount();
+      }, { busyText: "正在切换…" });
     };
   });
   panel.querySelectorAll("[data-edit]").forEach((btn) => {
@@ -437,22 +713,24 @@ function renderAccount() {
       if (!profile) return;
       const confirmed = window.confirm(`将删除 ${profile.display_name} 的云端学习记录和本机缓存，此操作不可撤销。是否继续？`);
       if (!confirmed) return;
-      const { error } = await supabase.from("learning_profiles").delete().eq("id", profile.id);
-      if (error) {
-        showToast(`删除失败：${error.message}`, 5000);
-        return;
-      }
-      const deletingActive = activeProfile?.id === profile.id;
-      profiles = profiles.filter((item) => item.id !== profile.id);
-      if (deletingActive) {
-        activeProfile = null;
-        cloudVersion = null;
-        localStorage.removeItem(ACTIVE_PROFILE_KEY);
-        window.learningDesk.replaceState({}, { persist: true });
-      }
-      await loadWorkspace();
-      renderAccount();
-      showToast("学习者及其学习记录已删除");
+      await runLockedAction(button, async () => {
+        const { error } = await supabase.from("learning_profiles").delete().eq("id", profile.id);
+        if (error) {
+          showToast(formatCloudError(error, "删除学习者失败，请稍后再试。"), 5000);
+          return;
+        }
+        const deletingActive = activeProfile?.id === profile.id;
+        profiles = profiles.filter((item) => item.id !== profile.id);
+        if (deletingActive) {
+          activeProfile = null;
+          cloudVersion = null;
+          localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          window.learningDesk.replaceState({}, { persist: true });
+        }
+        await loadWorkspace();
+        renderAccount();
+        showToast("学习者及其学习记录已删除");
+      }, { busyText: "正在删除…" });
     };
   });
   panel.querySelector("[data-edit-household]")?.addEventListener("click", () => { editingHousehold = true; renderAccount(); });
@@ -460,83 +738,121 @@ function renderAccount() {
   panel.querySelector("[data-cancel-hh]")?.addEventListener("click", () => { editingHousehold = false; renderAccount(); });
   panel.querySelector("#householdEditForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const name = new FormData(e.currentTarget).get("household").trim();
-    const hhId = memberships[0]?.household_id;
-    if (!hhId) return;
-    const { error } = await supabase.from("learning_households").update({ name }).eq("id", hhId);
-    if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
-    householdName = name; editingHousehold = false; renderAccount();
-    showToast("家庭名称已更新");
+    const formElement = e.currentTarget;
+    await runLockedAction(formElement.querySelector("[type=submit]"), async () => {
+      const name = new FormData(formElement).get("household").trim();
+      const hhId = memberships[0]?.household_id;
+      if (!hhId) return;
+      const { error } = await supabase.from("learning_households").update({ name }).eq("id", hhId);
+      if (error) { showToast(formatCloudError(error, "修改家庭名称失败，请稍后再试。"), 5000); return; }
+      householdName = name; editingHousehold = false; renderAccount();
+      showToast("家庭名称已更新");
+    }, { busyText: "正在保存…" });
   });
   panel.querySelectorAll("[data-edit-profile]").forEach((form) => {
     form.onsubmit = async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      const pid = form.dataset.editProfile;
-      const { error } = await supabase.from("learning_profiles").update({
-        display_name: fd.get("name").trim(), grade_level: Number(fd.get("grade")),
-      }).eq("id", pid);
-      if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
-      const p = profiles.find((x) => x.id === pid);
-      if (p) { p.display_name = fd.get("name").trim(); p.grade_level = Number(fd.get("grade")); }
-      editingProfileId = null;
-      if (activeProfile?.id === pid) setAccountState();
-      renderAccount();
-      showToast("孩子信息已更新");
+      await runLockedAction(form.querySelector("[type=submit]"), async () => {
+        const fd = new FormData(form);
+        const pid = form.dataset.editProfile;
+        const { error } = await supabase.from("learning_profiles").update({
+          display_name: fd.get("name").trim(), grade_level: Number(fd.get("grade")),
+        }).eq("id", pid);
+        if (error) { showToast(formatCloudError(error, "修改学习者信息失败，请稍后再试。"), 5000); return; }
+        const p = profiles.find((x) => x.id === pid);
+        if (p) { p.display_name = fd.get("name").trim(); p.grade_level = Number(fd.get("grade")); }
+        editingProfileId = null;
+        if (activeProfile?.id === pid) setAccountState();
+        renderAccount();
+        showToast("孩子信息已更新");
+      }, { busyText: "正在保存…" });
     };
   });
-  panel.querySelector("[data-sync]")?.addEventListener("click", async () => { await saveCloudState(true); });
-  panel.querySelector("[data-export]")?.addEventListener("click", async () => { await exportWorkspace(); });
-  panel.querySelector("[data-signout]")?.addEventListener("click", async () => { await supabase.auth.signOut(); closeDialog(); });
-  panel.querySelector("[data-clear-local]")?.addEventListener("click", async () => {
+  panel.querySelector("[data-sync]")?.addEventListener("click", async (event) => {
+    await runLockedAction(event.currentTarget, () => saveCloudState(true), { busyText: "正在同步…" });
+  });
+  panel.querySelector("[data-export]")?.addEventListener("click", async (event) => {
+    await runLockedAction(event.currentTarget, exportWorkspace, { busyText: "正在导出…" });
+  });
+  panel.querySelector("[data-password-settings]")?.addEventListener("click", async (event) => {
+    await runLockedAction(event.currentTarget, async () => {
+      const hasPassword = await fetchHasPassword();
+      if (hasPassword === null) {
+        showToast("暂时无法读取密码状态，请稍后再试。", 5000);
+        return;
+      }
+      renderPasswordEditor({ mode: hasPassword ? "change" : "setup" });
+    }, { busyText: "正在检查…" });
+  });
+  panel.querySelector("[data-signout]")?.addEventListener("click", async (event) => {
+    await runLockedAction(event.currentTarget, async () => {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        showToast(formatAuthError(error, "退出登录失败，请稍后再试。"), 5000);
+        return;
+      }
+      sessionStorage.removeItem(passwordPromptStorageKey());
+      closeDialog();
+      showToast("已退出登录", 4000);
+    }, { busyText: "正在退出…" });
+  });
+  panel.querySelector("[data-clear-local]")?.addEventListener("click", async (event) => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录并退出登录。云端数据不会删除。是否继续？");
     if (!confirmed) return;
-    await clearLocalAccountState();
+    await runLockedAction(event.currentTarget, () => completeLocalAccountReset("本机数据已清除，已退出登录"), { busyText: "正在清除…" });
   });
-  panel.querySelector("[data-delete-household]")?.addEventListener("click", async () => {
+  panel.querySelector("[data-delete-household]")?.addEventListener("click", async (event) => {
     const householdId = memberships[0]?.household_id;
     if (!householdId) return;
     const confirmed = window.confirm("将删除整个家庭空间、所有学习者和云端学习记录；此操作不可撤销。是否继续？");
     if (!confirmed) return;
-    const { error } = await supabase.rpc("learning_delete_household", { p_household_id: householdId });
-    if (error) {
-      showToast(`删除家庭失败：${error.message}`, 5000);
-      return;
-    }
-    await clearLocalAccountState();
+    await runLockedAction(event.currentTarget, async () => {
+      const { error } = await supabase.rpc("learning_delete_household", { p_household_id: householdId });
+      if (error) {
+        showToast(formatCloudError(error, "删除家庭失败，请稍后再试。"), 5000);
+        return;
+      }
+      await completeLocalAccountReset("家庭数据已删除，已退出登录");
+    }, { busyText: "正在删除…" });
   });
-  panel.querySelector("[data-delete-account]")?.addEventListener("click", async () => {
+  panel.querySelector("[data-delete-account]")?.addEventListener("click", async (event) => {
     const confirmed = window.confirm("将注销当前登录账号，并删除 Shadow Mate 家庭数据。此操作不可恢复。是否继续？");
     if (!confirmed) return;
-    const { data, error } = await supabase.functions.invoke("delete-account", { body: {} });
-    if (error || data?.code || !data?.deleted) {
-      showToast(`注销失败：${data?.message || error?.message || "服务端未完成注销"}`, 6000);
-      return;
-    }
-    await clearLocalAccountState();
+    await runLockedAction(event.currentTarget, async () => {
+      const { data, error } = await supabase.functions.invoke("delete-account", { body: {} });
+      if (error || data?.code || !data?.deleted) {
+        showToast(formatCloudError(error || { message: data?.message }, "注销失败，请稍后再试。"), 6000);
+        return;
+      }
+      await completeLocalAccountReset("账号及家庭数据已删除，已退出登录");
+    }, { busyText: "正在注销…" });
   });
   panel.querySelector("#addLearnerForm").onsubmit = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const householdId = memberships[0]?.household_id;
-    if (!householdId) return;
-    const { data, error } = await supabase
-      .from("learning_profiles")
-      .insert({
-        household_id: householdId,
-        display_name: form.get("learner").trim(),
-        grade_level: Number(form.get("grade")),
-      })
-      .select()
-      .single();
-    if (error) {
-      showToast(`添加失败：${error.message}`, 5000);
-      return;
-    }
-    profiles.push(data);
-    await selectProfile(data.id);
-    renderAccount();
-    showToast("已添加新的学习者");
+    const formElement = event.currentTarget;
+    const submitButton = formElement.querySelector("[type=submit]");
+    await runLockedAction(submitButton, async () => {
+      const form = new FormData(formElement);
+      const householdId = memberships[0]?.household_id;
+      if (!householdId) return;
+      const { data, error } = await supabase
+        .from("learning_profiles")
+        .insert({
+          household_id: householdId,
+          display_name: form.get("learner").trim(),
+          grade_level: Number(form.get("grade")),
+        })
+        .select()
+        .single();
+      if (error) {
+        showToast(formatCloudError(error, "添加学习者失败，请稍后再试。"), 5000);
+        return;
+      }
+      profiles.push(data);
+      await selectProfile(data.id);
+      renderAccount();
+      showToast("已添加新的学习者");
+    }, { busyText: "正在添加…" });
   };
 }
 
@@ -592,7 +908,7 @@ async function exportWorkspace() {
     .in("household_id", householdIds)
     .order("created_at");
   if (profileError) {
-    showToast(`导出失败：${profileError.message}`, 5000);
+    showToast(formatCloudError(profileError, "导出家庭数据失败，请稍后再试。"), 5000);
     return;
   }
   const profilesForExport = profileRows || [];
@@ -603,7 +919,7 @@ async function exportWorkspace() {
       .select("profile_id, state, version, updated_at")
       .in("profile_id", profilesForExport.map((profile) => profile.id));
     if (stateError) {
-      showToast(`导出失败：${stateError.message}`, 5000);
+      showToast(formatCloudError(stateError, "导出家庭数据失败，请稍后再试。"), 5000);
       return;
     }
     stateRows = data || [];
@@ -660,7 +976,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
     .eq("profile_id", profile.id)
     .maybeSingle();
   if (error) {
-    showToast(`读取云端失败：${error.message}`, 5000);
+    showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
     return;
   }
   if (!data) {
@@ -686,37 +1002,63 @@ async function saveCloudState(manual = false) {
     return;
   }
   saveInFlight = true;
-  const currentState = window.learningDesk.getState();
-  const { data, error } = await supabase.rpc("learning_save_state", {
-    p_profile_id: activeProfile.id,
-    p_state: currentState,
-    p_expected_version: cloudVersion,
-  });
-  saveInFlight = false;
-  if (error) {
-    if (error.message.includes("learning_state_conflict")) {
-      const { data: remote } = await supabase
+  let saved = false;
+  let conflictRetries = 0;
+  try {
+    while (true) {
+      const currentState = window.learningDesk.getState();
+      const { data, error } = await supabase.rpc("learning_save_state", {
+        p_profile_id: activeProfile.id,
+        p_state: currentState,
+        p_expected_version: cloudVersion,
+      });
+      if (!error) {
+        const row = Array.isArray(data) ? data[0] : data;
+        cloudVersion = row?.version ?? cloudVersion;
+        lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+        updateSyncStatus();
+        if (manual) showToast("云端记录已更新");
+        saved = true;
+        break;
+      }
+
+      if (error.message.includes("learning_rate_limited")) {
+        showToast("操作过于频繁，请稍后再试。", 5000);
+        break;
+      }
+
+      if (!error.message.includes("learning_state_conflict")) {
+        showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+        break;
+      }
+
+      if (conflictRetries >= MAX_CONFLICT_RETRIES) {
+        showToast(formatCloudError(error, "云端记录冲突次数过多，请刷新后再试。"), 6000);
+        break;
+      }
+
+      const { data: remote, error: remoteError } = await supabase
         .from("learning_profile_states")
         .select("state, version")
         .eq("profile_id", activeProfile.id)
         .single();
-      if (remote) {
-        cloudVersion = remote.version;
-        window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
-        saveQueued = true;
+      if (remoteError || !remote) {
+        showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+        break;
       }
-    } else {
-      showToast(`云端同步失败：${error.message}`, 5000);
+
+      cloudVersion = remote.version;
+      window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
+      conflictRetries += 1;
+      await new Promise((resolve) => window.setTimeout(resolve, CONFLICT_RETRY_DELAY_MS * conflictRetries));
     }
-  } else {
-    const row = Array.isArray(data) ? data[0] : data;
-    cloudVersion = row?.version ?? cloudVersion;
-    lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-    updateSyncStatus();
-    if (manual) showToast("云端记录已更新");
+  } finally {
+    saveInFlight = false;
   }
-  if (saveQueued) {
-    saveQueued = false;
+
+  const queuedAfterSave = saveQueued;
+  saveQueued = false;
+  if (saved && queuedAfterSave) {
     await saveCloudState(false);
   }
 }
@@ -728,26 +1070,66 @@ function scheduleSave() {
 
 window.cloudSync = { schedule: scheduleSave };
 
-async function onAuthChange(nextSession) {
+async function maybePromptPasswordSetup(options = {}) {
+  if (!session || passwordRecoveryActive) return false;
+  const sessionKey = session.access_token || session.user.id;
+  if (!options.force && passwordStatusCheckedForSession === sessionKey) return false;
+  passwordStatusCheckedForSession = sessionKey;
+  if (!options.force && sessionStorage.getItem(passwordPromptStorageKey()) === "1") return false;
+  const hasPassword = await fetchHasPassword();
+  if (hasPassword !== false) return false;
+  renderPasswordEditor({ mode: "setup" });
+  if (!dialog.open) dialog.showModal();
+  showToast("建议为共享账号设置密码，也可以稍后处理。", 5000);
+  return true;
+}
+
+async function onAuthChange(nextSession, event = "") {
+  if (nextSession && localResetInProgress) return;
+  const authSessionKey = nextSession?.access_token || null;
+  if (authSessionKey === lastAuthSessionKey && event !== "PASSWORD_RECOVERY") return;
+  lastAuthSessionKey = authSessionKey;
+  if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
+  const changeVersion = ++authChangeVersion;
   session = nextSession;
   memberships = [];
   profiles = [];
   activeProfile = null;
   cloudVersion = null;
   lastSyncAt = null;
+  if (!session) {
+    passwordRecoveryActive = false;
+    passwordStatusCheckedForSession = null;
+  }
   setAccountState();
+  let passwordUiOpened = false;
   if (session) {
     workspaceLoading = loadWorkspace();
     try {
       await workspaceLoading;
-      showToast("已连接云端学习空间");
+      if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+        showToast("已连接云端学习空间");
+      }
     } catch (error) {
-      showToast(`登录成功，但读取学习空间失败：${error.message}`, 5000);
+      if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+        showToast(formatCloudError(error, "登录成功，但读取学习空间失败，请稍后再试。"), 5000);
+      }
     } finally {
-      workspaceLoading = null;
+      if (changeVersion === authChangeVersion) workspaceLoading = null;
+    }
+    if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+      if (passwordRecoveryActive) {
+        renderPasswordEditor({ mode: "recovery" });
+        if (!dialog.open) dialog.showModal();
+        passwordUiOpened = true;
+      } else if (memberships.length > 0) {
+        passwordUiOpened = await maybePromptPasswordSetup();
+      } else {
+        if (!dialog.open) dialog.showModal();
+      }
     }
   }
-  if (dialog.open) renderPanel();
+  if (!passwordUiOpened && dialog.open && (changeVersion === authChangeVersion || !session)) renderPanel();
 }
 
 accountButton?.addEventListener("click", openDialog);
@@ -759,8 +1141,8 @@ dialog?.addEventListener("close", hideToast);
 if (cloudEnabled) {
   // Register onAuthStateChange BEFORE getSession to avoid missing the
   // INITIAL_SESSION event when the client detects a magic-link session from URL.
-  supabase.auth.onAuthStateChange((_event, nextSession) => {
-    queueMicrotask(() => onAuthChange(nextSession));
+  supabase.auth.onAuthStateChange((event, nextSession) => {
+    queueMicrotask(() => onAuthChange(nextSession, event));
   });
   const {
     data: { session: initialSession },

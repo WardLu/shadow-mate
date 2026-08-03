@@ -28,23 +28,26 @@ http://localhost:3000
 
 ## 邮件模板
 
-首次使用邮箱登录且用户尚未注册时，Supabase 会发送 **Confirm signup**；已有用户会发送 **Magic Link**。两套模板必须保持同一套品牌和验证方式，不能只修改 Magic Link。
+首次使用邮箱验证码且用户尚未注册时，Supabase 会发送 **Confirm signup**；已有用户会发送 **Magic Link**；找回密码会发送 **Reset password / Recovery**。三套模板必须保持同一套多项目品牌规则。
 
-仓库已将两套本地模板固定在：
+仓库已将三套本地模板固定在：
 
 - `supabase/templates/confirmation.html`
 - `supabase/templates/magic_link.html`
+- `supabase/templates/recovery.html`
 
-两套模板都提供：
+Confirm signup 与 Magic Link 提供验证码和应用内验证链接；Recovery 使用 Supabase 官方 `{{ .ConfirmationURL }}` 完成一次性密码恢复。三套模板都使用 `{{ .RedirectTo }}` 区分来源：
 
 - `{{ .Token }}`：验证码，前端通过 `verifyOtp({ email, token, type: "email" })` 校验
 - 基于 `{{ .TokenHash }}` 的应用内验证按钮，避免邮件客户端预取 `{{ .ConfirmationURL }}` 导致链接提前失效
-- `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名优先识别产品。当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`
+- `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名识别品牌。当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`；未知来源回退为 `Shadow Nexus`，主题使用短品牌名以满足 Supabase 255 字符限制。各产品调用 `resetPasswordForEmail` 时应传产品根域名作为 `redirectTo`。
 - `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：作为域名识别之外的产品元数据回退；缺失时回退到 `Shadow Nexus`
 
-生产环境已在 Dashboard > Authentication > Email Templates 中分别更新 **Confirm signup** 和 **Magic Link**。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步；后续修改本地模板时，仍需在 Dashboard 手动同步并分别保存。
+生产环境的 **Confirm signup** 和 **Magic Link** 已同步；新增 Recovery 模板在本次改动发布时仍需通过 Supabase Management API 或 Dashboard 单独同步。托管邮件模板不属于数据库迁移，提交代码不会自动改变线上模板。
 
-> 注意：邮件模板和发件人仍是 Supabase 项目级配置。正文和主题可以使用 `RedirectTo` 区分本次请求来源，因此已有用户也能按产品显示；发件人显示名仍无法按单封邮件动态切换。如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目。
+密码流程使用 Supabase 官方接口：`signInWithPassword`、`resetPasswordForEmail`、`PASSWORD_RECOVERY` 和 `updateUser`。不得自建公开密码重置令牌表，不得在浏览器或业务表中保存密码，也不得使用 `user_metadata` 判断授权。
+
+> 注意：邮件模板和发件人仍是 Supabase 项目级配置。正文和主题使用本次请求的 `RedirectTo` 区分来源，不依赖已有用户的 `user_metadata`，因此同一共享 Auth 项目中已经在其他产品注册过的用户也能按当前产品显示；发件人显示名仍无法按单封邮件动态切换。如果同一邮箱已经在多个产品间共用，最可靠的长期方案仍是为产品拆分 Auth 项目。
 
 ## SMTP / 发件人
 

@@ -3,6 +3,7 @@ import {
   createLearningState,
   hasCheckin,
   isPointMarked,
+  normalizeLearningState,
   transitionLearningState,
 } from "../../src/learning-state.js";
 
@@ -23,6 +24,28 @@ describe("learning state machine", () => {
       peanutLog: [],
       peanutRead: {},
     });
+  });
+
+  it("normalizes malformed state containers and legacy group queries", () => {
+    const normalized = normalizeLearningState({
+      checkins: [],
+      points: null,
+      peanutLog: "not-a-log",
+      bookShelf: { "2": 1 },
+    });
+
+    expect(normalized).toEqual({
+      checkins: {},
+      extra: {},
+      points: {},
+      bookShelf: { "2": 1 },
+      peanutLog: [],
+      peanutRead: {},
+    });
+    expect(hasCheckin({ "chinese-literacy": true }, "chinese")).toBe(true);
+    expect(hasCheckin(null, "chinese")).toBe(false);
+    expect(hasCheckin({}, "chinese")).toBe(false);
+    expect(isPointMarked({}, "2026-8", 0, 3)).toBe(false);
   });
 
   it("toggles a task check-in and removes an empty day", () => {
@@ -67,6 +90,16 @@ describe("learning state machine", () => {
     expect(state.points["2026-8"]["0"]).toEqual({});
   });
 
+  it("ignores incomplete check-in and point actions", () => {
+    const initial = createLearningState();
+
+    expect(toggle(initial, { type: "CHECKIN_TOGGLED", date: "", key: "chinese-literacy" })).toEqual(initial);
+    expect(toggle(initial, { type: "CHECKIN_TOGGLED", date: "2026-08-01" })).toEqual(initial);
+    expect(toggle(initial, { type: "POINT_TOGGLED", month: "2026-8", itemIndex: undefined, day: 3 })).toEqual(initial);
+    expect(toggle(initial, { type: "POINT_TOGGLED", month: "2026-8", itemIndex: 0 })).toEqual(initial);
+    expect(toggle(initial, { type: "POINTS_CLEARED" })).toEqual(initial);
+  });
+
   it("toggles the shelf and reading-list completion flags independently", () => {
     let state = createLearningState();
 
@@ -90,6 +123,15 @@ describe("learning state machine", () => {
 
     state = toggle(state, { type: "READING_LOG_REMOVED", index: 0 });
     expect(state.peanutLog).toEqual([]);
+  });
+
+  it("ignores malformed reading-log transitions", () => {
+    const initial = createLearningState({ peanutLog: [{ title: "Keep me" }] });
+
+    expect(toggle(initial, { type: "READING_LOG_ADDED", record: [] })).toEqual(initial);
+    expect(toggle(initial, { type: "READING_LOG_REMOVED", index: -1 })).toEqual(initial);
+    expect(toggle(initial, { type: "READING_LOG_REMOVED", index: 2 })).toEqual(initial);
+    expect(toggle(initial, { type: "SHELF_TOGGLED" })).toEqual(initial);
   });
 
   it("clears only the selected month's points and replaces state safely", () => {

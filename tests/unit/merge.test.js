@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   escapeHtml,
+  formatAuthError,
+  formatCloudError,
   stateHasData,
   mergeObjects,
   mergeState,
@@ -10,6 +12,7 @@ import {
   gradeOptionsSelected,
   buildMissingSequence,
   latestUpdatedAt,
+  passwordStrength,
 } from "../../src/lib.js";
 
 describe("family sync metadata", () => {
@@ -63,6 +66,66 @@ describe("escapeHtml", () => {
   it("handles non-string input", () => {
     expect(escapeHtml(42)).toBe("42");
     expect(escapeHtml(null)).toBe("null");
+  });
+});
+
+describe("cloud error messages", () => {
+  it("explains the auth cooldown in Chinese and keeps the wait time", () => {
+    expect(formatAuthError({
+      message: "For security purposes, you can only request this after 7 seconds.",
+    })).toBe("请求过于频繁，请等待 7 秒后再试。");
+  });
+
+  it("explains expired and invalid verification codes", () => {
+    expect(formatAuthError({ message: "Token has expired or is invalid" })).toBe(
+      "验证码已过期，请重新发送验证码。",
+    );
+    expect(formatAuthError({ message: "Invalid token" })).toBe(
+      "验证码无效，请检查后重新输入。",
+    );
+  });
+
+  it("does not expose raw cloud permission errors", () => {
+    expect(formatCloudError(
+      { message: "new row violates row-level security policy" },
+      "删除家庭失败，请稍后再试。",
+    )).toBe("当前账号没有执行此操作的权限。");
+  });
+
+  it("explains password login and password length errors in Chinese", () => {
+    expect(formatAuthError({ message: "Invalid login credentials" })).toBe(
+      "邮箱或密码不正确；如果尚未设置密码，请改用邮箱验证码登录。",
+    );
+    expect(formatAuthError({ code: "weak_password", message: "Password is too short" })).toBe(
+      "密码至少需要 6 位。",
+    );
+  });
+});
+
+describe("additional error branches", () => {
+  it("translates rate-limit, unchanged-password, network, and fallback errors", () => {
+    expect(formatAuthError({ message: "Too many requests" }, "fallback")).not.toBe("fallback");
+    expect(formatAuthError({ message: "The new password is the same password" }, "fallback")).not.toBe("fallback");
+    expect(formatAuthError({ message: "Failed to fetch" }, "fallback")).not.toBe("fallback");
+    expect(formatAuthError({ message: "unexpected auth failure" }, "fallback")).toBe("fallback");
+  });
+
+  it("translates cloud conflict, network, and fallback errors", () => {
+    expect(formatCloudError({ message: "learning_state_conflict" }, "fallback")).not.toBe("fallback");
+    expect(formatCloudError({ message: "network timeout" }, "fallback")).not.toBe("fallback");
+    expect(formatCloudError({ message: "unexpected cloud failure" }, "fallback")).toBe("fallback");
+  });
+});
+
+describe("passwordStrength", () => {
+  it("uses six characters as the only hard requirement", () => {
+    expect(passwordStrength("12345").valid).toBe(false);
+    expect(passwordStrength("123456").valid).toBe(true);
+  });
+
+  it("raises the advisory score for length and character variety", () => {
+    expect(passwordStrength("abcdef").label).toBe("中");
+    expect(passwordStrength("StrongPass123!").label).toBe("强");
   });
 });
 

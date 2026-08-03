@@ -59,7 +59,7 @@
 ```mermaid
 flowchart TB
   device["平板 / 电脑 / 手机"] --> pwa["静态 PWA<br/>本机离线状态"]
-  pwa --> auth["Supabase Auth<br/>家长邮箱登录"]
+  pwa --> auth["Supabase Auth<br/>邮箱验证码 / 共享密码"]
   pwa --> api["Supabase Data API"]
   api --> rls["PostgreSQL RLS"]
   rls --> family["家庭 / 成员 / 学习者"]
@@ -134,6 +134,7 @@ erDiagram
 ### 5.1 身份边界
 
 - 家长/监护人：Supabase Auth 用户。
+- 同一 Supabase Auth 用户在 Shadow 系列产品间共用邮箱密码；产品只负责品牌化登录界面和回跳，不复制身份或密码。
 - 学习者：家庭内 profile，不是 Auth 用户。
 - 家庭成员角色：`owner / guardian / viewer`。
 - 角色存数据库 membership，不使用可由用户自行修改的 `user_metadata` 做授权。
@@ -171,7 +172,7 @@ erDiagram
    - 本机保留一份。
 5. 保存时传入 `expected_version`。
 6. 数据库版本不一致则返回 `learning_state_conflict`。
-7. 客户端重新读取、合并并重试。
+7. 客户端重新读取、合并并最多重试 2 次，每次逐步退避；超过上限则停止请求并提示刷新，避免版本冲突形成死循环。
 
 这不是通用 CRDT，但足以覆盖家庭低并发、离线打卡场景；比“最后写入覆盖全部数据”安全。
 
@@ -237,7 +238,7 @@ erDiagram
 - Supabase Auth URL Configuration 已配置：
   - Site URL: `https://shadow.wang`（共享项目主域名）
   - Redirect URLs: `https://*.shadow.wang`、`https://shadow.wang`、`https://*-wardlus-projects.vercel.app`、各项目 Vercel 生产域名、`http://localhost:5173`
-  - 邮件模板：Confirm signup 与 Magic Link/OTP 均支持验证码输入和应用内验证链接；`https://sm.shadow.wang` 显示影伴 Shadow Mate，`https://sc.shadow.wang` / `https://sbc.shadow.wang` 显示影匣 Shadow Card，`https://ss.shadow.wang` 显示影裁 Shadow Size，其余来源再使用 `product_id/product_name` 元数据回退
+  - 邮件模板：Confirm signup、Magic Link/OTP 与 Recovery 使用同一套 `RedirectTo` 多项目品牌映射；Recovery 使用 Supabase 官方一次性恢复链接，未知来源回退 `Shadow Nexus`
   - 发件人名称：`Shadow Nexus`（共享 SMTP `noreply@shadow.wang`）
 
 当前 `src/config.js` 中的 Supabase publishable key 可公开。RLS 是数据安全边界。禁止提交 secret/service role key。
@@ -259,11 +260,11 @@ erDiagram
 - 4 张 `learning_*` 表均已启用 RLS；
 - 共 12 条针对 authenticated 的策略；
 - `learning_save_state` 为 security invoker；
-- pgTAP 23 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回，并覆盖账户与家庭删除权限；
+- pgTAP 37 项测试通过：两位用户相互隔离、匿名访问拒绝、越权写入拒绝、首次创建家庭/成员/学习者/状态成功、版本冲突正确返回，覆盖账户与家庭删除权限及密码状态 RPC 权限；
 - 数据库 lint 无 schema 错误；
 - 已从空数据库验证产品 ID、外键、默认值、检查约束和家庭级 RLS。
 
-截至 v1.0.1 发布验收，线上共享 Supabase 已应用仓库中的 8 个迁移版本，与本地迁移清单一致，无待执行迁移；`delete-account` Edge Function 已部署并启用 JWT 校验，且在共享项目中拒绝删除 Auth 身份。Vercel Preview 已完成浏览器、服务连通性和安全响应头核验，并将同一构建提升到 Production（`https://sm.shadow.wang/`）。Confirm signup 与 Magic Link/OTP 生产模板也已同步。
+截至 v1.0.1 发布验收，线上共享 Supabase 已应用当时仓库中的 8 个迁移版本。当前待发布改动新增第 9 个密码状态迁移和 Recovery 邮件模板，合并前必须完成本地 pgTAP，发布时再增量应用迁移并同步线上 Recovery 模板；不得远程重置数据库。当前本地迁移和 pgTAP 已包含密码状态 RPC，生产仍未应用第 9 个迁移。
 
 共享数据库的 Advisor 仍报告其他历史对象存在 security-definer view、可变 search path、重复策略等问题。这些不由本次迁移产生，也没有在本项目中擅自修改；应另开数据库安全清理任务，逐项评估现有产品影响。
 
@@ -281,20 +282,20 @@ erDiagram
 ### 已完成：第一阶段
 
 - PWA 资源与离线缓存
-- 家长 Magic Link 登录
+- 家长验证码与共享密码登录
 - 家庭与多个学习者
 - 旧 localStorage 自动迁移
-- 云端状态版本控制与冲突合并
+- 云端状态版本控制、冲突合并与限次重试
 - 共用 Supabase 数据库迁移
 - 静态构建与 Vercel 配置
 - CSP 移除 `unsafe-inline`（内联样式与脚本外置为 `app.css` / `app.js`）
-- 登录邮件中文化与品牌定制（标题、正文、发件人名称）
+- 注册、登录和找回密码邮件中文化与多项目品牌定制（共享项目发件人仍为 `Shadow Nexus`）
+- 全局防重复点击、密码设置/修改/找回和密码强度提示
 
 ### 下一阶段
 
 - 家长邀请共同监护人（一次性 invite token，经受信 RPC/Edge Function 接受）
 - learner PIN/设备授权模式
-- 数据导出与完整删除
 - 可选 activity event 双写与学习报表
 - 内容版本/审核/版权元数据
 

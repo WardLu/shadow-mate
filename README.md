@@ -29,6 +29,8 @@
 - **成长记录**：近 30 天按学习模块统计完成情况，用 `已完成/4` 直接说明当天进度。
 - **积分日历**：行为积分单独记录，与学习模块分开，支持按日期查看和补记。
 - **家庭空间**：一个家长管理多个学习者，切换孩子后加载对应的学习记录。
+- **共享账号登录**：支持邮箱验证码和邮箱密码；可设置、修改或找回适用于 Shadow 系列产品的共享密码。
+- **防重复操作**：提交、同步、删除和打卡等操作会拦截快速连点，避免重复创建或重复变更。
 - **离线优先**：未登录即可使用；登录后将本机记录同步到云端，并保留本机离线能力。
 - **跨设备恢复**：使用版本号进行乐观并发控制，尽量避免多设备同时操作时互相覆盖。
 
@@ -86,7 +88,7 @@ npm.cmd run test:db
 supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-`test:coverage` 覆盖核心纯函数和学习状态机，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间和数据生命周期；真实 Supabase E2E 需要额外配置环境变量。
+`test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码、数据生命周期和云端冲突限次重试；真实 Supabase E2E 需要额外配置环境变量。详见 [测试范围与覆盖率](docs/test-scope.md)。
 
 ## 工作方式
 
@@ -112,7 +114,8 @@ supabase db lint --local --schema public --level warning --fail-on error
 ```text
 src/app.js                 页面渲染、交互和本机状态
 src/learning-state.js      学习状态机与四个模块的打卡分组
-src/cloud.js               登录、家庭空间、同步、导出与删除
+src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
+src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
 src/icons.js               Lucide 图标渲染与图标 hydration
 supabase/migrations/       家庭数据、RLS、生命周期和删除权限
 supabase/functions/        账号级服务端删除

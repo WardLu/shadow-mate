@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <body style="margin:0;background:#f2faf4;color:#203326;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+      <div style="padding:28px;border-radius:20px;background:#fff;box-shadow:0 12px 36px rgba(31,70,42,.12);">
+        <h1 style="margin:0 0 16px;color:#1f7a39;font-size:24px;">
+          {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://localhost:3000") (eq .RedirectTo "http://localhost:3000/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") }}影裁 Shadow Size{{ else }}Shadow Nexus{{ end }}
+        </h1>
+        <h2 style="margin:0 0 12px;font-size:20px;">重设共享账号密码</h2>
+        <p style="margin:0 0 16px;line-height:1.7;">我们收到了重设密码的请求。点击下面的按钮返回发起请求的产品并设置新密码。</p>
+        <p style="margin:24px 0;text-align:center;">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 28px;border-radius:10px;background:#2fa84f;color:#fff;text-decoration:none;font-weight:700;">重设密码</a>
+        </p>
+        <p style="margin:0 0 12px;color:#647268;font-size:13px;line-height:1.7;">此密码适用于使用同一 Supabase Auth 账号的 Shadow 系列产品。链接仅能使用一次，并将在短时间后失效。</p>
+        <p style="margin:0;color:#87938a;font-size:12px;line-height:1.6;">如果您没有请求重设密码，请忽略此邮件。</p>
+      </div>
+    </div>
+  </body>
+</html>

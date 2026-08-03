@@ -1,11 +1,29 @@
 # Changelog
 
-All notable changes to Shadow Mate (影伴) are documented here.
-Format based on [Keep a Changelog](https://keepachangelog.com/).
-
 ## [Unreleased]
 
-暂无已发布版本之外的变更。
+### Added
+- 新增前端版本热更新与异常自愈检测：定期轮询 index.html 的 script src 哈希变化自动 reload；全局错误滑动窗口计数超阈值时自动 reload（带 sessionStorage 冷却防循环）。
+- 新增数据库 RPC 频控机制：`learning_enforce_rate_limit()` 函数以滑动窗口限制每用户高频调用（`learning_save_state` 默认 30 次/60 秒），超限抛出 `learning_rate_limited`，前端给出中文提示。
+- 新增邮箱密码登录、共享密码设置/修改、Supabase 官方找回密码流程和密码强度提示。
+- 新增 Recovery 多项目邮件模板，根据 `RedirectTo` 显示影伴、影匣、影裁或 Shadow Nexus。
+- 新增全局快速连点拦截和云端操作单次执行锁，避免重复创建学习者或重复提交。
+
+### Security
+- 新增最小权限 `learning_has_password()` RPC，基于 `raw_user_meta_data` 判断用户是否主动设置共享密码，不依赖 GoTrue 内部 `encrypted_password`（OTP 用户会被自动赋值 bcrypt 哈希），不暴露哈希或其他用户状态。
+- 找回密码不自建令牌表，不使用 Service Role 浏览器流程，并使用统一成功文案防止邮箱枚举。
+
+### Fixed
+- 修复 GoTrue 在 `verifyOtp` 创建用户时自动生成 bcrypt 密码哈希，导致 `learning_has_password()` 误判 OTP 用户为已设置密码、密码设置弹窗永远不出现的问题。
+- 修复 `onAuthChange` 中有密码用户登录后自动打开 dialog 拦截按钮点击的问题。
+- 学习状态机忽略缺少 `bookIndex` 的书架/阅读列表操作，避免生成 `undefined` 状态键。
+- `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后停止请求并提示用户，避免冲突死循环。
+
+### Tests
+- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记；新增 version-guard 纯函数单元测试（script src 提取/比较、滑动窗口错误计数器）；pgTAP 新增 RPC 频控边界测试（限制内通过、超限抛异常、独立 key 互不影响）。
+
+All notable changes to Shadow Mate (影伴) are documented here.
+Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [1.0.1] - 2026-08-02
 
@@ -22,7 +40,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - 修复绘本打卡首次点击状态不更新的问题。
 
 ### Changed
-- 统一 Confirm signup 与 Magic Link 邮件配置，支持验证码和应用内验证链接，并将多项目模板与本地 Supabase 配置纳入仓库。
+- 统一 Confirm signup 与 Magic Link/OTP 邮件配置，支持验证码和应用内验证链接；生产模板按请求的 `RedirectTo` 域名识别 Shadow Mate、Shadow Card、Shadow Size，并以 `product_id/product_name` 作为回退。
+- 修复共享 Supabase 项目中已有账号的登录邮件回退显示 `Shadow Nexus`；主题和正文按当前请求区分产品，项目级发件人显示名仍保持为 `Shadow Nexus`。
 - 今日打卡支持再次点击取消，按钮会明确提示“点击取消”。
 - 成长统计统一按语文、数学、英语、绘本四个学习模块计算；首页和成长日历使用 `已完成/4`，不再把同一模块的多个任务误计为多个模块。
 - 积分日历补充状态图例与日期网格间距，并明确区分无积分、加分、扣分、混合积分和当前选中日期。
