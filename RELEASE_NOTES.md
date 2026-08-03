@@ -17,7 +17,7 @@
 - 生产 Supabase 已执行 3 个新增迁移，迁移记录已包含密码状态 RPC、OTP 状态修复和 RPC 频控。
 - Vercel 生产部署已完成，部署 commit 为合并后的 `main` 提交 `e6ef77e`，生产域名为 [sm.shadow.wang](https://sm.shadow.wang/)。
 
-## 历史待发布记录
+## v1.0.1 历史变更摘要
 
 - 支持邮箱验证码和共享邮箱密码两种登录方式，并提供设置、修改和找回密码。
 - 注册、登录、找回密码邮件统一按请求域名显示 Shadow Mate、Shadow Card 或 Shadow Size 品牌。
