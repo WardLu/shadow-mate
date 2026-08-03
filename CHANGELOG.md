@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - 2026-08-03
 
 ### Added
 - 新增前端版本热更新与异常自愈检测：定期轮询 index.html 的 script src 哈希变化自动 reload；全局错误滑动窗口计数超阈值时自动 reload（带 sessionStorage 冷却防循环）。
