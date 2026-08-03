@@ -16,6 +16,7 @@
 - 本地 `npm run verify` 通过；单元测试 60/60、生产 Supabase 真实生命周期 E2E 通过。
 - 生产 Supabase 已执行 3 个新增迁移，迁移记录已包含密码状态 RPC、OTP 状态修复和 RPC 频控。
 - Vercel 生产部署已完成，部署 commit 为合并后的 `main` 提交 `e6ef77e`，生产域名为 [sm.shadow.wang](https://sm.shadow.wang/)。
+- Confirm signup、Magic Link 和 Reset password 三套生产 Supabase Auth 邮件模板已通过 CLI 配置推送并完成幂等核验。
 
 ## v1.0.1 历史变更摘要
 

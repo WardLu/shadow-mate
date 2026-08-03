@@ -17,6 +17,7 @@
 - [x] 执行 v1.1.0 新增 Supabase 生产迁移
 - [x] 完成 v1.1.0 Vercel 生产部署并验证 `main` commit
 - [x] 创建并推送 `v1.1.0` Git tag 与 GitHub Release
+- [x] 同步生产 Supabase Auth 的 Confirm signup、Magic Link 和 Reset password 模板
 - [x] 执行线上 Supabase 迁移（仓库中的 8 个迁移版本）
 - [x] 验证 Vercel Preview、Production 与生产域名
 
