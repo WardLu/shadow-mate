@@ -3,10 +3,6 @@
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
-
-- 修复共享 Supabase 项目中已有账号的登录邮件回退显示 `Shadow Nexus`：生产 Confirm signup 与 Magic Link/OTP 模板现按请求回跳域名识别产品，并兼容根域名尾斜杠。
-
 ## [1.0.1] - 2026-08-02
 
 ### Added
@@ -22,7 +18,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - 修复绘本打卡首次点击状态不更新的问题。
 
 ### Changed
-- 统一 Confirm signup 与 Magic Link 邮件配置，支持验证码和应用内验证链接，并将多项目模板与本地 Supabase 配置纳入仓库。
+- 统一 Confirm signup 与 Magic Link/OTP 邮件配置，支持验证码和应用内验证链接；生产模板按请求的 `RedirectTo` 域名识别 Shadow Mate、Shadow Card、Shadow Size，并以 `product_id/product_name` 作为回退。
+- 修复共享 Supabase 项目中已有账号的登录邮件回退显示 `Shadow Nexus`；主题和正文按当前请求区分产品，项目级发件人显示名仍保持为 `Shadow Nexus`。
 - 今日打卡支持再次点击取消，按钮会明确提示“点击取消”。
 - 成长统计统一按语文、数学、英语、绘本四个学习模块计算；首页和成长日历使用 `已完成/4`，不再把同一模块的多个任务误计为多个模块。
 - 积分日历补充状态图例与日期网格间距，并明确区分无积分、加分、扣分、混合积分和当前选中日期。

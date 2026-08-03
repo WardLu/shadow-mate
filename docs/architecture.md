@@ -288,13 +288,12 @@ erDiagram
 - 共用 Supabase 数据库迁移
 - 静态构建与 Vercel 配置
 - CSP 移除 `unsafe-inline`（内联样式与脚本外置为 `app.css` / `app.js`）
-- 登录邮件中文化与品牌定制（标题、正文、发件人名称）
+- 登录邮件中文化、验证码登录与多项目品牌定制（主题和正文按请求域名区分；共享项目发件人仍为 `Shadow Nexus`）
 
 ### 下一阶段
 
 - 家长邀请共同监护人（一次性 invite token，经受信 RPC/Edge Function 接受）
 - learner PIN/设备授权模式
-- 数据导出与完整删除
 - 可选 activity event 双写与学习报表
 - 内容版本/审核/版权元数据
 
