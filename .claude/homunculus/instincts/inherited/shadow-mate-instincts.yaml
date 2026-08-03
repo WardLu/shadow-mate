@@ -1,0 +1,558 @@
+# Instincts generated from https://github.com/WardLu/shadow-mate
+# Generated: 2026-08-03T10:51:34.159Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: shadow-mate-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: fix, docs, feat
+
+## Evidence
+
+- 9 commits analyzed
+- Detected conventional commit pattern
+- Examples: fix: brand shared auth email templates, docs: document GitHub plugin workflow
+
+---
+id: shadow-mate-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Commit Length
+
+## Action
+
+Keep commit messages concise (~42 characters)
+
+## Evidence
+
+- Average commit message length: 42 chars
+- Based on 9 commits
+
+---
+id: shadow-mate-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: shadow-mate-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: shadow-mate-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: shadow-mate-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: shadow-mate-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Test Framework
+
+## Action
+
+Use jest as the test framework
+
+## Evidence
+
+- Test framework detected: jest
+- File pattern: *.test.js
+
+---
+id: shadow-mate-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.js
+
+## Evidence
+
+- File pattern: *.test.js
+- Consistent across test files
+
+---
+id: shadow-mate-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Test Types
+
+## Action
+
+Write unit, integration, e2e tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration, e2e
+- Coverage config: no
+
+---
+id: shadow-mate-workflow-feature-development-with-auth-and-database
+trigger: "when doing feature development with auth and database"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Workflow Feature Development With Auth And Database
+
+## Action
+
+Follow the feature-development-with-auth-and-database workflow:
+1. Update or add backend logic in src/ (e.g., app.js, cloud.js, lib.js, action-lock.js, learning-state.js)
+2. Create or modify database migration files in supabase/migrations/
+3. Update Supabase configuration (supabase/config.toml)
+4. Add or update email templates (supabase/templates/)
+5. Update or add tests (tests/unit/, tests/e2e/, supabase/tests/)
+6. Update documentation (docs/architecture.md, docs/auth-setup.md, docs/security-baseline.md, docs/user-guide.md, docs/test-scope.md)
+7. Update project meta files (CHANGELOG.md, ROADMAP.md, TODO.md, README.md, RELEASE_NOTES.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/app.js, src/cloud.js, src/lib.js
+
+---
+id: shadow-mate-workflow-documentation-alignment-and-consistency
+trigger: "when doing documentation alignment and consistency"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Workflow Documentation Alignment And Consistency
+
+## Action
+
+Follow the documentation-alignment-and-consistency workflow:
+1. Edit multiple documentation files (docs/*.md, CONTRIBUTING.md, PRIVACY.md, etc.)
+2. Update meta files (CHANGELOG.md, ROADMAP.md, TODO.md, RELEASE_NOTES.md)
+3. Optionally update GitHub templates (.github/PULL_REQUEST_TEMPLATE.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: docs/architecture.md, docs/auth-setup.md, docs/user-guide.md
+
+---
+id: shadow-mate-workflow-bugfix-with-tests-and-documentation
+trigger: "when doing bugfix with tests and documentation"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/WardLu/shadow-mate
+---
+
+# Shadow Mate Workflow Bugfix With Tests And Documentation
+
+## Action
+
+Follow the bugfix-with-tests-and-documentation workflow:
+1. Fix bug in backend logic (src/*.js)
+2. Update or add relevant tests (tests/unit/, tests/e2e/)
+3. Update documentation and meta files (CHANGELOG.md, ROADMAP.md, TODO.md, docs/architecture.md, etc.)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/app.js, src/cloud.js, src/lib.js
+
+---
+id: shadow-mate-instinct-file-naming-camelCase
+trigger: "When creating or renaming a file in the codebase"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct File Naming CamelCase
+
+## Action
+
+Use camelCase for file names
+
+## Evidence
+
+- Pattern in namingConventions.files
+- Files in src/ follow camelCase
+
+---
+id: shadow-mate-instinct-function-naming-camelCase
+trigger: "When defining a function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Function Naming CamelCase
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: shadow-mate-instinct-class-naming-PascalCase
+trigger: "When defining a class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Class Naming PascalCase
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: shadow-mate-instinct-constant-naming-SCREAMING_SNAKE_CASE
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Constant Naming SCREAMING_SNAKE_CASE
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: shadow-mate-instinct-import-relative
+trigger: "When importing modules in JavaScript files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Import Relative
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+- Examples in src/ files
+
+---
+id: shadow-mate-instinct-export-named
+trigger: "When exporting modules in JavaScript files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Export Named
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: shadow-mate-instinct-test-file-pattern
+trigger: "When creating a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Test File Pattern
+
+## Action
+
+Name the file with the pattern *.test.js for unit/integration or *.spec.js for e2e
+
+## Evidence
+
+- testing.filePattern: *.test.js
+- tests/unit/*.test.js
+- tests/e2e/*.spec.js
+
+---
+id: shadow-mate-instinct-test-framework-jest
+trigger: "When writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Test Framework Jest
+
+## Action
+
+Use Jest as the testing framework
+
+## Evidence
+
+- testing.framework: jest
+- Presence of jest config and test files
+
+---
+id: shadow-mate-instinct-test-types
+trigger: "When planning tests for a change"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Test Types
+
+## Action
+
+Write unit, integration, and e2e tests as appropriate
+
+## Evidence
+
+- testing.testTypes includes unit, integration, e2e
+- tests/unit/, tests/e2e/ folders
+
+---
+id: shadow-mate-instinct-commit-conventional-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Commit Conventional Format
+
+## Action
+
+Use conventional commit prefixes (fix, feat, docs) followed by a colon and a short description
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Examples: 'fix: brand shared auth email templates', 'docs: document GitHub plugin workflow'
+
+---
+id: shadow-mate-instinct-commit-length
+trigger: "When composing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Commit Length
+
+## Action
+
+Keep the commit message concise (average ~42 characters)
+
+## Evidence
+
+- commits.averageLength: 42
+
+---
+id: shadow-mate-instinct-feature-workflow
+trigger: "When adding a new authentication or security feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Feature Workflow
+
+## Action
+
+Update backend logic, create/modify migrations, update config and templates, add tests, update documentation and meta files
+
+## Evidence
+
+- Workflow: feature-development-with-auth-and-database
+- Commit sequences and files in workflow definition
+
+---
+id: shadow-mate-instinct-documentation-alignment
+trigger: "When updating documentation for new features or process changes"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Documentation Alignment
+
+## Action
+
+Edit multiple docs and meta files for alignment and consistency
+
+## Evidence
+
+- Workflow: documentation-alignment-and-consistency
+- Commit sequences and files in workflow definition
+
+---
+id: shadow-mate-instinct-bugfix-workflow
+trigger: "When fixing a bug in backend logic"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Bugfix Workflow
+
+## Action
+
+Fix the bug, update/add tests to cover it, and update documentation/meta files
+
+## Evidence
+
+- Workflow: bugfix-with-tests-and-documentation
+- Commit sequences and files in workflow definition
+
+---
+id: shadow-mate-instinct-error-handling-try-catch
+trigger: "When handling errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: WardLu/shadow-mate
+---
+
+# Shadow Mate Instinct Error Handling Try Catch
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- errorHandling.style: try-catch
+
