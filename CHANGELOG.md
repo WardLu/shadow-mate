@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- 新增前端版本热更新与异常自愈检测：定期轮询 index.html 的 script src 哈希变化自动 reload；全局错误滑动窗口计数超阈值时自动 reload（带 sessionStorage 冷却防循环）。
+- 新增数据库 RPC 频控机制：`learning_enforce_rate_limit()` 函数以滑动窗口限制每用户高频调用（`learning_save_state` 默认 30 次/60 秒），超限抛出 `learning_rate_limited`，前端给出中文提示。
 - 新增邮箱密码登录、共享密码设置/修改、Supabase 官方找回密码流程和密码强度提示。
 - 新增 Recovery 多项目邮件模板，根据 `RedirectTo` 显示影伴、影匣、影裁或 Shadow Nexus。
 - 新增全局快速连点拦截和云端操作单次执行锁，避免重复创建学习者或重复提交。
@@ -18,7 +20,7 @@
 - `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后停止请求并提示用户，避免冲突死循环。
 
 ### Tests
-- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记。
+- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记；新增 version-guard 纯函数单元测试（script src 提取/比较、滑动窗口错误计数器）；pgTAP 新增 RPC 频控边界测试（限制内通过、超限抛异常、独立 key 互不影响）。
 
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).

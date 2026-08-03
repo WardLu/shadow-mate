@@ -1022,6 +1022,11 @@ async function saveCloudState(manual = false) {
         break;
       }
 
+      if (error.message.includes("learning_rate_limited")) {
+        showToast("操作过于频繁，请稍后再试。", 5000);
+        break;
+      }
+
       if (!error.message.includes("learning_state_conflict")) {
         showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
         break;

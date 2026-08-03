@@ -1,5 +1,5 @@
 begin;
-select plan(37);
+select plan(42);
 
 -- Final product identity and migration state.
 select is(
@@ -301,6 +301,37 @@ select throws_ok(
   '42501',
   null,
   'anonymous password status access is denied at the privilege layer'
+);
+
+-- Rate limiting
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $sql$select private.learning_enforce_rate_limit('test_rpc', 3, 60)$sql$,
+  'rate limit allows calls within threshold'
+);
+
+select lives_ok(
+  $sql$select private.learning_enforce_rate_limit('test_rpc', 3, 60)$sql$,
+  'second call within limit is allowed'
+);
+
+select lives_ok(
+  $sql$select private.learning_enforce_rate_limit('test_rpc', 3, 60)$sql$,
+  'third call at limit boundary is allowed'
+);
+
+select throws_ok(
+  $sql$select private.learning_enforce_rate_limit('test_rpc', 3, 60)$sql$,
+  'P0001',
+  'learning_rate_limited',
+  'fourth call exceeds limit and raises learning_rate_limited'
+);
+
+select lives_ok(
+  $sql$select private.learning_enforce_rate_limit('other_rpc', 3, 60)$sql$,
+  'different rpc key has independent limit'
 );
 
 select * from finish();

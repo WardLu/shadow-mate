@@ -1,5 +1,6 @@
 
 import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
@@ -13,6 +14,7 @@ import {
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
 installRapidActionGuard(document);
+startVersionGuard();
 
 /* =========================================================
    影伴学习任务台 —— 数据层
