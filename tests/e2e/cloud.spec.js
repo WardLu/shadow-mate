@@ -49,8 +49,12 @@ async function mockCloudApi(page, { remoteState = emptyState, rpcResponses = ["s
   const deletedHouseholds = [];
   let profileExists = true;
 
-  await page.route("**/auth/v1/logout", async (route) => {
-    await route.fulfill({ status: 204, body: "" });
+  await page.route("**/auth/v1/logout**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
   });
 
   await page.route("**/rest/v1/**", async (route) => {
@@ -207,10 +211,36 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-delete-household]");
     await expect.poll(() => api.deletedHouseholds.length).toBe(1);
     expect(api.deletedHouseholds[0]).toEqual({ p_household_id: HOUSEHOLD_ID });
+    await expect(page.locator("#syncToast")).toHaveText("家庭数据已删除，已退出登录");
   });
 });
 
 test.describe("Email OTP sign-in", () => {
+  test("translates an auth cooldown error into Chinese", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await page.route("**/auth/v1/otp**", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "over_email_send_rate_limit",
+          error_description: "For security purposes, you can only request this after 7 seconds.",
+          msg: "For security purposes, you can only request this after 7 seconds.",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator('#emailLoginForm input[name="email"]').fill("cooldown-parent@example.test");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect(page.locator("#syncToast")).toHaveText("请求过于频繁，请等待 7 秒后再试。");
+  });
+
   test("lets an unregistered user enter the signup code", async ({ page }) => {
     let otpRequests = 0;
     let verifyRequests = 0;

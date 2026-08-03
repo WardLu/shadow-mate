@@ -10,6 +10,45 @@ export function escapeHtml(value = "") {
     .replaceAll("'", "&#039;");
 }
 
+function errorText(error) {
+  return String(error?.message || error?.error_description || error || "").trim();
+}
+
+export function formatAuthError(error, fallback = "验证失败，请稍后再试。") {
+  const message = errorText(error);
+  const code = String(error?.code || "");
+  const retryMatch = message.match(/only request this after\s+(\d+)\s+seconds?/i);
+
+  if (retryMatch) return `请求过于频繁，请等待 ${retryMatch[1]} 秒后再试。`;
+  if (/rate limit|too many requests|over_email_send_rate_limit/i.test(`${code} ${message}`)) {
+    return "验证码发送过于频繁，请稍后再试。";
+  }
+  if (/expired/i.test(message)) return "验证码已过期，请重新发送验证码。";
+  if (/invalid.*(?:token|otp)|(?:token|otp).*(?:invalid|not valid)/i.test(message)) {
+    return "验证码无效，请检查后重新输入。";
+  }
+  if (/invalid.*email|email.*invalid/i.test(message)) return "请输入有效的邮箱地址。";
+  if (/network|failed to fetch|timeout/i.test(message)) {
+    return "网络连接失败，请检查网络后再试。";
+  }
+  return fallback;
+}
+
+export function formatCloudError(error, fallback = "云端操作失败，请稍后再试。") {
+  const message = errorText(error);
+
+  if (/learning_state_conflict/i.test(message)) {
+    return "云端记录已被其他设备更新，请刷新后再试。";
+  }
+  if (/network|failed to fetch|timeout/i.test(message)) {
+    return "网络连接失败，请检查网络后再试。";
+  }
+  if (/row-level security|permission denied|not authorized|forbidden/i.test(message)) {
+    return "当前账号没有执行此操作的权限。";
+  }
+  return fallback;
+}
+
 export function stateHasData(state) {
   return Boolean(
     Object.keys(state?.checkins || {}).length ||

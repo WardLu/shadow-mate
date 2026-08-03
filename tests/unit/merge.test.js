@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   escapeHtml,
+  formatAuthError,
+  formatCloudError,
   stateHasData,
   mergeObjects,
   mergeState,
@@ -63,6 +65,30 @@ describe("escapeHtml", () => {
   it("handles non-string input", () => {
     expect(escapeHtml(42)).toBe("42");
     expect(escapeHtml(null)).toBe("null");
+  });
+});
+
+describe("cloud error messages", () => {
+  it("explains the auth cooldown in Chinese and keeps the wait time", () => {
+    expect(formatAuthError({
+      message: "For security purposes, you can only request this after 7 seconds.",
+    })).toBe("请求过于频繁，请等待 7 秒后再试。");
+  });
+
+  it("explains expired and invalid verification codes", () => {
+    expect(formatAuthError({ message: "Token has expired or is invalid" })).toBe(
+      "验证码已过期，请重新发送验证码。",
+    );
+    expect(formatAuthError({ message: "Invalid token" })).toBe(
+      "验证码无效，请检查后重新输入。",
+    );
+  });
+
+  it("does not expose raw cloud permission errors", () => {
+    expect(formatCloudError(
+      { message: "new row violates row-level security policy" },
+      "删除家庭失败，请稍后再试。",
+    )).toBe("当前账号没有执行此操作的权限。");
   });
 });
 

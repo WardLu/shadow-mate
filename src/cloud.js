@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { escapeHtml, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
+import { escapeHtml, formatAuthError, formatCloudError, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { icon } from "./icons.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
@@ -37,6 +37,9 @@ let saveQueued = false;
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
+let authChangeVersion = 0;
+let localResetInProgress = false;
+let lastAuthSessionKey = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -75,10 +78,35 @@ function showToast(message, duration = 2800) {
 }
 
 async function clearLocalAccountState() {
-  await supabase.auth.signOut({ scope: "local" });
+  let signOutError = null;
+  try {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    signOutError = error;
+  } catch (error) {
+    signOutError = error;
+  }
   if (AUTH_STORAGE_KEY) sessionStorage.clear();
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
-  window.learningDesk.clearLocalData();
+  window.learningDesk.clearLocalData({ reload: false });
+  session = null;
+  memberships = [];
+  profiles = [];
+  activeProfile = null;
+  setAccountState();
+  return signOutError;
+}
+
+async function completeLocalAccountReset(successMessage) {
+  localResetInProgress = true;
+  const signOutError = await clearLocalAccountState();
+  closeDialog();
+  showToast(
+    signOutError
+      ? `${successMessage}；本机已退出登录，云端会话注销未完成，请稍后重试。`
+      : successMessage,
+    5000,
+  );
+  return true;
 }
 
 function formatSyncTime(value) {
@@ -99,6 +127,7 @@ function updateSyncStatus() {
 }
 
 async function sendLoginOtp(email) {
+  localResetInProgress = false;
   return supabase.auth.signInWithOtp({
     email,
     options: {
@@ -144,16 +173,25 @@ function setAccountState() {
 }
 
 function openDialog() {
-  renderPanel();
+  if (session && workspaceLoading) renderWorkspaceLoading();
+  else renderPanel();
   if (!dialog.open) dialog.showModal();
-  workspaceLoading?.then(() => {
-    if (dialog.open) renderPanel();
-  }).catch(() => {});
 }
 
 function closeDialog() {
   if (dialog.open) dialog.close();
   hideToast();
+}
+
+function renderWorkspaceLoading() {
+  panel.innerHTML = `
+    <div class="cloud-heading">
+      <h2>${icon("cloudCheck")} 家庭学习空间</h2>
+      <button class="icon-button" type="button" data-close-dialog aria-label="关闭账户面板">${icon("close")}</button>
+    </div>
+    <p class="cloud-sync-copy">正在连接云端学习空间，请稍候…</p>
+  `;
+  panel.querySelector("[data-close-dialog]")?.addEventListener("click", closeDialog);
 }
 
 function renderOtpVerification(email) {
@@ -195,7 +233,7 @@ function renderOtpVerification(email) {
     if (error) {
       submitButton.disabled = false;
       input.select();
-      showToast(`验证失败：${error.message}`, 5000);
+      showToast(formatAuthError(error), 5000);
       return;
     }
     showToast("验证成功，正在连接云端…", 4000);
@@ -206,7 +244,7 @@ function renderOtpVerification(email) {
     const { error } = await sendLoginOtp(email);
     if (error) {
       resendButton.disabled = false;
-      showToast(`重新发送失败：${error.message}`, 5000);
+      showToast(formatAuthError(error, "重新发送失败，请稍后再试。"), 5000);
       return;
     }
     showToast("新的验证码已发送", 4000);
@@ -231,7 +269,7 @@ async function consumeAuthTokenHash() {
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
 
   const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
-  if (error) showToast(`邮件链接验证失败：${error.message}`, 6000);
+  if (error) showToast(formatAuthError(error, "邮件链接验证失败，请重新获取验证码。"), 6000);
 }
 
 function renderSignedOut() {
@@ -274,7 +312,7 @@ function renderSignedOut() {
     const email = new FormData(event.currentTarget).get("email").trim();
     const { error } = await sendLoginOtp(email);
     if (error) {
-      showToast(`发送失败：${error.message}`, 5000);
+      showToast(formatAuthError(error, "验证码发送失败，请稍后再试。"), 5000);
       return;
     }
     renderOtpVerification(email);
@@ -324,7 +362,7 @@ function renderSetup() {
       .insert(payload);
     if (householdError) {
       console.error("Household error:", householdError);
-      showToast(`创建家庭失败：${householdError.message}`, 5000);
+      showToast(formatCloudError(householdError, "创建家庭失败，请稍后再试。"), 5000);
       return;
     }
     const { error: memberError } = await supabase
@@ -336,7 +374,7 @@ function renderSetup() {
       });
     if (memberError) {
       console.error("Member error:", memberError);
-      showToast(`创建成员失败：${memberError.message}`, 5000);
+      showToast(formatCloudError(memberError, "创建成员失败，请稍后再试。"), 5000);
       return;
     }
     const { error: profileError } = await supabase
@@ -349,7 +387,7 @@ function renderSetup() {
       });
     if (profileError) {
       console.error("Profile error:", profileError);
-      showToast(`创建学习者失败：${profileError.message}`, 5000);
+      showToast(formatCloudError(profileError, "创建学习者失败，请稍后再试。"), 5000);
       return;
     }
     await loadWorkspace(profileId, { migrateLocal: true });
@@ -439,7 +477,7 @@ function renderAccount() {
       if (!confirmed) return;
       const { error } = await supabase.from("learning_profiles").delete().eq("id", profile.id);
       if (error) {
-        showToast(`删除失败：${error.message}`, 5000);
+        showToast(formatCloudError(error, "删除学习者失败，请稍后再试。"), 5000);
         return;
       }
       const deletingActive = activeProfile?.id === profile.id;
@@ -464,7 +502,7 @@ function renderAccount() {
     const hhId = memberships[0]?.household_id;
     if (!hhId) return;
     const { error } = await supabase.from("learning_households").update({ name }).eq("id", hhId);
-    if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
+    if (error) { showToast(formatCloudError(error, "修改家庭名称失败，请稍后再试。"), 5000); return; }
     householdName = name; editingHousehold = false; renderAccount();
     showToast("家庭名称已更新");
   });
@@ -476,7 +514,7 @@ function renderAccount() {
       const { error } = await supabase.from("learning_profiles").update({
         display_name: fd.get("name").trim(), grade_level: Number(fd.get("grade")),
       }).eq("id", pid);
-      if (error) { showToast(`修改失败：${error.message}`, 5000); return; }
+      if (error) { showToast(formatCloudError(error, "修改学习者信息失败，请稍后再试。"), 5000); return; }
       const p = profiles.find((x) => x.id === pid);
       if (p) { p.display_name = fd.get("name").trim(); p.grade_level = Number(fd.get("grade")); }
       editingProfileId = null;
@@ -487,11 +525,19 @@ function renderAccount() {
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async () => { await saveCloudState(true); });
   panel.querySelector("[data-export]")?.addEventListener("click", async () => { await exportWorkspace(); });
-  panel.querySelector("[data-signout]")?.addEventListener("click", async () => { await supabase.auth.signOut(); closeDialog(); });
+  panel.querySelector("[data-signout]")?.addEventListener("click", async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      showToast(formatAuthError(error, "退出登录失败，请稍后再试。"), 5000);
+      return;
+    }
+    closeDialog();
+    showToast("已退出登录", 4000);
+  });
   panel.querySelector("[data-clear-local]")?.addEventListener("click", async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录并退出登录。云端数据不会删除。是否继续？");
     if (!confirmed) return;
-    await clearLocalAccountState();
+    await completeLocalAccountReset("本机数据已清除，已退出登录");
   });
   panel.querySelector("[data-delete-household]")?.addEventListener("click", async () => {
     const householdId = memberships[0]?.household_id;
@@ -500,20 +546,20 @@ function renderAccount() {
     if (!confirmed) return;
     const { error } = await supabase.rpc("learning_delete_household", { p_household_id: householdId });
     if (error) {
-      showToast(`删除家庭失败：${error.message}`, 5000);
+      showToast(formatCloudError(error, "删除家庭失败，请稍后再试。"), 5000);
       return;
     }
-    await clearLocalAccountState();
+    await completeLocalAccountReset("家庭数据已删除，已退出登录");
   });
   panel.querySelector("[data-delete-account]")?.addEventListener("click", async () => {
     const confirmed = window.confirm("将注销当前登录账号，并删除 Shadow Mate 家庭数据。此操作不可恢复。是否继续？");
     if (!confirmed) return;
     const { data, error } = await supabase.functions.invoke("delete-account", { body: {} });
     if (error || data?.code || !data?.deleted) {
-      showToast(`注销失败：${data?.message || error?.message || "服务端未完成注销"}`, 6000);
+      showToast(formatCloudError(error || { message: data?.message }, "注销失败，请稍后再试。"), 6000);
       return;
     }
-    await clearLocalAccountState();
+    await completeLocalAccountReset("账号及家庭数据已删除，已退出登录");
   });
   panel.querySelector("#addLearnerForm").onsubmit = async (event) => {
     event.preventDefault();
@@ -530,7 +576,7 @@ function renderAccount() {
       .select()
       .single();
     if (error) {
-      showToast(`添加失败：${error.message}`, 5000);
+      showToast(formatCloudError(error, "添加学习者失败，请稍后再试。"), 5000);
       return;
     }
     profiles.push(data);
@@ -592,7 +638,7 @@ async function exportWorkspace() {
     .in("household_id", householdIds)
     .order("created_at");
   if (profileError) {
-    showToast(`导出失败：${profileError.message}`, 5000);
+    showToast(formatCloudError(profileError, "导出家庭数据失败，请稍后再试。"), 5000);
     return;
   }
   const profilesForExport = profileRows || [];
@@ -603,7 +649,7 @@ async function exportWorkspace() {
       .select("profile_id, state, version, updated_at")
       .in("profile_id", profilesForExport.map((profile) => profile.id));
     if (stateError) {
-      showToast(`导出失败：${stateError.message}`, 5000);
+      showToast(formatCloudError(stateError, "导出家庭数据失败，请稍后再试。"), 5000);
       return;
     }
     stateRows = data || [];
@@ -660,7 +706,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
     .eq("profile_id", profile.id)
     .maybeSingle();
   if (error) {
-    showToast(`读取云端失败：${error.message}`, 5000);
+    showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
     return;
   }
   if (!data) {
@@ -706,7 +752,7 @@ async function saveCloudState(manual = false) {
         saveQueued = true;
       }
     } else {
-      showToast(`云端同步失败：${error.message}`, 5000);
+      showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
     }
   } else {
     const row = Array.isArray(data) ? data[0] : data;
@@ -729,6 +775,11 @@ function scheduleSave() {
 window.cloudSync = { schedule: scheduleSave };
 
 async function onAuthChange(nextSession) {
+  if (nextSession && localResetInProgress) return;
+  const authSessionKey = nextSession?.access_token || null;
+  if (authSessionKey === lastAuthSessionKey) return;
+  lastAuthSessionKey = authSessionKey;
+  const changeVersion = ++authChangeVersion;
   session = nextSession;
   memberships = [];
   profiles = [];
@@ -740,14 +791,18 @@ async function onAuthChange(nextSession) {
     workspaceLoading = loadWorkspace();
     try {
       await workspaceLoading;
-      showToast("已连接云端学习空间");
+      if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+        showToast("已连接云端学习空间");
+      }
     } catch (error) {
-      showToast(`登录成功，但读取学习空间失败：${error.message}`, 5000);
+      if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+        showToast(formatCloudError(error, "登录成功，但读取学习空间失败，请稍后再试。"), 5000);
+      }
     } finally {
-      workspaceLoading = null;
+      if (changeVersion === authChangeVersion) workspaceLoading = null;
     }
   }
-  if (dialog.open) renderPanel();
+  if (dialog.open && (changeVersion === authChangeVersion || !session)) renderPanel();
 }
 
 accountButton?.addEventListener("click", openDialog);

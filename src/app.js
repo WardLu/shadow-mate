@@ -1008,7 +1008,13 @@ window.learningDesk = {
     switchMod(CURRENT_MOD);
   },
   clearLocalData(){
+    const { reload = true } = arguments[0] || {};
     localStorage.removeItem(STORE_KEY);
-    window.location.reload();
+    if (reload) {
+      window.location.reload();
+      return;
+    }
+    store = createLearningState();
+    switchMod(CURRENT_MOD);
   }
 };
