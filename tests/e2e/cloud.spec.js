@@ -254,6 +254,20 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.rpcPayloads[1]).toHaveProperty("p_profile_id", PROFILE_ID);
   });
 
+  test("stops after repeated version conflicts instead of retrying forever", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcResponses: ["conflict"] });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(3);
+    await expect(page.locator("#syncToast")).toContainText("云端记录已被其他设备更新，请刷新后再试。");
+    await page.waitForTimeout(300);
+    expect(api.rpcPayloads).toHaveLength(3);
+  });
+
   test("lets a guardian delete a learner and its local cache", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page);

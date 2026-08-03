@@ -8,6 +8,8 @@ const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
+const MAX_CONFLICT_RETRIES = 2;
+const CONFLICT_RETRY_DELAY_MS = 200;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -980,37 +982,58 @@ async function saveCloudState(manual = false) {
     return;
   }
   saveInFlight = true;
-  const currentState = window.learningDesk.getState();
-  const { data, error } = await supabase.rpc("learning_save_state", {
-    p_profile_id: activeProfile.id,
-    p_state: currentState,
-    p_expected_version: cloudVersion,
-  });
-  saveInFlight = false;
-  if (error) {
-    if (error.message.includes("learning_state_conflict")) {
-      const { data: remote } = await supabase
+  let saved = false;
+  let conflictRetries = 0;
+  try {
+    while (true) {
+      const currentState = window.learningDesk.getState();
+      const { data, error } = await supabase.rpc("learning_save_state", {
+        p_profile_id: activeProfile.id,
+        p_state: currentState,
+        p_expected_version: cloudVersion,
+      });
+      if (!error) {
+        const row = Array.isArray(data) ? data[0] : data;
+        cloudVersion = row?.version ?? cloudVersion;
+        lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+        updateSyncStatus();
+        if (manual) showToast("云端记录已更新");
+        saved = true;
+        break;
+      }
+
+      if (!error.message.includes("learning_state_conflict")) {
+        showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+        break;
+      }
+
+      if (conflictRetries >= MAX_CONFLICT_RETRIES) {
+        showToast(formatCloudError(error, "云端记录冲突次数过多，请刷新后再试。"), 6000);
+        break;
+      }
+
+      const { data: remote, error: remoteError } = await supabase
         .from("learning_profile_states")
         .select("state, version")
         .eq("profile_id", activeProfile.id)
         .single();
-      if (remote) {
-        cloudVersion = remote.version;
-        window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
-        saveQueued = true;
+      if (remoteError || !remote) {
+        showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+        break;
       }
-    } else {
-      showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+
+      cloudVersion = remote.version;
+      window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
+      conflictRetries += 1;
+      await new Promise((resolve) => window.setTimeout(resolve, CONFLICT_RETRY_DELAY_MS * conflictRetries));
     }
-  } else {
-    const row = Array.isArray(data) ? data[0] : data;
-    cloudVersion = row?.version ?? cloudVersion;
-    lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-    updateSyncStatus();
-    if (manual) showToast("云端记录已更新");
+  } finally {
+    saveInFlight = false;
   }
-  if (saveQueued) {
-    saveQueued = false;
+
+  const queuedAfterSave = saveQueued;
+  saveQueued = false;
+  if (saved && queuedAfterSave) {
     await saveCloudState(false);
   }
 }

@@ -88,7 +88,7 @@ npm.cmd run test:db
 supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-`test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码和数据生命周期；真实 Supabase E2E 需要额外配置环境变量。详见 [测试范围与覆盖率](docs/test-scope.md)。
+`test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码、数据生命周期和云端冲突限次重试；真实 Supabase E2E 需要额外配置环境变量。详见 [测试范围与覆盖率](docs/test-scope.md)。
 
 ## 工作方式
 
