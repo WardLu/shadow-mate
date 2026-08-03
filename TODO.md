@@ -15,6 +15,8 @@
 - [x] 完成 v1.0.1 生产发布（`sm.shadow.wang`）
 - [x] 完成 v1.1.0 代码合并与 CI 验收
 - [x] 执行 v1.1.0 新增 Supabase 生产迁移
+- [x] 完成 v1.1.0 Vercel 生产部署并验证 `main` commit
+- [x] 创建并推送 `v1.1.0` Git tag 与 GitHub Release
 - [x] 执行线上 Supabase 迁移（仓库中的 8 个迁移版本）
 - [x] 验证 Vercel Preview、Production 与生产域名
 
