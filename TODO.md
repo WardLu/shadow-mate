@@ -6,6 +6,7 @@
 - Supabase Cloud 的 Confirm signup、Magic Link 与 Recovery 模板需要分别维护；仓库提供本地模板，生产配置不能通过数据库迁移自动同步
 - Service Worker 缓存可能导致旧版本页面残留，用户需清除缓存或等待 SW 自动更新
 - 共享 Supabase 项目的发件人是项目级共享；邮件正文可通过 `product_id/product_name` 元数据区分，但同一邮箱跨产品共用时仍建议拆分 Auth 项目
+- 本机 Supabase Postgres 17.6.1.106 在匿名密码状态权限断言时发生 `SIGSEGV`；CI pgTAP 42/42 通过，需单独升级或重建本地 Docker 环境排查。
 
 ## Pending
 

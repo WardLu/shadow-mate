@@ -20,7 +20,7 @@
 - `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后停止请求并提示用户，避免冲突死循环。
 
 ### Tests
-- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记；新增 version-guard 纯函数单元测试（script src 提取/比较、滑动窗口错误计数器）；pgTAP 新增 RPC 频控边界测试（限制内通过、超限抛异常、独立 key 互不影响）。
+- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记；新增 version-guard 纯函数单元测试（script src 提取/比较、滑动窗口错误计数器）；CI pgTAP 新增 RPC 频控边界测试（42/42 通过，限制内通过、超限抛异常、独立 key 互不影响）。
 
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).

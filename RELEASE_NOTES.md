@@ -13,10 +13,14 @@
 ### 发布验收
 
 - PR #12 已合并到 `main`，CI、CodeQL 和 JavaScript/TypeScript 分析全部通过。
-- 本地 `npm run verify` 通过；单元测试 60/60、生产 Supabase 真实生命周期 E2E 通过。
+- 本地 `npm run verify` 通过；单元测试 60/60，完整 Playwright E2E 为 42 通过、1 个按环境跳过；CI pgTAP 数据库测试 42/42 通过。
 - 生产 Supabase 已执行 3 个新增迁移，迁移记录已包含密码状态 RPC、OTP 状态修复和 RPC 频控。
 - Vercel 生产部署已完成，部署 commit 为合并后的 `main` 提交 `e6ef77e`，生产域名为 [sm.shadow.wang](https://sm.shadow.wang/)。
 - Confirm signup、Magic Link 和 Reset password 三套生产 Supabase Auth 邮件模板已通过 CLI 配置推送并完成幂等核验。
+
+### 回归环境备注
+
+- 本机 `npm run test:db` 在执行匿名用户密码状态权限断言时触发本地 Postgres `SIGSEGV`，导致连接中断；该问题只发生在本地 Docker 数据库，CI 的同套 42 条 pgTAP 测试已通过，生产数据库未受影响。
 
 ## v1.0.1 历史变更摘要
 
