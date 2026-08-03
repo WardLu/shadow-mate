@@ -256,6 +256,10 @@ content_path = "./supabase/templates/confirmation.html"
 subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang") }}影匣{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁{{ else }}登录验证{{ end }} · 登录验证码'
 content_path = "./supabase/templates/magic_link.html"
 
+[auth.email.template.recovery]
+subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang") }}影匣{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁{{ else }}Shadow Nexus{{ end }} · 重设密码'
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true

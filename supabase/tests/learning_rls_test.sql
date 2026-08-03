@@ -1,5 +1,5 @@
 begin;
-select plan(30);
+select plan(37);
 
 -- Final product identity and migration state.
 select is(
@@ -96,6 +96,26 @@ select ok(
 );
 
 select ok(
+  has_function_privilege('authenticated', 'public.learning_has_password()', 'execute'),
+  'authenticated users can query their own password status'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.learning_has_password()', 'execute'),
+  'anonymous users cannot query password status'
+);
+
+select ok(
+  not (select prosecdef from pg_proc where oid = 'public.learning_has_password()'::regprocedure),
+  'the public password status RPC is security invoker'
+);
+
+select ok(
+  not has_function_privilege('anon', 'private.learning_current_user_has_password()', 'execute'),
+  'anonymous users cannot call the private password lookup'
+);
+
+select ok(
   has_function_privilege(
     'authenticated',
     'private.learning_is_household_owner(uuid)',
@@ -113,12 +133,28 @@ select ok(
   'anonymous users cannot call the private owner check'
 );
 
-insert into auth.users (id, email)
+insert into auth.users (id, email, encrypted_password)
 values
-  ('11111111-1111-4111-8111-111111111111', 'owner-a@example.test'),
-  ('22222222-2222-4222-8222-222222222222', 'owner-b@example.test');
+  ('11111111-1111-4111-8111-111111111111', 'owner-a@example.test', null),
+  ('22222222-2222-4222-8222-222222222222', 'owner-b@example.test', '$2a$10$test-password-hash');
 
 set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select is(
+  public.learning_has_password(),
+  false,
+  'a passwordless user sees only their own false password status'
+);
+
+set local request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
+
+select is(
+  public.learning_has_password(),
+  true,
+  'a user with a password sees only their own true password status'
+);
+
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
 select lives_ok(
@@ -256,6 +292,13 @@ select throws_ok(
   '42501',
   null,
   'anonymous access is denied at the privilege layer'
+);
+
+select throws_ok(
+  $$select public.learning_has_password()$$,
+  '42501',
+  null,
+  'anonymous password status access is denied at the privilege layer'
 );
 
 select * from finish();

@@ -41,6 +41,7 @@ export function hasCheckin(day, key) {
 }
 
 function toggleFlag(record, key) {
+  if (key === undefined || key === null || key === "") return;
   const normalizedKey = String(key);
   if (record[normalizedKey]) delete record[normalizedKey];
   else record[normalizedKey] = 1;

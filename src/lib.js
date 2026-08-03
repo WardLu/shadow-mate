@@ -28,10 +28,34 @@ export function formatAuthError(error, fallback = "验证失败，请稍后再�
     return "验证码无效，请检查后重新输入。";
   }
   if (/invalid.*email|email.*invalid/i.test(message)) return "请输入有效的邮箱地址。";
+  if (/invalid login credentials|invalid credentials|email or password/i.test(message)) {
+    return "邮箱或密码不正确；如果尚未设置密码，请改用邮箱验证码登录。";
+  }
+  if (/password.*(?:short|length)|weak_password/i.test(`${code} ${message}`)) {
+    return "密码至少需要 6 位。";
+  }
+  if (/same password|different from the old password/i.test(message)) {
+    return "新密码不能与当前密码相同。";
+  }
   if (/network|failed to fetch|timeout/i.test(message)) {
     return "网络连接失败，请检查网络后再试。";
   }
   return fallback;
+}
+
+export function passwordStrength(password = "") {
+  const value = String(password);
+  const checks = {
+    length: value.length >= 6,
+    long: value.length >= 12,
+    letter: /[a-zA-Z]/.test(value),
+    number: /[0-9]/.test(value),
+    symbol: /[^a-zA-Z0-9\s]/.test(value),
+  };
+  const variety = [checks.letter, checks.number, checks.symbol].filter(Boolean).length;
+  const score = !checks.length ? 0 : Math.min(4, 1 + variety + (checks.long ? 1 : 0));
+  const label = score <= 1 ? "弱" : score <= 3 ? "中" : "强";
+  return { score, label, checks, valid: checks.length };
 }
 
 export function formatCloudError(error, fallback = "云端操作失败，请稍后再试。") {

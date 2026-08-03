@@ -1,5 +1,6 @@
 
 import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { installRapidActionGuard } from "./action-lock.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
@@ -10,6 +11,8 @@ import {
 } from "./learning-state.js";
 
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
+
+installRapidActionGuard(document);
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -908,7 +911,7 @@ function renderGuide(){
       <section class="guide-card" data-guide-section="quickstart">
         <div class="guide-section-heading"><span>01</span><div><h3>第一次使用怎么做</h3><p>孩子不需要注册账号，家长一个邮箱就能管理多个孩子。</p></div></div>
         <div class="guide-steps">
-          <article class="guide-step"><span class="guide-step-no">1</span><div><h4>家长登录</h4><p>点击右上角“登录”，输入家长邮箱。打开邮件中的登录链接即可，不需要记密码。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">1</span><div><h4>家长登录</h4><p>点击右上角“登录”，输入家长邮箱。可以使用邮箱验证码或共享密码登录；尚未设置密码时，先用验证码完成登录。</p></div></article>
           <article class="guide-step"><span class="guide-step-no">2</span><div><h4>建立家庭空间</h4><p>填写家庭名称和第一个学习者；之后可以在家庭空间里添加孩子、修改资料和切换当前孩子。</p></div></article>
           <article class="guide-step"><span class="guide-step-no">3</span><div><h4>开始学习和打卡</h4><p>从左侧选择语文、数学、英语或绘本。每个任务单独打卡，再次点击同一个按钮即可取消。</p></div></article>
         </div>

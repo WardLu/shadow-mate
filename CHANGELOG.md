@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- 新增邮箱密码登录、共享密码设置/修改、Supabase 官方找回密码流程和密码强度提示。
+- 新增 Recovery 多项目邮件模板，根据 `RedirectTo` 显示影伴、影匣、影裁或 Shadow Nexus。
+- 新增全局快速连点拦截和云端操作单次执行锁，避免重复创建学习者或重复提交。
+
+### Security
+- 新增最小权限 `learning_has_password()` RPC，只返回当前登录身份是否已有密码，不暴露哈希或其他用户状态。
+- 找回密码不自建令牌表，不使用 Service Role 浏览器流程，并使用统一成功文案防止邮箱枚举。
+
+### Fixed
+- 学习状态机忽略缺少 `bookIndex` 的书架/阅读列表操作，避免生成 `undefined` 状态键。
+
+### Tests
+- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；本地覆盖率达到语句 98.96%、分支 90.62%、函数 100%、行 100%。
+
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 

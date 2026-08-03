@@ -17,7 +17,9 @@ Last reviewed: 2026-08-02
 - Supabase dependencies are bundled from the pinned lockfile, not loaded from a runtime CDN.
 - Browser sessions use session storage; local learning data has a visible deletion action.
 - Security headers include CSP (script-src and style-src 'self', no unsafe-inline), HSTS, framing protection, a restrictive permissions policy, and no-referrer behavior.
-- Auth email templates are localized (Chinese) with the product name; the sender display name is configurable for the shared project.
+- Confirm signup, Magic Link, and Recovery templates are localized and branded from the allow-listed redirect domain; unknown recovery origins fall back to Shadow Nexus.
+- Password reset uses Supabase recovery sessions and never stores custom reset tokens, password hashes, secret keys, or passwords in browser/business data.
+- Network mutations use a single-flight control lock, with a global rapid-click guard for synchronous state changes.
 - The public product registry exposes only product ID and display name columns.
 - Learning tables deny anonymous access and enforce family membership through RLS.
 - Privileged database helper functions live outside the exposed schema and have explicit execution grants.

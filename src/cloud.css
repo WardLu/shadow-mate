@@ -201,6 +201,80 @@
   opacity: .58;
 }
 
+.cloud-action.compact {
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding-inline: 14px;
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  margin: 14px 0;
+  border-radius: 15px;
+  background: var(--green-soft);
+}
+
+.auth-mode-switch button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-mode-switch button.active {
+  background: #fff;
+  color: var(--green-deep);
+  box-shadow: 0 4px 14px rgba(31, 70, 42, .1);
+}
+
+.password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.password-strength {
+  margin: 4px 0 12px;
+}
+
+.password-strength-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.password-strength-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin: 7px 0;
+}
+
+.password-strength-bars span {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.password-strength[data-score="1"] .password-strength-bars span.active { background: #cf5b5b; }
+.password-strength[data-score="2"] .password-strength-bars span.active,
+.password-strength[data-score="3"] .password-strength-bars span.active { background: #d29b24; }
+.password-strength[data-score="4"] .password-strength-bars span.active { background: var(--green); }
+
+.password-strength p {
+  margin: 0 !important;
+  font-size: 11px !important;
+}
+
 .cloud-status {
   display: flex;
   align-items: center;
