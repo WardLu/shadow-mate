@@ -39,7 +39,7 @@ http://localhost:3000
 
 - `{{ .Token }}`：验证码，前端通过 `verifyOtp({ email, token, type: "email" })` 校验
 - 基于 `{{ .TokenHash }}` 的应用内验证按钮，避免邮件客户端预取 `{{ .ConfirmationURL }}` 导致链接提前失效
-- `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名优先识别产品，同时兼容根域名带或不带尾斜杠。当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`
+- `{{ .RedirectTo }}`：按发起认证请求的产品回跳域名优先识别产品，同时兼容根域名带或不带尾斜杠。正文当前映射为：`https://sm.shadow.wang` → `影伴 Shadow Mate`，`https://sc.shadow.wang` / `https://sbc.shadow.wang` → `影匣 Shadow Card`，`https://ss.shadow.wang` → `影裁 Shadow Size`；主题使用短品牌名以满足 Supabase 255 字符限制。
 - `{{ .Data.product_id }}` / `{{ .Data.product_name }}`：作为域名识别之外的产品元数据回退；缺失时回退到 `Shadow Nexus`
 
 生产环境已通过 Supabase Management API 分别更新 **Confirm signup** 和 **Magic Link**，当前内容与仓库模板一致。托管 Supabase 的邮件模板不属于数据库迁移，不能仅靠提交代码同步；后续修改本地模板时，需要使用已授权的 Management API 或在 Dashboard 手动同步并分别保存。
