@@ -647,7 +647,7 @@ test.describe("Shared password authentication", () => {
     await page.click('#passwordEditorForm button[type="submit"]');
 
     await expect.poll(() => updatePayload).not.toBeNull();
-    expect(updatePayload).toMatchObject({ password: "RecoveredPassword123!" });
+    expect(updatePayload).toMatchObject({ password: "RecoveredPassword123!", data: { shared_password_set: true } });
     await expect(page.locator("#syncToast")).toContainText("共享密码已设置");
   });
 
