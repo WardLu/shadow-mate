@@ -67,8 +67,10 @@ jobs:
         shell: bash
         run: |
           npx supabase functions serve delete-account > "$RUNNER_TEMP/delete-account-function.log" 2>&1 &
+          api_url="$(npx supabase status --output env 2>/dev/null | sed -n 's/^API_URL=//p' | tr -d '"')"
+          test -n "$api_url"
           for attempt in {1..30}; do
-            if curl --fail --silent --output /dev/null -X OPTIONS http://127.0.0.1:54321/functions/v1/delete-account; then
+            if curl --fail --silent --output /dev/null -X OPTIONS "$api_url/functions/v1/delete-account"; then
               exit 0
             fi
             sleep 1
