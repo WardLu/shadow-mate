@@ -133,10 +133,12 @@ select ok(
   'anonymous users cannot call the private owner check'
 );
 
-insert into auth.users (id, email, encrypted_password)
+insert into auth.users (id, email, encrypted_password, raw_user_meta_data)
 values
-  ('11111111-1111-4111-8111-111111111111', 'owner-a@example.test', null),
-  ('22222222-2222-4222-8222-222222222222', 'owner-b@example.test', '$2a$10$test-password-hash');
+  -- GoTrue auto-generates a bcrypt hash for OTP-created users;
+  -- encrypted_password is non-empty even though no password was set.
+  ('11111111-1111-4111-8111-111111111111', 'owner-a@example.test', '$2a$10$gotrue-auto-generated-hash', '{}'::jsonb),
+  ('22222222-2222-4222-8222-222222222222', 'owner-b@example.test', '$2a$10$test-password-hash', '{"shared_password_set": true}'::jsonb);
 
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
@@ -144,7 +146,7 @@ set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 select is(
   public.learning_has_password(),
   false,
-  'a passwordless user sees only their own false password status'
+  'a passwordless OTP user (GoTrue auto-hash, no shared_password_set) sees false'
 );
 
 set local request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
@@ -152,7 +154,7 @@ set local request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
 select is(
   public.learning_has_password(),
   true,
-  'a user with a password sees only their own true password status'
+  'a user with shared_password_set metadata sees true password status'
 );
 
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';

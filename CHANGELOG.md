@@ -8,15 +8,17 @@
 - 新增全局快速连点拦截和云端操作单次执行锁，避免重复创建学习者或重复提交。
 
 ### Security
-- 新增最小权限 `learning_has_password()` RPC，只返回当前登录身份是否已有密码，不暴露哈希或其他用户状态。
+- 新增最小权限 `learning_has_password()` RPC，基于 `raw_user_meta_data` 判断用户是否主动设置共享密码，不依赖 GoTrue 内部 `encrypted_password`（OTP 用户会被自动赋值 bcrypt 哈希），不暴露哈希或其他用户状态。
 - 找回密码不自建令牌表，不使用 Service Role 浏览器流程，并使用统一成功文案防止邮箱枚举。
 
 ### Fixed
+- 修复 GoTrue 在 `verifyOtp` 创建用户时自动生成 bcrypt 密码哈希，导致 `learning_has_password()` 误判 OTP 用户为已设置密码、密码设置弹窗永远不出现的问题。
+- 修复 `onAuthChange` 中有密码用户登录后自动打开 dialog 拦截按钮点击的问题。
 - 学习状态机忽略缺少 `bookIndex` 的书架/阅读列表操作，避免生成 `undefined` 状态键。
 - `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后停止请求并提示用户，避免冲突死循环。
 
 ### Tests
-- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；本地覆盖率达到语句 98.96%、分支 90.62%、函数 100%、行 100%。
+- 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记。
 
 All notable changes to Shadow Mate (影伴) are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).

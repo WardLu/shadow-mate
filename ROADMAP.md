@@ -19,6 +19,8 @@
 ## 下一阶段：家庭协作与数据自主
 
 - 家长邀请共同监护人（一次性 invite token，经受信 RPC/Edge Function 接受）
+- 前端客户端版本热更新与异常自愈检测（静态资源更新或连续异常时自动 reload，防止旧版 JS 异常常驻）
+- Supabase / 数据库 RPC 频控（Rate Limiting）机制（在数据库或 API 层限制高频重试，防护 Postgres 日志）
 - learner PIN / 设备授权模式（孩子无需家长手机即可打卡）
 - 可选 activity event 双写与学习报表
 - 内容版本/审核/版权元数据

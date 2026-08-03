@@ -196,7 +196,7 @@ test.describe("Authenticated cloud workspace", () => {
     const api = await mockCloudApi(page, { noMembership: true, householdCreateDelayMs: 500 });
 
     await page.goto("/");
-    await page.click("#accountButton");
+    // onAuthChange auto-opens the dialog for users without a household
     await expect(page.locator("#householdSetupForm")).toBeVisible();
     await page.locator('#householdSetupForm input[name="household"]').fill("重复创建测试家庭");
     await page.locator('#householdSetupForm input[name="learner"]').fill("测试学习者");
@@ -477,6 +477,7 @@ test.describe("Email OTP sign-in", () => {
 
   test("prompts a passwordless OTP user to set a shared password", async ({ page }) => {
     let passwordUpdates = 0;
+    let updatePayload = null;
     const now = Math.floor(Date.now() / 1000);
     const authSession = {
       access_token: "passwordless-e2e-access-token",
@@ -490,7 +491,10 @@ test.describe("Email OTP sign-in", () => {
     await page.route("**/auth/v1/otp**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
     await page.route("**/auth/v1/verify**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) }));
     await page.route("**/auth/v1/user**", async (route) => {
-      if (route.request().method() === "PUT") passwordUpdates += 1;
+      if (route.request().method() === "PUT") {
+        passwordUpdates += 1;
+        updatePayload = JSON.parse(route.request().postData() || "{}");
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession.user) });
     });
     await mockCloudApi(page, { hasPassword: false });
@@ -508,6 +512,7 @@ test.describe("Email OTP sign-in", () => {
     await page.locator('#passwordEditorForm input[name="confirmPassword"]').fill("SharedPassword123!");
     await page.click('#passwordEditorForm button[type="submit"]');
     await expect.poll(() => passwordUpdates).toBe(1);
+    expect(updatePayload).toMatchObject({ password: "SharedPassword123!", data: { shared_password_set: true } });
     await expect(page.locator("#syncToast")).toContainText("共享密码已设置");
   });
 

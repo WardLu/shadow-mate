@@ -256,7 +256,10 @@ function renderPasswordEditor({ mode = "setup" } = {}) {
           return;
         }
       }
-      const { error } = await supabase.auth.updateUser({ password: nextPassword });
+      const { error } = await supabase.auth.updateUser({
+        password: nextPassword,
+        data: { shared_password_set: true },
+      });
       if (error) {
         showToast(formatAuthError(error, isChange ? "当前密码不正确或新密码无法保存。" : "密码设置失败，请稍后再试。"), 6000);
         return;
@@ -429,6 +432,7 @@ function renderOtpVerification(email) {
 
   panel.querySelector("[data-change-email]").onclick = renderSignedOut;
   panel.querySelector("[data-close]").onclick = closeDialog;
+
 }
 
 async function consumeAuthTokenHash() {
@@ -537,7 +541,7 @@ function renderSetup() {
     <form id="householdSetupForm">
       <label class="cloud-field">
         家庭空间名称
-        <input name="household" maxlength="40" required placeholder="我的家庭">
+        <input name="household" maxlength="40" required value="家庭空间">
       </label>
       <label class="cloud-field">
         第一个学习者
@@ -557,6 +561,19 @@ function renderSetup() {
   `;
   restoreToastLocation();
   panel.querySelector("[data-close]").onclick = closeDialog;
+  const householdInput = panel.querySelector('input[name="household"]');
+  if (householdInput) {
+    householdInput.addEventListener('focus', () => {
+      if (householdInput.value === '家庭空间') {
+        householdInput.value = '';
+      }
+    });
+    householdInput.addEventListener('blur', () => {
+      if (!householdInput.value.trim()) {
+        householdInput.value = '家庭空间';
+      }
+    });
+  }
   panel.querySelector("#householdSetupForm").onsubmit = async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -605,9 +622,12 @@ function renderSetup() {
         return;
       }
       await loadWorkspace(profileId, { migrateLocal: true });
-      renderPanel();
-      closeDialog();
       showToast("家庭学习空间已建立，正在同步本机记录");
+      renderPanel();
+      const prompted = await maybePromptPasswordSetup({ force: true });
+      if (!prompted) {
+        closeDialog();
+      }
     }, { busyText: "正在创建…" });
   };
 }
@@ -1045,12 +1065,12 @@ function scheduleSave() {
 
 window.cloudSync = { schedule: scheduleSave };
 
-async function maybePromptPasswordSetup() {
+async function maybePromptPasswordSetup(options = {}) {
   if (!session || passwordRecoveryActive) return false;
   const sessionKey = session.access_token || session.user.id;
-  if (passwordStatusCheckedForSession === sessionKey) return false;
+  if (!options.force && passwordStatusCheckedForSession === sessionKey) return false;
   passwordStatusCheckedForSession = sessionKey;
-  if (sessionStorage.getItem(passwordPromptStorageKey()) === "1") return false;
+  if (!options.force && sessionStorage.getItem(passwordPromptStorageKey()) === "1") return false;
   const hasPassword = await fetchHasPassword();
   if (hasPassword !== false) return false;
   renderPasswordEditor({ mode: "setup" });
@@ -1097,8 +1117,10 @@ async function onAuthChange(nextSession, event = "") {
         renderPasswordEditor({ mode: "recovery" });
         if (!dialog.open) dialog.showModal();
         passwordUiOpened = true;
-      } else {
+      } else if (memberships.length > 0) {
         passwordUiOpened = await maybePromptPasswordSetup();
+      } else {
+        if (!dialog.open) dialog.showModal();
       }
     }
   }
