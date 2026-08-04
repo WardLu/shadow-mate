@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">影伴 Shadow Mate：把每天的学习，变成看得见的成长</title>
+  <desc id="desc">面向家庭的儿童学习打卡 PWA，支持四个学习模块、成长日历、积分记录、离线使用与家庭空间同步。</desc>
+  <rect width="1200" height="640" rx="32" fill="#F3F9F4"/>
+  <path d="M0 500C190 440 274 555 464 500s274-80 436-14 190 45 300-12v166H0Z" fill="#E6F2E8"/>
+  <path d="M0 0h1200v16H0z" fill="#2AA650"/>
+  <g transform="translate(72 74)">
+    <g transform="translate(0 0)">
+      <g transform="scale(.683333)">
+        <rect width="120" height="120" fill="#F3F9F4"/>
+        <rect x="6" y="6" width="108" height="108" rx="31" fill="#2AA650"/>
+        <path d="M19 64C22 39 39 23 60 23C81 23 98 39 101 64" fill="none" stroke="#DDF3E2" stroke-width="2" stroke-dasharray="4 4" opacity=".85"/>
+        <g>
+          <path d="M25 80C25 63 36 52 50 52C64 52 75 63 75 80V88H25V80Z" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+          <circle cx="50" cy="41" r="13" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+          <path d="M51 84C51 63 64 49 80 49C96 49 103 63 103 84V88H51V84Z" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+          <circle cx="80" cy="37" r="16" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+        </g>
+        <circle cx="65" cy="57" r="5" fill="#FFC83D" stroke="#176B30" stroke-width="3"/>
+        <path d="M20 96H48M72 96H100" stroke="#176B30" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+      </g>
+    </g>
+    <text x="106" y="29" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="700">FAMILY LEARNING / OFFLINE-FIRST PWA</text>
+    <text x="0" y="178" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="76" font-weight="800" letter-spacing="-3">影伴</text>
+    <text x="0" y="237" fill="#2AA650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="42" font-weight="700">SHADOW MATE</text>
+    <text x="0" y="304" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="28" font-weight="700">把每天的学习，变成看得见的成长。</text>
+    <text x="0" y="348" fill="#49634F" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="21">让家长和孩子在同一个轻量空间里学习、记录、同步。</text>
+    <g transform="translate(0 397)">
+      <rect width="150" height="48" rx="24" fill="#DDF3E2"/>
+      <circle cx="26" cy="24" r="8" fill="#2AA650"/>
+      <text x="45" y="31" fill="#176B30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="700">4 个学习模块</text>
+      <rect x="164" width="132" height="48" rx="24" fill="#FFF0BD"/>
+      <path d="M188 16v16m-7-9h14m-11-9h8" stroke="#A36C00" stroke-width="3" stroke-linecap="round"/>
+      <text x="211" y="31" fill="#7A5200" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="700">离线优先</text>
+      <rect x="310" width="140" height="48" rx="24" fill="#E8EEF8"/>
+      <path d="M333 18h18v14h-18zM336 14h12" fill="none" stroke="#45638E" stroke-width="3"/>
+      <text x="369" y="31" fill="#385174" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="700">家庭空间</text>
+    </g>
+  </g>
+  <g transform="translate(652 72)">
+    <rect width="476" height="500" rx="28" fill="#FFFFFF" stroke="#CFE4D3" stroke-width="3"/>
+    <rect width="476" height="70" rx="28" fill="#F8FCF8"/>
+    <rect y="50" width="476" height="20" fill="#F8FCF8"/>
+    <circle cx="34" cy="35" r="12" fill="#2AA650"/>
+    <text x="60" y="42" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="700">今日成长</text>
+    <text x="386" y="41" fill="#62806A" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">2026.08.01</text>
+    <rect x="28" y="94" width="420" height="92" rx="20" fill="#FFF0BD"/>
+    <text x="50" y="132" fill="#7A5200" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="20" font-weight="700">今天也要加油！</text>
+    <text x="50" y="161" fill="#9B6E1B" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="16">完成四个学习模块，留下今天的脚印。</text>
+    <text x="28" y="224" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="19" font-weight="700">今日完成度</text>
+    <g transform="translate(28 244)">
+      <rect width="96" height="86" rx="16" fill="#2AA650"/>
+      <text x="48" y="48" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="34" font-weight="800">4/4</text>
+      <text x="48" y="70" text-anchor="middle" fill="#E9F8EC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">今天打卡</text>
+      <rect x="108" width="96" height="86" rx="16" fill="#238A43"/>
+      <text x="156" y="48" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="34" font-weight="800">1</text>
+      <text x="156" y="70" text-anchor="middle" fill="#E9F8EC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">语文连续</text>
+      <rect x="216" width="96" height="86" rx="16" fill="#1F7E3B"/>
+      <text x="264" y="48" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="34" font-weight="800">1</text>
+      <text x="264" y="70" text-anchor="middle" fill="#E9F8EC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">数学累计</text>
+      <rect x="324" width="96" height="86" rx="16" fill="#176B30"/>
+      <text x="372" y="48" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="34" font-weight="800">1</text>
+      <text x="372" y="70" text-anchor="middle" fill="#E9F8EC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">英语累计</text>
+    </g>
+    <rect x="28" y="354" width="420" height="12" rx="6" fill="#E4F0E6"/>
+    <rect x="28" y="354" width="420" height="12" rx="6" fill="#2AA650"/>
+    <g transform="translate(28 399)">
+      <rect width="84" height="60" rx="14" fill="#F4F8F4"/>
+      <text x="42" y="28" text-anchor="middle" fill="#2AA650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17" font-weight="700">语文</text>
+      <text x="42" y="48" text-anchor="middle" fill="#65806B" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">DONE</text>
+      <rect x="96" width="84" height="60" rx="14" fill="#F4F8F4"/>
+      <text x="138" y="28" text-anchor="middle" fill="#2AA650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17" font-weight="700">数学</text>
+      <text x="138" y="48" text-anchor="middle" fill="#65806B" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">DONE</text>
+      <rect x="192" width="84" height="60" rx="14" fill="#F4F8F4"/>
+      <text x="234" y="28" text-anchor="middle" fill="#2AA650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17" font-weight="700">英语</text>
+      <text x="234" y="48" text-anchor="middle" fill="#65806B" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">DONE</text>
+      <rect x="288" width="84" height="60" rx="14" fill="#FFF0BD" stroke="#FFC83D" stroke-width="2"/>
+      <text x="330" y="28" text-anchor="middle" fill="#9B6E1B" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17" font-weight="700">绘本</text>
+      <text x="330" y="48" text-anchor="middle" fill="#9B6E1B" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">TODAY</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,32 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Shadow Mate Logo 07：每日检查点</title>
+  <desc id="desc">带有今日高亮和向上路径的学习日历，寓意每天完成一个小检查点，逐步累积成长。</desc>
+  <defs>
+    <linearGradient id="checkGrad" x1="22" y1="22" x2="98" y2="99" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset=".5" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="checkGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="100" height="100" rx="25" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <rect x="24" y="27" width="72" height="67" rx="9" fill="#1E293B" stroke="url(#checkGrad)" stroke-width="2"/>
+  <path d="M24 45H96" stroke="#334155" stroke-width="6"/>
+  <path d="M38 20V34M82 20V34" stroke="#818CF8" stroke-width="5" stroke-linecap="round"/>
+  <g opacity=".8">
+    <circle cx="39" cy="58" r="4" fill="#22D3EE"/>
+    <circle cx="60" cy="58" r="4" fill="#818CF8"/>
+    <circle cx="81" cy="58" r="4" fill="#A855F7"/>
+    <circle cx="39" cy="77" r="4" fill="#818CF8"/>
+    <circle cx="81" cy="77" r="4" fill="#22D3EE"/>
+  </g>
+  <g filter="url(#checkGlow)">
+    <circle cx="60" cy="77" r="10" fill="#111827" stroke="url(#checkGrad)" stroke-width="2.5"/>
+    <path d="m54 77 4 4 9-10" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M60 100C60 84 69 70 88 61" stroke="url(#checkGrad)" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"/>
+  <path d="m84 59 7 1-3 7" stroke="#A855F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,26 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Shadow Mate Logo 05：陪伴轨道</title>
+  <desc id="desc">两个相互靠近的成长形体在同一条轨道上，中心节点代表家长与孩子共同看见学习进度。</desc>
+  <defs>
+    <linearGradient id="companionGrad" x1="22" y1="20" x2="101" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset=".5" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="companionGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="100" height="100" rx="25" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <path d="M22 63C24 36 41 21 60 21C79 21 96 36 98 63" stroke="url(#companionGrad)" stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>
+  <path d="M26 80C26 63 36 52 50 52C64 52 74 63 74 80V88H26V80Z" fill="#1E293B" stroke="url(#companionGrad)" stroke-width="2.3"/>
+  <circle cx="50" cy="41" r="13" fill="#1E293B" stroke="#22D3EE" stroke-width="2.3"/>
+  <path d="M51 84C51 63 64 49 80 49C96 49 103 63 103 84V88H51V84Z" fill="#111827" stroke="url(#companionGrad)" stroke-width="2.3"/>
+  <circle cx="80" cy="37" r="16" fill="#111827" stroke="#A855F7" stroke-width="2.3"/>
+  <g filter="url(#companionGlow)">
+    <circle cx="65" cy="57" r="4" fill="#FFFFFF"/>
+    <circle cx="65" cy="57" r="8" stroke="url(#companionGrad)" stroke-width="1.5" opacity=".8"/>
+  </g>
+  <path d="M20 92H48M72 92H100" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+</svg>

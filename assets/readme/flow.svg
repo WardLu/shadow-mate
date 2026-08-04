@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">影伴的离线优先同步流程</title>
+  <desc id="desc">学习记录先保存在浏览器本机，登录家庭空间后按学习者隔离，并通过版本号、RLS 和产品边界同步到云端。</desc>
+  <rect width="1200" height="430" rx="30" fill="#F3F9F4"/>
+  <text x="58" y="58" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="27" font-weight="800">一条记录，两种状态，清楚的边界</text>
+  <text x="58" y="91" fill="#62806A" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">LOCAL-FIRST / FAMILY SPACE / VERSIONED SYNC</text>
+  <path d="M350 230h96M754 230h96" stroke="#A6CDAE" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 12"/>
+  <path d="m436 230 22-12v24Zm414 0-22-12v24Z" fill="#2AA650"/>
+  <g transform="translate(58 132)">
+    <rect width="292" height="194" rx="22" fill="#FFFFFF" stroke="#CFE4D3" stroke-width="3"/>
+    <circle cx="42" cy="48" r="22" fill="#DDF3E2"/>
+    <path d="M31 46h22v16H31zM34 42h16" fill="none" stroke="#2AA650" stroke-width="3"/>
+    <text x="78" y="55" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="800">浏览器本机</text>
+    <text x="28" y="101" fill="#49634F" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18">未登录也能完成</text>
+    <text x="28" y="132" fill="#16311D" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">学习 / 打卡 / 积分 / 绘本</text>
+    <rect x="28" y="154" width="236" height="10" rx="5" fill="#E4F0E6"/>
+    <rect x="28" y="154" width="164" height="10" rx="5" fill="#2AA650"/>
+  </g>
+  <g transform="translate(454 132)">
+    <rect width="300" height="194" rx="22" fill="#2AA650"/>
+    <circle cx="42" cy="48" r="22" fill="#C9EBD1"/>
+    <path d="M31 42h22v17H31zM34 39h16" fill="none" stroke="#176B30" stroke-width="3"/>
+    <text x="78" y="55" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="800">家庭空间</text>
+    <text x="28" y="101" fill="#E9F8EC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18">登录后按学习者隔离</text>
+    <text x="28" y="132" fill="#FFFFFF" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">family → learner → state</text>
+    <rect x="28" y="154" width="244" height="10" rx="5" fill="#5BBD73"/>
+    <rect x="28" y="154" width="198" height="10" rx="5" fill="#FFC83D"/>
+  </g>
+  <g transform="translate(858 132)">
+    <rect width="284" height="194" rx="22" fill="#FFFFFF" stroke="#CFE4D3" stroke-width="3"/>
+    <circle cx="42" cy="48" r="22" fill="#FFF0BD"/>
+    <path d="M42 31v13l9 6" fill="none" stroke="#A36C00" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="42" cy="48" r="13" fill="none" stroke="#A36C00" stroke-width="3"/>
+    <text x="78" y="55" fill="#16311D" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="800">安全同步</text>
+    <text x="28" y="101" fill="#49634F" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18">多设备尽量不互相覆盖</text>
+    <text x="28" y="132" fill="#16311D" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">version + RLS + product</text>
+    <rect x="28" y="154" width="228" height="10" rx="5" fill="#E4F0E6"/>
+    <circle cx="204" cy="159" r="10" fill="#FFC83D"/>
+  </g>
+  <text x="58" y="382" fill="#49634F" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="17">云端只同步影伴自己的家庭数据；共享 Supabase 项目中的其他产品与身份不在删除边界内。</text>
+</svg>
