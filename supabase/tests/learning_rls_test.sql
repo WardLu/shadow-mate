@@ -340,10 +340,18 @@ select lives_ok(
 -- Uses postgres role for private table cleanup/verification, authenticated for
 -- function calls. Fresh state row is created to have a known starting version.
 
--- As postgres: reset state and rate limits for a clean slate
+-- The earlier deletion test (learning_delete_household) cascade-deleted the
+-- household, profile, and state. Recreate them as postgres (bypassing RLS).
 set local role postgres;
-delete from public.learning_profile_states
- where profile_id = 'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa';
+insert into public.learning_households (id, project_id, name, owner_user_id)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'shadow-mate', 'Rate Limit Test', '11111111-1111-4111-8111-111111111111')
+on conflict (id) do nothing;
+insert into public.learning_household_members (household_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'owner')
+on conflict do nothing;
+insert into public.learning_profiles (id, household_id, display_name, grade_level)
+values ('aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Rate Limit Learner', 3)
+on conflict (id) do nothing;
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
    and rpc_key = 'save_state';
