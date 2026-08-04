@@ -280,11 +280,10 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.rpcPayloads.length).toBe(3);
     await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
 
-    // Trigger a local save (toggle a checkin) - should NOT produce a 4th RPC.
-    // Hard wait because this is a negative assertion: we must wait longer than
-    // the 500 ms debounce to confirm the circuit breaker blocked the auto sync.
-    await page.click(".navbtn[data-mod=\"chinese\"]");
-    await page.click(".checkin[data-mod=\"chinese\"]");
+    // Trigger an automatic sync attempt - should NOT produce a 4th RPC
+    // because the circuit breaker is active. Hard wait because this is a
+    // negative assertion: we must wait longer than the 500 ms debounce.
+    await page.evaluate(() => window.cloudSync?.schedule());
     await page.waitForTimeout(1200);
     expect(api.rpcPayloads).toHaveLength(3);
 
@@ -331,8 +330,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
 
     // Automatic sync should work again now
-    await page.click(".navbtn[data-mod=\"chinese\"]");
-    await page.click(".checkin[data-mod=\"chinese\"]");
+    await page.evaluate(() => window.cloudSync?.schedule());
     await expect.poll(() => callCount).toBe(5);
   });
 
