@@ -339,12 +339,19 @@ select lives_ok(
 -- the rate-limit counter because they were in the same transaction.
 -- NOTE: the profile 'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa' already has a state
 -- row with version=2 from the earlier save test, so expected_version=999 will conflict.
-set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+-- Cleanup and verification use the postgres role because authenticated has no
+-- direct table access to private.learning_rpc_rate_limits (only the security-definer
+-- function learning_enforce_rate_limit can access it).
 
--- Reset any leftover rate-limit rows for this user/rpc_key
+-- Reset any leftover rate-limit rows for this user/rpc_key (as superuser)
+set local role postgres;
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
    and rpc_key = 'save_state';
+
+-- Switch to authenticated for the actual function calls
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
 -- Conflict call: stale expected_version triggers learning_state_conflict
 -- This should NOT create a rate-limit row because the rate limiter runs
@@ -360,6 +367,8 @@ select throws_ok(
   'stale version conflict is raised'
 );
 
+-- Switch to postgres to verify rate-limit table state
+set local role postgres;
 -- Verify rate-limit counter was NOT incremented by the conflict
 select is(
   (select call_count from private.learning_rpc_rate_limits
@@ -367,6 +376,10 @@ select is(
   null,
   'conflict does not consume rate-limit budget (no row created)'
 );
+
+-- Switch back to authenticated for the successful save call
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
 -- Successful update with correct expected_version (version=2 from earlier test)
 -- This SHOULD consume rate-limit budget.
@@ -379,6 +392,8 @@ select lives_ok(
   'save with correct expected_version succeeds (updates state)'
 );
 
+-- Switch to postgres to verify rate-limit table state
+set local role postgres;
 -- Verify rate-limit counter WAS incremented by the successful write
 select is(
   (select call_count from private.learning_rpc_rate_limits
