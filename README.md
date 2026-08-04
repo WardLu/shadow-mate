@@ -144,6 +144,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 | [架构文档](docs/architecture.md) | 数据模型、同步策略、RLS、迁移和发布闸门 |
 | [学习者数据生命周期](docs/learner-data-lifecycle.md) | 学习者、家庭数据和删除边界 |
 | [Auth 配置](docs/auth-setup.md) | Supabase Auth 服务端配置 |
+| [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
 | [安全基线](docs/security-baseline.md) | 安全检查与发布前闸门 |
 | [TODO](TODO.md) | 当前待办与已知问题 |
 | [Roadmap](ROADMAP.md) | 已完成阶段与后续方向 |
@@ -153,6 +154,25 @@ tests/e2e/                 离线、云端和数据生命周期测试
 ## 当前边界
 
 影伴 v1.1.1 已部署到 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系；公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md) 与 [安全政策](SECURITY.md)。
+
+## 联系我
+
+如果你对 B 端产品、AI 产品开发、供应链数字化或 Shadow 系列产品感兴趣，可以通过以下方式联系我：
+
+- **X（Twitter）**：[@Gollumgulu](https://x.com/Gollumgulu)
+- **微信公众号**：Ward 的 AI 产品实战
+
+  <p align="center">
+    <img src="./assets/readme/wechat-public-account.png" width="180" alt="微信公众号：Ward 的 AI 产品实战">
+  </p>
+
+- **小红书 / 微博 / 抖音**：全网同名「Ward 的 AI 产品实战」——[小红书](https://xhslink.cn/m/4W1NWyRrxv5) · [微博](https://weibo.com/u/8344390431) · [抖音](https://v.douyin.com/1y06PMohfoE/)
+- **产品主页**：[Shadow Nexus](https://www.shadow.wang/)
+- **Email**：[wardlu@126.com](mailto:wardlu@126.com)
+
+> **可接 1v1 咨询和项目陪跑，欢迎联系。**
+>
+> 产品诊断 · AI 实施 · 工作流 / Skill / 系统定制
 
 ## License
 
