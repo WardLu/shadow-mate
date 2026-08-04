@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.1] - 2026-08-04
+
+### Fixed
+- 冲突熔断：版本冲突达到重试上限后设置 `cloudSyncBlocked`，暂停自动同步，阻止多标签页冲突风暴；用户手动点击同步按钮可清除熔断并重试
+- 频控位置修正：将 `learning_save_state` 中 `learning_enforce_rate_limit` 调用从冲突检查之前移到之后，使冲突异常不再回滚频控计数
+
+### Tests
+- E2E 新增「熔断后自动同步被阻止」和「手动同步恢复」两个用例
+- 数据库测试新增「冲突不消耗频控预算」和「成功写入消耗频控预算」断言
+
 ## [1.1.0] - 2026-08-03
 
 ### Added
@@ -14,12 +24,10 @@
 - 找回密码不自建令牌表，不使用 Service Role 浏览器流程，并使用统一成功文案防止邮箱枚举。
 
 ### Fixed
-- 冲突熔断：版本冲突达到重试上限后设置 `cloudSyncBlocked`，暂停自动同步，阻止多标签页冲突风暴；用户手动点击同步按钮可清除熔断并重试
-- 频控位置修正：将 `learning_save_state` 中 `learning_enforce_rate_limit` 调用从冲突检查之前移到之后，使冲突异常不再回滚频控计数
 - 修复 GoTrue 在 `verifyOtp` 创建用户时自动生成 bcrypt 密码哈希，导致 `learning_has_password()` 误判 OTP 用户为已设置密码、密码设置弹窗永远不出现的问题。
 - 修复 `onAuthChange` 中有密码用户登录后自动打开 dialog 拦截按钮点击的问题。
 - 学习状态机忽略缺少 `bookIndex` 的书架/阅读列表操作，避免生成 `undefined` 状态键。
-- `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后触发熔断暂停自动同步，避免冲突死循环。
+- `learning_state_conflict` 只允许最多 2 次客户端重试并逐次退避，超过上限后停止请求并提示用户，避免冲突死循环。
 
 ### Tests
 - 补齐学习状态机防御性分支、验证码重发/失败、密码失败、Recovery 回调和家庭创建防重复测试；pgTAP 用真实 bcrypt 哈希模拟 OTP 用户验证密码状态判断；e2e 验证密码设置请求携带 `shared_password_set` 标记；新增 version-guard 纯函数单元测试（script src 提取/比较、滑动窗口错误计数器）；CI pgTAP 新增 RPC 频控边界测试（42/42 通过，限制内通过、超限抛异常、独立 key 互不影响）。
