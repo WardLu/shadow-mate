@@ -1038,7 +1038,7 @@ async function saveCloudState(manual = false) {
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
         cloudSyncBlocked = true;
-        showToast(formatCloudError(error, "云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。"), 6000);
+        showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
         break;
       }
 

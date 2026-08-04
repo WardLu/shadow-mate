@@ -295,10 +295,10 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("recovers from circuit-breaker after manual sync succeeds", async ({ page }) => {
     await seedAuthenticatedSession(page);
+    await mockCloudApi(page, { rpcResponses: [] });
     let callCount = 0;
     await page.route("**/rest/v1/rpc/learning_save_state", async (route) => {
       callCount += 1;
-      const payload = JSON.parse(route.request().postData() || "{}");
       if (callCount <= 3) {
         await route.fulfill({
           status: 409,
@@ -313,7 +313,6 @@ test.describe("Authenticated cloud workspace", () => {
         body: JSON.stringify({ version: 99, updated_at: "2026-08-04T09:00:00.000Z" }),
       });
     });
-    await mockCloudApi(page, { rpcResponses: [] });
 
     await page.goto("/");
     await page.click("#accountButton");
