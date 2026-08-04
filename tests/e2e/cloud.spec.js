@@ -288,8 +288,7 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.rpcPayloads).toHaveLength(3);
 
     // Manual sync button should clear the circuit breaker and retry.
-    // Reopen the account dialog because clicking a nav button may have closed it.
-    await page.click("#accountButton");
+    // The dialog is still open because we used evaluate instead of nav clicks.
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(4);
   });
@@ -323,8 +322,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
 
     // Manual sync - should succeed and clear the breaker.
-    // Reopen the account dialog because clicking a nav button may have closed it.
-    await page.click("#accountButton");
+    // The dialog is still open because we used evaluate instead of nav clicks.
     await page.click("[data-sync]");
     await expect.poll(() => callCount).toBe(4);
     await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
