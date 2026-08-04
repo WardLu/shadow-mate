@@ -263,7 +263,7 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-sync]");
 
     await expect.poll(() => api.rpcPayloads.length).toBe(3);
-    await expect(page.locator("#syncToast")).toContainText("云端记录已被其他设备更新，请刷新后再试。");
+    await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
     await page.waitForTimeout(300);
     expect(api.rpcPayloads).toHaveLength(3);
   });
@@ -288,7 +288,9 @@ test.describe("Authenticated cloud workspace", () => {
     await page.waitForTimeout(1200);
     expect(api.rpcPayloads).toHaveLength(3);
 
-    // Manual sync button should clear the circuit breaker and retry
+    // Manual sync button should clear the circuit breaker and retry.
+    // Reopen the account dialog because clicking a nav button may have closed it.
+    await page.click("#accountButton");
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(4);
   });
@@ -321,7 +323,9 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => callCount).toBe(3);
     await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
 
-    // Manual sync - should succeed and clear the breaker
+    // Manual sync - should succeed and clear the breaker.
+    // Reopen the account dialog because clicking a nav button may have closed it.
+    await page.click("#accountButton");
     await page.click("[data-sync]");
     await expect.poll(() => callCount).toBe(4);
     await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
