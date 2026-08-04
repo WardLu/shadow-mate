@@ -1,5 +1,5 @@
 begin;
-select plan(42);
+select plan(46);
 
 -- Final product identity and migration state.
 select is(
@@ -337,25 +337,40 @@ select lives_ok(
 -- Rate limiter position: conflicts should NOT consume rate-limit budget.
 -- This verifies the fix for the issue where conflict exceptions rolled back
 -- the rate-limit counter because they were in the same transaction.
--- NOTE: the profile 'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa' already has a state
--- row with version=2 from the earlier save test, so expected_version=999 will conflict.
--- Cleanup and verification use the postgres role because authenticated has no
--- direct table access to private.learning_rpc_rate_limits (only the security-definer
--- function learning_enforce_rate_limit can access it).
+-- Uses postgres role for private table cleanup/verification, authenticated for
+-- function calls. Fresh state row is created to have a known starting version.
 
--- Reset any leftover rate-limit rows for this user/rpc_key (as superuser)
+-- As postgres: reset state and rate limits for a clean slate
+set local role postgres;
+delete from public.learning_profile_states
+ where profile_id = 'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa';
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
+
+-- As authenticated: create fresh state (version defaults to 1)
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"fresh_state": 1}'::jsonb,
+    null
+  )$$,
+  'fresh state created with null expected_version'
+);
+
+-- As postgres: reset rate limit counter to isolate conflict test
 set local role postgres;
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
    and rpc_key = 'save_state';
 
--- Switch to authenticated for the actual function calls
+-- As authenticated: conflict call (expected_version=999, actual=1)
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
--- Conflict call: stale expected_version triggers learning_state_conflict
--- This should NOT create a rate-limit row because the rate limiter runs
--- AFTER conflict checks in the updated function.
 select throws_ok(
   $$select * from public.learning_save_state(
     'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
@@ -367,9 +382,8 @@ select throws_ok(
   'stale version conflict is raised'
 );
 
--- Switch to postgres to verify rate-limit table state
+-- As postgres: verify conflict did NOT create a rate-limit row
 set local role postgres;
--- Verify rate-limit counter was NOT incremented by the conflict
 select is(
   (select call_count from private.learning_rpc_rate_limits
     where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
@@ -377,24 +391,21 @@ select is(
   'conflict does not consume rate-limit budget (no row created)'
 );
 
--- Switch back to authenticated for the successful save call
+-- As authenticated: successful update (expected_version=1, actual=1)
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
--- Successful update with correct expected_version (version=2 from earlier test)
--- This SHOULD consume rate-limit budget.
 select lives_ok(
   $$select * from public.learning_save_state(
     'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
     '{"rate_limit_test": 1}'::jsonb,
-    2
+    1
   )$$,
   'save with correct expected_version succeeds (updates state)'
 );
 
--- Switch to postgres to verify rate-limit table state
+-- As postgres: verify successful write DID create a rate-limit row
 set local role postgres;
--- Verify rate-limit counter WAS incremented by the successful write
 select is(
   (select call_count from private.learning_rpc_rate_limits
     where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
