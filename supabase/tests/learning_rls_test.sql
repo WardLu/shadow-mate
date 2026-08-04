@@ -1,5 +1,5 @@
 begin;
-select plan(42);
+select plan(47);
 
 -- Final product identity and migration state.
 select is(
@@ -333,6 +333,98 @@ select lives_ok(
   $sql$select private.learning_enforce_rate_limit('other_rpc', 3, 60)$sql$,
   'different rpc key has independent limit'
 );
+
+-- Rate limiter position: conflicts should NOT consume rate-limit budget.
+-- This verifies the fix for the issue where conflict exceptions rolled back
+-- the rate-limit counter because they were in the same transaction.
+-- Uses postgres role for private table cleanup/verification, authenticated for
+-- function calls. Fresh state row is created to have a known starting version.
+
+-- The earlier deletion test (learning_delete_household) cascade-deleted the
+-- household, profile, and state. Recreate them as postgres (bypassing RLS).
+set local role postgres;
+insert into public.learning_households (id, project_id, name, owner_user_id)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'shadow-mate', 'Rate Limit Test', '11111111-1111-4111-8111-111111111111')
+on conflict (id) do nothing;
+insert into public.learning_household_members (household_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'owner')
+on conflict do nothing;
+insert into public.learning_profiles (id, household_id, display_name, grade_level)
+values ('aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Rate Limit Learner', 3)
+on conflict (id) do nothing;
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
+
+-- As authenticated: create fresh state (version defaults to 1)
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"fresh_state": 1}'::jsonb,
+    null
+  )$$,
+  'fresh state created with null expected_version'
+);
+
+-- As postgres: reset rate limit counter to isolate conflict test
+set local role postgres;
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
+
+-- As authenticated: conflict call (expected_version=999, actual=1)
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select throws_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"conflict_test": 1}'::jsonb,
+    999
+  )$$,
+  '40001',
+  'learning_state_conflict',
+  'stale version conflict is raised'
+);
+
+-- As postgres: verify conflict did NOT create a rate-limit row
+set local role postgres;
+select is(
+  (select call_count from private.learning_rpc_rate_limits
+    where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
+  null,
+  'conflict does not consume rate-limit budget (no row created)'
+);
+
+-- As authenticated: successful update (expected_version=1, actual=1)
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"rate_limit_test": 1}'::jsonb,
+    1
+  )$$,
+  'save with correct expected_version succeeds (updates state)'
+);
+
+-- As postgres: verify successful write DID create a rate-limit row
+set local role postgres;
+select is(
+  (select call_count from private.learning_rpc_rate_limits
+    where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
+  1,
+  'successful write consumes rate-limit budget'
+);
+
+-- Clean up rate-limit row (state row cleanup is handled by rollback)
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
 
 select * from finish();
 rollback;

@@ -1,5 +1,24 @@
 # Release Notes
 
+## v1.1.1 - 2026-08-04
+
+冲突风暴热修复版本。
+
+- 冲突熔断：版本冲突达到重试上限后设置 `cloudSyncBlocked`，暂停自动同步，阻止多标签页/旧客户端持续制造冲突请求；用户手动点击同步按钮可清除熔断并重试。
+- 频控位置修正：将 `learning_save_state` 中频控计数从冲突检查之前移到之后，使冲突异常不再回滚频控预算；频控只在实际写入时消耗。
+- `scheduleSave` 熔断时清除旧 timer，避免无意义触发。
+- E2E 新增熔断阻止和手动恢复两个用例；数据库测试新增频控位置验证。
+- 本地 Supabase Postgres 17.6.1.106 在匿名密码状态权限断言时发生 SIGSEGV（已知问题，CI pgTAP 42/42 通过）。
+
+### 部署清单
+
+1. 合并到 `main`，Vercel 自动部署前端。
+2. 在生产 Supabase 执行第 13 条迁移 `20260804120000_learning_save_state_rate_limit_position.sql`。
+3. 观察生产 `learning_state_conflict` 是否在 5-10 分钟内停止增长。
+4. 提醒用户刷新页面以加载含熔断逻辑的新版。
+
+---
+
 ## v1.1.0 — 2026-08-03
 
 影伴 Shadow Mate 第二个生产修订版本。
