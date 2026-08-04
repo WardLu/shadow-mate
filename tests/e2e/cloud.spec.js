@@ -268,6 +268,69 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.rpcPayloads).toHaveLength(3);
   });
 
+  test("blocks automatic sync after conflict circuit-breaker trips", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcResponses: ["conflict"] });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    // Wait for the 3 RPC calls (initial + 2 retries) to complete
+    await expect.poll(() => api.rpcPayloads.length).toBe(3);
+    await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
+
+    // Trigger a local save (toggle a checkin) - should NOT produce a 4th RPC
+    await page.click(".navbtn[data-mod=\"chinese\"]");
+    await page.click(".checkin[data-mod=\"chinese\"]");
+    await page.waitForTimeout(1000);
+    expect(api.rpcPayloads).toHaveLength(3);
+
+    // Manual sync button should clear the circuit breaker and retry
+    await page.click("[data-sync]");
+    await expect.poll(() => api.rpcPayloads.length).toBe(4);
+  });
+
+  test("recovers from circuit-breaker after manual sync succeeds", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    let callCount = 0;
+    await page.route("**/rest/v1/rpc/learning_save_state", async (route) => {
+      callCount += 1;
+      const payload = JSON.parse(route.request().postData() || "{}");
+      if (callCount <= 3) {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "P0001", message: "learning_state_conflict" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ version: 99, updated_at: "2026-08-04T09:00:00.000Z" }),
+      });
+    });
+    await mockCloudApi(page, { rpcResponses: [] });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    await expect.poll(() => callCount).toBe(3);
+    await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
+
+    // Manual sync - should succeed and clear the breaker
+    await page.click("[data-sync]");
+    await expect.poll(() => callCount).toBe(4);
+    await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
+
+    // Automatic sync should work again now
+    await page.click(".navbtn[data-mod=\"chinese\"]");
+    await page.click(".checkin[data-mod=\"chinese\"]");
+    await expect.poll(() => callCount).toBe(5);
+  });
+
   test("lets a guardian delete a learner and its local cache", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page);

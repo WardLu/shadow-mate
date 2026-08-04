@@ -38,6 +38,7 @@ let cloudVersion = null;
 let saveTimer = null;
 let saveInFlight = false;
 let saveQueued = false;
+let cloudSyncBlocked = false;
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
@@ -968,6 +969,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
   const profile = profiles.find((item) => item.id === profileId);
   if (!profile) return;
   activeProfile = profile;
+  cloudSyncBlocked = false;
   localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
   const localState = window.learningDesk.getState();
   const { data, error } = await supabase
@@ -1001,6 +1003,8 @@ async function saveCloudState(manual = false) {
     if (saveInFlight) saveQueued = true;
     return;
   }
+  if (cloudSyncBlocked && !manual) return;
+  if (manual) cloudSyncBlocked = false;
   saveInFlight = true;
   let saved = false;
   let conflictRetries = 0;
@@ -1033,7 +1037,8 @@ async function saveCloudState(manual = false) {
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
-        showToast(formatCloudError(error, "云端记录冲突次数过多，请刷新后再试。"), 6000);
+        cloudSyncBlocked = true;
+        showToast(formatCloudError(error, "云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。"), 6000);
         break;
       }
 
@@ -1064,6 +1069,10 @@ async function saveCloudState(manual = false) {
 }
 
 function scheduleSave() {
+  if (cloudSyncBlocked) {
+    clearTimeout(saveTimer);
+    return;
+  }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => saveCloudState(false), 500);
 }
@@ -1097,6 +1106,7 @@ async function onAuthChange(nextSession, event = "") {
   activeProfile = null;
   cloudVersion = null;
   lastSyncAt = null;
+  cloudSyncBlocked = false;
   if (!session) {
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;

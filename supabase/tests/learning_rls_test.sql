@@ -334,5 +334,63 @@ select lives_ok(
   'different rpc key has independent limit'
 );
 
+-- Rate limiter position: conflicts should NOT consume rate-limit budget.
+-- This verifies the fix for the issue where conflict exceptions rolled back
+-- the rate-limit counter because they were in the same transaction.
+-- NOTE: the profile 'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa' already has a state
+-- row with version=2 from the earlier save test, so expected_version=999 will conflict.
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+-- Reset any leftover rate-limit rows for this user/rpc_key
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
+
+-- Conflict call: stale expected_version triggers learning_state_conflict
+-- This should NOT create a rate-limit row because the rate limiter runs
+-- AFTER conflict checks in the updated function.
+select throws_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"conflict_test": 1}'::jsonb,
+    999
+  )$$,
+  '40001',
+  'learning_state_conflict',
+  'stale version conflict is raised'
+);
+
+-- Verify rate-limit counter was NOT incremented by the conflict
+select is(
+  (select call_count from private.learning_rpc_rate_limits
+    where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
+  null,
+  'conflict does not consume rate-limit budget (no row created)'
+);
+
+-- Successful update with correct expected_version (version=2 from earlier test)
+-- This SHOULD consume rate-limit budget.
+select lives_ok(
+  $$select * from public.learning_save_state(
+    'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+    '{"rate_limit_test": 1}'::jsonb,
+    2
+  )$$,
+  'save with correct expected_version succeeds (updates state)'
+);
+
+-- Verify rate-limit counter WAS incremented by the successful write
+select is(
+  (select call_count from private.learning_rpc_rate_limits
+    where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
+  1,
+  'successful write consumes rate-limit budget'
+);
+
+-- Clean up rate-limit row (state row cleanup is handled by rollback)
+delete from private.learning_rpc_rate_limits
+ where user_id = '11111111-1111-4111-8111-111111111111'
+   and rpc_key = 'save_state';
+
 select * from finish();
 rollback;
