@@ -75,7 +75,7 @@ test.describe("Offline mode (no login)", () => {
       });
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
-        value: { cancel() {}, speak(utterance) { calls.push(utterance.text); } },
+        value: { cancel() {}, speak(utterance) { calls.push(utterance.text); }, getVoices() { return [{ lang: "en-US" }]; } },
       });
     });
     await page.goto("/");
@@ -85,21 +85,22 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button explains when Windows has no usable voice", async ({ page }) => {
+  test("speech button offers local offline voice when system has no usable voice", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => {
-      const synth = window.speechSynthesis;
-      Object.defineProperty(synth, "speak", { configurable: true, value() {} });
-      Object.defineProperty(synth, "getVoices", { configurable: true, value() { return []; } });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { getVoices() { return []; }, speak() {} },
+      });
       Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
     });
     await page.click('[data-mod="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
-    await expect(button).toContainText("安装英语语音");
-    await expect(page.locator("[data-speech-guide]")).toBeVisible();
-    await page.click("[data-speech-guide]");
-    await expect(page.locator(".guide-page")).toBeVisible();
+    await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线英语语音");
+    await page.click('.voice-dialog-actions [data-action="cancel"]');
+    await expect(page.locator("#shadow-voice-dialog")).toBeHidden();
   });
 
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {
