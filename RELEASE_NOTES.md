@@ -1,5 +1,22 @@
 # Release Notes
 
+## v1.3.0 - 2026-08-05
+
+国产 Android（无 GMS）英语发音兜底版本。
+
+- 新增本地 Piper 语音合成兜底：系统没有英语语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），在浏览器本地合成发音。
+- 系统有英语语音时仍优先走系统 TTS，其他设备不受影响。
+- 移除 `README.preview.html` 的 git 跟踪（本地文件保留）。
+- 修复：审计清理迁移兼容无 pg_cron 环境；修正 pgTAP 数据库测试 `plan` 数（47→48）。
+- 依赖致谢：`piper-tts-web` / `rhasspy/piper` / `ONNX Runtime Web` / `rhasspy/piper-voices`（均 MIT）。
+
+### 部署清单
+
+1. 合并 `codex/piper-tts` 到 `main`，Vercel 自动部署前端。
+2. 在国产 Android 设备验证首次点“听发音”的下载确认、进度与本地发音；确认后模型已缓存可离线使用。
+
+---
+
 ## v1.1.1 - 2026-08-04
 
 冲突风暴热修复版本。

@@ -30,6 +30,7 @@
 - [x] 前端 profile 残留引用防护与 not_found 熔断（清除 `ACTIVE_PROFILE_KEY` 残留引用）
 - [x] 冲突审计表 7 天保留 + pg_cron 每日清理
 - [x] 恢复 CI verify 全绿：邮箱白名单、supabase start 重试（Docker Hub 限流）、pg_cron 兼容、pgTAP plan 修正
+- [x] 英语发音本地兜底（无 GMS 国产 Android，Piper WASM 本地合成，下载前确认 + 可离线）
 - [ ] 家长邀请共同监护人（一次性 invite token）
 - [ ] learner PIN / 设备授权模式
 - [x] 数据导出与完整删除（自助）
