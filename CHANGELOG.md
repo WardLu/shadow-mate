@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- 审计清理迁移 `20260805010000_learning_save_audit_prune.sql` 兼容无 pg_cron 环境：改用 pg_cron 扩展检测 + 动态 SQL，本地/CI 无 pg_cron 时跳过 cron job 创建，不再导致 `supabase start` 失败（有 pg_cron 的生产环境仍正常创建清理 job）。
+- 修正 pgTAP 数据库测试 `plan` 数（47→48）与实际断言一致，`test:db` 恢复通过。
+
+### CI
+- `security:check` 邮箱白名单加入 `126.com`（README / README.preview.html 以 `wardlu@126.com` 作为联系邮箱），CI verify 不再因 non-example email 报错，分支保护可自动通过。
+- CI `supabase start` 增加 3 次重试（间隔 30s）以应对 Docker Hub 匿名拉取限流（`toomanyrequests`），并将 job 超时放宽到 20 分钟。
+
 ## [1.2.0] - 2026-08-05
 
 ### Fixed
