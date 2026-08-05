@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-08-05
 
 ### Added
 - 国产 Android（无 GMS）英语发音兜底：系统没有英语语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），基于 piper-tts-web / rhasspy/piper 在浏览器本地合成。
