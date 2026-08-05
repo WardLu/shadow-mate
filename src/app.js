@@ -14,7 +14,7 @@ import {
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
 installRapidActionGuard(document);
-startVersionGuard();
+startVersionGuard({ checkIntervalMs: 60_000 });
 
 /* =========================================================
    影伴学习任务台 —— 数据层

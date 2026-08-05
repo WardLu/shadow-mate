@@ -11,7 +11,7 @@
  */
 
 const RELOAD_COOLDOWN_KEY = "shadow_mate_reload_cooldown";
-const DEFAULT_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+const DEFAULT_CHECK_INTERVAL_MS = 60 * 1000; // 1 min
 const DEFAULT_MAX_ERRORS = 5;
 const DEFAULT_ERROR_WINDOW_MS = 10_000;
 const RELOAD_COOLDOWN_MS = 30_000;
@@ -87,6 +87,23 @@ function markReload() {
 }
 
 /**
+ * Force a reload to the newest build. Deletes service-worker caches first so
+ * the stale index.html / assets can never pin an old client after a deploy.
+ */
+async function reloadToLatest() {
+  if ("caches" in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    } catch {
+      // Cache clearing is best-effort; still reload.
+    }
+  }
+  markReload();
+  window.location.reload();
+}
+
+/**
  * Start the version guard. Call once on page load.
  * @param {{checkIntervalMs?: number, maxErrors?: number, errorWindowMs?: number}} options
  */
@@ -121,8 +138,7 @@ export function startVersionGuard(options = {}) {
       const fetchedSources = extractScriptSources(html);
       if (fetchedSources.length && scriptSourcesDiffer(currentSources, fetchedSources)) {
         if (!recentlyReloaded()) {
-          markReload();
-          window.location.reload();
+          await reloadToLatest();
         }
       }
     } catch {

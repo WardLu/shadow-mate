@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- 根治学习状态冲突风暴：`learning_save_state` 版本冲突不再 `raise`（此前事务回滚会连带撤销同事务的限流计数），改为返回空集并消耗每用户独立的 `save_state_attempts` 限流预算（默认 120 次/60 秒）。冲突风暴因此被硬性限制在约 2 次/秒/用户，无法再绕过写入限流。
+- 强制所有在线客户端尽快更新到最新构建：`version-guard` 检查间隔从 5 分钟缩短到 1 分钟，并在检测到新部署时先清空 Service Worker 缓存再刷新，避免旧版本继续运行。
+- 前端 profile 残留防护：`loadWorkspace` 会清除指向已不存在 profile 的本地引用（`ACTIVE_PROFILE_KEY`）；`saveCloudState` 在目标 profile 于云端不存在（PGRST116）时熔断自动同步，避免每次编辑都触发一次无效的冲突往返。
+
+### Changed
+- 数据库迁移 `20260805000000_learning_save_state_conflict_attempt_rate_limit.sql`：`learning_save_state` 冲突时返回空集（HTTP 200 + 空数组）而非 `40001` 错误。
+- 同迁移新增只读审计（`private.learning_save_audit` + `private.learning_audit_conflict`）：每次冲突记录调用者账号/email、目标 profile、期望与当前版本、客户端 IP、User-Agent、路径与时间戳，用于定位风暴来源。
+- 前端 `saveCloudState` 将「成功返回空集」识别为版本冲突并走原有冲突处理，同时兼容旧服务端以 `learning_state_conflict` 错误上报的路径。
+- 审计表 `private.learning_save_audit` 新增保留策略：仅保留最近 7 天，由 pg_cron job `shadow-mate-cleanup-learning-save-audit` 每日 04:00 UTC 清理（迁移 `20260805010000_learning_save_audit_prune.sql`），防止冲突风暴复发时审计表无限增长。
+
 ## [1.1.1] - 2026-08-04
 
 ### Fixed

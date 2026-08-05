@@ -10,7 +10,7 @@
 
 ## Pending
 
-> v1.1.0 生产环境已应用 12 条迁移记录。本次新增第 13 条迁移（频控位置修正），待生产应用。
+> v1.1.0 生产环境已应用 12 条迁移记录。第 13 条（频控位置修正）、第 14 条（冲突风暴 attempts 限流，`20260805000000_learning_save_state_conflict_attempt_rate_limit.sql`）、第 15 条（审计表 7 天清理，`20260805010000_learning_save_audit_prune.sql`）均已应用并登记到生产 `supabase_migrations.schema_migrations`。
 
 ### 近期
 - [x] 完成 v1.0.1 生产发布（`sm.shadow.wang`）
@@ -27,6 +27,8 @@
 - [x] 全局防重复点击和云端提交单次执行锁
 - [x] 云端版本冲突限次重试与中文提示
 - [x] 冲突熔断（cloudSyncBlocked）与频控位置修正，彻底解决冲突风暴
+- [x] 前端 profile 残留引用防护与 not_found 熔断（清除 `ACTIVE_PROFILE_KEY` 残留引用）
+- [x] 冲突审计表 7 天保留 + pg_cron 每日清理
 - [ ] 家长邀请共同监护人（一次性 invite token）
 - [ ] learner PIN / 设备授权模式
 - [x] 数据导出与完整删除（自助）
