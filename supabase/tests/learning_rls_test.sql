@@ -1,5 +1,5 @@
 begin;
-select plan(47);
+select plan(48);
 
 -- Final product identity and migration state.
 select is(
