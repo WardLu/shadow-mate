@@ -45,6 +45,7 @@ jobs:
         run: |
           if ! npx supabase start --output env > "$RUNNER_TEMP/supabase-start.env" 2> "$RUNNER_TEMP/supabase-start.log"; then
             echo "Supabase failed to start."
+            cat "$RUNNER_TEMP/supabase-start.log"
             exit 1
           fi
           echo "Local Supabase started."
