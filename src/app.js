@@ -1,4 +1,4 @@
-
+import { inject } from "@vercel/analytics";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
@@ -13,6 +13,7 @@ import {
 
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
+inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 
