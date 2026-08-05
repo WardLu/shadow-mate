@@ -13,3 +13,6 @@ Thumbs.db
 test-results/
 playwright-report/
 coverage/
+
+# Playwright MCP session artifacts (test snapshots/logs)
+.playwright-mcp/

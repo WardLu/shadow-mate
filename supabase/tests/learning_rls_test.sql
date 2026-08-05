@@ -210,16 +210,15 @@ select is(
   'state save increments the optimistic version'
 );
 
-select throws_ok(
-  $$select *
-    from public.learning_save_state(
-      'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
-      '{"points": 12}'::jsonb,
-      1
-    )$$,
-  '40001',
-  'learning_state_conflict',
-  'stale state version is rejected'
+select is(
+  (select count(*)
+   from public.learning_save_state(
+     'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
+     '{"points": 12}'::jsonb,
+     1
+   )),
+  0::bigint,
+  'stale state version returns empty set (conflict)'
 );
 
 set local request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
@@ -354,7 +353,7 @@ values ('aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaa
 on conflict (id) do nothing;
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
-   and rpc_key = 'save_state';
+   and rpc_key in ('save_state', 'save_state_attempts');
 
 -- As authenticated: create fresh state (version defaults to 1)
 set local role authenticated;
@@ -373,30 +372,35 @@ select lives_ok(
 set local role postgres;
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
-   and rpc_key = 'save_state';
+   and rpc_key in ('save_state', 'save_state_attempts');
 
--- As authenticated: conflict call (expected_version=999, actual=1)
+-- As authenticated: conflict call (expected_version=999, actual=1) returns empty set
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
-select throws_ok(
-  $$select * from public.learning_save_state(
+select is(
+  (select count(*) from public.learning_save_state(
     'aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa',
     '{"conflict_test": 1}'::jsonb,
     999
-  )$$,
-  '40001',
-  'learning_state_conflict',
-  'stale version conflict is raised'
+  )),
+  0::bigint,
+  'stale version conflict returns empty set (no raise)'
 );
 
--- As postgres: verify conflict did NOT create a rate-limit row
+-- As postgres: conflict must NOT consume write budget, but MUST consume attempt budget
 set local role postgres;
 select is(
   (select call_count from private.learning_rpc_rate_limits
     where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state'),
   null,
-  'conflict does not consume rate-limit budget (no row created)'
+  'conflict does not consume write budget (no save_state row)'
+);
+select isnt(
+  (select call_count from private.learning_rpc_rate_limits
+    where user_id = '11111111-1111-4111-8111-111111111111' and rpc_key = 'save_state_attempts'),
+  null,
+  'conflict consumes attempt budget (save_state_attempts row created)'
 );
 
 -- As authenticated: successful update (expected_version=1, actual=1)
@@ -424,7 +428,7 @@ select is(
 -- Clean up rate-limit row (state row cleanup is handled by rollback)
 delete from private.learning_rpc_rate_limits
  where user_id = '11111111-1111-4111-8111-111111111111'
-   and rpc_key = 'save_state';
+   and rpc_key in ('save_state', 'save_state_attempts');
 
 select * from finish();
 rollback;

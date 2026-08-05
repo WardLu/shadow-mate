@@ -961,6 +961,11 @@ async function loadWorkspace(preferredProfileId = null, options = {}) {
     return;
   }
   const remembered = preferredProfileId || readRememberedProfileId();
+  if (remembered && !profiles.some((item) => item.id === remembered)) {
+    // 残留引用指向已不存在的 profile（如云端删除 / household 残留）→ 清除，
+    // 避免后续对不存在的 profile 发起无效同步（曾在生产触发 not_found 冲突风暴）。
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  }
   const profile = profiles.find((item) => item.id === remembered) || profiles[0] || null;
   if (profile) await selectProfile(profile.id, options);
 }
@@ -1016,24 +1021,27 @@ async function saveCloudState(manual = false) {
         p_state: currentState,
         p_expected_version: cloudVersion,
       });
-      if (!error) {
+      if (error) {
+        if (error.message.includes("learning_rate_limited")) {
+          showToast("操作过于频繁，请稍后再试。", 5000);
+          break;
+        }
+        if (!error.message.includes("learning_state_conflict")) {
+          showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+          break;
+        }
+        // 旧服务端兼容：learning_state_conflict 错误 → 走下方统一冲突处理。
+      } else {
         const row = Array.isArray(data) ? data[0] : data;
-        cloudVersion = row?.version ?? cloudVersion;
-        lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-        updateSyncStatus();
-        if (manual) showToast("云端记录已更新");
-        saved = true;
-        break;
-      }
-
-      if (error.message.includes("learning_rate_limited")) {
-        showToast("操作过于频繁，请稍后再试。", 5000);
-        break;
-      }
-
-      if (!error.message.includes("learning_state_conflict")) {
-        showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
-        break;
+        if (row) {
+          cloudVersion = row?.version ?? cloudVersion;
+          lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+          updateSyncStatus();
+          if (manual) showToast("云端记录已更新");
+          saved = true;
+          break;
+        }
+        // 空集 = 版本冲突（服务端不再 raise，避免事务回滚绕过限流）→ 走下方统一冲突处理。
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
@@ -1048,7 +1056,15 @@ async function saveCloudState(manual = false) {
         .eq("profile_id", activeProfile.id)
         .single();
       if (remoteError || !remote) {
-        showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+        if (remoteError?.code === "PGRST116" || (!remoteError && !remote)) {
+          // 目标 profile 在云端已不存在 → 熔断自动同步，避免每次编辑都触发一次无效冲突往返
+          activeProfile = null;
+          cloudSyncBlocked = true;
+          localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          showToast("云端记录已不存在，已停止自动同步。", 6000);
+        } else {
+          showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+        }
         break;
       }
 
