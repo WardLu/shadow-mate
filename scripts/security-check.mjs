@@ -33,6 +33,7 @@ const secretRules = [
 const allowedEmailDomains = new Set([
   "example.com",
   "example.test",
+  "126.com",
   "shadow.wang",
   "users.noreply.github.com",
   "github.com",
