@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- 国产 Android（无 GMS）英语发音兜底：系统没有英语语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），基于 piper-tts-web / rhasspy/piper 在浏览器本地合成。
+
 ### Fixed
 - 审计清理迁移 `20260805010000_learning_save_audit_prune.sql` 兼容无 pg_cron 环境：改用 pg_cron 扩展检测 + 动态 SQL，本地/CI 无 pg_cron 时跳过 cron job 创建，不再导致 `supabase start` 失败（有 pg_cron 的生产环境仍正常创建清理 job）。
 - 修正 pgTAP 数据库测试 `plan` 数（47→48）与实际断言一致，`test:db` 恢复通过。

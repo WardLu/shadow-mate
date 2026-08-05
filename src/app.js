@@ -2,6 +2,7 @@ import { inject } from "@vercel/analytics";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
+import { askDownloadVoice, hasSystemEnglishVoice, speakLocally } from "./piper-tts.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
@@ -242,9 +243,7 @@ function dayTotal(day){
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
-function speak(t, button){
-  const synth = window.speechSynthesis;
-  const Utterance = window.SpeechSynthesisUtterance;
+async function speak(t, button){
   const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
   const showSpeechGuide = () => {
@@ -278,39 +277,72 @@ function speak(t, button){
       if (button.dataset.speechFailure === "true") restore();
     }, 5000);
   };
-  if (!synth || typeof Utterance !== "function") {
-    fail("浏览器不支持发音");
-    return;
-  }
-  if (button) {
+  const setBusy = (label = "播放中…") => {
+    if (!button) return;
     button.dataset.label = originalLabel;
-    button.innerHTML = buttonContent("volume", "播放中…");
+    button.innerHTML = buttonContent("volume", label);
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
-  }
-  const speakNow = () => {
-    const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
-    const utterance = new Utterance(t);
-    utterance.lang = "en-US";
-    utterance.rate = 0.9;
-    const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
-    if (voice) utterance.voice = voice;
-    utterance.onend = restore;
-    utterance.onerror = () => fail("发音失败，请检查系统音量和语音设置");
-    try {
-      synth.cancel();
-      // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
-      synth.speak(utterance);
-      window.setTimeout(() => {
-        if (button?.disabled) {
-          fail("发音未响应，请检查系统语音设置或安装英语语音");
-        }
-      }, 3000);
-    } catch (_) {
-      fail("发音失败，请检查系统音量和语音设置");
-    }
   };
-  speakNow();
+
+  // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
+  if (hasSystemEnglishVoice()) {
+    const synth = window.speechSynthesis;
+    const Utterance = window.SpeechSynthesisUtterance;
+    setBusy();
+    const speakNow = () => {
+      const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+      const utterance = new Utterance(t);
+      utterance.lang = "en-US";
+      utterance.rate = 0.9;
+      const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
+      if (voice) utterance.voice = voice;
+      utterance.onend = restore;
+      utterance.onerror = () => fail("发音失败，请检查系统音量和语音设置");
+      try {
+        synth.cancel();
+        // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
+        synth.speak(utterance);
+        window.setTimeout(() => {
+          if (button?.disabled) fail("发音未响应，请下载本地英语语音");
+        }, 4000);
+      } catch (_) {
+        fail("发音失败，请检查系统音量和语音设置");
+      }
+    };
+    speakNow();
+    return;
+  }
+
+  // 无 GMS 的国产 Android 等设备：使用本地 Piper 兜底
+  setBusy("准备中…");
+  try {
+    const status = await askDownloadVoice((received, total) => {
+      if (!button) return;
+      button.innerHTML = buttonContent(
+        "volume",
+        total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
+      );
+    });
+    if (status !== "ok") {
+      restore();
+      return;
+    }
+    setBusy("合成中…");
+    const { url } = await speakLocally(t);
+    const audio = new Audio(url);
+    audio.onended = () => {
+      restore();
+      URL.revokeObjectURL(url);
+    };
+    audio.onerror = () => {
+      fail("发音失败，请重试");
+      URL.revokeObjectURL(url);
+    };
+    await audio.play();
+  } catch (_) {
+    fail("发音失败，请检查网络后重试");
+  }
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
@@ -927,6 +959,7 @@ function renderGuide(){
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
+          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
         </div>
         <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
       </section>
