@@ -13,7 +13,7 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,12 +43,16 @@ jobs:
       - name: Start local Supabase
         shell: bash
         run: |
-          if ! npx supabase start --output env > "$RUNNER_TEMP/supabase-start.env" 2> "$RUNNER_TEMP/supabase-start.log"; then
-            echo "Supabase failed to start."
+          for attempt in 1 2 3; do
+            if npx supabase start --output env > "$RUNNER_TEMP/supabase-start.env" 2> "$RUNNER_TEMP/supabase-start.log"; then
+              echo "Local Supabase started."
+              exit 0
+            fi
+            echo "Supabase start failed (attempt $attempt/3)."
             cat "$RUNNER_TEMP/supabase-start.log"
-            exit 1
-          fi
-          echo "Local Supabase started."
+            if [ "$attempt" -lt 3 ]; then sleep 30; fi
+          done
+          exit 1
       - name: Configure local Supabase for E2E
         shell: bash
         run: |
