@@ -215,5 +215,7 @@ erDiagram
 - 静态构建脚本，无 npm 依赖下载；
 - Supabase JS 固定到 `2.111.0`。
 - CSP 的 `script-src` 和 `style-src` 均为 `'self'`，不含 `unsafe-inline`。
+- Piper 本地语音使用 `connect-src blob:` 读取浏览器生成的模块/模型资源，使用 `media-src 'self' blob:` 播放合成音频，并使用 `wasm-unsafe-eval` 支持 WASM 初始化；不允许通用的 `unsafe-eval`。
+- `vite.config.js` 仅在开发服务器中兼容 Vite 为公共 Piper 模块追加的 `?import` 查询，生产环境仍由静态资源直接提供。
 
 若未来管理后台、内容编辑器、支付和服务端页面成为主体，再迁移到 TypeScript + React/Next.js；不为“可能有一天”提前承担框架成本。

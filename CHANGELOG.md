@@ -5,9 +5,12 @@
 ### Fixed
 - 修复系统返回英语语音但 `speechSynthesis` 实际无响应时，按钮显示“发音未响应”却不回退本地语音的问题。
 - 系统语音超时、报错或抛异常时自动切换到本地 Piper；已缓存语音包时直接合成，不再停在下载弹窗。
+- 下载离线语音时提前预热 Piper 引擎，避免下载完成后仍停在“合成中…”或短暂显示“发音未响应”。
+- 补充 `media-src 'self' blob:`，允许播放本地合成音频；继续只允许必要的 `connect-src blob:` 和 `wasm-unsafe-eval`，不放开 `unsafe-eval`。
+- 修复 Vite 开发环境对 `/piper-tts-web.js?import` 的处理，避免本地开发时 Piper 模块被错误返回 500。
 
 ### Tests
-- `npm run verify` 通过，单元测试 65/65；新增系统语音无响应回退 Piper E2E 1/1 通过。
+- `npm run verify` 通过，单元测试 66/66；Piper 开发资源、下载失败、引擎预热和系统语音回退 E2E 均通过。
 
 ## [1.3.2] - 2026-08-09
 
