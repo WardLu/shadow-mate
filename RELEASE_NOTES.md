@@ -1,5 +1,23 @@
 # Release Notes
 
+## v1.3.2 - 2026-08-09
+
+离线英语发音下载与 macOS CSP 兼容性修复版本。
+
+- 修复 macOS Chrome 中 Piper 离线发音被 CSP 阻断的问题：允许 `blob:` 和 `wasm-unsafe-eval`，继续禁止 `unsafe-eval`。
+- 下载语音包时按流式读取动态更新进度；没有 `Content-Length` 时显示动态下载状态，并可随时取消。
+- 下载失败、CSP 阻断或合成超时会结束“合成中…”状态并给出可重试提示。
+- 补充标准 `mobile-web-app-capable` 元标签。
+- 发布前验证：`npm run verify` 通过，单元测试 65/65，离线语音失败路径 E2E 1/1 通过。
+
+### 部署清单
+
+1. 合并本分支 PR 到 `main`，由 Vercel 自动部署前端。
+2. 在生产响应头确认 `script-src 'self' 'wasm-unsafe-eval'`，并确认 `connect-src` 包含 `blob:`。
+3. 在 MacBook Chrome 验证取消弹窗后再次“听发音”、刷新页面后首次合成，以及无 GMS Android 的下载进度、取消和离线发音。
+
+---
+
 ## v1.3.1 - 2026-08-09
 
 夜间模式可读性修复版本。

@@ -1,0 +1,28 @@
+import { test, expect } from "@playwright/test";
+
+test.describe("Offline voice download errors", () => {
+  test.use({ serviceWorkers: "block" });
+
+  test("keeps a failed voice download visible to the user", async ({ page }) => {
+    await page.route("**/piper/en_US-lessac-medium.onnx", async (route) => {
+      await route.fulfill({ status: 503, contentType: "text/plain", body: "unavailable" });
+    });
+    await page.goto("/");
+    await page.evaluate(() => {
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { getVoices() { return []; }, speak() {} },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+    });
+    await page.click('[data-mod="english"]');
+    const button = page.locator("[data-speak]").first();
+    await button.click();
+    await page.click('.voice-dialog-actions [data-action="ok"]');
+
+    await expect(button).toContainText("下载失败");
+  });
+});

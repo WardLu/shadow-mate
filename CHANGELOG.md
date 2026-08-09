@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.2] - 2026-08-09
+
+### Fixed
+- 修复 macOS Chrome 使用 Piper 离线发音时的 CSP 兼容性：允许 `blob:` 模块加载和 `wasm-unsafe-eval`，不放开 `unsafe-eval`。
+- 修复无 GMS Android 下载离线英语语音包时进度长期显示 0 的问题；服务端未返回 `Content-Length` 时显示动态下载状态，并支持下载中取消。
+- 修复 Piper 下载失败、CSP 阻断或合成超时后按钮一直停留在“合成中…”的问题，改为显示可重试的错误提示。
+- 补充标准 `mobile-web-app-capable` 元标签，消除 Chrome 的弃用警告。
+
+### Tests
+- `npm run verify` 通过，单元测试 65/65；离线语音下载失败 E2E 1/1 通过。
+
 ## [1.3.1] - 2026-08-09
 
 ### Fixed
