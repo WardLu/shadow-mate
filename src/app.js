@@ -260,6 +260,7 @@ async function speak(t, button){
     button.after(guideLink);
   };
   const restore = () => {
+    clearSystemTimer();
     if (!button) return;
     button.innerHTML = buttonContent("volume", originalLabel);
     button.disabled = false;
@@ -285,10 +286,65 @@ async function speak(t, button){
     button.setAttribute("aria-busy", "true");
   };
 
+  let systemTimer = null;
+  const clearSystemTimer = () => {
+    if (systemTimer !== null) {
+      window.clearTimeout(systemTimer);
+      systemTimer = null;
+    }
+  };
+
+  const speakOffline = async () => {
+    setBusy("准备中…");
+    try {
+      const status = await askDownloadVoice((received, total) => {
+        if (!button) return;
+        button.innerHTML = buttonContent(
+          "volume",
+          total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
+        );
+      });
+      if (status === "cancel") {
+        restore();
+        return;
+      }
+      if (status !== "ok") {
+        fail("离线语音下载失败，请检查网络后重试");
+        return;
+      }
+      setBusy("合成中…");
+      const { url } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
+      const audio = new Audio(url);
+      audio.onended = () => {
+        restore();
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        fail("发音失败，请重试");
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
+    } catch (error) {
+      fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
+    }
+  };
+
   // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
   if (hasSystemEnglishVoice()) {
     const synth = window.speechSynthesis;
     const Utterance = window.SpeechSynthesisUtterance;
+    let fallbackStarted = false;
+    const fallbackToLocal = () => {
+      if (fallbackStarted || !button?.disabled) return;
+      fallbackStarted = true;
+      clearSystemTimer();
+      try {
+        synth.cancel();
+      } catch (_) {
+        // Some browser speech implementations throw while cancelling a stalled utterance.
+      }
+      void speakOffline();
+    };
     setBusy();
     const speakNow = () => {
       const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
@@ -297,17 +353,21 @@ async function speak(t, button){
       utterance.rate = 0.9;
       const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
       if (voice) utterance.voice = voice;
-      utterance.onend = restore;
-      utterance.onerror = () => fail("发音失败，请检查系统音量和语音设置");
+      utterance.onend = () => {
+        if (!fallbackStarted) restore();
+      };
+      utterance.onerror = () => {
+        if (!fallbackStarted) fallbackToLocal();
+      };
       try {
         synth.cancel();
         // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
         synth.speak(utterance);
-        window.setTimeout(() => {
-          if (button?.disabled) fail("发音未响应，请下载本地英语语音");
+        systemTimer = window.setTimeout(() => {
+          if (button?.disabled) fallbackToLocal();
         }, 4000);
       } catch (_) {
-        fail("发音失败，请检查系统音量和语音设置");
+        fallbackToLocal();
       }
     };
     speakNow();
@@ -315,38 +375,7 @@ async function speak(t, button){
   }
 
   // 无 GMS 的国产 Android 等设备：使用本地 Piper 兜底
-  setBusy("准备中…");
-  try {
-    const status = await askDownloadVoice((received, total) => {
-      if (!button) return;
-      button.innerHTML = buttonContent(
-        "volume",
-        total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
-      );
-    });
-    if (status === "cancel") {
-      restore();
-      return;
-    }
-    if (status !== "ok") {
-      fail("离线语音下载失败，请检查网络后重试");
-      return;
-    }
-    setBusy("合成中…");
-    const { url } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-    const audio = new Audio(url);
-    audio.onended = () => {
-      restore();
-      URL.revokeObjectURL(url);
-    };
-    audio.onerror = () => {
-      fail("发音失败，请重试");
-      URL.revokeObjectURL(url);
-    };
-    await audio.play();
-  } catch (error) {
-    fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
-  }
+  await speakOffline();
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
