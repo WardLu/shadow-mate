@@ -12,6 +12,39 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".stat-grid .stat")).toHaveCount(4);
   });
 
+  test("night mode keeps page surfaces and text readable", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/");
+
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(14, 28, 20)");
+    await expect(page.locator(".card").first()).toHaveCSS("background-color", "rgb(24, 39, 29)");
+    await expect(page.locator(".card h3").first()).toHaveCSS("color", "rgb(238, 247, 239)");
+    await expect(page.locator(".card .desc").first()).toHaveCSS("color", "rgb(173, 193, 178)");
+  });
+
+  test("night mode gives interactive and guide surfaces the same dark treatment", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/");
+
+    await page.click('[data-mod="math"]');
+    await expect(page.locator(".lvl-btn").nth(1)).toHaveCSS("background-color", "rgb(24, 39, 29)");
+    await expect(page.locator(".lvl-btn").first()).toHaveCSS("background-color", "rgb(26, 56, 36)");
+    await expect(page.locator(".num-cell.miss")).toHaveCSS("background-color", "rgb(24, 39, 29)");
+
+    await page.click('[data-mod="guide"]');
+    await expect(page.locator(".guide-card").first()).toHaveCSS("background-color", "rgb(24, 39, 29)");
+  });
+
+  test("night mode keeps the account dialog readable", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/");
+    await page.click("#accountButton");
+
+    await expect(page.locator("#cloudDialog")).toHaveCSS("background-color", "rgb(24, 39, 29)");
+    await expect(page.locator("#cloudDialog input").first()).toHaveCSS("background-color", "rgb(18, 34, 24)");
+  });
+
   test("login button is visible", async ({ page }) => {
     await page.goto("/");
     const btn = page.locator("#accountButton");

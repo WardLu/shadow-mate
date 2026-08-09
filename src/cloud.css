@@ -396,3 +396,42 @@
 .household-edit-input {
   margin-top: 6px;
 }
+
+@media (prefers-color-scheme: dark) {
+  .account-button {
+    background: var(--card);
+    color: var(--green-deep);
+  }
+
+  .cloud-dialog {
+    background: var(--card);
+    color: var(--ink);
+  }
+
+  .cloud-field input,
+  .cloud-field select {
+    background: #122218;
+    border-color: var(--line);
+    color: var(--ink);
+  }
+
+  .cloud-action.secondary,
+  .auth-mode-switch {
+    background: var(--green-soft);
+  }
+
+  .auth-mode-switch button.active,
+  .learner-choice {
+    background: var(--card);
+    color: var(--ink);
+  }
+
+  .learner-choice.active {
+    background: var(--green-soft);
+  }
+
+  .cloud-action.danger {
+    background: #45252b;
+    color: #f0a0a8;
+  }
+}

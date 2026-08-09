@@ -1,5 +1,6 @@
 
   :root{
+    color-scheme:light;
     --green:#2fa84f;
     --green-deep:#1f7a39;
     --green-soft:#e8f7ec;
@@ -381,3 +382,82 @@
 .voice-dialog-ok{background:var(--green);color:#fff;}
 .voice-dialog-actions button:disabled{opacity:.6;cursor:default;}
 .guide-device-tip{font-size:12.5px;color:var(--green-deep);background:var(--green-light);border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.6;}
+
+  @media (prefers-color-scheme:dark){
+    :root{
+      color-scheme:dark;
+      --green:#36bd61;
+      --green-deep:#81e29a;
+      --green-soft:#1a3824;
+      --green-light:#28583a;
+      --yellow:#ffd166;
+      --yellow-soft:#40351f;
+      --ink:#eef7ef;
+      --ink-soft:#adc1b2;
+      --card:#18271d;
+      --bg:#0e1c14;
+      --line:#374f3c;
+      --focus:#9bf3ad;
+      --shadow:0 6px 18px rgba(0,0,0,.3);
+    }
+
+    html{background:var(--bg);}
+    body{background:var(--bg);color:var(--ink);}
+    .app{background:linear-gradient(180deg,#142b1c 0%,var(--bg) 220px);}
+    .topbar{background:linear-gradient(180deg,#142b1c,rgba(20,43,28,.92));}
+    .nav{background:linear-gradient(180deg,#172a1f,#122218);border-color:var(--line);}
+
+    .banner{background:linear-gradient(135deg,#40351f,#302a1e);border-color:#66552e;}
+    .banner .t{color:#ffd875;}
+    .banner .d{color:#d8c58e;}
+    .checkin{background:linear-gradient(135deg,#35b65a,#227c40);}
+    .checkin.done{background:#395046;color:#d4e7d8;}
+    .stat{background:linear-gradient(135deg,#2fa84f,#1f7a39);}
+    .progressbar{background:var(--green-light);}
+    .video-link{background:var(--yellow-soft);color:#ffd875;}
+
+    .lvl-btn{background:var(--card);border-color:var(--line);color:var(--ink-soft);}
+    .lvl-btn.active{background:var(--green-soft);border-color:var(--green);color:var(--green-deep);}
+    .num-cell.miss{background:var(--card);color:var(--ink);}
+    .sudoku div.fixed{background:#274a32;color:var(--green-deep);}
+    .mr-chip{background:var(--card);border-color:var(--line);}
+
+    .pts-card{background:var(--card);border-color:var(--green-light);}
+    .pts-card.done{background:var(--green-soft);}
+    .pts-card.sub{border-color:#8b4c56;}
+    .pts-card.sub.done{background:#45252b;border-color:#b86673;}
+    .pts-ic{background:var(--green-soft);}
+    .pts-card.sub .pts-ic{background:#45252b;}
+    .pts-card.sub .pts-badge{color:#f0a0a8;background:#45252b;}
+
+    .cal-chip{background:var(--card);color:var(--ink-soft);}
+    .cal-chip.active:not(.pos):not(.neg):not(.mixed){background:var(--card);color:var(--ink-soft);}
+    .cal-chip.pos{background:var(--green-soft);color:var(--green-deep);}
+    .cal-chip.neg{background:#45252b;color:#f0a0a8;}
+    .cal-chip.mixed{background:linear-gradient(135deg,var(--green-soft) 0 50%,#45252b 50% 100%);color:var(--ink);}
+    .cal-cell.lvl-0{background:#1a2a20;color:#8fa695;}
+    .cal-cell.lvl-1{background:var(--yellow-soft);color:#e4ca82;}
+    .cal-cell.lvl-2{background:var(--green-light);color:var(--ink);}
+    .cal-cell.lvl-3{background:#2fa84f;color:#f4fff5;}
+    .cal-cell.lvl-4{background:#1f7a39;color:#f4fff5;}
+    .cal-swatch.neutral,.cal-swatch.lvl-0{background:#1a2a20;border-color:#314839;}
+    .cal-swatch.lvl-1{background:var(--yellow-soft);border-color:#786332;}
+    .cal-swatch.lvl-2{background:var(--green-light);border-color:#3d7750;}
+    .cal-swatch.pos{background:var(--green-soft);border-color:var(--green);}
+    .cal-swatch.neg{background:#45252b;border-color:#b86673;}
+    .cal-swatch.mixed{background:linear-gradient(135deg,var(--green-soft) 0 50%,#45252b 50% 100%);border-color:#607866;}
+
+    .peanut-input{background:#122218;border-color:var(--line);color:var(--ink);}
+    .log-row{background:var(--card);border-color:var(--line);}
+
+    .guide-hero{background:linear-gradient(135deg,#1b6235 0%,#238b46 60%,#3a9e59 100%);}
+    .guide-card{background:var(--card);border-color:var(--line);}
+    .guide-device,.guide-facts>div,.guide-install-grid>div{background:#1b2c22;border-color:var(--line);}
+    .guide-note,.guide-help-card{background:#2f291b;border-color:#66552e;}
+    .guide-note{color:#e1c77b;}
+    .guide-help-card h3{color:#ffd875;}
+    .guide-help-card p{color:#d8c58e;}
+    .guide-device-tip{background:var(--green-light);color:var(--green-deep);}
+
+    .voice-dialog{background:var(--card);color:var(--ink);}
+  }

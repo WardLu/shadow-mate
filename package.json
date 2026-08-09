@@ -1,6 +1,6 @@
 {
   "name": "shadow-mate",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -31,6 +31,9 @@
     "supabase": "2.111.0",
     "vite": "8.2.0",
     "vitest": "4.1.10"
+  },
+  "overrides": {
+    "nanoid": "3.3.18"
   },
   "engines": {
     "node": ">=22"
