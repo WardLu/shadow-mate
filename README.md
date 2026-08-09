@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.3.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.3.4</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -117,6 +117,7 @@ supabase db lint --local --schema public --level warning --fail-on error
 
 ```text
 src/app.js                 页面渲染、交互和本机状态
+vite.config.js              Vite 开发环境 Piper 公共模块兼容处理
 src/learning-state.js      学习状态机与四个模块的打卡分组
 src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
 src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
@@ -157,11 +158,11 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴 v1.3.0 已部署到 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系；公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md) 与 [安全政策](SECURITY.md)。
+影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系；公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md) 与 [安全政策](SECURITY.md)。
 
 ## 致谢
 
-影伴的"听发音"在系统没有英语语音的设备（主要是无 GMS 的国产 Android）上，使用浏览器本地合成兜底，全程不上传录音。相关开源项目：
+影伴的“听发音”优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底，全程不上传录音。相关开源项目：
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成

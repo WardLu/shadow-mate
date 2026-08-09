@@ -25,6 +25,7 @@ describe("offline Piper speech security contract", () => {
     expect(csp["script-src"]).toContain("'wasm-unsafe-eval'");
     expect(csp["script-src"]).not.toContain("'unsafe-eval'");
     expect(csp["connect-src"]).toContain("blob:");
+    expect(csp["media-src"]).toContain("blob:");
   });
 
   test("declares the standard mobile web app capability", async () => {

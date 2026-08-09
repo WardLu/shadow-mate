@@ -13,6 +13,8 @@
 const VOICE = "/piper/en_US-lessac-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
+const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
+export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 export function withTimeout(promise, timeoutMs, message) {
@@ -38,6 +40,17 @@ async function openVoiceCache() {
   return caches.open(VOICE_CACHE);
 }
 
+async function getContentLength(url, signal) {
+  try {
+    const res = await fetch(url, { method: "HEAD", signal });
+    if (!res.ok) return 0;
+    return Number(res.headers.get("content-length")) || 0;
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    return 0;
+  }
+}
+
 export async function isVoiceCached() {
   if (!("caches" in window)) return false;
   try {
@@ -49,31 +62,54 @@ export async function isVoiceCached() {
 
 export async function downloadVoice(onProgress, signal) {
   const cache = await openVoiceCache();
-  for (const url of [VOICE + ".onnx", VOICE + ".onnx.json"]) {
+  const pendingFiles = [];
+  for (const url of VOICE_FILES) {
+    if (!(await cache.match(url))) pendingFiles.push(url);
+  }
+
+  const lengths = await Promise.all(pendingFiles.map((url) => getContentLength(url, signal)));
+  const total = lengths.every((length) => length > 0) ? lengths.reduce((sum, length) => sum + length, 0) : 0;
+  let receivedTotal = 0;
+
+  for (let fileIndex = 0; fileIndex < pendingFiles.length; fileIndex += 1) {
+    const url = pendingFiles[fileIndex];
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    if (await cache.match(url)) continue;
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error("语音包下载失败");
-    const total = Number(res.headers.get("content-length")) || 0;
+    const fileTotal = Number(res.headers.get("content-length")) || lengths[fileIndex] || 0;
     const reader = res.body.getReader();
     const chunks = [];
-    let received = 0;
+    let receivedFile = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
       if (value) {
         chunks.push(value);
-        received += value.length;
+        receivedFile += value.length;
+        if (onProgress) {
+          const progressTotal = total || fileTotal;
+          const progressReceived = total ? receivedTotal + receivedFile : receivedFile;
+          onProgress(progressReceived, progressTotal, {
+            fileIndex,
+            fileCount: pendingFiles.length,
+            fileReceived: receivedFile,
+            fileTotal,
+            totalKnown: total > 0,
+          });
+        }
       }
-      if (onProgress) onProgress(received, total);
     }
     await cache.put(
       url,
       new Response(new Blob(chunks), {
-        headers: { "Content-Type": res.headers.get("content-type") || "application/octet-stream" },
+        headers: {
+          "Content-Type": res.headers.get("content-type") || "application/octet-stream",
+          ...(fileTotal > 0 ? { "Content-Length": String(fileTotal) } : {}),
+        },
       })
     );
+    receivedTotal += receivedFile;
   }
 }
 
@@ -119,6 +155,10 @@ export async function speakLocally(text) {
   return { url: URL.createObjectURL(result.file), duration: result.duration };
 }
 
+export async function prepareLocalVoice() {
+  await loadEngine();
+}
+
 function buildDialog() {
   let dlg = document.getElementById("shadow-voice-dialog");
   if (dlg) return dlg;
@@ -137,7 +177,7 @@ function buildDialog() {
   return dlg;
 }
 
-export function askDownloadVoice(onProgress) {
+export function askDownloadVoice(onProgress, { onDownloadStart } = {}) {
   return new Promise((resolve) => {
     const dlg = buildDialog();
     const title = dlg.querySelector(".voice-dialog-title");
@@ -172,6 +212,7 @@ export function askDownloadVoice(onProgress) {
       bar.style.width = "35%";
       pct.textContent = "下载中…";
       if (onProgress) onProgress(0, 0);
+      onDownloadStart?.();
       try {
         await downloadVoice((received, total) => {
           if (total > 0) {
