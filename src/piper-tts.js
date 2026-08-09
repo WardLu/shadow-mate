@@ -200,6 +200,12 @@ export function askDownloadVoice(onProgress) {
     };
     cancelButton.onclick = () => finish("cancel");
     dlg.oncancel = () => finish("cancel");
-    dlg.showModal();
+    (async () => {
+      if (await isVoiceCached()) {
+        finish("ok");
+        return;
+      }
+      dlg.showModal();
+    })();
   });
 }
