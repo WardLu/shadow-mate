@@ -25,3 +25,11 @@ assets/readme/logo-mark-green.svg
 *preview*.html
 current-preview.png
 shadow-wang-home.png
+
+# Local-only internal planning and deployment docs
+/TODO.md
+/ROADMAP.md
+/docs/auth-setup.md
+/docs/security-baseline.md
+/docs/test-scope.md
+/docs/architecture-internal.md
