@@ -5,11 +5,11 @@ const originalDialogDescriptors = new Map(
   ["showModal", "close"].map((name) => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)])
 );
 
-function responseWithChunks(chunks) {
+function responseWithChunks(chunks, headers = {}) {
   let index = 0;
   return {
     ok: true,
-    headers: new Headers({ "content-type": "application/octet-stream" }),
+    headers: new Headers({ "content-type": "application/octet-stream", ...headers }),
     body: {
       getReader() {
         return {
@@ -42,9 +42,14 @@ describe("offline Piper voice download", () => {
     vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
     vi.stubGlobal(
       "fetch",
-      vi.fn()
-        .mockResolvedValueOnce(responseWithChunks([Uint8Array.from([1, 2]), Uint8Array.from([3, 4, 5])]))
-        .mockResolvedValueOnce(responseWithChunks([Uint8Array.from([6])]))
+      vi.fn((url, options) => {
+        if (options?.method === "HEAD") return Promise.resolve(responseWithChunks([]));
+        return Promise.resolve(
+          url.endsWith(".onnx")
+            ? responseWithChunks([Uint8Array.from([1, 2]), Uint8Array.from([3, 4, 5])])
+            : responseWithChunks([Uint8Array.from([6])])
+        );
+      })
     );
     const progress = [];
 
@@ -52,6 +57,33 @@ describe("offline Piper voice download", () => {
 
     expect(progress).toContainEqual([5, 0]);
     expect(progress.some(([received]) => received > 0)).toBe(true);
+  });
+
+  test("reports aggregate bytes across the model and config files", async () => {
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) => {
+        const isModel = url.endsWith(".onnx");
+        return Promise.resolve(
+          responseWithChunks(
+            isModel ? [Uint8Array.from([1, 2, 3]), Uint8Array.from([4, 5])] : [Uint8Array.from([6])],
+            { "content-length": isModel ? "5" : "1" }
+          )
+        );
+      })
+    );
+    const progress = [];
+
+    await downloadVoice((received, total) => progress.push([received, total]));
+
+    expect(progress).toContainEqual([3, 6]);
+    expect(progress).toContainEqual([5, 6]);
+    expect(progress.at(-1)).toEqual([6, 6]);
   });
 
   test("rejects when speech synthesis never settles", async () => {

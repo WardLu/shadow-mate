@@ -2,7 +2,15 @@ import { inject } from "@vercel/analytics";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
-import { askDownloadVoice, hasSystemEnglishVoice, speakLocally, SYNTHESIS_TIMEOUT_MS, withTimeout } from "./piper-tts.js";
+import {
+  askDownloadVoice,
+  ENGINE_LOAD_TIMEOUT_MS,
+  hasSystemEnglishVoice,
+  prepareLocalVoice,
+  speakLocally,
+  SYNTHESIS_TIMEOUT_MS,
+  withTimeout,
+} from "./piper-tts.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
@@ -296,6 +304,16 @@ async function speak(t, button){
 
   const speakOffline = async () => {
     setBusy("准备中…");
+    let engineWarmup;
+    const startEngineWarmup = () => {
+      if (!engineWarmup) {
+        engineWarmup = withTimeout(
+          prepareLocalVoice(),
+          ENGINE_LOAD_TIMEOUT_MS,
+          "本地语音引擎加载超时"
+        );
+      }
+    };
     try {
       const status = await askDownloadVoice((received, total) => {
         if (!button) return;
@@ -303,7 +321,7 @@ async function speak(t, button){
           "volume",
           total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
         );
-      });
+      }, { onDownloadStart: startEngineWarmup });
       if (status === "cancel") {
         restore();
         return;
@@ -312,6 +330,9 @@ async function speak(t, button){
         fail("离线语音下载失败，请检查网络后重试");
         return;
       }
+      startEngineWarmup();
+      setBusy("加载语音引擎…");
+      await engineWarmup;
       setBusy("合成中…");
       const { url } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       const audio = new Audio(url);
@@ -325,7 +346,11 @@ async function speak(t, button){
       };
       await audio.play();
     } catch (error) {
-      fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
+      if (error?.message === "本地语音引擎加载超时") {
+        fail("本地语音引擎加载超时，请重试");
+      } else {
+        fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
+      }
     }
   };
 
