@@ -305,13 +305,17 @@ async function speak(t, button){
   const speakOffline = async () => {
     setBusy("准备中…");
     let engineWarmup;
+    let engineWarmupError;
     const startEngineWarmup = () => {
       if (!engineWarmup) {
         engineWarmup = withTimeout(
           prepareLocalVoice(),
           ENGINE_LOAD_TIMEOUT_MS,
           "本地语音引擎加载超时"
-        );
+        ).catch((error) => {
+          engineWarmupError = error;
+          return null;
+        });
       }
     };
     try {
@@ -333,6 +337,7 @@ async function speak(t, button){
       startEngineWarmup();
       setBusy("加载语音引擎…");
       await engineWarmup;
+      if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       const audio = new Audio(url);
