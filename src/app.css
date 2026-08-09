@@ -375,6 +375,8 @@
 .voice-dialog-progress{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
 .voice-dialog-bar{flex:1;height:10px;background:var(--green-light);border-radius:999px;overflow:hidden;}
 .voice-dialog-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--yellow));border-radius:999px;transition:width .15s;}
+.voice-dialog-bar i.indeterminate{animation:voice-download-indeterminate 1.2s ease-in-out infinite;}
+@keyframes voice-download-indeterminate{0%{transform:translateX(-140%)}100%{transform:translateX(300%)}}
 .voice-dialog-pct{font-size:13px;font-weight:800;color:var(--green-deep);min-width:34px;text-align:right;}
 .voice-dialog-actions{display:flex;justify-content:flex-end;gap:10px;}
 .voice-dialog-actions button{border:none;border-radius:999px;padding:9px 18px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}

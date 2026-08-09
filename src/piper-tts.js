@@ -13,6 +13,19 @@
 const VOICE = "/piper/en_US-lessac-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
+export const SYNTHESIS_TIMEOUT_MS = 30_000;
+
+export function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => {
+      const error = new Error(message);
+      error.name = "TimeoutError";
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
+}
 
 export function hasSystemEnglishVoice() {
   const synth = window.speechSynthesis;
@@ -34,11 +47,12 @@ export async function isVoiceCached() {
   }
 }
 
-export async function downloadVoice(onProgress) {
+export async function downloadVoice(onProgress, signal) {
   const cache = await openVoiceCache();
   for (const url of [VOICE + ".onnx", VOICE + ".onnx.json"]) {
+    if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     if (await cache.match(url)) continue;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) throw new Error("语音包下载失败");
     const total = Number(res.headers.get("content-length")) || 0;
     const reader = res.body.getReader();
@@ -47,11 +61,12 @@ export async function downloadVoice(onProgress) {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
       if (value) {
         chunks.push(value);
         received += value.length;
       }
-      if (onProgress && total) onProgress(received, total);
+      if (onProgress) onProgress(received, total);
     }
     await cache.put(
       url,
@@ -131,11 +146,15 @@ export function askDownloadVoice(onProgress) {
     const bar = dlg.querySelector(".voice-dialog-bar i");
     const pct = dlg.querySelector(".voice-dialog-pct");
     const actions = dlg.querySelector(".voice-dialog-actions");
+    const okButton = actions.querySelector('[data-action="ok"]');
+    const cancelButton = actions.querySelector('[data-action="cancel"]');
+    const controller = new AbortController();
     let settled = false;
 
     const finish = (status) => {
       if (settled) return;
       settled = true;
+      if (status === "cancel") controller.abort();
       dlg.close();
       dlg.remove();
       resolve(status);
@@ -148,28 +167,38 @@ export function askDownloadVoice(onProgress) {
       }
       title.textContent = "正在下载离线英语语音";
       desc.hidden = true;
-      actions.hidden = true;
       progress.hidden = false;
+      bar.classList.add("indeterminate");
+      bar.style.width = "35%";
+      pct.textContent = "下载中…";
+      if (onProgress) onProgress(0, 0);
       try {
         await downloadVoice((received, total) => {
-          const percent = Math.min(100, Math.round((received / total) * 100));
-          bar.style.width = percent + "%";
-          pct.textContent = percent + "%";
+          if (total > 0) {
+            const percent = Math.min(100, Math.round((received / total) * 100));
+            bar.classList.remove("indeterminate");
+            bar.style.width = percent + "%";
+            pct.textContent = percent + "%";
+          } else {
+            bar.classList.add("indeterminate");
+            bar.style.width = "35%";
+            pct.textContent = "下载中…";
+          }
           if (onProgress) onProgress(received, total);
-        });
+        }, controller.signal);
         finish("ok");
-      } catch (_) {
+      } catch (error) {
+        if (controller.signal.aborted || error?.name === "AbortError") return;
         if (onProgress) onProgress(0, 0);
         finish("error");
       }
     };
 
-    actions.querySelector('[data-action="ok"]').onclick = () => {
-      actions.querySelector('[data-action="ok"]').disabled = true;
-      actions.querySelector('[data-action="cancel"]').disabled = true;
+    okButton.onclick = () => {
+      okButton.disabled = true;
       run();
     };
-    actions.querySelector('[data-action="cancel"]').onclick = () => finish("cancel");
+    cancelButton.onclick = () => finish("cancel");
     dlg.oncancel = () => finish("cancel");
     dlg.showModal();
   });
