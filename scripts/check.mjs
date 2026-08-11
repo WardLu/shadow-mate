@@ -13,6 +13,11 @@ const requiredFiles = [
   "SECURITY.md",
   "PRIVACY.md",
   "CONTRIBUTING.md",
+  "TRADEMARKS.md",
+  "THIRD_PARTY_NOTICES.md",
+  "CLA.md",
+  "docs/commercialization-boundary.md",
+  "src/commercialization-contract.js",
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
 ];
@@ -67,6 +72,18 @@ for (const marker of [
   "speechSynthesis",
 ]) {
   if (!appJs.includes(marker)) throw new Error(`src/app.js is missing ${marker}`);
+}
+
+const commercializationContract = await readFile("src/commercialization-contract.js", "utf8");
+for (const marker of [
+  "COMMERCIAL_CONTRACT_VERSION",
+  "CAPABILITY_KEYS",
+  "normalizeCapabilitySnapshot",
+  "hasCapability",
+]) {
+  if (!commercializationContract.includes(marker)) {
+    throw new Error(`Commercialization contract is missing ${marker}`);
+  }
 }
 
 const config = await readFile("src/config.js", "utf8");

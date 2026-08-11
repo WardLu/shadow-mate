@@ -16,7 +16,7 @@ The JSON state in `public.learning_profile_states.state` contains check-ins, poi
 
 ## Operational constraints
 
-- No learner email, phone number, birthday, school, address, precise location, photo, advertising identifier, or third-party analytics identifier is collected.
+- No learner email, phone number, birthday, school, address, precise location, photo, or advertising identifier is stored in the learner profile. Page-view analytics is a separate Vercel Web Analytics data flow; see [`PRIVACY.md`](../PRIVACY.md).
 - A guardian must be signed in to create, update, or delete a learner profile; anonymous users have no table privileges.
 - The signed-in household owner can export the complete family workspace as a JSON file from the account dialog. The export includes household metadata, learner profile fields, and each learner's learning state; it does not include auth tokens or email-provider data.
 - The signed-in household owner can permanently delete the complete family workspace. The `learning_delete_household` RPC checks ownership and cascades through memberships, learner profiles, and learning state. The product-data deletion does not delete the Supabase Auth identity; identity closure remains an auth-provider/account-support operation.

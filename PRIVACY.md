@@ -9,7 +9,7 @@
 - 学习者显示名称和年级。建议使用昵称，不填写真实姓名。
 - 打卡、积分、书架和阅读日志等学习状态。
 
-当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告或第三方分析脚本。
+当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。Vercel 文档说明页面访问数据可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
 
 ## 数据存放位置
 

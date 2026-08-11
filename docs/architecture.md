@@ -219,3 +219,9 @@ erDiagram
 - `vite.config.js` 仅在开发服务器中兼容 Vite 为公共 Piper 模块追加的 `?import` 查询，生产环境仍由静态资源直接提供。
 
 若未来管理后台、内容编辑器、支付和服务端页面成为主体，再迁移到 TypeScript + React/Next.js；不为“可能有一天”提前承担框架成本。
+
+## 9. 商业化边界
+
+公共 Core 继续保持完整可用和 MIT License。官方 Cloud 当前继续免费提供；未来 Billing、Entitlement、Quota、AI Prompt/Router、Premium Content 和运营后台进入独立的私有 Services 层。Core 只消费版本化 Capability snapshot，不直接读取 `subscriptions`、`credits` 或支付表，也不把前端 UI 隐藏当成安全授权。
+
+具体契约和未完成的商业化闸门见 [商业化边界](commercialization-boundary.md)。

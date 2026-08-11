@@ -22,6 +22,15 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 - Run the local Supabase pgTAP tests and database lint for schema changes.
 - Never commit credentials, personal data, production exports, `.env`, `.vercel`, local Supabase state, or internal agent/tool configuration.
 
+## Commercialization and intellectual property
+
+- Shadow Mate Core remains MIT; do not add plan-specific forks or hide commercial code inside this public repository.
+- Read [the commercialization boundary](docs/commercialization-boundary.md) before adding billing, entitlement, AI provider, or premium-content code.
+- Read [the trademark policy](TRADEMARKS.md) before adding brand assets, product names, domains, or screenshots.
+- Record the source, version/commit, license, and redistribution terms for every vendored asset in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Do not add prompts, model weights, premium content, API secrets, production exports, or private service implementation to this repository.
+- External contributors must contact the maintainer before submitting code that may be reused in private services; the [CLA](CLA.md) is a draft and is not yet enforced by an automated bot.
+
 ## 提交前文档一致性闸门
 
 提交代码前必须先核对实现与相关文档，文档不一致时不得提交：

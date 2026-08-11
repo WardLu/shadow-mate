@@ -147,10 +147,14 @@ tests/e2e/                 离线、云端和数据生命周期测试
 | --- | --- |
 | [使用指南](docs/user-guide.md) | 家长登录、家庭空间、打卡、日历、同步、语音和安装 |
 | [架构文档](docs/architecture.md) | 数据模型、同步策略、RLS、迁移和发布闸门 |
+| [商业化边界](docs/commercialization-boundary.md) | Public Core、官方 Cloud、私有 Services 和 Capability 契约 |
 | [学习者数据生命周期](docs/learner-data-lifecycle.md) | 学习者、家庭数据和删除边界 |
 | [Auth 配置](docs/auth-setup.md) | Supabase Auth 服务端配置 |
 | [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
 | [安全基线](docs/security-baseline.md) | 安全检查与发布前闸门 |
+| [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
+| [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、Piper、模型和 vendored 资源的来源与许可状态 |
+| [CLA 草案](CLA.md) | 外部贡献、版权许可和未来重新许可准备 |
 | [TODO](TODO.md) | 当前待办与已知问题 |
 | [Roadmap](ROADMAP.md) | 已完成阶段与后续方向 |
 | [Changelog](CHANGELOG.md) | 详细变更记录 |
@@ -158,7 +162,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告、第三方追踪或儿童独立账号体系；公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md) 与 [安全政策](SECURITY.md)。
+影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。当前商业化准备只完成了公共仓库治理和边界契约，不代表已接入 Pro、支付或商业许可清零。公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md)、[安全政策](SECURITY.md) 与 [商业化边界](docs/commercialization-boundary.md)。
 
 ## 致谢
 
@@ -168,6 +172,8 @@ tests/e2e/                 离线、云端和数据生命周期测试
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
 - [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-lessac-medium`
+
+第三方资源的来源、版本指纹和商业化待复核项见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 联系我
 
@@ -190,4 +196,4 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## License
 
-代码采用 MIT License。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容或商标的使用权。
+代码采用 MIT License。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容、模型或商标的使用权。Shadow Mate 品牌边界见 [TRADEMARKS.md](TRADEMARKS.md)。

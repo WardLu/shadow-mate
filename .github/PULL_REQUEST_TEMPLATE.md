@@ -19,3 +19,4 @@
 - [ ] 代码、测试、迁移、配置和相关文档已作为同一项工作提交；若无文档改动，已在 PR 说明原因
 - [ ] 用户可见文案不包含「Supabase」（用「云端」替代）
 - [ ] 无内联 `style=` 属性或内联 `<script>` 块
+- [ ] 如包含外部贡献或第三方代码，已阅读 [CLA.md](../CLA.md) 和 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)，并在 PR 中说明来源与授权状态
