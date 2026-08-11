@@ -153,6 +153,8 @@ tests/e2e/                 离线、云端和数据生命周期测试
 | [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
 | [安全基线](docs/security-baseline.md) | 安全检查与发布前闸门 |
 | [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
+| [儿童隐私与家长同意审核](docs/child-privacy-and-consent.md) | 数据范围、服务端同意闸门和待完成的地域法律审核 |
+| [IP 法律审核记录](docs/ip-legal-review.md) | 商标、版权、CLA、主体归属和发布前权属核验 |
 | [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、Piper、模型和 vendored 资源的来源与许可状态 |
 | [CLA 草案](CLA.md) | 外部贡献、版权许可和未来重新许可准备 |
 | [TODO](TODO.md) | 当前待办与已知问题 |
@@ -162,7 +164,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。当前商业化准备只完成了公共仓库治理和边界契约，不代表已接入 Pro、支付或商业许可清零。公开运营前仍需完成儿童隐私政策、家长同意流程、内容版权审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md)、[安全政策](SECURITY.md) 与 [商业化边界](docs/commercialization-boundary.md)。
+影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。当前商业化准备只完成了公共仓库治理、语音资源技术替换和服务端同意控制，不代表已接入 Pro、支付或商业许可清零。公开运营前仍需完成地域化儿童隐私法律审核、可验证家长同意、内容版权/商标审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md)、[儿童隐私与家长同意审核](docs/child-privacy-and-consent.md)、[IP 法律审核记录](docs/ip-legal-review.md)、[安全政策](SECURITY.md) 与 [商业化边界](docs/commercialization-boundary.md)。
 
 ## 致谢
 
@@ -171,7 +173,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-lessac-medium`
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-ljspeech-medium`（模型卡标注 LJ Speech 数据集为 public domain，详见 [模型记录](docs/piper-ljspeech-model-card.md)）
 
 第三方资源的来源、版本指纹和商业化待复核项见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

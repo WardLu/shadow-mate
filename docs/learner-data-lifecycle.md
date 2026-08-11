@@ -14,10 +14,15 @@ This inventory is the release-gate record for fields stored in the family learni
 
 The JSON state in `public.learning_profile_states.state` contains check-ins, points, shelf flags, reading flags, and reading-log records for the selected learner. It is limited to 1 MiB, protected by household-membership RLS, and retained only until the learner profile is deleted. The local cache uses browser `localStorage` and is cleared by the account dialog's local-data action or by the learner deletion flow.
 
+## Guardian consent record
+
+`public.learning_guardian_consents` stores one append-only consent record per household, authenticated guardian, consent type, and policy version. The current contract is `consent_type=learner_data_processing` and `policy_version=privacy-v1`. The database supplies `consented_at` and `created_at`; the browser cannot update or delete those records. A profile INSERT requires both an owner/guardian membership and a matching consent record. Household deletion cascades the record. This is a server-side self-attestation control, not a claim that every jurisdiction's verifiable parental consent requirement has been satisfied.
+
 ## Operational constraints
 
 - No learner email, phone number, birthday, school, address, precise location, photo, or advertising identifier is stored in the learner profile. Page-view analytics is a separate Vercel Web Analytics data flow; see [`PRIVACY.md`](../PRIVACY.md).
 - A guardian must be signed in to create, update, or delete a learner profile; anonymous users have no table privileges.
+- A guardian consent record is required server-side before creating a learner profile; the UI also provides a refusal/skip path and links to the privacy notice.
 - The signed-in household owner can export the complete family workspace as a JSON file from the account dialog. The export includes household metadata, learner profile fields, and each learner's learning state; it does not include auth tokens or email-provider data.
 - The signed-in household owner can permanently delete the complete family workspace. The `learning_delete_household` RPC checks ownership and cascades through memberships, learner profiles, and learning state. The product-data deletion does not delete the Supabase Auth identity; identity closure remains an auth-provider/account-support operation.
 - Supabase Auth identity deletion is implemented only behind the `delete-account` JWT-protected Edge Function. It refuses to run unless the Supabase project registry contains Shadow Mate only, `SHADOW_MATE_AUTH_PROJECT_ISOLATED=true`, and `SHADOW_MATE_AUTH_PROJECT_REF` matches the running project. This prevents a shared Supabase project from deleting identities used by other products. The browser never receives a service or secret key.

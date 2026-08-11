@@ -146,6 +146,7 @@ erDiagram
 - 创建家庭时 `owner_user_id` 必须等于 `auth.uid()`。
 - 家庭 owner 只能为自己创建初始 owner membership。
 - owner/guardian 可创建和修改 learner profile/state。
+- 创建 learner profile 还必须存在当前 owner/guardian 的 `privacy-v1` 家长同意记录；同意记录只允许服务端默认时间戳写入，客户端无更新/删除权限。
 - `learning_save_state` 是 `SECURITY INVOKER`，不会绕过 RLS。
 - `learning_is_household_owner` 是唯一的 `SECURITY DEFINER` 授权辅助函数：固定空 `search_path`、仅返回当前用户是否为指定家庭 owner、仅授予 `authenticated` 执行权，用于打断 household 与 membership 策略之间的递归。
 - 更新策略同时具有 `USING` 与 `WITH CHECK`。
@@ -160,6 +161,7 @@ erDiagram
 - 学习状态
 
 不保存生日、学校、真实姓名、地址、精确位置、照片或儿童邮箱。新增任何儿童敏感字段前，先完成必要性、保留期限、删除流程和家长同意评审。
+家长同意和儿童隐私的工程记录见 [儿童隐私与家长同意审核](child-privacy-and-consent.md)；这不是特定司法辖区的法律清权。
 
 ## 6. 同步与冲突处理
 

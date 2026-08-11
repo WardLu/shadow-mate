@@ -15,11 +15,17 @@ const requiredFiles = [
   "CONTRIBUTING.md",
   "TRADEMARKS.md",
   "THIRD_PARTY_NOTICES.md",
+  "docs/child-privacy-and-consent.md",
+  "docs/ip-legal-review.md",
+  "docs/piper-ljspeech-model-card.md",
   "CLA.md",
   "docs/commercialization-boundary.md",
   "src/commercialization-contract.js",
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
+  "supabase/migrations/20260811202411_child_privacy_consent.sql",
+  "public/piper/en_US-ljspeech-medium.onnx",
+  "public/piper/en_US-ljspeech-medium.onnx.json",
 ];
 
 for (const file of requiredFiles) {
@@ -108,11 +114,21 @@ for (const marker of [
   '"serviceWorker" in navigator && window.isSecureContext',
   'if (document.readyState === "complete") registerServiceWorker()',
   "gradeOptionsSelected",
+  "GUARDIAN_CONSENT_TYPE",
+  'from("learning_guardian_consents")',
 ]) {
   if (!cloud.includes(marker)) throw new Error(`cloud.js is missing ${marker}`);
 }
 if (/https:\/\/esm\.sh/i.test(cloud)) {
   throw new Error("Runtime CDN imports are not allowed");
+}
+
+const piper = await readFile("src/piper-tts.js", "utf8");
+for (const marker of [
+  'export const VOICE = "/piper/en_US-ljspeech-medium"',
+  'export const VOICE_FILES',
+]) {
+  if (!piper.includes(marker)) throw new Error(`piper-tts.js is missing ${marker}`);
 }
 
 const migrationDir = "supabase/migrations";
@@ -178,6 +194,19 @@ for (const marker of [
 ]) {
   if (!baseMigration.includes(marker)) {
     throw new Error(`Base migration is missing security step: ${marker}`);
+  }
+}
+
+const consentMigration = await readFile(join(migrationDir, "20260811202411_child_privacy_consent.sql"), "utf8");
+for (const marker of [
+  "create table if not exists public.learning_guardian_consents",
+  "enable row level security",
+  "grant insert",
+  "privacy-v1",
+  "learning profiles: guardians can create",
+]) {
+  if (!consentMigration.includes(marker)) {
+    throw new Error(`Child consent migration is missing security step: ${marker}`);
   }
 }
 

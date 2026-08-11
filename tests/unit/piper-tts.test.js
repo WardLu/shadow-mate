@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { askDownloadVoice, downloadVoice, withTimeout } from "../../src/piper-tts.js";
+import { askDownloadVoice, downloadVoice, VOICE, VOICE_FILES, withTimeout } from "../../src/piper-tts.js";
 
 const originalDialogDescriptors = new Map(
   ["showModal", "close"].map((name) => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)])
@@ -34,6 +34,14 @@ afterEach(() => {
 });
 
 describe("offline Piper voice download", () => {
+  test("uses the commercially reviewed replacement voice path", () => {
+    expect(VOICE).toBe("/piper/en_US-ljspeech-medium");
+    expect(VOICE_FILES).toEqual([
+      "/piper/en_US-ljspeech-medium.onnx",
+      "/piper/en_US-ljspeech-medium.onnx.json",
+    ]);
+  });
+
   test("reports received bytes when the response omits Content-Length", async () => {
     const cache = {
       match: vi.fn().mockResolvedValue(undefined),

@@ -1,5 +1,5 @@
 begin;
-select plan(48);
+select plan(58);
 
 -- Final product identity and migration state.
 select is(
@@ -44,7 +44,8 @@ select ok(
      'public.learning_households'::regclass,
      'public.learning_household_members'::regclass,
      'public.learning_profiles'::regclass,
-     'public.learning_profile_states'::regclass
+     'public.learning_profile_states'::regclass,
+     'public.learning_guardian_consents'::regclass
    )),
   'RLS is enabled on every learning table'
 );
@@ -57,6 +58,26 @@ select ok(
 select ok(
   has_table_privilege('authenticated', 'public.learning_profile_states', 'select,insert,update,delete'),
   'authenticated users have state table privileges governed by RLS'
+);
+
+select ok(
+  has_table_privilege('authenticated', 'public.learning_guardian_consents', 'select'),
+  'authenticated users can read consent rows through RLS'
+);
+
+select ok(
+  has_column_privilege('authenticated', 'public.learning_guardian_consents', 'household_id', 'insert'),
+  'authenticated users can insert the consent identity columns'
+);
+
+select ok(
+  not has_column_privilege('authenticated', 'public.learning_guardian_consents', 'consented_at', 'insert'),
+  'authenticated users cannot set the consent timestamp'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.learning_guardian_consents', 'select'),
+  'anonymous users cannot read guardian consents'
 );
 
 select ok(
@@ -179,6 +200,33 @@ select lives_ok(
   'owner can create their own membership'
 );
 
+select throws_ok(
+  $$insert into public.learning_profiles (household_id, display_name, grade_level)
+    values (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      '未同意学习者',
+      3
+    )$$,
+  '42501',
+  null,
+  'owner cannot create a learner profile before guardian consent'
+);
+
+select lives_ok(
+  $$insert into public.learning_guardian_consents (
+      household_id,
+      user_id,
+      consent_type,
+      policy_version
+    ) values (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      '11111111-1111-4111-8111-111111111111',
+      'learner_data_processing',
+      'privacy-v1'
+    )$$,
+  'owner can create a guardian consent record'
+);
+
 select lives_ok(
   $$insert into public.learning_profiles (id, household_id, display_name, grade_level)
     values (
@@ -241,6 +289,12 @@ select is(
   'another user cannot read the first profile state'
 );
 
+select is(
+  (select count(*) from public.learning_guardian_consents),
+  0::bigint,
+  'another user cannot read the first guardian consent'
+);
+
 select throws_ok(
   $$insert into public.learning_profiles (household_id, display_name, grade_level)
     values (
@@ -251,6 +305,23 @@ select throws_ok(
   '42501',
   null,
   'another user cannot insert a profile into the first household'
+);
+
+select throws_ok(
+  $$insert into public.learning_guardian_consents (
+      household_id,
+      user_id,
+      consent_type,
+      policy_version
+    ) values (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      '22222222-2222-4222-8222-222222222222',
+      'learner_data_processing',
+      'privacy-v1'
+    )$$,
+  '42501',
+  null,
+  'another user cannot create a guardian consent for the first household'
 );
 
 select throws_ok(
@@ -285,6 +356,12 @@ select is(
   'whole-family deletion removes learning state'
 );
 
+select is(
+  (select count(*) from public.learning_guardian_consents),
+  0::bigint,
+  'whole-family deletion removes guardian consent records'
+);
+
 set local role anon;
 set local request.jwt.claim.sub = '';
 
@@ -293,6 +370,13 @@ select throws_ok(
   '42501',
   null,
   'anonymous access is denied at the privilege layer'
+);
+
+select throws_ok(
+  $$select * from public.learning_guardian_consents$$,
+  '42501',
+  null,
+  'anonymous guardian consent access is denied at the privilege layer'
 );
 
 select throws_ok(

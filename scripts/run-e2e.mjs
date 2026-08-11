@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 
 const host = "127.0.0.1";
 const preferredPort = Number(process.env.E2E_PORT || 5173);
+const e2eEnv = {
+  ...process.env,
+  FORCE_COLOR: "1",
+  // Vite loads .env.local automatically, while Playwright only sees process
+  // env. Keep the auth storage key derivation identical in both processes when
+  // a real E2E Supabase URL was not explicitly supplied.
+  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || "https://dutepjyocxcvecmsrtfp.supabase.co",
+};
 const viteEntry = resolve("node_modules/vite/bin/vite.js");
 const playwrightEntry = resolve("node_modules/@playwright/test/cli.js");
 
@@ -63,7 +71,7 @@ const vite = spawn(process.execPath, [viteEntry, "--host", host, "--port", Strin
   // server to use when the default port is occupied by another dev server.
   // Resolve the port first and pass it to both processes explicitly.
   stdio: "inherit",
-  env: { ...process.env, FORCE_COLOR: "1" },
+  env: e2eEnv,
 });
 
 let exitCode = 1;
@@ -71,7 +79,7 @@ try {
   await waitForServer(baseURL);
   const playwright = spawnSync(process.execPath, [playwrightEntry, "test", ...process.argv.slice(2)], {
     stdio: "inherit",
-    env: { ...process.env, E2E_BASE_URL: baseURL, E2E_EXTERNAL_SERVER: "1" },
+    env: { ...e2eEnv, E2E_BASE_URL: baseURL, E2E_EXTERNAL_SERVER: "1" },
   });
   exitCode = playwright.status ?? 1;
 } finally {

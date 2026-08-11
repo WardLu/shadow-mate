@@ -73,8 +73,8 @@ Core 不应出现大量 `if (plan === "pro")`，也不应直接查询 `subscript
 
 以下事项完成前，不应正式销售 Pro 或 Premium Content：
 
-- Piper Lessac 模型和 `piper_phonemize` WASM 的商业许可复核；
+- Piper 模型权利链，以及 `piper_phonemize` WASM/eSpeak NG GPL 依赖的商业分发决策（Lessac 已替换为 ljspeech，但法律清权仍未完成）；
 - 第三方依赖和 vendored 文件的来源、版本、许可证及 notices 可追溯；
-- 儿童隐私、家长同意、数据保留、删除和事故响应流程；
+- 儿童隐私、可验证家长同意、数据保留、删除、撤回和事故响应流程；当前工程控制见 [儿童隐私与家长同意审核](child-privacy-and-consent.md)，不等于法律清权；
 - 真实服务端 Entitlement、Quota、支付 Webhook 签名和审计日志；
-- 商标、CLA 和商业主体/IP 归属的法律审核。
+- 商标、CLA 和商业主体/IP 归属的法律审核，见 [IP 法律审核记录](ip-legal-review.md)。
