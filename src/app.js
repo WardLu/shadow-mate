@@ -1113,6 +1113,27 @@ function switchMod(mod){
 document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod));
 hydrateIcons();
 
+const wechatButton = document.querySelector("#wechatButton");
+const wechatDialog = document.querySelector("#wechatDialog");
+const wechatDialogClose = document.querySelector("#wechatDialogClose");
+let wechatDialogTrigger = null;
+const closeWechatDialog = () => {
+  if (wechatDialog?.open) wechatDialog.close();
+};
+wechatButton?.addEventListener("click", () => {
+  wechatDialogTrigger = document.activeElement;
+  wechatDialog?.showModal();
+  wechatDialogClose?.focus();
+});
+wechatDialogClose?.addEventListener("click", closeWechatDialog);
+wechatDialog?.addEventListener("click", (event) => {
+  if (event.target === wechatDialog) closeWechatDialog();
+});
+wechatDialog?.addEventListener("close", () => {
+  if (wechatDialogTrigger instanceof HTMLElement) wechatDialogTrigger.focus();
+  wechatDialogTrigger = null;
+});
+
 // 日期显示
 (function(){
   const d=new Date();
