@@ -31,6 +31,10 @@ jobs:
         if: ${{ hashFiles('package-lock.json') != '' }}
         run: npm ci
 
+      - name: Validate release metadata baseline
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm run release:check
+
       - name: Verify source and build
         if: ${{ hashFiles('package-lock.json') != '' }}
         run: npm run verify
