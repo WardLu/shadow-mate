@@ -1,22 +1,109 @@
 <!doctype html>
 <html lang="zh-CN">
-  <body style="margin:0;background:#f2faf4;color:#203326;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-      <div style="padding:28px;border-radius:20px;background:#fff;box-shadow:0 12px 36px rgba(31,70,42,.12);">
-        <h1 style="margin:0 0 16px;color:#1f7a39;font-size:24px;">
-          {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "http://localhost:3000") (eq .RedirectTo "http://localhost:3000/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") }}影裁 Shadow Size{{ else if eq .Data.product_id "shadow-mate" }}影伴 Shadow Mate{{ else if .Data.product_name }}{{ .Data.product_name }}{{ else }}Shadow Nexus{{ end }}
-        </h1>
-        <h2 style="margin:0 0 12px;font-size:20px;">欢迎注册</h2>
-        <p style="margin:0 0 16px;line-height:1.7;">请使用下面的验证码完成邮箱注册：</p>
-        <div style="margin:20px 0;padding:16px;border-radius:14px;background:#e8f7eb;color:#1f7a39;text-align:center;font-size:32px;font-weight:800;letter-spacing:8px;">
-          {{ .Token }}
-        </div>
-        <p style="margin:0 0 20px;color:#647268;font-size:13px;line-height:1.7;">验证码只能使用一次。如果邮件客户端支持按钮，也可以点击下方按钮完成验证。</p>
-        <p style="margin:0 0 20px;text-align:center;">
-          <a href="{{ if .RedirectTo }}{{ .RedirectTo }}{{ else }}{{ .SiteURL }}{{ end }}?token_hash={{ .TokenHash }}&amp;type=email" style="display:inline-block;padding:12px 28px;border-radius:10px;background:#2fa84f;color:#fff;text-decoration:none;font-weight:700;">完成注册</a>
-        </p>
-        <p style="margin:0;color:#87938a;font-size:12px;line-height:1.6;">如果您没有请求注册，请忽略此邮件。</p>
-      </div>
-    </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        supported-color-schemes: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        .email-page { background-color: #101820 !important; }
+        .email-body { background-color: #101820 !important; }
+        .email-card { background-color: #141c22 !important; border-color: #35454d !important; }
+        .email-border { border-color: #35454d !important; }
+        .email-brand-name, .email-heading { color: #eef4f1 !important; }
+        .email-brand-meta, .email-copy, .email-code-label, .email-expiry, .email-note { color: #a3b1b7 !important; }
+        .email-code-box { background-color: #203b46 !important; border-color: #3a6673 !important; }
+        .email-code, .email-link { color: #67cbe7 !important; }
+        .email-footer { background-color: #1d2931 !important; }
+      }
+      [data-ogsc] .email-page { background-color: #101820 !important; }
+      [data-ogsc] .email-body { background-color: #101820 !important; }
+      [data-ogsc] .email-card { background-color: #141c22 !important; border-color: #35454d !important; }
+      [data-ogsc] .email-border { border-color: #35454d !important; }
+      [data-ogsc] .email-brand-name, [data-ogsc] .email-heading { color: #eef4f1 !important; }
+      [data-ogsc] .email-brand-meta, [data-ogsc] .email-copy, [data-ogsc] .email-code-label, [data-ogsc] .email-expiry, [data-ogsc] .email-note { color: #a3b1b7 !important; }
+      [data-ogsc] .email-code-box { background-color: #203b46 !important; border-color: #3a6673 !important; }
+      [data-ogsc] .email-code, [data-ogsc] .email-link { color: #67cbe7 !important; }
+      [data-ogsc] .email-footer { background-color: #1d2931 !important; }
+      @media (max-width: 480px) {
+        .email-card { width: 100% !important; }
+        .email-code-box { table-layout: fixed !important; }
+        .email-code-box td { display: block !important; width: 100% !important; box-sizing: border-box !important; text-align: left !important; }
+        .email-code-box td:last-child { padding: 0 20px 16px !important; white-space: normal !important; }
+        .email-code { font-size: 32px !important; letter-spacing: .12em !important; }
+        .email-footer table { table-layout: fixed !important; }
+        .email-footer table td { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-right: 0 !important; text-align: left !important; white-space: normal !important; }
+        .email-footer table td:last-child { padding-top: 10px !important; }
+      }
+    </style>
+  </head>
+  <body class="email-page" style="margin:0;padding:0;background-color:#f3f1eb;color:#1d2730;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif;">
+    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" class="email-body" style="width:100%;background-color:#f3f1eb;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" class="email-card" style="width:100%;max-width:600px;min-width:0;background-color:#fbfaf6;border:1px solid #d9d8d0;border-radius:10px;overflow:hidden;">
+            <tr>
+              <td class="email-border" style="padding:24px 28px 20px;border-bottom:1px solid #d9d8d0;">
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td width="42" valign="middle" style="width:42px;padding-right:11px;">
+                      {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") (eq .RedirectTo "http://localhost:3000") (eq .RedirectTo "http://localhost:3000/") (eq .Data.product_id "shadow-mate") }}
+                      <img src="https://shadow.wang/brand_assets/shadow_mate.svg" width="42" height="42" alt="影伴 Shadow Mate" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />
+                      {{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}
+                      <img src="https://shadow.wang/brand_assets/shadow_card_logo.png" width="42" height="42" alt="Shadow Card" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />
+                      {{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}
+                      <img src="https://shadow.wang/brand_assets/shadow_size.png" width="42" height="42" alt="Shadow Size" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />
+                      {{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}
+                      <img src="https://shadow.wang/brand_assets/shadow_flomo_sender.png" width="42" height="42" alt="Quick flomo" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />
+                      {{ else }}
+                      <img src="https://shadow.wang/shadow_portal_logo.png" width="42" height="42" alt="Shadow Nexus" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />
+                      {{ end }}
+                    </td>
+                    <td valign="middle">
+                      <div class="email-brand-name" style="color:#1d2730;font-size:15px;line-height:20px;font-weight:700;">
+                        {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .Data.product_id "shadow-mate") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}Quick flomo{{ else }}Shadow Nexus{{ end }}
+                      </div>
+                      <div class="email-brand-meta" style="margin-top:2px;color:#66737d;font-size:11px;line-height:16px;">by Shadow Nexus</div>
+                    </td>
+                    <td align="right" valign="middle" class="email-brand-meta" style="color:#66737d;font-size:11px;line-height:16px;white-space:nowrap;">注册验证</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px 32px 24px;">
+                <h1 class="email-heading" style="max-width:450px;margin:0 0 15px;color:#1d2730;font-family:Georgia,'Songti SC','STSong',serif;font-size:31px;line-height:1.1;font-weight:500;letter-spacing:-0.035em;">确认是你本人。</h1>
+                <p class="email-copy" style="margin:0 0 26px;color:#66737d;font-size:15px;line-height:1.75;">您好，您正在注册 {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .Data.product_id "shadow-mate") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}Quick flomo{{ else }}Shadow Nexus{{ end }}。请输入下面的验证码完成注册。</p>
+                <p class="email-code-label" style="margin:0 0 8px;color:#66737d;font-size:11px;line-height:16px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;">Your verification code</p>
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" class="email-code-box" style="width:100%;background-color:#e1f1f8;border:1px solid #177fb9;border-radius:7px;">
+                  <tr>
+                    <td valign="middle" style="padding:18px 20px 17px;"><span class="email-code" style="color:#177fb9;font-family:'SF Mono','Roboto Mono','Courier New',monospace;font-size:36px;line-height:42px;font-weight:700;letter-spacing:.18em;">{{ .Token }}</span></td>
+                    <td align="right" valign="middle" class="email-expiry" style="padding:18px 20px 17px 8px;color:#66737d;font-size:11px;line-height:16px;white-space:nowrap;">短时间内有效<br />仅可使用一次</td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="width:100%;margin:27px 0 20px;"><tr><td height="1" class="email-border" style="height:1px;border-top:1px solid #d9d8d0;font-size:0;line-height:0;">&nbsp;</td></tr></table>
+                <p class="email-note" style="margin:0 0 7px;color:#66737d;font-size:13px;line-height:1.7;">验证码只能使用一次。如果邮件客户端支持按钮，也可以点击下方按钮完成注册。</p>
+                <p style="margin:0;text-align:center;"><a class="email-link" href="{{ if .RedirectTo }}{{ .RedirectTo }}{{ else }}{{ .SiteURL }}{{ end }}?token_hash={{ .TokenHash }}&amp;type=email" style="display:inline-block;padding:12px 28px;border-radius:7px;background:#177fb9;color:#fff;text-decoration:none;font-weight:700;font-size:13px;">完成注册 ↗</a></p>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-footer" style="padding:18px 32px 22px;background-color:#f1efe8;">
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0"><tr>
+                  <td valign="top" style="padding-right:16px;"><div class="email-brand-name" style="margin-bottom:2px;color:#1d2730;font-size:12px;line-height:18px;font-weight:700;">Shadow Nexus</div><div class="email-brand-meta" style="color:#66737d;font-size:11px;line-height:17px;">一组让日常更有秩序的产品。</div></td>
+                  <td align="right" valign="top" style="white-space:nowrap;">
+                    {{ if or (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") }}<a class="email-link" href="http://localhost:3000/zh/products/shadow-mate" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a><span class="email-brand-meta" style="padding:0 7px;color:#a3adb2;font-size:11px;">·</span><a class="email-link" href="http://localhost:3000/zh" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">Shadow Nexus ↗</a>{{ else if or (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}<a class="email-link" href="http://localhost:3000/zh/products/shadow-mate" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a><span class="email-brand-meta" style="padding:0 7px;color:#a3adb2;font-size:11px;">·</span><a class="email-link" href="http://localhost:3000/zh" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">Shadow Nexus ↗</a>{{ else if or (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") }}<a class="email-link" href="https://shadow-portal.vercel.app/zh/products/shadow-mate" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a><span class="email-brand-meta" style="padding:0 7px;color:#a3adb2;font-size:11px;">·</span><a class="email-link" href="https://shadow-portal.vercel.app/zh" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">Shadow Nexus ↗</a>{{ else }}{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .Data.product_id "shadow-mate") }}<a class="email-link" href="https://shadow.wang/zh/products/shadow-mate" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a>{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}<a class="email-link" href="https://shadow.wang/zh/products/shadow-card" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a>{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}<a class="email-link" href="https://shadow.wang/zh/products/shadow-size" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a>{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}<a class="email-link" href="https://shadow.wang/zh/products/shadow-flomo" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a>{{ else }}<a class="email-link" href="https://shadow.wang/zh" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">产品详情 ↗</a>{{ end }}<span class="email-brand-meta" style="padding:0 7px;color:#a3adb2;font-size:11px;">·</span><a class="email-link" href="https://shadow.wang/zh" style="color:#177fb9;font-size:11px;line-height:17px;font-weight:700;text-decoration:none;">Shadow Nexus ↗</a>{{ end }}
+                  </td>
+                </tr></table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>
