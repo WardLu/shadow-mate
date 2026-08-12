@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- 将国产 Android（无 GMS）离线英语兜底从 `en_US-ljspeech-medium` 升级为 `en_US-ljspeech-high`，提升本地朗读自然度；声音模型约 115MB，仍支持一次下载后离线使用。
+- 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；声音模型约 115MB，仍支持一次下载后离线使用。
 
 ## v1.3.6 - 2026-08-12
 

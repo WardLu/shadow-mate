@@ -34,12 +34,12 @@ afterEach(() => {
 });
 
 describe("offline Piper voice download", () => {
-  test("uses the high-quality public-domain voice path", () => {
-    expect(VOICE).toBe("/piper/en_US-ljspeech-high");
+  test("uses the high-quality lessac voice path", () => {
+    expect(VOICE).toBe("/piper/en_US-lessac-high");
     expect(VOICE_FILES).toEqual([
-      "/piper/en_US-ljspeech-high.onnx.part-00",
-      "/piper/en_US-ljspeech-high.onnx.part-01",
-      "/piper/en_US-ljspeech-high.onnx.json",
+      "/piper/en_US-lessac-high.onnx.part-00",
+      "/piper/en_US-lessac-high.onnx.part-01",
+      "/piper/en_US-lessac-high.onnx.json",
     ]);
   });
 
