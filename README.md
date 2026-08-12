@@ -164,7 +164,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。当前商业化准备只完成了公共仓库治理、语音资源技术替换和服务端同意控制，不代表已接入 Pro、支付或商业许可清零。公开运营前仍需完成地域化儿童隐私法律审核、可验证家长同意、内容版权/商标审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md)、[儿童隐私与家长同意审核](docs/child-privacy-and-consent.md)、[IP 法律审核记录](docs/ip-legal-review.md)、[安全政策](SECURITY.md) 与 [商业化边界](docs/commercialization-boundary.md)。
+影伴当前仓库版本为 v1.3.4，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它目前是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。当前由独立开发者 Ward Lu 以个人名义进行非商业 Dogfooding 和小规模邀请制内测，未设立商业主体、未接入 Pro 或支付；这不代表商标/IP、儿童隐私或第三方许可证已经完成商业清权。公开运营前仍需完成地域化儿童隐私法律审核、可验证家长同意、内容版权/商标审核、备份和事故响应等运营工作，详见 [隐私说明](PRIVACY.md)、[儿童隐私与家长同意审核](docs/child-privacy-and-consent.md)、[IP 法律审核记录](docs/ip-legal-review.md)、[安全政策](SECURITY.md) 与 [商业化边界](docs/commercialization-boundary.md)。
 
 ## 致谢
 
