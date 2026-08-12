@@ -17,11 +17,11 @@
 
 SHA-256：`478857934c9284a6138c2b426afae59fbb4b07291a7b9d899a5531c98d26f7b1`
 
-### 部署清单（进行中）
+### 部署清单（已完成）
 
-- 创建并推送 Git tag `v1.3.7`。
-- 创建 GitHub Release 并上传发布包。
-- 验证 `https://sm.shadow.wang/` 的版本、TTS 静态资源、响应头和生产发音链路。
+- Git tag `v1.3.7` 已创建并推送，指向合并提交 `c98e246`。
+- GitHub Release 已发布并上传 `shadow-mate-v1.3.7.zip`，SHA-256 已核对。
+- `https://sm.shadow.wang/` 已验证为新版本，TTS 静态资源、CSP、HSTS、X-Frame-Options 和 HTTPS 响应均正常。
 
 ## v1.3.6 - 2026-08-12
 
