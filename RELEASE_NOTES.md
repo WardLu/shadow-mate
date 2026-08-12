@@ -1,5 +1,26 @@
 # Release Notes
 
+## v1.3.6 - 2026-08-12
+
+影伴隐私政策页面修复版本。
+
+- 修复生产 `/privacy` 显示 HTML 源代码而不是渲染页面的问题。
+- 将隐私页改为 Vercel 静态构建产物，避开 Supabase Storage 对 HTML 的纯文本返回策略。
+- 将隐私页样式移到独立 CSS 文件，并增加构建产物、路由和 `Content-Type` 验收。
+
+### 验证结果
+
+- `npm run verify` 通过。
+- 隐私页浏览器回归：1/1 通过。
+- Vercel Preview `/privacy`：HTTP 200，`Content-Type: text/html; charset=utf-8`。
+- PR #33 的 CI、CodeQL 和 Vercel 检查通过。
+
+### 部署清单
+
+1. 合并 PR #33 到 `main`，由 Vercel 部署 v1.3.6。
+2. 验证 `https://sm.shadow.wang/privacy` 和 `/privacy/` 返回 `text/html`，页面显示中文标题、中英文内容和品牌首屏。
+3. 创建并发布 Git tag `v1.3.6`，核对 Release 附件和 SHA-256。
+
 ## v1.3.5 - 2026-08-12
 
 影伴商业化准备与隐私/安全边界修订版本，面向 Dogfooding 和小规模内测。

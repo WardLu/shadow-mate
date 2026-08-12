@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.6] - 2026-08-12
+
+### Fixed
+- 修复生产隐私政策被 Supabase Storage 按纯文本返回、浏览器显示 HTML 源代码的问题。
+- 将 `/privacy` 和 `/privacy/` 改为 Vercel 静态 HTML 路由，并补充构建产物与响应头回归检查。
+- 将隐私页样式移到独立 CSS 文件，兼容生产 CSP。
+
+### Tests
+- `npm run verify` 通过；隐私页浏览器回归 1/1 通过；Vercel Preview 返回 `text/html`。
+
 ## [1.3.5] - 2026-08-12
 
 ### Added
