@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 const requiredFiles = [
   "index.html",
+  "privacy-policy.html",
+  "public/privacy-policy.css",
   "public/manifest.json",
   "public/sw.js",
   "src/config.js",
@@ -180,6 +182,12 @@ for (const marker of [
 }
 
 const vercel = JSON.parse(await readFile("vercel.json", "utf8"));
+for (const source of ["/privacy", "/privacy/"]) {
+  const route = vercel.rewrites?.find((item) => item.source === source);
+  if (route?.destination !== "/privacy.html") {
+    throw new Error(`Vercel privacy route ${source} must serve the built privacy.html`);
+  }
+}
 const headerNames = new Set(
   vercel.headers?.flatMap((rule) => rule.headers?.map((header) => header.key.toLowerCase()) || [])
 );

@@ -2,6 +2,8 @@ import { access, readFile, readdir } from "node:fs/promises";
 
 const requiredBuildFiles = [
   "dist/index.html",
+  "dist/privacy.html",
+  "dist/privacy-policy.css",
   "dist/manifest.json",
   "dist/sw.js",
   "dist/icons/icon-192.png",
@@ -25,6 +27,15 @@ if (!jsAssets.length || !cssAssets.length) {
 const html = await readFile("dist/index.html", "utf8");
 if (!html.includes('href="manifest.json"') || !html.includes("/assets/")) {
   throw new Error("Built HTML is missing manifest or bundled asset references");
+}
+
+const privacyHtml = await readFile("dist/privacy.html", "utf8");
+if (
+  !privacyHtml.includes('<meta charset="utf-8">') ||
+  !privacyHtml.includes("<title>影伴隐私说明</title>") ||
+  !privacyHtml.includes('<link rel="stylesheet" href="/privacy-policy.css">')
+) {
+  throw new Error("Built privacy HTML is missing its charset, title, or stylesheet");
 }
 
 for (const asset of jsAssets) {
