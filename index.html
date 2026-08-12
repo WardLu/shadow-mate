@@ -47,7 +47,34 @@
 
     <main class="main" id="main" tabindex="-1"><!-- 动态渲染 --></main>
   </div>
+
+  <footer class="site-footer" aria-label="页脚">
+    <nav class="site-footer-links" aria-label="社交媒体与法律信息">
+      <a class="site-footer-link" href="https://www.shadow.wang/" target="_blank" rel="noopener noreferrer">Shadow Nexus</a>
+      <span aria-hidden="true">·</span>
+      <button class="site-footer-link" id="wechatButton" type="button" aria-haspopup="dialog" aria-label="打开微信公众号二维码">微信公众号</button>
+      <span aria-hidden="true">·</span>
+      <a class="site-footer-link" href="https://xhslink.cn/m/4W1NWyRrxv5" target="_blank" rel="noopener noreferrer">小红书</a>
+      <span aria-hidden="true">·</span>
+      <a class="site-footer-link" href="https://v.douyin.com/1y06PMohfoE/" target="_blank" rel="noopener noreferrer">抖音</a>
+      <span aria-hidden="true">·</span>
+      <a class="site-footer-link" href="https://x.com/Gollumgulu" target="_blank" rel="noopener noreferrer" aria-label="打开 X">X</a>
+      <span aria-hidden="true">·</span>
+      <a class="site-footer-link" href="/privacy" target="_blank" rel="noopener noreferrer">隐私政策</a>
+    </nav>
+  </footer>
 </div>
+
+<dialog class="social-qr-dialog" id="wechatDialog" aria-labelledby="wechatDialogTitle" aria-describedby="wechatDialogDescription">
+  <div class="social-qr-card">
+    <div class="social-qr-heading">
+      <h2 id="wechatDialogTitle">微信公众号</h2>
+      <button class="social-qr-close" id="wechatDialogClose" type="button" aria-label="关闭二维码">×</button>
+    </div>
+    <img src="/brand_assets/wechat-public-account.jpg" alt="微信公众号二维码">
+    <p id="wechatDialogDescription">扫码关注公众号</p>
+  </div>
+</dialog>
 
 <dialog class="cloud-dialog" id="cloudDialog" aria-label="账户与云端同步">
   <div class="cloud-panel" id="cloudPanel"></div>

@@ -12,6 +12,34 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".stat-grid .stat")).toHaveCount(4);
   });
 
+  test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".site-footer")).toBeVisible();
+    await expect(page.locator('a[href="https://www.shadow.wang/"]')).toHaveAttribute("target", "_blank");
+    await expect(page.locator(".site-footer-links > .site-footer-link").first()).toContainText("Shadow Nexus");
+    await expect(page.locator('a[href="/privacy"]')).toHaveAttribute("target", "_blank");
+    await expect(page.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
+    await expect(page.locator('a[href="https://v.douyin.com/1y06PMohfoE/"]')).toBeVisible();
+    await expect(page.locator('a[href="https://x.com/Gollumgulu"]')).toHaveAccessibleName("打开 X");
+
+    await page.locator("#wechatButton").click();
+    await expect(page.locator("#wechatDialog")).toBeVisible();
+    await expect(page.locator("#wechatDialog img")).toHaveAttribute("src", "/brand_assets/wechat-public-account.jpg");
+    await expect(page.locator("#wechatDialog img")).toHaveAttribute("alt", "微信公众号二维码");
+    await page.locator("#wechatDialogClose").click();
+    await expect(page.locator("#wechatDialog")).toBeHidden();
+    await expect(page.locator("#wechatButton")).toBeFocused();
+  });
+
+  test("local privacy route serves the standalone policy page", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page).toHaveTitle("影伴隐私说明");
+    await expect(page.locator("#zh .language-title")).toContainText("隐私说明");
+    await expect(page.locator("#en")).toBeVisible();
+    await expect(page.locator(".brand")).toHaveAttribute("href", "/");
+    await expect(page.locator(".back-link")).toHaveAttribute("href", "/");
+  });
+
   test("night mode keeps page surfaces and text readable", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");

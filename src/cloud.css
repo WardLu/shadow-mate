@@ -163,6 +163,28 @@
   font-weight: 800;
 }
 
+.cloud-consent {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.cloud-consent input[type="checkbox"] {
+  width: auto;
+  margin: 3px 0 0;
+}
+
+.cloud-consent span {
+  font-size: 12px;
+}
+
+.cloud-consent a {
+  color: var(--green-deep);
+  text-decoration: underline;
+}
+
 .cloud-actions {
   display: flex;
   flex-wrap: wrap;

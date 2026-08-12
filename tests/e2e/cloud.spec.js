@@ -56,6 +56,7 @@ async function mockCloudApi(page, {
   const deletedHouseholds = [];
   const createdProfiles = [];
   const createdHouseholds = [];
+  const createdConsents = [];
   let profileExists = true;
 
   await page.route("**/auth/v1/logout**", async (route) => {
@@ -113,6 +114,20 @@ async function mockCloudApi(page, {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID, role: "owner" }]),
+      });
+      return;
+    }
+
+    if (path.endsWith("/learning_guardian_consents")) {
+      if (request.method() === "POST") {
+        createdConsents.push(JSON.parse(request.postData() || "{}"));
+        await route.fulfill({ status: 201, body: "" });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID }]),
       });
       return;
     }
@@ -186,6 +201,7 @@ async function mockCloudApi(page, {
     deletedHouseholds,
     createdProfiles,
     createdHouseholds,
+    createdConsents,
     getState: () => state,
   };
 }
@@ -200,12 +216,14 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#householdSetupForm")).toBeVisible();
     await page.locator('#householdSetupForm input[name="household"]').fill("重复创建测试家庭");
     await page.locator('#householdSetupForm input[name="learner"]').fill("测试学习者");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
     await page.evaluate(() => {
       const button = document.querySelector('#householdSetupForm button[type="submit"]');
       for (let index = 0; index < 5; index += 1) button.click();
     });
 
     await expect.poll(() => api.createdHouseholds.length).toBe(1);
+    await expect.poll(() => api.createdConsents.length).toBe(1);
   });
 
   test("loads a learner profile and completes a manual cloud sync", async ({ page }) => {

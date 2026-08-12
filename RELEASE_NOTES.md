@@ -1,5 +1,34 @@
 # Release Notes
 
+## v1.3.5 - 2026-08-12
+
+影伴商业化准备与隐私/安全边界修订版本，面向 Dogfooding 和小规模内测。
+
+- 增加家长/监护人同意审计、学习者隐私访问边界和双语隐私说明页面。
+- 隐私页发布源文件、Supabase Storage 发布工具和临时发布凭据清理流程已纳入仓库。
+- 隐私页增加影伴品牌首屏、成长轨道视觉、数据最小化原则卡片和移动端布局；本地 `/privacy` 与 `/privacy/` 路由已和生产入口保持一致。
+- 隐私页品牌标识和返回应用入口使用当前站点相对路径，确保本地、Preview 和生产环境不会跨环境跳转。
+- 应用页脚首位增加 Shadow Nexus 产品主页链接，社交媒体和隐私政策入口保持不变。
+- 增加公开仓库 Git/Release 防线，检查公开范围、密钥、最终产物、第三方资源哈希与部署响应头。
+- 将 Piper 英语声音模型切换为 `en_US-ljspeech-medium`，并同步第三方来源与许可证记录。
+- 新增迁移 `20260812081305_learning_has_password_anon_safe_error.sql`：避免本地 PostgreSQL 在匿名调用密码状态 RPC 时因权限拒绝触发后端崩溃。
+- `learning_has_password()` 改为 `SECURITY DEFINER` 并保留内部 `auth.uid()` 检查；匿名调用仍返回 `42501`，不暴露密码状态。
+
+### 验证结果
+
+- `npm run build` 通过。
+- `npm run test:unit`：72/72 通过。
+- 离线 Chromium E2E：25/25 通过，包含本地隐私页路由、品牌页渲染和主应用回归。
+- `npm run test:db`：58/58 通过。
+- `npm run public:check`、`npm run security:check`、`npm run release:check` 通过。
+
+### 部署清单
+
+1. 合并 PR #31 到 `main`，由 Vercel 部署包含本地 `/privacy` 路由和品牌化页面的应用版本。
+2. 按 [`docs/privacy-policy-publishing.md`](docs/privacy-policy-publishing.md) 发布最新 `privacy-policy.html` 到 Supabase Storage，核对 SHA-256。
+3. 验证 `https://sm.shadow.wang/privacy` 显示品牌首屏、中英文内容、语言锚点和移动端布局；确认线上页面哈希与源文件一致。
+4. 验收完成后删除一次性发布 Edge Function，并清除 `PRIVACY_POLICY_PUBLISH_TOKEN`；未完成前不得把线上页面标记为已更新。
+
 ## v1.3.4 - 2026-08-10
 
 离线英语发音、CSP 和开发环境兼容性修复版本。

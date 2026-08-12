@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="index,follow">
+    <title>影伴隐私说明</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --green: #2aa650;
+        --green-deep: #176b30;
+        --green-soft: #e9f7ec;
+        --green-pale: #f3f9f4;
+        --yellow: #ffc83d;
+        --ink: #203126;
+        --ink-soft: #5e7063;
+        --line: #dcecdf;
+        --surface: #ffffff;
+        --canvas: #f3f9f4;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--canvas);
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        min-width: 320px;
+        margin: 0;
+        line-height: 1.7;
+        background:
+          radial-gradient(circle at 9% 1%, rgba(99, 193, 116, .22), transparent 25rem),
+          radial-gradient(circle at 94% 24%, rgba(255, 200, 61, .16), transparent 20rem),
+          var(--canvas);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      a { color: var(--green-deep); text-underline-offset: 3px; }
+      a:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; border-radius: 5px; }
+      main { max-width: 840px; margin: 0 auto; padding: 28px 22px 72px; }
+      .site-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+      .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+      .brand-mark { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 13px; box-shadow: 0 8px 18px rgba(23, 107, 48, .14); }
+      .brand-name { display: grid; gap: 1px; line-height: 1.1; }
+      .brand-name strong { font-size: 16px; letter-spacing: .08em; }
+      .brand-name small { color: var(--ink-soft); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+      .back-link { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, .62); font-size: 12px; text-decoration: none; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1fr) 210px; align-items: center; gap: 34px; padding: 70px 10px 54px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 15px; color: var(--green-deep); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+      .eyebrow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 5px rgba(255, 200, 61, .2); }
+      .hero h1 { max-width: 12ch; margin: 0; color: var(--green-deep); font-size: clamp(34px, 6vw, 54px); letter-spacing: -.045em; line-height: 1.08; text-wrap: balance; }
+      .hero h1 em { color: var(--ink); font-style: normal; }
+      .hero-copy > p:last-child { max-width: 44ch; margin: 20px 0 0; color: var(--ink-soft); font-size: 15px; text-wrap: pretty; }
+      .orbit-art { position: relative; width: 190px; height: 190px; margin: auto; border-radius: 50%; background: linear-gradient(145deg, #dff3e3, #fff2c8); box-shadow: 0 20px 45px rgba(23, 107, 48, .13); }
+      .orbit-art::before, .orbit-art::after { position: absolute; content: ""; border: 1px dashed rgba(23, 107, 48, .42); border-radius: 50%; }
+      .orbit-art::before { inset: 22px; transform: rotate(25deg) scaleY(.5); }
+      .orbit-art::after { inset: 42px; transform: rotate(-28deg) scaleY(.5); }
+      .orbit-core { position: absolute; inset: 50%; z-index: 1; width: 76px; height: 76px; padding-top: 17px; border: 5px solid var(--green-deep); border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 800; line-height: 1.25; text-align: center; transform: translate(-50%, -50%); box-shadow: 0 10px 20px rgba(23, 107, 48, .22); }
+      .orbit-node { position: absolute; z-index: 2; width: 26px; height: 26px; border: 5px solid var(--green-deep); border-radius: 50%; background: var(--yellow); box-shadow: 0 5px 12px rgba(23, 107, 48, .18); }
+      .orbit-node.one { top: 24px; left: 45px; }
+      .orbit-node.two { right: 24px; bottom: 38px; background: #fff; }
+      .trust-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 20px; }
+      .trust-item { min-height: 118px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255, 255, 255, .66); box-shadow: 0 8px 22px rgba(23, 107, 48, .06); }
+      .trust-number { display: block; margin-bottom: 8px; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+      .trust-item strong { display: block; margin-bottom: 4px; font-size: 14px; }
+      .trust-item span:last-child { display: block; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+      article { padding: 34px 38px 42px; border: 1px solid var(--line); border-radius: 26px; background: var(--surface); box-shadow: 0 18px 50px rgba(23, 107, 48, .1); }
+      .language-nav { display: flex; align-items: center; gap: 8px; margin: 0 0 30px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--green-pale); font-size: 13px; }
+      .language-nav span { padding: 5px 10px; color: var(--ink-soft); font-size: 12px; }
+      .language-nav a { padding: 5px 12px; border-radius: 999px; color: var(--green-deep); font-weight: 700; text-decoration: none; }
+      .language-nav a:hover { background: var(--surface); box-shadow: 0 3px 10px rgba(23, 107, 48, .1); }
+      .language-section h2 { margin: 0 0 8px; color: var(--green-deep); font-size: 29px; letter-spacing: -.025em; line-height: 1.2; text-wrap: balance; }
+      .language-section h3 { margin: 34px 0 10px; color: var(--ink); font-size: 20px; line-height: 1.35; }
+      p { max-width: 68ch; margin: 11px 0; }
+      ul { max-width: 68ch; margin: 9px 0 14px; padding-left: 24px; }
+      li { margin: 5px 0; }
+      .meta { margin: 0 0 28px; color: var(--ink-soft); font-size: 13px; }
+      .language-section + .language-section { margin-top: 58px; padding-top: 42px; border-top: 1px solid var(--line); }
+      code { padding: 2px 5px; border-radius: 5px; background: var(--green-soft); color: var(--green-deep); font-size: .92em; }
+      .site-footer { margin-top: 18px; color: var(--ink-soft); font-size: 11px; text-align: center; }
+      @media (prefers-reduced-motion: no-preference) {
+        .back-link, .language-nav a { transition: background-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+        .back-link:active, .language-nav a:active { transform: scale(.96); }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --ink: #edf7ef; --ink-soft: #acc2b1; --line: #294c33; --surface: #14261a; --canvas: #0d1d13; --green-pale: #173521; }
+        body { background: radial-gradient(circle at 9% 1%, rgba(42, 166, 80, .22), transparent 25rem), var(--canvas); }
+        .back-link, .trust-item { background: rgba(20, 38, 26, .72); }
+        .orbit-art { background: linear-gradient(145deg, #173a22, #4b3b1b); }
+        .orbit-node.two { background: var(--surface); }
+      }
+      @media (max-width: 620px) {
+        main { padding: 20px 14px 48px; }
+        .hero { grid-template-columns: 1fr; gap: 28px; padding: 52px 4px 38px; }
+        .hero h1 { max-width: 11ch; }
+        .orbit-art { width: 150px; height: 150px; }
+        .trust-strip { grid-template-columns: 1fr; }
+        .trust-item { min-height: auto; padding: 14px 16px; }
+        article { padding: 24px 20px 30px; border-radius: 22px; }
+        .language-section h2 { font-size: 26px; }
+        .language-section h3 { font-size: 19px; }
+      }
+      @media (max-width: 420px) {
+        .brand-name small { display: none; }
+        .back-link { padding-inline: 10px; }
+        .language-nav { align-items: stretch; flex-wrap: wrap; border-radius: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="返回影伴首页">
+          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" rx="31" fill="#2AA650"/>
+            <path d="M19 64C22 39 39 23 60 23C81 23 98 39 101 64" fill="none" stroke="#DDF3E2" stroke-width="2" stroke-dasharray="4 4" opacity=".85"/>
+            <path d="M25 80C25 63 36 52 50 52C64 52 75 63 75 80V88H25V80Z" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+            <circle cx="50" cy="41" r="13" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+            <path d="M51 84C51 63 64 49 80 49C96 49 103 63 103 84V88H51V84Z" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+            <circle cx="80" cy="37" r="16" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+            <circle cx="65" cy="57" r="5" fill="#FFC83D" stroke="#176B30" stroke-width="3"/>
+            <path d="M20 96H48M72 96H100" stroke="#176B30" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+          </svg>
+          <span class="brand-name"><strong>影伴</strong><small>Shadow Mate</small></span>
+        </a>
+        <a class="back-link" href="/">返回应用 <span aria-hidden="true">↗</span></a>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> FAMILY LEARNING COMPANION</p>
+          <h1 id="page-title">把成长留在<br><em>值得信任的地方</em></h1>
+          <p>影伴面向家庭和未成年学习者，记录每天的小小进步，也认真说明每一份数据如何被使用。</p>
+        </div>
+        <div class="orbit-art" aria-hidden="true">
+          <span class="orbit-node one"></span><span class="orbit-node two"></span>
+          <div class="orbit-core">家长<br>与孩子</div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="影伴隐私原则">
+        <div class="trust-item"><span class="trust-number">01 / PRINCIPLE</span><strong>数据最小化</strong><span>只收集完成家庭学习所需的信息。</span></div>
+        <div class="trust-item"><span class="trust-number">02 / BY DESIGN</span><strong>本地优先朗读</strong><span>文本在设备上朗读，不上传录音。</span></div>
+        <div class="trust-item"><span class="trust-number">03 / FAMILY</span><strong>家长确认</strong><span>学习者档案由家长或监护人管理。</span></div>
+      </section>
+
+      <article>
+        <nav class="language-nav" aria-label="Language"><span>阅读语言</span><a href="#zh">中文</a><a href="#en">English</a></nav>
+
+        <section id="zh" class="language-section" lang="zh-CN">
+          <h2 class="language-title">影伴隐私说明</h2>
+          <p class="meta">产品：影伴 Shadow Mate　·　当前版本：privacy-v1　·　生效日期：2026 年 8 月 12 日</p>
+
+          <p>影伴面向家庭和未成年学习者，默认遵循数据最小化原则。本说明描述当前 Dogfooding 和小规模内测版本的技术行为。</p>
+
+          <h2>我们收集和保存什么</h2>
+          <ul>
+            <li>家长用于登录的邮箱，由 Supabase Auth 处理。</li>
+            <li>家庭空间名称。</li>
+            <li>学习者显示名称和年级。建议使用昵称，不填写真实姓名。</li>
+            <li>打卡、积分、书架和阅读日志等学习状态。</li>
+          </ul>
+          <p>当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。</p>
+
+          <h2>分析服务和朗读功能</h2>
+          <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。页面访问数据可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
+          <p>当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。</p>
+
+          <h2>家长同意和学习者档案</h2>
+          <p>学习者不是独立登录账号。创建第一个学习者或添加学习者前，登录用户必须确认自己是家长或监护人，并阅读本隐私说明。系统会在 Supabase 数据库记录家庭 ID、认证用户 ID、同意类型 <code>learner_data_processing</code>、隐私说明版本 <code>privacy-v1</code> 和数据库生成的同意时间。客户端不能修改同意时间戳，也不能在没有同意记录的情况下通过公开 API 创建新的学习者档案。</p>
+
+          <h2>数据存放和访问</h2>
+          <ul>
+            <li>离线学习状态保存在当前设备的浏览器存储中。</li>
+            <li>登录后，家庭和学习状态同步到项目配置的 Supabase 数据库。</li>
+            <li>登录会话使用浏览器会话存储；关闭对应浏览器会话后需要重新登录。</li>
+            <li>学习数据按家庭隔离，登录用户仍必须通过家庭成员关系和 RLS 才能读取或修改记录。</li>
+          </ul>
+          <p>本机缓存通常会在关闭浏览器后继续保留，直到用户清除该网站的浏览器数据、使用隐私/无痕窗口、浏览器或系统自动清理，或更换访问域名。登录并同步后，云端家庭记录才是跨设备恢复来源。</p>
+
+          <h2>删除、导出和保留</h2>
+          <ul>
+            <li>“清除本机数据”只删除当前设备的离线学习记录并退出登录，不删除云端记录。</li>
+            <li>家庭所有者可以从账号面板导出完整家庭 JSON 数据，也可以使用“删除全部家庭数据”删除当前家庭的云端记录、清理本机数据并退出登录。</li>
+            <li>共享 Supabase 项目中的家庭数据删除不会删除 Supabase Auth 身份；用户仍可使用同一邮箱重新登录。</li>
+            <li>删除学习者或家庭时，同意记录随家庭或学习者所属家庭级联删除。</li>
+          </ul>
+          <p>当前没有独立的“撤回同意但保留家庭”的自助流程。数据保留期限、删除、导出、更正和撤回请求会根据产品运营地区和适用法律持续更新。</p>
+
+          <h2>安全问题</h2>
+          <p>请不要在公开 Issue 中提交个人数据或安全漏洞。安全问题请通过仓库的私密漏洞报告功能提交。</p>
+        </section>
+
+        <section id="en" class="language-section" lang="en">
+          <h2 class="language-title">Shadow Mate Privacy Policy</h2>
+          <p class="meta">Product: Shadow Mate　·　Current version: privacy-v1　·　Effective date: August 12, 2026</p>
+
+          <p>Shadow Mate is designed for families and learners who may be minors. We follow data minimization by default. This policy describes the technical behavior of the current Dogfooding and small-scale beta version.</p>
+
+          <h2>What We Collect and Store</h2>
+          <ul>
+            <li>The parent's email address used to sign in, handled by Supabase Auth.</li>
+            <li>The family space name.</li>
+            <li>The learner's display name and grade. We recommend using a nickname instead of a real name.</li>
+            <li>Learning activity such as check-ins, points, bookshelf items, and reading logs.</li>
+          </ul>
+          <p>The current version does not require a child to provide an email address, phone number, birthday, school, address, precise location, or photo. It does not contain advertising.</p>
+
+          <h2>Analytics and Reading Aloud</h2>
+          <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data. It currently sends no custom events and does not send learning status, email addresses, or learner display names as custom Analytics fields. Page-visit data may include the time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
+          <p>The local Piper text-to-speech feature does not send text to Shadow Mate servers in the current version. Shadow Mate does not record microphone audio.</p>
+
+          <h2>Parental Consent and Learner Profiles</h2>
+          <p>A learner is not an independent login account. Before creating or adding a learner, the signed-in user must confirm that they are the child's parent or guardian and read this policy. Supabase stores the household ID, authenticated user ID, consent type <code>learner_data_processing</code>, policy version <code>privacy-v1</code>, and a database-generated consent timestamp. The client cannot change the timestamp, and the public API cannot create a new learner profile without a consent record.</p>
+
+          <h2>Where Data Is Stored and Who Can Access It</h2>
+          <ul>
+            <li>Offline learning state is stored in the browser storage on the current device.</li>
+            <li>After sign-in, household and learning state sync to the Supabase database configured for the project.</li>
+            <li>The sign-in session uses browser session storage; a new browser session may require signing in again.</li>
+            <li>Learning data is isolated by household. Signed-in users must still pass household membership checks and Row Level Security (RLS) to read or change records.</li>
+          </ul>
+          <p>Local cache normally remains after the browser closes until the site's browser data is cleared, a private/incognito session is used, the browser or operating system cleans it up, or the site domain changes. After synchronization, the cloud household record is the source for cross-device recovery.</p>
+
+          <h2>Deletion, Export, and Retention</h2>
+          <ul>
+            <li>“Clear local data” removes only offline learning records from the current device and signs the user out; it does not delete cloud records.</li>
+            <li>The household owner can export the full household data as JSON or use “Delete all household data” to remove the current household's cloud records, clear local data, and sign out.</li>
+            <li>Deleting household data in the shared Supabase project does not delete the Supabase Auth identity; the user can sign in again with the same email.</li>
+            <li>When a learner or household is deleted, its consent record is deleted through the household-level cascade.</li>
+          </ul>
+          <p>There is currently no self-service flow to withdraw consent while keeping the household. Data retention periods and requests for deletion, export, correction, or withdrawal will be updated as the operating region and applicable laws require.</p>
+
+          <h2>Security Issues</h2>
+          <p>Do not submit personal data or security vulnerabilities in public issues. Please use the repository's private vulnerability reporting process for security issues.</p>
+        </section>
+      </article>
+      <footer class="site-footer">影伴 Shadow Mate · privacy-v1 · 2026</footer>
+    </main>
+  </body>
+</html>

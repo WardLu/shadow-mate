@@ -1,6 +1,16 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/privacy",
+      "destination": "https://dutepjyocxcvecmsrtfp.supabase.co/storage/v1/object/public/legal/shadow-mate/privacy-policy.html"
+    },
+    {
+      "source": "/privacy/",
+      "destination": "https://dutepjyocxcvecmsrtfp.supabase.co/storage/v1/object/public/legal/shadow-mate/privacy-policy.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

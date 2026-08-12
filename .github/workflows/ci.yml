@@ -37,6 +37,10 @@ jobs:
         env:
           SECURITY_CHECK_HISTORY: "1"
 
+      - name: Validate release metadata baseline
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm run release:check
+
       - name: Audit dependencies
         if: ${{ hashFiles('package-lock.json') != '' }}
         run: npm audit --audit-level=high
