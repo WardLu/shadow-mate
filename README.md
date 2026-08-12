@@ -155,6 +155,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 | [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
 | [儿童隐私与家长同意审核](docs/child-privacy-and-consent.md) | 数据范围、服务端同意闸门和待完成的地域法律审核 |
 | [IP 法律审核记录](docs/ip-legal-review.md) | 商标、版权、CLA、主体归属和发布前权属核验 |
+| [Dogfooding 内测清单](docs/dogfooding-checklist.md) | 当前非商业、小规模邀请制内测范围和验收项 |
 | [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、Piper、模型和 vendored 资源的来源与许可状态 |
 | [CLA 草案](CLA.md) | 外部贡献、版权许可和未来重新许可准备 |
 | [TODO](TODO.md) | 当前待办与已知问题 |
