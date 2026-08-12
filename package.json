@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "release:check": "node scripts/release-check.mjs",
+    "test:release": "node --test tests/release-check.guard.mjs",
     "check": "node scripts/check.mjs",
     "security:check": "node scripts/security-check.mjs",
     "verify": "npm run security:check && npm run check && npm run build && node scripts/check-build.mjs && npm run test:coverage",
