@@ -15,6 +15,13 @@ const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
 export const VOICE_MODEL_PARTS = [VOICE + ".onnx.part-00", VOICE + ".onnx.part-01"];
 export const VOICE_FILES = [...VOICE_MODEL_PARTS, VOICE + ".onnx.json"];
+// Android 某些网络环境会隐藏响应的 Content-Length；这里用当前随包文件大小兜底计算百分比。
+// 替换语音模型文件时，需要同步更新这些数值。
+export const VOICE_FILE_SIZES = {
+  [VOICE_MODEL_PARTS[0]]: 62_914_560,
+  [VOICE_MODEL_PARTS[1]]: 51_284_451,
+  [VOICE + ".onnx.json"]: 4_970,
+};
 export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
@@ -71,7 +78,10 @@ export async function downloadVoice(onProgress, signal) {
   }
 
   const lengths = await Promise.all(pendingFiles.map((url) => getContentLength(url, signal)));
-  const total = lengths.every((length) => length > 0) ? lengths.reduce((sum, length) => sum + length, 0) : 0;
+  const progressLengths = lengths.map((length, index) => length || VOICE_FILE_SIZES[pendingFiles[index]] || 0);
+  const total = progressLengths.every((length) => length > 0)
+    ? progressLengths.reduce((sum, length) => sum + length, 0)
+    : 0;
   let receivedTotal = 0;
 
   for (let fileIndex = 0; fileIndex < pendingFiles.length; fileIndex += 1) {
@@ -79,7 +89,7 @@ export async function downloadVoice(onProgress, signal) {
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error("语音包下载失败");
-    const fileTotal = Number(res.headers.get("content-length")) || lengths[fileIndex] || 0;
+    const fileTotal = Number(res.headers.get("content-length")) || progressLengths[fileIndex] || 0;
     const reader = res.body.getReader();
     const chunks = [];
     let receivedFile = 0;

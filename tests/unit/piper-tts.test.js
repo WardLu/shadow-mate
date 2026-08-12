@@ -54,7 +54,7 @@ describe("offline Piper voice download", () => {
     expect(cache.match.mock.calls.map(([url]) => url)).toEqual(VOICE_FILES);
   });
 
-  test("reports received bytes when the response omits Content-Length", async () => {
+  test("reports aggregate progress using bundled sizes when the response omits Content-Length", async () => {
     const cache = {
       match: vi.fn().mockResolvedValue(undefined),
       put: vi.fn().mockResolvedValue(undefined),
@@ -75,8 +75,40 @@ describe("offline Piper voice download", () => {
 
     await downloadVoice((received, total) => progress.push([received, total]));
 
-    expect(progress).toContainEqual([5, 0]);
     expect(progress.some(([received]) => received > 0)).toBe(true);
+    expect(progress.some(([received, total]) => received > 0 && total > 100_000_000)).toBe(true);
+  });
+
+  test("shows a percentage in the download dialog when Content-Length is unavailable", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      value() {
+        this.open = true;
+      },
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true,
+      value() {
+        this.open = false;
+      },
+    });
+
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(responseWithChunks([Uint8Array.from([1])]))));
+
+    const result = askDownloadVoice();
+    const dialog = document.querySelector("#shadow-voice-dialog");
+    dialog.querySelector('[data-action="ok"]').click();
+
+    await vi.waitFor(() => {
+      expect(dialog.querySelector(".voice-dialog-pct").textContent).toMatch(/^\d+%$/);
+    });
+    expect(dialog.querySelector(".voice-dialog-bar i").classList.contains("indeterminate")).toBe(false);
+    await expect(result).resolves.toBe("ok");
   });
 
   test("reports aggregate bytes across the model and config files", async () => {
