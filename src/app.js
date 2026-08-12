@@ -304,6 +304,13 @@ async function speak(t, button){
 
   const speakOffline = async () => {
     setBusy("准备中…");
+    let playbackTimer = null;
+    const clearPlaybackTimer = () => {
+      if (playbackTimer !== null) {
+        window.clearTimeout(playbackTimer);
+        playbackTimer = null;
+      }
+    };
     let engineWarmup;
     let engineWarmupError;
     const startEngineWarmup = () => {
@@ -339,18 +346,34 @@ async function speak(t, button){
       await engineWarmup;
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
-      const { url } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
+      const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       const audio = new Audio(url);
-      audio.onended = () => {
+      let playbackSettled = false;
+      const finishPlayback = () => {
+        if (playbackSettled) return;
+        playbackSettled = true;
+        clearPlaybackTimer();
         restore();
         URL.revokeObjectURL(url);
       };
+      audio.onended = () => {
+        finishPlayback();
+      };
       audio.onerror = () => {
+        if (playbackSettled) return;
+        playbackSettled = true;
+        clearPlaybackTimer();
         fail("发音失败，请重试");
         URL.revokeObjectURL(url);
       };
+      const playbackFallbackMs = Number.isFinite(duration) && duration > 0
+        ? Math.max(1000, Math.ceil(duration * 1000) + 750)
+        : 5000;
+      playbackTimer = window.setTimeout(finishPlayback, playbackFallbackMs);
       await audio.play();
+      if (!playbackSettled) setBusy("播放中…");
     } catch (error) {
+      clearPlaybackTimer();
       if (error?.message === "本地语音引擎加载超时") {
         fail("本地语音引擎加载超时，请重试");
       } else {

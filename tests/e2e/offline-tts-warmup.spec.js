@@ -82,4 +82,52 @@ test.describe("Offline voice warmup", () => {
     await expect.poll(() => page.evaluate(() => window.__piperGenerateCalls || 0), { timeout: 3000 }).toBe(1);
     await expect(button).not.toContainText("发音失败");
   });
+
+  test("does not leave the button busy when playback omits ended", async ({ page }) => {
+    await page.route("**/piper-tts-web.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export class OnnxWebRuntime { constructor() {} }
+          export class PhonemizeWebRuntime { constructor() {} }
+          export class PiperWebEngine {
+            async generate() {
+              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 0.1 };
+            }
+          }
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { getVoices() { return []; }, speak() {} },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+      const cacheStore = new Map([
+        ["/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
+      ]);
+      Object.defineProperty(window, "caches", {
+        configurable: true,
+        value: { open: async () => ({ match: async (url) => cacheStore.get(url), put: async () => {} }) },
+      });
+      Object.defineProperty(window, "Audio", {
+        configurable: true,
+        value: function Audio() {
+          this.play = async () => {};
+        },
+      });
+    });
+
+    await page.goto("/");
+    await page.click('[data-mod="english"]');
+    const button = page.locator("[data-speak]").first();
+    await button.click();
+
+    await expect(button).not.toBeDisabled({ timeout: 2500 });
+  });
 });
