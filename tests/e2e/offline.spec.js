@@ -15,6 +15,8 @@ test.describe("Offline mode (no login)", () => {
   test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".site-footer")).toBeVisible();
+    await expect(page.locator('a[href="https://www.shadow.wang/"]')).toHaveAttribute("target", "_blank");
+    await expect(page.locator(".site-footer-links > .site-footer-link").first()).toContainText("Shadow Nexus");
     await expect(page.locator('a[href="/privacy"]')).toHaveAttribute("target", "_blank");
     await expect(page.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
     await expect(page.locator('a[href="https://v.douyin.com/1y06PMohfoE/"]')).toBeVisible();
