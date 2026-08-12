@@ -8,6 +8,9 @@ const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
+export const GUARDIAN_CONSENT_TYPE = "learner_data_processing";
+export const PRIVACY_POLICY_VERSION = "privacy-v1";
+const PRIVACY_POLICY_URL = "https://github.com/WardLu/shadow-mate/blob/main/PRIVACY.md";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
@@ -30,6 +33,7 @@ const supabase = cloudEnabled
 let session = null;
 let memberships = [];
 let profiles = [];
+let guardianConsentHouseholds = new Set();
 let activeProfile = null;
 let editingProfileId = null;
 let editingHousehold = false;
@@ -84,6 +88,22 @@ function showToast(message, duration = 2800) {
   toastTimer = setTimeout(hideToast, duration);
 }
 
+function guardianConsentField() {
+  return `<label class="cloud-consent cloud-field">
+    <input type="checkbox" name="guardianConsent" value="on" required>
+    <span>我是孩子的家长或监护人，已阅读<a href="${PRIVACY_POLICY_URL}" target="_blank" rel="noopener noreferrer">隐私说明</a>，同意影伴为学习者保存昵称、年级和学习记录。</span>
+  </label>`;
+}
+
+function guardianConsentPayload(householdId) {
+  return {
+    household_id: householdId,
+    user_id: session.user.id,
+    consent_type: GUARDIAN_CONSENT_TYPE,
+    policy_version: PRIVACY_POLICY_VERSION,
+  };
+}
+
 async function clearLocalAccountState() {
   let signOutError = null;
   try {
@@ -98,6 +118,7 @@ async function clearLocalAccountState() {
   session = null;
   memberships = [];
   profiles = [];
+  guardianConsentHouseholds = new Set();
   activeProfile = null;
   setAccountState();
   return signOutError;
@@ -554,6 +575,7 @@ function renderSetup() {
           ${GRADE_OPTIONS}
         </select>
       </label>
+      ${guardianConsentField()}
       <div class="cloud-actions">
         <button class="cloud-action" type="submit">创建并同步</button>
         <button class="cloud-action secondary" type="button" data-close>稍后设置</button>
@@ -581,6 +603,10 @@ function renderSetup() {
     const submitButton = formElement.querySelector("[type=submit]");
     await runLockedAction(submitButton, async () => {
       const form = new FormData(formElement);
+      if (form.get("guardianConsent") !== "on") {
+        showToast("请先确认你是家长或监护人并阅读隐私说明。", 5000);
+        return;
+      }
       const householdId = crypto.randomUUID();
       const profileId = crypto.randomUUID();
       const payload = {
@@ -609,6 +635,14 @@ function renderSetup() {
         showToast(formatCloudError(memberError, "创建成员失败，请稍后再试。"), 5000);
         return;
       }
+      const { error: consentError } = await supabase
+        .from("learning_guardian_consents")
+        .insert(guardianConsentPayload(householdId));
+      if (consentError) {
+        console.error("Guardian consent error:", consentError);
+        showToast(formatCloudError(consentError, "保存家长同意失败，请稍后再试。"), 5000);
+        return;
+      }
       const { error: profileError } = await supabase
         .from("learning_profiles")
         .insert({
@@ -634,6 +668,8 @@ function renderSetup() {
 }
 
 function renderAccount() {
+  const activeHouseholdId = memberships[0]?.household_id;
+  const hasGuardianConsent = guardianConsentHouseholds.has(activeHouseholdId);
   const choices = profiles
     .map((profile) => {
       if (editingProfileId === profile.id) {
@@ -673,6 +709,7 @@ function renderAccount() {
     <p class="cloud-sync-copy">家庭空间统一管理，学习记录按孩子分别同步。切换孩子后会加载对应的学习记录。</p>
     <div class="learner-list">${choices}</div>
     <form id="addLearnerForm">
+      ${hasGuardianConsent ? '<p class="cloud-hint">家长同意已记录（隐私说明版本 privacy-v1）。</p>' : `<p class="cloud-hint">添加学习者前，需要由家长或监护人确认隐私说明。</p>${guardianConsentField()}`}
       <label class="cloud-field">
         添加学习者
         <input name="learner" maxlength="30" required placeholder="例如：弟弟">
@@ -836,6 +873,21 @@ function renderAccount() {
       const form = new FormData(formElement);
       const householdId = memberships[0]?.household_id;
       if (!householdId) return;
+      if (!guardianConsentHouseholds.has(householdId)) {
+        if (form.get("guardianConsent") !== "on") {
+          showToast("请先确认你是家长或监护人并阅读隐私说明。", 5000);
+          return;
+        }
+        const { error: consentError } = await supabase
+          .from("learning_guardian_consents")
+          .insert(guardianConsentPayload(householdId));
+        if (consentError) {
+          console.error("Guardian consent error:", consentError);
+          showToast(formatCloudError(consentError, "保存家长同意失败，请稍后再试。"), 5000);
+          return;
+        }
+        guardianConsentHouseholds.add(householdId);
+      }
       const { data, error } = await supabase
         .from("learning_profiles")
         .insert({
@@ -873,10 +925,20 @@ async function fetchWorkspace() {
   memberships = memberRows || [];
   if (!memberships.length) {
     profiles = [];
+    guardianConsentHouseholds = new Set();
     activeProfile = null;
     return;
   }
   const householdIds = memberships.map((item) => item.household_id);
+  const { data: consentRows, error: consentError } = await supabase
+    .from("learning_guardian_consents")
+    .select("household_id")
+    .in("household_id", householdIds)
+    .eq("user_id", session.user.id)
+    .eq("consent_type", GUARDIAN_CONSENT_TYPE)
+    .eq("policy_version", PRIVACY_POLICY_VERSION);
+  if (consentError) throw consentError;
+  guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
   const { data: profileRows, error: profileError } = await supabase
     .from("learning_profiles")
     .select("id, household_id, display_name, grade_level")

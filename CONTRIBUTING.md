@@ -22,14 +22,26 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 - Run the local Supabase pgTAP tests and database lint for schema changes.
 - Never commit credentials, personal data, production exports, `.env`, `.vercel`, local Supabase state, or internal agent/tool configuration.
 
-## 提交前文档一致性闸门
+## Public repository boundary
+
+- This repository contains the public application, its tests, public documentation and the notices required for included third-party assets.
+- Do not add prompts, private model weights, premium content, API secrets, production exports, private service implementation, internal legal reviews, commercial plans or private agent/tool configuration.
+- Record the source, version/commit, license and redistribution terms for every vendored asset in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Keep local plans, legal notes, customer information and deployment records outside the repository. Use the local ignored planning files only for local work.
+
+## 提交前公开性与文档一致性闸门
 
 提交代码前必须先核对实现与相关文档，文档不一致时不得提交：
 
 - 检查本次 `git diff` 涉及的用户行为、数据模型、迁移、配置、测试命令、覆盖率、版本号和发布状态。
-- 按影响范围同步 `README.md`、`docs/`、`TODO.md`、`ROADMAP.md`、`CHANGELOG.md`、`RELEASE_NOTES.md`、隐私/安全文档和 PR 说明；没有受影响的文档时，在 PR 中说明原因。
+- 按影响范围同步 `README.md`、公开 `docs/`、`CHANGELOG.md`、`RELEASE_NOTES.md`、隐私/安全文档和 PR 说明；内部计划、法律记录和发布闸门不得放入公开目录。
 - 代码、测试、迁移、配置和对应文档必须作为同一项工作提交并推送，禁止明知文档过期而先提交代码、之后再补文档。
-- 提交前至少运行 `git diff --check` 和 `npm.cmd run verify`，并复查暂存区，确认没有遗漏相关文档或把敏感文件一起加入提交。
+- 提交前运行 `npm run public:check`、`git diff --cached --check` 和 `npm run verify`，并逐项复查 `git diff --cached --name-status` 与 `git diff --cached`，确认没有把内部、敏感或不必要文件加入提交。
+- 推送前重新核对远端仓库可见性、目标分支、PR base/head 和 PR 描述；任何不确定的文件先移出暂存区，不要“先提交再解释”。
+
+### 已误推送时的兜底
+
+立即停止继续推送；保留本地备份引用；检查是否包含密钥、个人数据或内部材料；关闭或暂停 PR；从干净的公开 base 重建分支，移除不适合公开的文件和提交，再强制更新远端分支。密钥或个人数据一旦出现，应立即轮换/删除并按安全事件流程处理；历史对象和缓存可能仍需向托管平台申请清理。
 
 ## GitHub 协作流程
 
@@ -42,4 +54,4 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 
 ## Privacy review
 
-Any new learner field must document why it is necessary, where it is stored, its retention period, its deletion path, and whether explicit parent/guardian consent is required. Keep the field inventory in [docs/learner-data-lifecycle.md](docs/learner-data-lifecycle.md) and update it in the same change.
+Any new learner field must document why it is necessary, where it is stored, its retention period, its deletion path, and whether explicit parent/guardian consent is required. Update `PRIVACY.md` and the relevant migration/tests in the same change.

@@ -10,4 +10,5 @@ case "$email" in
     ;;
 esac
 
+npm run public:check
 npm run security:check

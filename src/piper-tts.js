@@ -6,14 +6,14 @@
  *
  * 致谢（开源项目详见 README 致谢一节）：
  *  - piper-tts-web（MIT）
- *  - rhasspy/piper 语音模型 en_US-lessac-medium（MIT）
+ *  - rhasspy/piper 语音模型 en_US-ljspeech-medium（模型卡标注训练数据为 public domain）
  *  - ONNX Runtime Web（MIT）
  */
 
-const VOICE = "/piper/en_US-lessac-medium";
+export const VOICE = "/piper/en_US-ljspeech-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
-const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
+export const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
 export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 

@@ -48,6 +48,7 @@ test.describe("Real local Supabase cloud lifecycle", () => {
     await expect(page.locator("#householdSetupForm")).toBeVisible();
     await page.locator('#householdSetupForm input[name="household"]').fill("Real E2E Family");
     await page.locator('#householdSetupForm input[name="learner"]').fill("Real E2E Learner");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
     await page.locator("#householdSetupForm").getByRole("button", { name: "创建并同步" }).click();
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await expect(page.locator("#accountButton")).toHaveAttribute("title", /Real E2E Learner/);

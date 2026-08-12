@@ -27,7 +27,7 @@ test.describe("Offline voice warmup", () => {
         `,
       });
     });
-    await page.route("**/piper/en_US-lessac-medium.onnx*", async (route) => {
+    await page.route("**/piper/en_US-ljspeech-medium.onnx*", async (route) => {
       const request = route.request();
       const isConfig = request.url().endsWith(".json");
       if (request.method() === "HEAD") {

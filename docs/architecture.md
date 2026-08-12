@@ -146,6 +146,7 @@ erDiagram
 - 创建家庭时 `owner_user_id` 必须等于 `auth.uid()`。
 - 家庭 owner 只能为自己创建初始 owner membership。
 - owner/guardian 可创建和修改 learner profile/state。
+- 创建 learner profile 还必须存在当前 owner/guardian 的 `privacy-v1` 确认记录；记录只允许服务端默认时间戳写入，客户端无更新/删除权限。
 - `learning_save_state` 是 `SECURITY INVOKER`，不会绕过 RLS。
 - `learning_is_household_owner` 是唯一的 `SECURITY DEFINER` 授权辅助函数：固定空 `search_path`、仅返回当前用户是否为指定家庭 owner、仅授予 `authenticated` 执行权，用于打断 household 与 membership 策略之间的递归。
 - 更新策略同时具有 `USING` 与 `WITH CHECK`。
@@ -216,6 +217,6 @@ erDiagram
 - Supabase JS 固定到 `2.111.0`。
 - CSP 的 `script-src` 和 `style-src` 均为 `'self'`，不含 `unsafe-inline`。
 - Piper 本地语音使用 `connect-src blob:` 读取浏览器生成的模块/模型资源，使用 `media-src 'self' blob:` 播放合成音频，并使用 `wasm-unsafe-eval` 支持 WASM 初始化；不允许通用的 `unsafe-eval`。
-- `vite.config.js` 仅在开发服务器中兼容 Vite 为公共 Piper 模块追加的 `?import` 查询，生产环境仍由静态资源直接提供。
+- `vite.config.js` 为开发服务器提供 Piper 模块兼容处理，生产环境使用静态资源。
 
 若未来管理后台、内容编辑器、支付和服务端页面成为主体，再迁移到 TypeScript + React/Next.js；不为“可能有一天”提前承担框架成本。

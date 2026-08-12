@@ -29,6 +29,12 @@ shadow-wang-home.png
 # Local-only internal planning and deployment docs
 /TODO.md
 /ROADMAP.md
+/docs/internal/
+/docs/private/
+/docs/legal/
+/docs/commercial/
+/docs/finance/
+/docs/release-gates/
 /docs/auth-setup.md
 /docs/security-baseline.md
 /docs/test-scope.md
