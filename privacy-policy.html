@@ -6,31 +6,149 @@
     <meta name="robots" content="index,follow">
     <title>影伴隐私说明</title>
     <style>
-      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #253044; background: #f5f7fb; }
-      body { margin: 0; line-height: 1.75; }
-      main { box-sizing: border-box; max-width: 760px; margin: 0 auto; padding: 48px 22px 72px; }
-      article { padding: 34px 30px; background: #fff; border: 1px solid #e7ebf2; border-radius: 18px; box-shadow: 0 8px 30px rgba(37, 48, 68, .06); }
-      h1 { margin: 0 0 8px; color: #172033; font-size: 30px; line-height: 1.25; }
-      h2 { margin: 32px 0 10px; color: #172033; font-size: 20px; line-height: 1.4; }
-      p { margin: 10px 0; }
-      ul { margin: 8px 0 12px; padding-left: 24px; }
-      li { margin: 4px 0; }
-      .meta { margin: 0 0 28px; color: #667085; font-size: 14px; }
-      .language-nav { margin: 0 0 28px; font-size: 14px; }
-      .language-nav a { margin-right: 14px; }
-      .language-section + .language-section { margin-top: 56px; padding-top: 40px; border-top: 1px solid #e7ebf2; }
-      code { padding: 2px 5px; border-radius: 5px; background: #f0f2f6; font-size: .92em; }
-      a { color: #356ae6; }
-      @media (max-width: 520px) { main { padding: 20px 12px 44px; } article { padding: 24px 20px; } h1 { font-size: 26px; } }
+      :root {
+        color-scheme: light dark;
+        --green: #2aa650;
+        --green-deep: #176b30;
+        --green-soft: #e9f7ec;
+        --green-pale: #f3f9f4;
+        --yellow: #ffc83d;
+        --ink: #203126;
+        --ink-soft: #5e7063;
+        --line: #dcecdf;
+        --surface: #ffffff;
+        --canvas: #f3f9f4;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--canvas);
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        min-width: 320px;
+        margin: 0;
+        line-height: 1.7;
+        background:
+          radial-gradient(circle at 9% 1%, rgba(99, 193, 116, .22), transparent 25rem),
+          radial-gradient(circle at 94% 24%, rgba(255, 200, 61, .16), transparent 20rem),
+          var(--canvas);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      a { color: var(--green-deep); text-underline-offset: 3px; }
+      a:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; border-radius: 5px; }
+      main { max-width: 840px; margin: 0 auto; padding: 28px 22px 72px; }
+      .site-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+      .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+      .brand-mark { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 13px; box-shadow: 0 8px 18px rgba(23, 107, 48, .14); }
+      .brand-name { display: grid; gap: 1px; line-height: 1.1; }
+      .brand-name strong { font-size: 16px; letter-spacing: .08em; }
+      .brand-name small { color: var(--ink-soft); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+      .back-link { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, .62); font-size: 12px; text-decoration: none; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1fr) 210px; align-items: center; gap: 34px; padding: 70px 10px 54px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 15px; color: var(--green-deep); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+      .eyebrow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 5px rgba(255, 200, 61, .2); }
+      .hero h1 { max-width: 12ch; margin: 0; color: var(--green-deep); font-size: clamp(34px, 6vw, 54px); letter-spacing: -.045em; line-height: 1.08; text-wrap: balance; }
+      .hero h1 em { color: var(--ink); font-style: normal; }
+      .hero-copy > p:last-child { max-width: 44ch; margin: 20px 0 0; color: var(--ink-soft); font-size: 15px; text-wrap: pretty; }
+      .orbit-art { position: relative; width: 190px; height: 190px; margin: auto; border-radius: 50%; background: linear-gradient(145deg, #dff3e3, #fff2c8); box-shadow: 0 20px 45px rgba(23, 107, 48, .13); }
+      .orbit-art::before, .orbit-art::after { position: absolute; content: ""; border: 1px dashed rgba(23, 107, 48, .42); border-radius: 50%; }
+      .orbit-art::before { inset: 22px; transform: rotate(25deg) scaleY(.5); }
+      .orbit-art::after { inset: 42px; transform: rotate(-28deg) scaleY(.5); }
+      .orbit-core { position: absolute; inset: 50%; z-index: 1; width: 76px; height: 76px; padding-top: 17px; border: 5px solid var(--green-deep); border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 800; line-height: 1.25; text-align: center; transform: translate(-50%, -50%); box-shadow: 0 10px 20px rgba(23, 107, 48, .22); }
+      .orbit-node { position: absolute; z-index: 2; width: 26px; height: 26px; border: 5px solid var(--green-deep); border-radius: 50%; background: var(--yellow); box-shadow: 0 5px 12px rgba(23, 107, 48, .18); }
+      .orbit-node.one { top: 24px; left: 45px; }
+      .orbit-node.two { right: 24px; bottom: 38px; background: #fff; }
+      .trust-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 20px; }
+      .trust-item { min-height: 118px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255, 255, 255, .66); box-shadow: 0 8px 22px rgba(23, 107, 48, .06); }
+      .trust-number { display: block; margin-bottom: 8px; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+      .trust-item strong { display: block; margin-bottom: 4px; font-size: 14px; }
+      .trust-item span:last-child { display: block; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+      article { padding: 34px 38px 42px; border: 1px solid var(--line); border-radius: 26px; background: var(--surface); box-shadow: 0 18px 50px rgba(23, 107, 48, .1); }
+      .language-nav { display: flex; align-items: center; gap: 8px; margin: 0 0 30px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--green-pale); font-size: 13px; }
+      .language-nav span { padding: 5px 10px; color: var(--ink-soft); font-size: 12px; }
+      .language-nav a { padding: 5px 12px; border-radius: 999px; color: var(--green-deep); font-weight: 700; text-decoration: none; }
+      .language-nav a:hover { background: var(--surface); box-shadow: 0 3px 10px rgba(23, 107, 48, .1); }
+      .language-section h2 { margin: 0 0 8px; color: var(--green-deep); font-size: 29px; letter-spacing: -.025em; line-height: 1.2; text-wrap: balance; }
+      .language-section h3 { margin: 34px 0 10px; color: var(--ink); font-size: 20px; line-height: 1.35; }
+      p { max-width: 68ch; margin: 11px 0; }
+      ul { max-width: 68ch; margin: 9px 0 14px; padding-left: 24px; }
+      li { margin: 5px 0; }
+      .meta { margin: 0 0 28px; color: var(--ink-soft); font-size: 13px; }
+      .language-section + .language-section { margin-top: 58px; padding-top: 42px; border-top: 1px solid var(--line); }
+      code { padding: 2px 5px; border-radius: 5px; background: var(--green-soft); color: var(--green-deep); font-size: .92em; }
+      .site-footer { margin-top: 18px; color: var(--ink-soft); font-size: 11px; text-align: center; }
+      @media (prefers-reduced-motion: no-preference) {
+        .back-link, .language-nav a { transition: background-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+        .back-link:active, .language-nav a:active { transform: scale(.96); }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --ink: #edf7ef; --ink-soft: #acc2b1; --line: #294c33; --surface: #14261a; --canvas: #0d1d13; --green-pale: #173521; }
+        body { background: radial-gradient(circle at 9% 1%, rgba(42, 166, 80, .22), transparent 25rem), var(--canvas); }
+        .back-link, .trust-item { background: rgba(20, 38, 26, .72); }
+        .orbit-art { background: linear-gradient(145deg, #173a22, #4b3b1b); }
+        .orbit-node.two { background: var(--surface); }
+      }
+      @media (max-width: 620px) {
+        main { padding: 20px 14px 48px; }
+        .hero { grid-template-columns: 1fr; gap: 28px; padding: 52px 4px 38px; }
+        .hero h1 { max-width: 11ch; }
+        .orbit-art { width: 150px; height: 150px; }
+        .trust-strip { grid-template-columns: 1fr; }
+        .trust-item { min-height: auto; padding: 14px 16px; }
+        article { padding: 24px 20px 30px; border-radius: 22px; }
+        .language-section h2 { font-size: 26px; }
+        .language-section h3 { font-size: 19px; }
+      }
+      @media (max-width: 420px) {
+        .brand-name small { display: none; }
+        .back-link { padding-inline: 10px; }
+        .language-nav { align-items: stretch; flex-wrap: wrap; border-radius: 16px; }
+      }
     </style>
   </head>
   <body>
     <main>
+      <header class="site-header">
+        <a class="brand" href="https://sm.shadow.wang/" aria-label="返回影伴首页">
+          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" rx="31" fill="#2AA650"/>
+            <path d="M19 64C22 39 39 23 60 23C81 23 98 39 101 64" fill="none" stroke="#DDF3E2" stroke-width="2" stroke-dasharray="4 4" opacity=".85"/>
+            <path d="M25 80C25 63 36 52 50 52C64 52 75 63 75 80V88H25V80Z" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+            <circle cx="50" cy="41" r="13" fill="#F3FBF4" stroke="#176B30" stroke-width="3"/>
+            <path d="M51 84C51 63 64 49 80 49C96 49 103 63 103 84V88H51V84Z" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+            <circle cx="80" cy="37" r="16" fill="#FFF0BD" stroke="#176B30" stroke-width="3"/>
+            <circle cx="65" cy="57" r="5" fill="#FFC83D" stroke="#176B30" stroke-width="3"/>
+            <path d="M20 96H48M72 96H100" stroke="#176B30" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+          </svg>
+          <span class="brand-name"><strong>影伴</strong><small>Shadow Mate</small></span>
+        </a>
+        <a class="back-link" href="https://sm.shadow.wang/">返回应用 <span aria-hidden="true">↗</span></a>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> FAMILY LEARNING COMPANION</p>
+          <h1 id="page-title">把成长留在<br><em>值得信任的地方</em></h1>
+          <p>影伴面向家庭和未成年学习者，记录每天的小小进步，也认真说明每一份数据如何被使用。</p>
+        </div>
+        <div class="orbit-art" aria-hidden="true">
+          <span class="orbit-node one"></span><span class="orbit-node two"></span>
+          <div class="orbit-core">家长<br>与孩子</div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="影伴隐私原则">
+        <div class="trust-item"><span class="trust-number">01 / PRINCIPLE</span><strong>数据最小化</strong><span>只收集完成家庭学习所需的信息。</span></div>
+        <div class="trust-item"><span class="trust-number">02 / BY DESIGN</span><strong>本地优先朗读</strong><span>文本在设备上朗读，不上传录音。</span></div>
+        <div class="trust-item"><span class="trust-number">03 / FAMILY</span><strong>家长确认</strong><span>学习者档案由家长或监护人管理。</span></div>
+      </section>
+
       <article>
-        <nav class="language-nav" aria-label="Language"><a href="#zh">中文</a><a href="#en">English</a></nav>
+        <nav class="language-nav" aria-label="Language"><span>阅读语言</span><a href="#zh">中文</a><a href="#en">English</a></nav>
 
         <section id="zh" class="language-section" lang="zh-CN">
-          <h1>影伴隐私说明</h1>
+          <h2 class="language-title">影伴隐私说明</h2>
           <p class="meta">产品：影伴 Shadow Mate　·　当前版本：privacy-v1　·　生效日期：2026 年 8 月 12 日</p>
 
           <p>影伴面向家庭和未成年学习者，默认遵循数据最小化原则。本说明描述当前 Dogfooding 和小规模内测版本的技术行为。</p>
@@ -74,7 +192,7 @@
         </section>
 
         <section id="en" class="language-section" lang="en">
-          <h1>Shadow Mate Privacy Policy</h1>
+          <h2 class="language-title">Shadow Mate Privacy Policy</h2>
           <p class="meta">Product: Shadow Mate　·　Current version: privacy-v1　·　Effective date: August 12, 2026</p>
 
           <p>Shadow Mate is designed for families and learners who may be minors. We follow data minimization by default. This policy describes the technical behavior of the current Dogfooding and small-scale beta version.</p>
@@ -117,6 +235,7 @@
           <p>Do not submit personal data or security vulnerabilities in public issues. Please use the repository's private vulnerability reporting process for security issues.</p>
         </section>
       </article>
+      <footer class="site-footer">影伴 Shadow Mate · privacy-v1 · 2026</footer>
     </main>
   </body>
 </html>

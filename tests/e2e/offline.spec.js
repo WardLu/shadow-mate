@@ -29,6 +29,13 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator("#wechatButton")).toBeFocused();
   });
 
+  test("local privacy route serves the standalone policy page", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page).toHaveTitle("影伴隐私说明");
+    await expect(page.locator("#zh .language-title")).toContainText("隐私说明");
+    await expect(page.locator("#en")).toBeVisible();
+  });
+
   test("night mode keeps page surfaces and text readable", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
