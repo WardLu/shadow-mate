@@ -1,6 +1,6 @@
 {
   "name": "shadow-mate",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,6 @@
     "check": "node scripts/check.mjs",
     "public:check": "node scripts/public-check.mjs",
     "security:check": "node scripts/security-check.mjs",
-    "privacy:publish": "node scripts/publish-privacy-policy.mjs",
     "release:check": "node scripts/release-check.mjs",
     "verify": "npm run public:check && npm run security:check && npm run check && npm run build && node scripts/check-build.mjs && npm run test:coverage",
     "test": "vitest run",

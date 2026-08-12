@@ -1,10 +1,20 @@
 # Changelog
 
+## [1.3.6] - 2026-08-12
+
+### Fixed
+- 修复生产隐私政策被 Supabase Storage 按纯文本返回、浏览器显示 HTML 源代码的问题。
+- 将 `/privacy` 和 `/privacy/` 改为 Vercel 静态 HTML 路由，并补充构建产物与响应头回归检查。
+- 将隐私页样式移到独立 CSS 文件，兼容生产 CSP。
+
+### Tests
+- `npm run verify` 通过；隐私页浏览器回归 1/1 通过；Vercel Preview 返回 `text/html`。
+
 ## [1.3.5] - 2026-08-12
 
 ### Added
 - 增加家长/监护人同意审计和学习者隐私数据访问边界，学习者档案创建必须具备有效同意记录。
-- 增加双语隐私说明页面 `https://sm.shadow.wang/privacy`，并提供受保护的 Supabase Storage 发布工具。
+- 增加双语隐私说明页面 `https://sm.shadow.wang/privacy`，并将其作为 Vercel 静态构建产物发布。
 - 为隐私页增加影伴品牌首屏、成长轨道视觉、数据最小化原则卡片和移动端布局；Vite 本地开发与 Preview 环境同步提供 `/privacy` 路由。
 - 页脚首位增加 Shadow Nexus 产品主页链接，并保留社交媒体与隐私政策入口。
 - 增加公开仓库提交、推送、PR 和 Release 检查配置与自动化验证。

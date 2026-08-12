@@ -1,4 +1,4 @@
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
@@ -63,6 +63,19 @@ function serveLocalPrivacyPolicy() {
   };
 }
 
+function emitPrivacyPolicy() {
+  return {
+    name: "emit-privacy-policy",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "privacy.html",
+        source: readFileSync(PRIVACY_FILE, "utf8"),
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [servePublicPiperModule(), serveLocalPrivacyPolicy()],
+  plugins: [servePublicPiperModule(), serveLocalPrivacyPolicy(), emitPrivacyPolicy()],
 });

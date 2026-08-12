@@ -1,11 +1,32 @@
 # Release Notes
 
+## v1.3.6 - 2026-08-12
+
+影伴隐私政策页面修复版本。
+
+- 修复生产 `/privacy` 显示 HTML 源代码而不是渲染页面的问题。
+- 将隐私页改为 Vercel 静态构建产物，避开 Supabase Storage 对 HTML 的纯文本返回策略。
+- 将隐私页样式移到独立 CSS 文件，并增加构建产物、路由和 `Content-Type` 验收。
+
+### 验证结果
+
+- `npm run verify` 通过。
+- 隐私页浏览器回归：1/1 通过。
+- Vercel Preview `/privacy`：HTTP 200，`Content-Type: text/html; charset=utf-8`。
+- PR #33 的 CI、CodeQL 和 Vercel 检查通过。
+
+### 部署清单
+
+1. 合并 PR #33 到 `main`，由 Vercel 部署 v1.3.6。
+2. 验证 `https://sm.shadow.wang/privacy` 和 `/privacy/` 返回 `text/html`，页面显示中文标题、中英文内容和品牌首屏。
+3. 创建并发布 Git tag `v1.3.6`，核对 Release 附件和 SHA-256。
+
 ## v1.3.5 - 2026-08-12
 
 影伴商业化准备与隐私/安全边界修订版本，面向 Dogfooding 和小规模内测。
 
 - 增加家长/监护人同意审计、学习者隐私访问边界和双语隐私说明页面。
-- 隐私页发布源文件、Supabase Storage 发布工具和临时发布凭据清理流程已纳入仓库。
+- 隐私页源文件会随 Vercel 构建输出为静态页面，避免 Supabase Storage 将 HTML 按纯文本返回。
 - 隐私页增加影伴品牌首屏、成长轨道视觉、数据最小化原则卡片和移动端布局；本地 `/privacy` 与 `/privacy/` 路由已和生产入口保持一致。
 - 隐私页品牌标识和返回应用入口使用当前站点相对路径，确保本地、Preview 和生产环境不会跨环境跳转。
 - 应用页脚首位增加 Shadow Nexus 产品主页链接，社交媒体和隐私政策入口保持不变。
@@ -24,10 +45,9 @@
 
 ### 部署清单
 
-1. 合并 PR #31 到 `main`，由 Vercel 部署包含本地 `/privacy` 路由和品牌化页面的应用版本。
-2. 按 [`docs/privacy-policy-publishing.md`](docs/privacy-policy-publishing.md) 发布最新 `privacy-policy.html` 到 Supabase Storage，核对 SHA-256。
-3. 验证 `https://sm.shadow.wang/privacy` 显示品牌首屏、中英文内容、语言锚点和移动端布局；确认线上页面哈希与源文件一致。
-4. 验收完成后删除一次性发布 Edge Function，并清除 `PRIVACY_POLICY_PUBLISH_TOKEN`；未完成前不得把线上页面标记为已更新。
+1. 合并 PR #31 到 `main`，由 Vercel 部署包含静态 `/privacy` 页面和品牌化页面的应用版本。
+2. 按 [`docs/privacy-policy-publishing.md`](docs/privacy-policy-publishing.md) 完成构建产物和响应头验收。
+3. 验证 `https://sm.shadow.wang/privacy` 显示品牌首屏、中英文内容、语言锚点和移动端布局。
 
 ## v1.3.4 - 2026-08-10
 

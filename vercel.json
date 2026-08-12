@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/privacy",
-      "destination": "https://dutepjyocxcvecmsrtfp.supabase.co/storage/v1/object/public/legal/shadow-mate/privacy-policy.html"
+      "destination": "/privacy.html"
     },
     {
       "source": "/privacy/",
-      "destination": "https://dutepjyocxcvecmsrtfp.supabase.co/storage/v1/object/public/legal/shadow-mate/privacy-policy.html"
+      "destination": "/privacy.html"
     }
   ],
   "headers": [

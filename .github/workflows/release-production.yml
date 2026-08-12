@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "已部署的 Release tag，例如 v1.3.4"
+        description: "已部署的 Release tag，例如 v1.3.6"
         required: true
         type: string
       url:
