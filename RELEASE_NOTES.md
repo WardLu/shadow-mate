@@ -1,9 +1,27 @@
 # Release Notes
 
-## Unreleased
+## v1.3.7 - 2026-08-13
 
 - 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；声音模型约 115MB，仍支持一次下载后离线使用。
 - 有可用英语系统语音的设备仍优先使用系统 TTS；无 GMS Android 使用浏览器本地 Piper。模型更新后会按新的资源地址重新准备离线语音包，MacBook 与 Android 的音色可能不同。
+
+### 验证结果
+
+- PR #36 已 squash 合并到 `main`，合并提交为 `d59d43f`。
+- `npm run verify`、CI、CodeQL、Shared Supabase Policy、Vercel Preview 和公开仓库 Release 闸门通过。
+- Android 无 GMS 设备首次使用需下载约 115MB；下载完成后可断网测试离线发音。
+
+### 发布包
+
+文件：`shadow-mate-v1.3.7.zip`
+
+SHA-256：`478857934c9284a6138c2b426afae59fbb4b07291a7b9d899a5531c98d26f7b1`
+
+### 部署清单（进行中）
+
+- 创建并推送 Git tag `v1.3.7`。
+- 创建 GitHub Release 并上传发布包。
+- 验证 `https://sm.shadow.wang/` 的版本、TTS 静态资源、响应头和生产发音链路。
 
 ## v1.3.6 - 2026-08-12
 

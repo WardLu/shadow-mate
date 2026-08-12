@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.7] - 2026-08-13
 
 ### Fixed
 - 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；首次下载的声音模型约 115MB。
