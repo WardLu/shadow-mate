@@ -252,11 +252,59 @@ function $(html){ const t=document.createElement("template"); t.innerHTML=html.t
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
 let activeAudio = null;
+let activeAudioSource = null;
+let activeAudioSourceUrl = null;
+let sharedAudioContext = null;
+
+function getAudioContext() {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (typeof AudioContextCtor !== "function") return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    try {
+      sharedAudioContext = new AudioContextCtor();
+    } catch (_) {
+      sharedAudioContext = null;
+    }
+  }
+  return sharedAudioContext;
+}
+
+function releaseObjectUrl(url) {
+  if (!url?.startsWith("blob:")) return;
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+}
 
 function releaseAudio(audio, url) {
   if (activeAudio === audio) activeAudio = null;
   audio.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  releaseObjectUrl(url);
+}
+
+function stopActivePlayback() {
+  if (activeAudioSource) {
+    const source = activeAudioSource;
+    activeAudioSource = null;
+    try {
+      source.stop();
+    } catch (_) {
+      // The source may already have ended.
+    }
+    try {
+      source.disconnect();
+    } catch (_) {
+      // Some lightweight browser implementations do not expose disconnect().
+    }
+    releaseObjectUrl(activeAudioSourceUrl);
+    activeAudioSourceUrl = null;
+  }
+  if (activeAudio) {
+    const previousAudio = activeAudio;
+    activeAudio = null;
+    previousAudio.pause();
+    const previousUrl = previousAudio.src;
+    previousAudio.remove();
+    releaseObjectUrl(previousUrl);
+  }
 }
 
 async function speak(t, button){
@@ -312,6 +360,10 @@ async function speak(t, button){
 
   const speakOffline = async () => {
     setBusy("准备中…");
+    const audioContext = getAudioContext();
+    const audioContextReady = audioContext
+      ? Promise.resolve().then(() => audioContext.resume()).catch(() => {})
+      : null;
     let playbackTimer = null;
     const clearPlaybackTimer = () => {
       if (playbackTimer !== null) {
@@ -355,14 +407,53 @@ async function speak(t, button){
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-      if (activeAudio) {
-        const previousAudio = activeAudio;
-        activeAudio = null;
-        previousAudio.pause();
-        const previousUrl = previousAudio.src;
-        previousAudio.remove();
-        if (previousUrl.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
+      stopActivePlayback();
+
+      if (audioContext) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error("生成的音频读取失败");
+          const audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+          await audioContextReady;
+          if (audioContext.state === "suspended") await audioContext.resume();
+          const source = audioContext.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(audioContext.destination);
+          activeAudioSource = source;
+          activeAudioSourceUrl = url;
+          let playbackSettled = false;
+          const finishPlayback = () => {
+            if (playbackSettled) return;
+            playbackSettled = true;
+            clearPlaybackTimer();
+            if (activeAudioSource === source) activeAudioSource = null;
+            if (activeAudioSourceUrl === url) activeAudioSourceUrl = null;
+            try {
+              source.disconnect();
+            } catch (_) {
+              // Some lightweight browser implementations do not expose disconnect().
+            }
+            restore();
+            releaseObjectUrl(url);
+          };
+          source.onended = finishPlayback;
+          const reportedDurationMs = Number.isFinite(duration) && duration > 0 ? duration : 0;
+          const decodedDurationMs = Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
+            ? audioBuffer.duration * 1000
+            : 0;
+          const playbackFallbackMs = Math.max(reportedDurationMs, decodedDurationMs) + 750;
+          playbackTimer = window.setTimeout(finishPlayback, Math.max(1000, playbackFallbackMs));
+          source.start();
+          if (!playbackSettled) setBusy("播放中…");
+          return;
+        } catch (_) {
+          if (activeAudioSourceUrl === url) {
+            activeAudioSource = null;
+            activeAudioSourceUrl = null;
+          }
+        }
       }
+
       const audio = document.createElement("audio");
       audio.preload = "auto";
       audio.setAttribute("aria-hidden", "true");
@@ -388,9 +479,10 @@ async function speak(t, button){
         releaseAudio(audio, url);
       };
       const playbackFallbackMs = Number.isFinite(duration) && duration > 0
-        ? Math.max(1000, Math.ceil(duration * 1000) + 750)
+        ? Math.max(1000, Math.ceil(duration) + 750)
         : 5000;
       playbackTimer = window.setTimeout(finishPlayback, playbackFallbackMs);
+      audio.load();
       await audio.play();
       if (!playbackSettled) setBusy("播放中…");
     } catch (error) {

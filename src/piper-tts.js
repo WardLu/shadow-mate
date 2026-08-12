@@ -144,9 +144,14 @@ async function loadEngine() {
           return [config, modelUrl];
         },
       };
+      const useWorkerRuntime = typeof Worker === "function"
+        && typeof mod.OnnxWebWorkerRuntime === "function"
+        && typeof mod.PhonemizeWebWorkerRuntime === "function";
+      const OnnxRuntime = useWorkerRuntime ? mod.OnnxWebWorkerRuntime : mod.OnnxWebRuntime;
+      const PhonemizeRuntime = useWorkerRuntime ? mod.PhonemizeWebWorkerRuntime : mod.PhonemizeWebRuntime;
       return new mod.PiperWebEngine({
-        onnxRuntime: new mod.OnnxWebRuntime({ basePath: "/onnx/", numThreads: 1 }),
-        phonemizeRuntime: new mod.PhonemizeWebRuntime({ basePath: "/piper/" }),
+        onnxRuntime: new OnnxRuntime({ basePath: "/onnx/", numThreads: 1 }),
+        phonemizeRuntime: new PhonemizeRuntime({ basePath: "/piper/" }),
         voiceProvider,
       });
     })().catch((err) => {

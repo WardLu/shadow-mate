@@ -23,6 +23,8 @@ const requiredFiles = [
   "public/piper/en_US-ljspeech-high.onnx.part-00",
   "public/piper/en_US-ljspeech-high.onnx.part-01",
   "public/piper/en_US-ljspeech-high.onnx.json",
+  "public/worker/OnnxWebWorker.js",
+  "public/worker/PhonemizeWebWorker.js",
 ];
 
 for (const file of requiredFiles) {

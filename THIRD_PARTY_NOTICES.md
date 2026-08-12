@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-08-12
+更新时间：2026-08-13
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -31,6 +31,8 @@
 | `public/piper/en_US-ljspeech-high.onnx.part-00` | [Piper Voices](https://huggingface.co/rhasspy/piper-voices) 提交 `ea046e8458f6acd997706d6e6066a022b42f6fb1` 的 `en_US-ljspeech-high` 模型第 1 个分片；模型卡标注 LJ Speech 数据集为 public domain |
 | `public/piper/en_US-ljspeech-high.onnx.part-01` | 上述 `en_US-ljspeech-high` 模型第 2 个分片 |
 | `public/piper/en_US-ljspeech-high.onnx.json` | 上述模型的配置文件 |
+| `public/worker/OnnxWebWorker.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) 的 ONNX Runtime Web Worker 构建；文件头包含 ONNX Runtime Web 许可信息 |
+| `public/worker/PhonemizeWebWorker.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) 的 Piper phonemize Web Worker 构建；包含上游运行时许可声明 |
 
 eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
 
@@ -45,3 +47,5 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 | `public/piper/en_US-ljspeech-high.onnx.part-00` | `21d7e6678b3dfba6c3b2e8f774979a95cce8e72d0f505d0deeaef75791027006` |
 | `public/piper/en_US-ljspeech-high.onnx.part-01` | `5af3a36ef69e3b4fd23bd3a181638e3cafa662be4c608b055501a422d4c6c774` |
 | `public/piper/en_US-ljspeech-high.onnx.json` | `7e1f4634af596d83cca997fb7a931ba80b70f8a316a2655ee69c55365e0ace14` |
+| `public/worker/OnnxWebWorker.js` | `2587dea03597266ae54daf2c76721953e163ce6b7ff4df3fabf0f35463a69c1a` |
+| `public/worker/PhonemizeWebWorker.js` | `a42c76cdaf2aad92a280a0afc35c03a8d812f00f249f8aa65240078e26ea895a` |
