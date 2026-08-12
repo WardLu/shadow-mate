@@ -249,15 +249,15 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.confirmation]
-subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang") }}影匣{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁{{ else }}登录验证{{ end }} · 注册验证码'
+subject = '{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") }}影裁 Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") }}Quick flomo{{ else }}Shadow Nexus{{ end }} · 注册验证码'
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.magic_link]
-subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang") }}影匣{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁{{ else }}登录验证{{ end }} · 登录验证码'
+subject = '{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") }}影裁 Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") }}Quick flomo{{ else }}Shadow Nexus{{ end }} · 登录验证码'
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.recovery]
-subject = '{{ if eq .RedirectTo "https://sm.shadow.wang" }}影伴{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang") }}影匣{{ else if eq .RedirectTo "https://ss.shadow.wang" }}影裁{{ else }}Shadow Nexus{{ end }} · 重设密码'
+subject = '{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") }}影裁 Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") }}Quick flomo{{ else }}Shadow Nexus{{ end }} · 重设密码'
 content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
@@ -435,3 +435,9 @@ entrypoint = "./functions/delete-account/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/delete-account/*.html" ]
+
+[functions.check-auth-email]
+enabled = true
+verify_jwt = false
+import_map = "./functions/check-auth-email/deno.json"
+entrypoint = "./functions/check-auth-email/index.ts"
