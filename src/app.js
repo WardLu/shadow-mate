@@ -251,6 +251,14 @@ function dayTotal(day){
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
+let activeAudio = null;
+
+function releaseAudio(audio, url) {
+  if (activeAudio === audio) activeAudio = null;
+  audio.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
 async function speak(t, button){
   const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
@@ -347,14 +355,27 @@ async function speak(t, button){
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-      const audio = new Audio(url);
+      if (activeAudio) {
+        const previousAudio = activeAudio;
+        activeAudio = null;
+        previousAudio.pause();
+        const previousUrl = previousAudio.src;
+        previousAudio.remove();
+        if (previousUrl.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
+      }
+      const audio = document.createElement("audio");
+      audio.preload = "auto";
+      audio.setAttribute("aria-hidden", "true");
+      audio.src = url;
+      document.body.appendChild(audio);
+      activeAudio = audio;
       let playbackSettled = false;
       const finishPlayback = () => {
         if (playbackSettled) return;
         playbackSettled = true;
         clearPlaybackTimer();
         restore();
-        URL.revokeObjectURL(url);
+        releaseAudio(audio, url);
       };
       audio.onended = () => {
         finishPlayback();
@@ -364,7 +385,7 @@ async function speak(t, button){
         playbackSettled = true;
         clearPlaybackTimer();
         fail("发音失败，请重试");
-        URL.revokeObjectURL(url);
+        releaseAudio(audio, url);
       };
       const playbackFallbackMs = Number.isFinite(duration) && duration > 0
         ? Math.max(1000, Math.ceil(duration * 1000) + 750)
