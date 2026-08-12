@@ -2,7 +2,7 @@
 
 线上地址：[sm.shadow.wang/privacy](https://sm.shadow.wang/privacy)。发布源文件是仓库根目录的 `privacy-policy.html`，Storage 对象路径是 `legal/shadow-mate/privacy-policy.html`。
 
-隐私页是独立 HTML，不依赖主应用的 JavaScript、CSS 或图片资源。页面内的影伴品牌标识使用内嵌 SVG，避免上传到 Supabase Storage 后出现相对路径资源失效。当前页面包含中英文内容、品牌首屏、数据最小化原则卡片和移动端布局。
+隐私页是独立 HTML，不依赖主应用的 JavaScript、CSS 或图片资源。页面内的影伴品牌标识使用内嵌 SVG，避免上传到 Supabase Storage 后出现相对路径资源失效。当前页面包含中英文内容、品牌首屏、数据最小化原则卡片和移动端布局。品牌标识和“返回应用”入口使用当前站点的相对根路径，因此本地、Preview、生产环境会回到各自环境，不硬编码生产域名。
 
 ## 本地访问
 

@@ -10,6 +10,7 @@
 
 ### Changed
 - 将国产 Android 英语朗读兜底使用的 Piper 声音模型切换为 `en_US-ljspeech-medium`，并同步第三方来源与许可证记录。
+- 隐私页品牌标识和返回应用入口改用当前站点相对路径，避免本地或 Preview 环境跳转到生产域名。
 
 ### Security
 - 修复本地 Supabase PostgreSQL 在匿名调用密码状态 RPC 时因执行权限拒绝触发后端崩溃的问题。`learning_has_password()` 现在通过 `SECURITY DEFINER` 进入内部认证检查，匿名调用仍返回 `42501`，不会暴露密码状态。

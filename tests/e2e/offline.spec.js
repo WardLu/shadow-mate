@@ -34,6 +34,8 @@ test.describe("Offline mode (no login)", () => {
     await expect(page).toHaveTitle("影伴隐私说明");
     await expect(page.locator("#zh .language-title")).toContainText("隐私说明");
     await expect(page.locator("#en")).toBeVisible();
+    await expect(page.locator(".brand")).toHaveAttribute("href", "/");
+    await expect(page.locator(".back-link")).toHaveAttribute("href", "/");
   });
 
   test("night mode keeps page surfaces and text readable", async ({ page }) => {
