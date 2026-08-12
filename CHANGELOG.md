@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- 将国产 Android（无 GMS）离线英语兜底从 `en_US-ljspeech-medium` 升级为 `en_US-ljspeech-high`，保留公共领域数据来源和本地离线合成链路，提升朗读自然度；首次下载的声音模型约 115MB。
+
 ## [1.3.6] - 2026-08-12
 
 ### Fixed

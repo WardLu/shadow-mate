@@ -20,8 +20,9 @@ const requiredFiles = [
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
   "supabase/migrations/20260811202411_child_privacy_consent.sql",
-  "public/piper/en_US-ljspeech-medium.onnx",
-  "public/piper/en_US-ljspeech-medium.onnx.json",
+  "public/piper/en_US-ljspeech-high.onnx.part-00",
+  "public/piper/en_US-ljspeech-high.onnx.part-01",
+  "public/piper/en_US-ljspeech-high.onnx.json",
 ];
 
 for (const file of requiredFiles) {
@@ -109,7 +110,7 @@ if (/https:\/\/esm\.sh/i.test(cloud)) {
 
 const piper = await readFile("src/piper-tts.js", "utf8");
 for (const marker of [
-  'export const VOICE = "/piper/en_US-ljspeech-medium"',
+  'export const VOICE = "/piper/en_US-ljspeech-high"',
   'export const VOICE_FILES',
 ]) {
   if (!piper.includes(marker)) throw new Error(`piper-tts.js is missing ${marker}`);

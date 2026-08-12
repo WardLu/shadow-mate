@@ -28,8 +28,9 @@
 | `public/onnx/ort-wasm-simd-threaded.wasm` | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
 | `public/piper/piper_phonemize.wasm` | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
 | `public/piper/piper_phonemize.data` | 与上述 piper-tts-web 提交配套的运行时数据 |
-| `public/piper/en_US-ljspeech-medium.onnx` | [Piper Voices](https://huggingface.co/rhasspy/piper-voices) 的 `en_US-ljspeech-medium` 模型 |
-| `public/piper/en_US-ljspeech-medium.onnx.json` | 上述模型的配置文件 |
+| `public/piper/en_US-ljspeech-high.onnx.part-00` | [Piper Voices](https://huggingface.co/rhasspy/piper-voices) 提交 `ea046e8458f6acd997706d6e6066a022b42f6fb1` 的 `en_US-ljspeech-high` 模型第 1 个分片；模型卡标注 LJ Speech 数据集为 public domain |
+| `public/piper/en_US-ljspeech-high.onnx.part-01` | 上述 `en_US-ljspeech-high` 模型第 2 个分片 |
+| `public/piper/en_US-ljspeech-high.onnx.json` | 上述模型的配置文件 |
 
 eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
 
@@ -41,5 +42,6 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 | `public/onnx/ort-wasm-simd-threaded.wasm` | `207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea` |
 | `public/piper/piper_phonemize.data` | `a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa` |
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
-| `public/piper/en_US-ljspeech-medium.onnx` | `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22` |
-| `public/piper/en_US-ljspeech-medium.onnx.json` | `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860` |
+| `public/piper/en_US-ljspeech-high.onnx.part-00` | `21d7e6678b3dfba6c3b2e8f774979a95cce8e72d0f505d0deeaef75791027006` |
+| `public/piper/en_US-ljspeech-high.onnx.part-01` | `5af3a36ef69e3b4fd23bd3a181638e3cafa662be4c608b055501a422d4c6c774` |
+| `public/piper/en_US-ljspeech-high.onnx.json` | `7e1f4634af596d83cca997fb7a931ba80b70f8a316a2655ee69c55365e0ace14` |

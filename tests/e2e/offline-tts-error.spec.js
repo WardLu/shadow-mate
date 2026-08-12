@@ -16,7 +16,7 @@ test.describe("Offline voice download errors", () => {
         `,
       });
     });
-    await page.route("**/piper/en_US-ljspeech-medium.onnx", async (route) => {
+    await page.route("**/piper/en_US-ljspeech-high.onnx.part-00", async (route) => {
       await route.fulfill({ status: 503, contentType: "text/plain", body: "unavailable" });
     });
     await page.goto("/");

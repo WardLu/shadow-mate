@@ -6,14 +6,15 @@
  *
  * 致谢（开源项目详见 README 致谢一节）：
  *  - piper-tts-web（MIT）
- *  - rhasspy/piper 语音模型 en_US-ljspeech-medium（模型卡标注训练数据为 public domain）
+ *  - rhasspy/piper 语音模型 en_US-ljspeech-high（模型卡标注训练数据为 public domain）
  *  - ONNX Runtime Web（MIT）
  */
 
-export const VOICE = "/piper/en_US-ljspeech-medium";
+export const VOICE = "/piper/en_US-ljspeech-high";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
-export const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
+export const VOICE_MODEL_PARTS = [VOICE + ".onnx.part-00", VOICE + ".onnx.part-01"];
+export const VOICE_FILES = [...VOICE_MODEL_PARTS, VOICE + ".onnx.json"];
 export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
@@ -54,7 +55,9 @@ async function getContentLength(url, signal) {
 export async function isVoiceCached() {
   if (!("caches" in window)) return false;
   try {
-    return !!(await (await openVoiceCache()).match(VOICE + ".onnx"));
+    const cache = await openVoiceCache();
+    const cachedFiles = await Promise.all(VOICE_FILES.map((url) => cache.match(url)));
+    return cachedFiles.every(Boolean);
   } catch (_) {
     return false;
   }
@@ -120,7 +123,7 @@ async function loadEngine() {
       const mod = await import(/* @vite-ignore */ ENGINE_URL);
       const voiceProvider = {
         async fetch(voice) {
-          const read = async (url) => {
+          const readResponse = async (url) => {
             let res = null;
             if ("caches" in window) {
               try {
@@ -131,9 +134,14 @@ async function loadEngine() {
             }
             if (!res) res = await fetch(url);
             if (!res.ok) throw new Error("语音模型读取失败");
-            return url.endsWith(".json") ? res.json() : URL.createObjectURL(await res.blob());
+            return res;
           };
-          return Promise.all([read(voice + ".onnx.json"), read(voice + ".onnx")]);
+          const config = await (await readResponse(voice + ".onnx.json")).json();
+          const modelParts = await Promise.all(
+            VOICE_MODEL_PARTS.map(async (url) => (await readResponse(url)).blob())
+          );
+          const modelUrl = URL.createObjectURL(new Blob(modelParts, { type: "application/octet-stream" }));
+          return [config, modelUrl];
         },
       };
       return new mod.PiperWebEngine({
@@ -167,7 +175,7 @@ function buildDialog() {
   dlg.className = "voice-dialog";
   dlg.innerHTML =
     '<div class="voice-dialog-title">离线英语语音</div>' +
-    '<div class="voice-dialog-desc">当前设备没有可用的英语发音。影伴内置了约 90MB 的离线英语语音包（一次性下载，之后可离线使用，不上传录音）。是否现在下载？</div>' +
+    '<div class="voice-dialog-desc">当前设备没有可用的英语发音。影伴内置了约 115MB 的高质量离线英语语音包（一次性下载，之后可离线使用，不上传录音）。是否现在下载？</div>' +
     '<div class="voice-dialog-progress" hidden><div class="voice-dialog-bar"><i></i></div><span class="voice-dialog-pct">0%</span></div>' +
     '<div class="voice-dialog-actions">' +
     '<button type="button" class="voice-dialog-cancel" data-action="cancel">取消</button>' +

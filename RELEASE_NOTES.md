@@ -1,5 +1,9 @@
 # Release Notes
 
+## Unreleased
+
+- 将国产 Android（无 GMS）离线英语兜底从 `en_US-ljspeech-medium` 升级为 `en_US-ljspeech-high`，提升本地朗读自然度；声音模型约 115MB，仍支持一次下载后离线使用。
+
 ## v1.3.6 - 2026-08-12
 
 修复生产环境隐私政策页面显示 HTML 源代码的问题。
