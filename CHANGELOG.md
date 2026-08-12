@@ -8,7 +8,7 @@
 - 将隐私页样式移到独立 CSS 文件，兼容生产 CSP。
 
 ### Tests
-- `npm run verify` 通过；隐私页浏览器回归 1/1 通过；Vercel Preview 返回 `text/html`。
+- `npm run verify` 通过；隐私页浏览器回归 1/1 通过；Vercel Preview 和生产 `/privacy` 均返回 `text/html; charset=utf-8`。
 
 ## [1.3.5] - 2026-08-12
 

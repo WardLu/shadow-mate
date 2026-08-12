@@ -2,24 +2,31 @@
 
 ## v1.3.6 - 2026-08-12
 
-影伴隐私政策页面修复版本。
+修复生产环境隐私政策页面显示 HTML 源代码的问题。
 
-- 修复生产 `/privacy` 显示 HTML 源代码而不是渲染页面的问题。
-- 将隐私页改为 Vercel 静态构建产物，避开 Supabase Storage 对 HTML 的纯文本返回策略。
-- 将隐私页样式移到独立 CSS 文件，并增加构建产物、路由和 `Content-Type` 验收。
+### 本次更新
+
+- `/privacy` 和 `/privacy/` 改为 Vercel 静态 HTML 页面。
+- 隐私页样式拆分为独立 CSS 文件。
+- 增加构建产物、路由和 `Content-Type` 校验。
 
 ### 验证结果
 
 - `npm run verify` 通过。
-- 隐私页浏览器回归：1/1 通过。
-- Vercel Preview `/privacy`：HTTP 200，`Content-Type: text/html; charset=utf-8`。
-- PR #33 的 CI、CodeQL 和 Vercel 检查通过。
+- Release 校验和生产环境回归验证通过。
+- 生产 `/privacy` 返回 `text/html; charset=utf-8`。
 
-### 部署清单
+### 发布包
 
-1. 合并 PR #33 到 `main`，由 Vercel 部署 v1.3.6。
-2. 验证 `https://sm.shadow.wang/privacy` 和 `/privacy/` 返回 `text/html`，页面显示中文标题、中英文内容和品牌首屏。
-3. 创建并发布 Git tag `v1.3.6`，核对 Release 附件和 SHA-256。
+文件：`shadow-mate-v1.3.6.zip`
+
+SHA-256：`7cc7ccf6b7eee0a866521d3e01aef9315d9faccadaa46c1f22ed51d4d32e387a`
+
+### 部署清单（已完成）
+
+- PR #33 已合并到 `main`，合并提交为 `2836a7c`。
+- Git tag `v1.3.6` 和 GitHub Release 已发布。
+- 生产 `/privacy` 和 `/privacy/` 均已验证为正常 HTML 页面。
 
 ## v1.3.5 - 2026-08-12
 
