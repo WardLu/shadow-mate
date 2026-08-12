@@ -5,6 +5,7 @@
 ### Added
 - 增加家长/监护人同意审计和学习者隐私数据访问边界，学习者档案创建必须具备有效同意记录。
 - 增加双语隐私说明页面 `https://sm.shadow.wang/privacy`，并提供受保护的 Supabase Storage 发布工具。
+- 为隐私页增加影伴品牌首屏、成长轨道视觉、数据最小化原则卡片和移动端布局；Vite 本地开发与 Preview 环境同步提供 `/privacy` 路由。
 - 增加公开仓库提交、推送、PR 和 Release 检查配置与自动化验证。
 
 ### Changed

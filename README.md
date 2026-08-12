@@ -75,6 +75,8 @@ npm.cmd run dev
 
 打开终端输出的本地地址即可。不要直接双击 `index.html`，因为浏览器在 `file://` 协议下无法正常加载 ES Module。
 
+隐私页本地入口为 `http://localhost:5173/privacy`；它与主应用共用 Vite 开发服务器，但会直接展示独立的双语隐私 HTML。
+
 ### 验证项目
 
 ```powershell
