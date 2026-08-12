@@ -159,6 +159,10 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 影伴当前仓库版本为 v1.3.6，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
+### 英语发音
+
+“听发音”优先使用设备提供的英语系统语音。MacBook 等通常有可用系统语音的设备，听到的是系统 TTS；没有英语系统语音的国产 Android（尤其是无 GMS 设备）会切换到浏览器本地 Piper，首次使用下载约 115MB 的 `en_US-lessac-high` 离线语音包。两类设备使用的引擎不同，因此音色和听感可能不同；Piper 下载完成后可离线合成，且不会上传录音。
+
 ## 致谢
 
 影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
@@ -166,7 +170,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-ljspeech-medium`
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-lessac-high`
 
 第三方资源的来源、版本指纹和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

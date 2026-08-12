@@ -1,5 +1,10 @@
 # Release Notes
 
+## Unreleased
+
+- 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；声音模型约 115MB，仍支持一次下载后离线使用。
+- 有可用英语系统语音的设备仍优先使用系统 TTS；无 GMS Android 使用浏览器本地 Piper。模型更新后会按新的资源地址重新准备离线语音包，MacBook 与 Android 的音色可能不同。
+
 ## v1.3.6 - 2026-08-12
 
 修复生产环境隐私政策页面显示 HTML 源代码的问题。
