@@ -17,6 +17,7 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 
 - Use a branch and pull request; do not push directly to `main`.
 - Run `npm run verify` before pushing.
+- For a release tag, run `npm run build` followed by `npm run release:check`; the tag workflow repeats this against the final archive.
 - Commit `package-lock.json` and pin dependency versions.
 - Add explicit PostgreSQL grants and RLS policies in the same migration.
 - Run the local Supabase pgTAP tests and database lint for schema changes.
@@ -38,6 +39,19 @@ Maintainers may create an ignored `.security-local-denylist` file with one priva
 - 代码、测试、迁移、配置和对应文档必须作为同一项工作提交并推送，禁止明知文档过期而先提交代码、之后再补文档。
 - 提交前运行 `npm run public:check`、`git diff --cached --check` 和 `npm run verify`，并逐项复查 `git diff --cached --name-status` 与 `git diff --cached`，确认没有把内部、敏感或不必要文件加入提交。
 - 推送前重新核对远端仓库可见性、目标分支、PR base/head 和 PR 描述；任何不确定的文件先移出暂存区，不要“先提交再解释”。
+
+## Release 闸门
+
+Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
+
+1. 先同步 `package.json`、`package-lock.json`、`README.md`、`CHANGELOG.md` 和 `RELEASE_NOTES.md` 的版本号。
+2. 在目标 commit 创建匹配的 `vX.Y.Z` Tag；Tag 推送后等待 `Release verification` 全绿。
+3. 自动检查版本和 Tag 一致性、发布说明部署清单、最终 `dist`/压缩包的敏感内容、构建产物、第三方资源 SHA-256 和许可证清单。
+4. 部署完成后手动运行 `Release production verification`，填写同一个 Tag 和生产 HTTPS 地址，验收首页、Manifest、CSP、HSTS、X-Frame-Options 等响应头。
+5. 创建 GitHub Release 前人工核对：Release 页面 Tag 与已验收 Tag 相同；附件来自已扫描的最终压缩包；附件 SHA-256 与本地/CI 记录一致；没有额外未扫描附件。
+6. 涉及 Supabase 迁移时，发布人必须在生产 Supabase 确认目标迁移已执行，再在发布说明记录结果；自动化测试不等于生产迁移已完成。
+
+普通项目复用这套流程时，只复制通用闸门；在 `release-gate.config.json` 中按项目调整产物目录、第三方资源、发布说明标记和生产响应头，不要照搬影伴的 Piper、Vercel 或 Supabase 假设。
 
 ### 已误推送时的兜底
 

@@ -1,5 +1,23 @@
 # Release Notes
 
+## v1.3.5 - 2026-08-12
+
+影伴商业化准备与隐私/安全边界修订版本，面向 Dogfooding 和小规模内测。
+
+- 增加家长/监护人同意审计、学习者隐私访问边界和双语隐私说明页面。
+- 隐私页发布源文件、Supabase Storage 发布工具和临时发布凭据清理流程已纳入仓库。
+- 增加公开仓库 Git/Release 防线，检查公开范围、密钥、最终产物、第三方资源哈希与部署响应头。
+- 将 Piper 英语声音模型切换为 `en_US-ljspeech-medium`，并同步第三方来源与许可证记录。
+- 新增迁移 `20260812081305_learning_has_password_anon_safe_error.sql`：避免本地 PostgreSQL 在匿名调用密码状态 RPC 时因权限拒绝触发后端崩溃。
+- `learning_has_password()` 改为 `SECURITY DEFINER` 并保留内部 `auth.uid()` 检查；匿名调用仍返回 `42501`，不暴露密码状态。
+
+### 验证结果
+
+- `npm run build` 通过。
+- `npm run test:unit`：72/72 通过。
+- `npm run test:db`：58/58 通过。
+- `npm run public:check`、`npm run security:check`、`npm run release:check` 通过。
+
 ## v1.3.4 - 2026-08-10
 
 离线英语发音、CSP 和开发环境兼容性修复版本。

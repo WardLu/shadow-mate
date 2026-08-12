@@ -1,5 +1,7 @@
 # 影伴隐私说明
 
+线上展示版：[sm.shadow.wang/privacy](https://sm.shadow.wang/privacy)，包含中文和 English 两个版本。仓库根目录的 `privacy-policy.html` 是发布源文件；更新后使用 `npm run privacy:publish` 将它发布到 Supabase Storage，再通过短链接提供访问。
+
 影伴面向家庭和未成年学习者，默认遵循数据最小化原则。本文件描述当前开源版本的技术行为。
 
 ## 收集和保存的数据

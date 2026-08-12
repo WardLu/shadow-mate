@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.5] - 2026-08-12
+
+### Added
+- 增加家长/监护人同意审计和学习者隐私数据访问边界，学习者档案创建必须具备有效同意记录。
+- 增加双语隐私说明页面 `https://sm.shadow.wang/privacy`，并提供受保护的 Supabase Storage 发布工具。
+- 增加公开仓库提交、推送、PR 和 Release 检查配置与自动化验证。
+
+### Changed
+- 将国产 Android 英语朗读兜底使用的 Piper 声音模型切换为 `en_US-ljspeech-medium`，并同步第三方来源与许可证记录。
+
+### Security
+- 修复本地 Supabase PostgreSQL 在匿名调用密码状态 RPC 时因执行权限拒绝触发后端崩溃的问题。`learning_has_password()` 现在通过 `SECURITY DEFINER` 进入内部认证检查，匿名调用仍返回 `42501`，不会暴露密码状态。
+
+### Tests
+- 数据库 pgTAP 测试恢复为 58/58 通过；单元测试 72/72 通过；构建、公开仓库、安全和 Release 检查通过。
+
 ## [1.3.4] - 2026-08-10
 
 ### Fixed

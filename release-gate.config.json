@@ -1,0 +1,17 @@
+{
+  "artifactPaths": ["dist"],
+  "vendoredPaths": [
+    "public/piper-tts-web.js",
+    "public/onnx/ort-wasm-simd-threaded.wasm",
+    "public/piper/piper_phonemize.data",
+    "public/piper/piper_phonemize.wasm",
+    "public/piper/en_US-ljspeech-medium.onnx",
+    "public/piper/en_US-ljspeech-medium.onnx.json"
+  ],
+  "requireDeploymentChecklist": true,
+  "production": {
+    "requiredHeaders": ["content-security-policy", "strict-transport-security", "x-frame-options"],
+    "forbiddenHeaderValues": ["unsafe-inline"],
+    "paths": ["/", "/manifest.json"]
+  }
+}

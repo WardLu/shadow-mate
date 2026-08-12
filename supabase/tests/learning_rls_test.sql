@@ -122,13 +122,13 @@ select ok(
 );
 
 select ok(
-  not has_function_privilege('anon', 'public.learning_has_password()', 'execute'),
-  'anonymous users cannot query password status'
+  has_function_privilege('anon', 'public.learning_has_password()', 'execute'),
+  'anonymous callers reach the password status guard without exposing status'
 );
 
 select ok(
-  not (select prosecdef from pg_proc where oid = 'public.learning_has_password()'::regprocedure),
-  'the public password status RPC is security invoker'
+  (select prosecdef from pg_proc where oid = 'public.learning_has_password()'::regprocedure),
+  'the public password status RPC is security definer with an auth guard'
 );
 
 select ok(
@@ -383,7 +383,7 @@ select throws_ok(
   $$select public.learning_has_password()$$,
   '42501',
   null,
-  'anonymous password status access is denied at the privilege layer'
+  'anonymous password status access is denied without exposing password state'
 );
 
 -- Rate limiting

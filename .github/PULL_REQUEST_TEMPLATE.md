@@ -21,3 +21,4 @@
 - [ ] 无内联 `style=` 属性或内联 `<script>` 块
 - [ ] 如包含外部贡献或第三方代码，已阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)，并在 PR 中说明来源与授权状态
 - [ ] 已运行 `npm run public:check`，并复查暂存区没有内部、敏感或不必要文件
+- [ ] 如果这是发布准备变更，已确认 `release-gate.config.json`、版本文件和发布说明同步

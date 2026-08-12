@@ -1,0 +1,47 @@
+name: Release verification
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: verify release tag and artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run source and test verification
+        run: npm run verify
+        env:
+          SECURITY_CHECK_HISTORY: "1"
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build final release archive
+        shell: bash
+        run: zip -qr "shadow-mate-${GITHUB_REF_NAME}.zip" dist
+
+      - name: Scan final release archive
+        run: npm run release:check
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ARTIFACT: shadow-mate-${{ github.ref_name }}.zip
+          RELEASE_REQUIRE_DEPLOYMENT_CHECKLIST: "1"
