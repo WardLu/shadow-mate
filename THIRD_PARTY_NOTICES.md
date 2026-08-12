@@ -50,6 +50,12 @@
 
 因此，本次复核完成的是“字节来源、构建脚本和主要依赖已被识别”，不是“语音链路已经获得商业许可”。在商业发行前应二选一：把该本地语音包作为单独的 GPL 合规分发单元并完成完整义务评估，或从商业构建中移除它并使用系统/其他已清权的语音方案；也可以在法律确认后采用替换后的 phonemizer 构建链。
 
+### 目标 MeloTTS 路线
+
+当前决策记录在 [`docs/tts-decision.md`](docs/tts-decision.md)。目标方案是系统 TTS 优先，系统语音不可用时请求自托管 MeloTTS API。官方 MeloTTS 代码、中文模型和英语模型目前均标注 MIT，适合作为商业候选；但在接入前仍需锁定版本、扫描完整服务端依赖树、保存模型卡和许可证文本，并确认服务端日志、缓存和动态文本处理边界。
+
+MeloTTS 未完成接入前，不得把上述候选描述为当前已经替换 Piper，也不得删除当前 Piper 的来源和许可证记录。
+
 ## 当前文件指纹
 
 以下 SHA-256 用于之后复核 vendored 资源是否发生了未记录替换：
@@ -69,6 +75,8 @@
 - [x] 移除 Lessac 模型并替换为 `en_US-ljspeech-medium`。
 - [x] 完成 `piper_phonemize` WASM 的字节来源、构建脚本和主要依赖识别。
 - [ ] 固定 Emscripten、espeak-ng、phonemizer fork 的可复现构建版本，并完成 GPL 义务与商业分发决策。
+- [ ] 完成商业构建从 Piper 到自托管 MeloTTS 的迁移，并从商业产物移除 Piper WASM、phonemizer 和模型。
+- [ ] 固定 MeloTTS 代码、模型和完整服务端依赖版本，更新最终 notices。
 - [ ] 完成 `en_US-ljspeech-medium` 的正式权利链和目标市场法律审核。
 - [ ] 对完整 npm 依赖树运行许可证扫描并审阅例外项。
 - [ ] 将最终 notice、模型许可和法律审核记录绑定到具体 release/tag。

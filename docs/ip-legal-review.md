@@ -18,7 +18,8 @@
 - [ ] 为现有和未来贡献者签署 CLA 或版权/著作权转让协议；确认 [`CLA.md`](../CLA.md) 草案与实际收集流程一致。
 - [ ] 核对外包、设计、配音、内容作者、翻译和 AI 生成素材是否有可商业使用的书面权利。
 - [ ] 对 README、课程/书名、出版社/品牌、第三方链接、图标和字体做版权、商标和宣传使用复核。
-- [ ] 把 Piper 模型、训练数据、phonemizer、eSpeak NG、ONNX Runtime 及其 notices 与产品代码分开记录；见 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)。
+- [x] 已把当前过渡 Piper 模型、训练数据、phonemizer、eSpeak NG、ONNX Runtime 及其 notices 与产品代码分开记录；见 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)。
+- [ ] MeloTTS 接入后，重新记录服务端代码、模型、完整依赖树、缓存和动态文本处理边界；Piper 记录保留为历史发行证据，直到商业构建完全移除。
 - [ ] 发行前为每个 release/tag 归档源文件、许可证全文、授权合同、notice、构建哈希和审核结论。
 
 ## 公开使用边界

@@ -11,6 +11,8 @@
 
 当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。Vercel 文档说明页面访问数据可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
 
+当前版本的本地 Piper 朗读不把文本发送到影伴服务器。目标商业 TTS 路线会在设备系统语音不可用时，把需要朗读的动态文本发送到影伴自托管 MeloTTS 服务；该服务尚未接入，正式启用前必须补充处理目的、日志/缓存保留、删除机制、子处理者和跨境处理说明。
+
 ## 家长同意和学习者档案
 
 学习者不是独立登录账号。创建第一个学习者或添加学习者前，登录用户必须确认自己是家长或监护人，并阅读本隐私说明。系统会在 Supabase 数据库记录以下同意审计字段：家庭 ID、认证用户 ID、同意类型 `learner_data_processing`、隐私说明版本 `privacy-v1` 和数据库生成的同意时间。客户端不能修改同意时间戳，也不能在没有同意记录的情况下通过公开 API 创建新的学习者档案。

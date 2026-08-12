@@ -117,7 +117,7 @@ supabase db lint --local --schema public --level warning --fail-on error
 
 ```text
 src/app.js                 页面渲染、交互和本机状态
-vite.config.js              Vite 开发环境 Piper 公共模块兼容处理
+vite.config.js              Vite 开发环境兼容处理（当前仍包含 Piper 过渡资源）
 src/learning-state.js      学习状态机与四个模块的打卡分组
 src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
 src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
@@ -168,12 +168,14 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 致谢
 
-影伴的“听发音”优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底，全程不上传录音。相关开源项目：
+影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。该 Piper 路线是过渡实现，商业构建计划迁移到自托管 MeloTTS API。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和迁移记录：
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
 - [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-ljspeech-medium`（模型卡标注 LJ Speech 数据集为 public domain，详见 [模型记录](docs/piper-ljspeech-model-card.md)）
+
+TTS 路线、当前过渡状态和后续 MeloTTS 方案见 [TTS 路线决策](docs/tts-decision.md)。
 
 第三方资源的来源、版本指纹和商业化待复核项见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

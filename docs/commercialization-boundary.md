@@ -1,6 +1,6 @@
 # Shadow Mate 商业化边界
 
-状态：公共 Core 边界与服务契约准备完成；Billing、生产 Entitlement 和私有 Services 尚未接入
+状态：公共 Core 边界与服务契约准备完成；TTS 仍处于 Piper 到 MeloTTS 的迁移阶段；Billing、生产 Entitlement 和私有 Services 尚未接入
 
 本文件把开源项目与未来官方服务分开。目标不是把公共版本砍成 Demo，而是让一个家庭可以完整使用 Shadow Mate Core，同时让官方服务通过托管、智能和内容创造商业价值。
 
@@ -73,8 +73,27 @@ Core 不应出现大量 `if (plan === "pro")`，也不应直接查询 `subscript
 
 以下事项完成前，不应正式销售 Pro 或 Premium Content：
 
-- Piper 模型权利链，以及 `piper_phonemize` WASM/eSpeak NG GPL 依赖的商业分发决策（Lessac 已替换为 ljspeech，但法律清权仍未完成）；
+- 当前商业构建仍包含 Piper 模型和 `piper_phonemize` WASM/eSpeak NG GPL 依赖；迁移到自托管 MeloTTS 并从商业构建移除 Piper 前，该项仍为阻塞；
+- MeloTTS 迁移完成后，仍需固定代码、模型和完整依赖版本，更新 notices，并说明动态文本会发送到 TTS 服务；
 - 第三方依赖和 vendored 文件的来源、版本、许可证及 notices 可追溯；
 - 儿童隐私、可验证家长同意、数据保留、删除、撤回和事故响应流程；当前工程控制见 [儿童隐私与家长同意审核](child-privacy-and-consent.md)，不等于法律清权；
 - 真实服务端 Entitlement、Quota、支付 Webhook 签名和审计日志；
 - 商标、CLA 和商业主体/IP 归属的法律审核，见 [IP 法律审核记录](ip-legal-review.md)。
+
+## 6. 按当前 TTS 方案重新划分的阻塞
+
+### Dogfooding
+
+当前没有需要立即清除的商业销售闸门。可以继续使用现有 Piper 过渡实现，但不能把它描述为已经完成商业清权，也不应以此版本正式销售或承诺无条件商业再分发。
+
+### 公开免费服务
+
+需要先完成 MeloTTS 服务端迁移的最小闭环：服务可用性、动态文本的隐私说明、日志和缓存保留、错误降级、资源成本和完整第三方 notices。它不要求当前就实现支付。
+
+### 儿童场景付费服务
+
+仍然必须完成儿童隐私、可验证家长同意、数据保留/删除/撤回、Supabase/Vercel/MeloTTS 子处理者和跨境处理审核。动态 TTS 会把需要朗读的文本发送到影伴服务，不能继续沿用“全程本地、不上传文本”的表述。
+
+### 正式商业发行
+
+除 TTS 外，仍有商标检索、商业主体/IP 归属、CLA、内容版权、服务端 Entitlement/Quota、支付 Webhook、备份、告警和事故响应等闸门。
