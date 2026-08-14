@@ -16,9 +16,14 @@ import {
   CHECKIN_GROUPS,
   createLearningState,
   hasCheckin,
-  isPointMarked,
   transitionLearningState,
 } from "./learning-state.js";
+import { getLearningStateStorageKey } from "./learning-state-envelope.js";
+import { loadLearningStateEnvelope, adoptPendingLearningState } from "./learning-state-storage.js";
+import { createIndexedDbLearningDb } from "./learning-local-db.js";
+import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
+import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
+import { getActivePointAction, getBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
@@ -130,29 +135,88 @@ const PEANUT_BOOKS = [
    ========================================================= */
 const STORE_KEY = "shadow_mate_workbench_v1";
 
+const growthLoopDb = createIndexedDbLearningDb();
+const growthLoopController = createGrowthLoopController({ db: growthLoopDb });
+let growthLoopSnapshot = growthLoopController.getSnapshot();
+let CURRENT_MOD = "home";
+window.growthLoop = growthLoopController;
+
+function clientRequestId(prefix = "growth") {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function queueGrowthActivity(event_type, payload = {}, bucket = "once") {
+  const scope = growthLoopController.getScope();
+  if (!scope.household_id || !scope.profile_id) return Promise.resolve(null);
+  return growthLoopController.queueActivity({
+    event_type,
+    event_id: activityEventIdFor({ ...scope, event_type, bucket }),
+    payload,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    client_version: document.documentElement.dataset.version || null,
+  }).catch((error) => {
+    console.warn("Growth Loop activity event queued locally but could not be written:", error);
+    return null;
+  });
+}
+
+growthLoopController.subscribe((nextSnapshot) => {
+  growthLoopSnapshot = nextSnapshot;
+  if (CURRENT_MOD === "points" || CURRENT_MOD === "grow") switchMod(CURRENT_MOD);
+});
+
+function learningStateFromEnvelope(envelope) {
+  return envelope?.schema_version === 2 && envelope.learning ? envelope.learning : envelope;
+}
+
 function readStoredState(){
-  const raw = localStorage.getItem(STORE_KEY);
-  if(raw === null) return {};
-  try{
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  }catch(error){
-    console.warn("忽略无法解析的本地存档", error);
-  }
-  return {};
+  return learningStateFromEnvelope(loadLearningStateEnvelope(localStorage, {}));
 }
 
 let store = createLearningState(readStoredState());
 if(!store.checkins) store.checkins = {};   // {date: {module:true}}
 if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
-if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
+if(!store.points) store.points = {};       // 仅保留旧积分历史；新 Growth Loop 不再写入此字段
 if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
 if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
 
+let learningEnvelope = loadLearningStateEnvelope(localStorage, {});
+
+function persistLearningState(){
+  learningEnvelope = {
+    ...learningEnvelope,
+    schema_version: 2,
+    product_id: "shadow-mate",
+    learning: structuredClone(store),
+  };
+  const scope = learningEnvelope.scope || {};
+  localStorage.setItem(getLearningStateStorageKey(scope), JSON.stringify(learningEnvelope));
+  // 兼容旧版本的低风险学习状态读取和既有冲突测试；新 Growth Loop
+  // 账本永远不写入旧 state.points。
+  localStorage.setItem(STORE_KEY, JSON.stringify({ ...store, points: {} }));
+}
+
 function save(){
-  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  persistLearningState();
   window.cloudSync?.schedule();
+}
+
+async function setLearningScope(scope, { adoptPending = false } = {}) {
+  learningEnvelope = adoptPending
+    ? adoptPendingLearningState(localStorage, scope)
+    : loadLearningStateEnvelope(localStorage, scope);
+  store = createLearningState(learningStateFromEnvelope(learningEnvelope));
+  if(!store.checkins) store.checkins = {};
+  if(!store.extra) store.extra = {};
+  if(!store.points) store.points = {};
+  if(!store.bookShelf) store.bookShelf = {};
+  if(!store.peanutLog) store.peanutLog = [];
+  if(!store.peanutRead) store.peanutRead = {};
+  persistLearningState();
+  switchMod(CURRENT_MOD);
+  return structuredClone(learningEnvelope);
 }
 
 function todayKey(){
@@ -181,6 +245,12 @@ function toggleCheckin(mod){
     key: mod,
   });
   save();
+  void queueGrowthActivity(
+    ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
+    { source: "checkin", entry_type: "manual" },
+    `${todayKey()}:${mod}`,
+  );
+  window.cloudSync?.scheduleGrowthLoop?.();
 }
 function streak(mod){
   let s = 0;
@@ -199,37 +269,69 @@ function totalChecked(mod){
 
 /* 积分打卡辅助 */
 function ymKey(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1); }
-function pointOn(itemIdx, day){
-  const ym = ymKey();
-  return isPointMarked(store, ym, itemIdx, day);
+function dateKeyForDay(day){
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(Number(day));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-function togglePoint(itemIdx, day){
-  store = transitionLearningState(store, {
-    type: "POINT_TOGGLED",
-    month: ymKey(),
-    itemIndex: itemIdx,
-    day,
+function visiblePointItems(){
+  const items = window.growthLoop?.getPointItems?.() || [];
+  if(items.length) return items;
+  return POINT_ITEMS.map((item, index) => ({
+    id: `recommended:${index}`,
+    name: item.name,
+    description: item.desc,
+    default_points: item.pts,
+    icon_key: PTS_ICON[item.name] || "star",
+    item_kind: "recommended",
+  }));
+}
+function pointItemAt(itemId){
+  return visiblePointItems().find((item) => item.id === itemId) || null;
+}
+function pointOn(itemId, day){
+  const item = pointItemAt(itemId);
+  if(!item?.id || item.id.startsWith("recommended:")) return false;
+  return getActivePointAction(growthLoopSnapshot, item.id, dateKeyForDay(day));
+}
+function togglePoint(itemId, day){
+  const item = pointItemAt(itemId);
+  if(!item) return;
+  const requestId = clientRequestId("point");
+  void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
+    void queueGrowthActivity(
+      ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
+      { source: "point_item", entry_type: Number(item.default_points ?? item.pts) < 0 ? "adjustment" : "manual" },
+      requestId,
+    );
+    void queueGrowthActivity(ACTIVITY_EVENT_TYPES.CORE_ACTIVATION, { source: "point_item" }, "once");
+    window.cloudSync?.scheduleGrowthLoop?.();
+    renderPoints();
+  }).catch((error) => {
+    console.error("Growth Loop local point write failed:", error);
+    alert("本机记录没有保存成功，请稍后重试。");
   });
-  save();
 }
-function itemMonthTotal(itemIdx){
-  const ym = ymKey();
-  const rec = store.points[ym] && store.points[ym][itemIdx];
-  if(!rec) return 0;
-  return POINT_ITEMS[itemIdx].pts * Object.keys(rec).length;
+function itemMonthTotal(itemId){
+  const item = pointItemAt(itemId);
+  if(!item?.id || item.id.startsWith("recommended:")) return 0;
+  return getPointPeriodTotal(growthLoopSnapshot, item.id, currentPeriodKey());
 }
 function monthTotal(){
-  let s = 0;
-  for(let i=0;i<POINT_ITEMS.length;i++) s += itemMonthTotal(i);
-  return s;
+  return visiblePointItems().reduce((total, item) => total + itemMonthTotal(item.id), 0);
+}
+function currentPeriodKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function pointDayState(day){
   let total = 0;
   let positive = false;
   let negative = false;
-  for(let i=0;i<POINT_ITEMS.length;i++){
-    if(!pointOn(i,day)) continue;
-    const points = POINT_ITEMS[i].pts;
+  for(const item of visiblePointItems()){
+    if(!pointOn(item.id,day)) continue;
+    const points = Number(item?.default_points || 0);
     total += points;
     if(points > 0) positive = true;
     if(points < 0) negative = true;
@@ -337,6 +439,12 @@ async function speak(t, button){
     button.innerHTML = buttonContent("alert", message);
     button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
     button.dataset.speechFailure = "true";
+    const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
+    void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
+      source: "offline_tts",
+      error_code: errorCode,
+      retryable: true,
+    }, `${errorCode}:${Date.now()}`);
     showSpeechGuide();
     window.setTimeout(() => {
       if (button.dataset.speechFailure === "true") restore();
@@ -856,6 +964,74 @@ function renderGrow(){
   main.appendChild(card);
   card.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
 
+  const balance = getBalance(growthLoopSnapshot);
+  const rewards = window.growthLoop?.getRewards?.() || [];
+  const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
+  const rewardCards = rewards.map((reward) => {
+    const cost = Number(reward.cost_points || 0);
+    const latest = growthLoopSnapshot.redemptions
+      .filter((item) => item.reward_id === reward.id)
+      .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
+    const status = latest?.status === "pending" ? "待联网确认" : latest?.status === "fulfilled" ? "已兑现" : "";
+    return `<div class="reward-card">
+      <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
+      <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
+      <span class="pts-badge">${cost}分</span>
+      <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${status || "兑换"}</button>
+    </div>`;
+  }).join("");
+  const rewardCard = $(`<div class="card growth-reward-card">
+      <h3>${icon("gift")} 奖励兑换</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
+        <div class="stat"><div class="n">${pendingRedemptions}</div><div class="t">待联网确认</div></div>
+      </div>
+      <div class="desc">离线兑换会先记为“待联网确认”，联网并完成服务端确认前不代表最终成功。</div>
+      <form id="rewardForm" class="growth-form">
+        <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
+        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加奖励</button>
+      </form>
+      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励，先添加一个约定吧。</div>'}</div>
+    </div>`);
+  main.appendChild(rewardCard);
+  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const cost = Number(form.get("cost"));
+    if (!name || !Number.isInteger(cost) || cost < 1 || cost > 100000) {
+      alert("请填写奖励名称，并输入 1 到 100000 的整数积分。");
+      return;
+    }
+    try {
+      await window.growthLoop.createReward({
+        request_id: clientRequestId("reward"),
+        reward: { name, description: "家庭约定奖励", cost_points: cost, category: "family", icon_key: "gift" },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    } catch (error) {
+      console.error("Growth Loop reward creation failed:", error);
+      alert("奖励没有保存成功，请稍后重试。");
+    }
+  };
+  rewardCard.querySelectorAll("[data-reward-id]").forEach((button) => {
+    button.onclick = async () => {
+      const requestId = clientRequestId("redemption");
+      button.disabled = true;
+      const result = await window.growthLoop.redeemReward({ reward_id: button.dataset.rewardId, request_id: requestId });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "insufficient_points" ? "积分还不够，继续积累后再兑换吧。" : "这个奖励暂时不能兑换，请刷新后重试。");
+        return;
+      }
+      void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    };
+  });
+
   // 日历式最近记录
   let cells="";
   for(let i=29;i>=0;i--){
@@ -892,18 +1068,20 @@ function renderGrow(){
 /* 积分卡片辅助 */
 const PTS_ICON = {"一起做家务":"house","认真完成学习":"bookCheck","帮带带弟弟":"learner","古诗词跟读":"bookMarked","撒谎":"circleX","白天摸当众摸鸡鸡":"alert","不收玩具":"eraser"};
 let PT_DAY = null;
-function ptsCardHTML(it, i, day){
-  const done = pointOn(i, day);
-  const sub = it.pts < 0;
-  const ptsIcon = PTS_ICON[it.name] || (sub ? "alert" : "star");
+function ptsCardHTML(it, day){
+  const done = pointOn(it.id, day);
+  const points = Number(it.default_points ?? it.pts ?? 0);
+  const description = it.description ?? it.desc ?? "";
+  const sub = points < 0;
+  const ptsIcon = it.icon_key || PTS_ICON[it.name] || (sub ? "alert" : "star");
   return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
     <div class="pts-ic">${icon(ptsIcon)}</div>
     <div class="pts-info">
-      <div class="pts-name">${it.name}</div>
-      ${it.desc?`<div class="pts-desc">${it.desc}</div>`:""}
+      <div class="pts-name">${escapeHtml(it.name)}</div>
+      ${description?`<div class="pts-desc">${escapeHtml(description)}</div>`:""}
     </div>
-    <div class="pts-badge">${it.pts>0?'+':'-'}${Math.abs(it.pts)}分</div>
-    <button class="pts-toggle" type="button" data-i="${i}" aria-pressed="${done}" aria-label="${done?"取消":"记录"}${it.name}">${done?icon("check"):icon("plus")}</button>
+    <div class="pts-badge">${points>0?'+':'-'}${Math.abs(points)}分</div>
+    <button class="pts-toggle" type="button" data-item-id="${escapeHtml(it.id)}" aria-pressed="${done}" aria-label="${done?"取消":"记录"}${escapeHtml(it.name)}">${done?icon("check"):icon("plus")}</button>
   </div>`;
 }
 
@@ -919,7 +1097,8 @@ function renderPoints(){
   if(PT_DAY===null || PT_DAY > daysInMonth) PT_DAY = Math.min(today, daysInMonth);
   const activeDay = PT_DAY;
   const mt = monthTotal();
-  const dt = dayTotal(activeDay);
+  const dt = getPointDayTotal(growthLoopSnapshot, dateKeyForDay(activeDay));
+  const pointItems = visiblePointItems();
 
   // 挖掘机主题横幅
   main.appendChild($(`<div class="exc-banner">
@@ -967,20 +1146,70 @@ function renderPoints(){
       <div class="pts-sec">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
       ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
       <div class="pts-sec">${icon("plus")} 加分项</div>
-      ${POINT_ITEMS.filter(it=>it.group==="加分项").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
       <div class="pts-sec">${icon("minus")} 减分项目</div>
-      ${POINT_ITEMS.filter(it=>it.group==="减分项目").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
     </div>`);
   main.appendChild(head);
-  head.querySelectorAll(".pts-toggle").forEach(b=>b.onclick=()=>{ togglePoint(+b.dataset.i, activeDay); renderPoints(); });
+  head.querySelectorAll(".pts-toggle").forEach((button)=>{
+    button.onclick=()=>{
+      togglePoint(button.dataset.itemId, activeDay);
+      button.disabled = true;
+    };
+  });
   const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
 
-  // 清空
-  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 清空本月积分</button></div>`));
-  el("ptclear").onclick=()=>{
-    if(confirm("确定清空本月所有积分打卡记录？")){
-      store = transitionLearningState(store, { type: "POINTS_CLEARED", month: ymKey() });
-      save(); PT_DAY=today; renderPoints();
+  const customCard = $(`<div class="card growth-custom-card">
+      <h3>${icon("pencil")} 自定义积分项</h3>
+      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
+      <form id="pointItemForm" class="growth-form">
+        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
+        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
+      </form>
+    </div>`);
+  main.appendChild(customCard);
+  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const points = Number(form.get("points"));
+    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
+      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
+      return;
+    }
+    try {
+      await window.growthLoop.createPointItem({
+        request_id: clientRequestId("point-item"),
+        item: {
+          name,
+          description: "自定义成长任务",
+          default_points: points,
+          category: "growth",
+          icon_key: points > 0 ? "star" : "alert",
+          item_kind: "custom",
+        },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderPoints();
+    } catch (error) {
+      console.error("Growth Loop custom point item creation failed:", error);
+      alert("积分项没有保存成功，请稍后重试。");
+    }
+  };
+
+  // 结束当前积分周期：保留历史，通过不可变的反向调整归零当前月。
+  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 结束本月积分周期</button><div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div></div>`));
+  el("ptclear").onclick=async()=>{
+    if(confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")){
+      try {
+        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
+        window.cloudSync?.scheduleGrowthLoop?.();
+        PT_DAY=today; renderPoints();
+      } catch (error) {
+        console.error("Growth Loop point period close failed:", error);
+        alert("积分周期没有结束成功，请稍后重试。");
+      }
     }
   };
   main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
@@ -1195,7 +1424,6 @@ function checkinBtn(mod,label){
 /* =========================================================
    导航切换
    ========================================================= */
-let CURRENT_MOD = "home";
 function switchMod(mod){
   CURRENT_MOD = mod;
   document.querySelectorAll(".navbtn").forEach(b=>{
@@ -1261,19 +1489,41 @@ window.learningDesk = {
   getState(){
     return JSON.parse(JSON.stringify(store));
   },
+  getEnvelope(){
+    return structuredClone({
+      ...learningEnvelope,
+      schema_version: 2,
+      product_id: "shadow-mate",
+      learning: store,
+    });
+  },
+  async setScope(scope, options = {}){
+    return setLearningScope(scope, options);
+  },
+  getPendingState(){
+    const pending = loadLearningStateEnvelope(localStorage, {});
+    return structuredClone(pending);
+  },
   replaceState(next, options = {}){
-    store = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
-    if(options.persist) localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    store = transitionLearningState(store, { type: "STATE_REPLACED", state: learningStateFromEnvelope(next) });
+    if(options.persist) persistLearningState();
     switchMod(CURRENT_MOD);
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
     localStorage.removeItem(STORE_KEY);
+    localStorage.removeItem(getLearningStateStorageKey({}));
+    localStorage.removeItem(getLearningStateStorageKey(learningEnvelope.scope || {}));
     if (reload) {
       window.location.reload();
       return;
     }
+    learningEnvelope = loadLearningStateEnvelope(localStorage, {});
     store = createLearningState();
     switchMod(CURRENT_MOD);
   }
 };
+
+void growthLoopController.hydrate().catch((error) => {
+  console.warn("Growth Loop 本地数据库初始化失败，已保持只读推荐项：", error);
+});

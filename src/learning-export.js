@@ -70,6 +70,7 @@ function exportConsent(consent) {
     "consent_type",
     "policy_version",
     "consented_at",
+    "created_at",
     "revoked_at",
     "source",
   ]);
@@ -97,7 +98,9 @@ export function buildHouseholdExport(input = {}) {
     consents: Array.isArray(input.consents) ? input.consents.map(exportConsent) : [],
     growth_loop: {
       point_items: exportRows(growthLoop.pointItems),
+      profile_point_items: exportRows(growthLoop.profilePointItems),
       rewards: exportRows(growthLoop.rewards),
+      profile_rewards: exportRows(growthLoop.profileRewards),
       ledger: exportRows(growthLoop.ledger),
       redemptions: exportRows(growthLoop.redemptions),
     },
