@@ -3,6 +3,11 @@ import { CLOUD_CONFIG } from "./config.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
+import { buildCloudSavePayload, normalizeCloudLearningState } from "./learning-cloud-state.js";
+import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "./learning-growth-cloud.js";
+import { buildHouseholdExport } from "./learning-export.js";
+import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
+import { mergeGrowthLoopSnapshot } from "./learning-growth-loop.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
@@ -29,6 +34,7 @@ const supabase = cloudEnabled
       },
     })
   : null;
+const growthLoopTransport = cloudEnabled ? createGrowthLoopTransport({ client: supabase }) : null;
 
 let session = null;
 let memberships = [];
@@ -51,6 +57,7 @@ let localResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
+let growthLoopSyncTimer = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -88,6 +95,67 @@ function showToast(message, duration = 2800) {
   toastTimer = setTimeout(hideToast, duration);
 }
 
+async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
+  if (!profile || !window.growthLoop || !window.learningDesk) return;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  await window.growthLoop.loadScope(scope, { adoptPending });
+  await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED, {}, "once");
+  if (!growthLoopTransport) return;
+  const remote = await fetchGrowthLoopSnapshot(supabase, {
+    householdId: profile.household_id,
+    profileId: profile.id,
+  });
+  if (window.growthLoop.getScope().profile_id !== profile.id) return;
+  // A not-yet-migrated environment must not overwrite local records with an
+  // empty fallback snapshot. Release-time migrations enable this path.
+  if (remote.errors.length) return;
+  await window.growthLoop.mergeRemote(remote.snapshot);
+  if (window.growthLoop.getScope().profile_id !== profile.id) return;
+  const report = await window.growthLoop.sync({ transport: growthLoopTransport });
+  if (report.retryable || report.conflict || report.rejected) {
+    await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.SYNC_FAILED, {
+      source: "growth_loop_sync",
+      error_code: report.conflict ? "conflict" : report.rejected ? "rejected" : "retryable",
+      retryable: Boolean(report.retryable),
+    }, `sync:${new Date().toISOString().slice(0, 13)}`);
+    scheduleGrowthLoopSync();
+  }
+}
+
+async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false } = {}) {
+  if (!profile || !window.growthLoop) return null;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  if (!scope.household_id || !scope.profile_id) return null;
+  try {
+    const currentScope = window.growthLoop.getScope();
+    if (currentScope.household_id !== scope.household_id || currentScope.profile_id !== scope.profile_id) {
+      if (!ensureScope) return null;
+      await window.growthLoop.loadScope(scope, { adoptPending: false });
+    }
+    if (window.growthLoop.getScope().profile_id !== scope.profile_id) return null;
+    const event = await window.growthLoop.queueActivity({
+      event_type,
+      event_id: activityEventIdFor({ ...scope, event_type, bucket }),
+      payload,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      client_version: document.documentElement.dataset.version || null,
+    });
+    return event;
+  } catch (error) {
+    console.warn("Growth Loop cloud activity event deferred:", error);
+    return null;
+  }
+}
+
+function scheduleGrowthLoopSync() {
+  clearTimeout(growthLoopSyncTimer);
+  growthLoopSyncTimer = setTimeout(() => {
+    if (activeProfile) void loadGrowthLoopProfile(activeProfile).catch((error) => {
+      console.warn("Growth Loop cloud sync deferred:", error);
+    });
+  }, 500);
+}
+
 function guardianConsentField() {
   return `<label class="cloud-consent cloud-field">
     <input type="checkbox" name="guardianConsent" value="on" required>
@@ -114,6 +182,7 @@ async function clearLocalAccountState() {
   }
   if (AUTH_STORAGE_KEY) sessionStorage.clear();
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  await window.growthLoop?.clearAllLocalData?.();
   window.learningDesk.clearLocalData({ reload: false });
   session = null;
   memberships = [];
@@ -510,10 +579,11 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     });
   });
   panel.querySelector("[data-close]").onclick = closeDialog;
-  panel.querySelector("[data-clear-local]").onclick = () => {
+  panel.querySelector("[data-clear-local]").onclick = async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录。此操作不可撤销，是否继续？");
     if (!confirmed) return;
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    await window.growthLoop?.clearAllLocalData?.();
     window.learningDesk.clearLocalData();
   };
   panel.querySelector("[data-toggle-login-password]")?.addEventListener("click", (event) => {
@@ -657,6 +727,13 @@ function renderSetup() {
         return;
       }
       await loadWorkspace(profileId, { migrateLocal: true });
+      await queueGrowthCloudActivity(
+        { household_id: householdId, id: profileId },
+        ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
+        { source: "household_setup" },
+        `learner:${profileId}`,
+        { ensureScope: true },
+      );
       showToast("家庭学习空间已建立，正在同步本机记录");
       renderPanel();
       const prompted = await maybePromptPasswordSetup({ force: true });
@@ -737,7 +814,11 @@ function renderAccount() {
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await runLockedAction(button, async () => {
-        await selectProfile(button.dataset.profile);
+        let migrateLocal = false;
+        if (button.dataset.profile !== activeProfile?.id && await window.growthLoop?.hasPendingData?.()) {
+          migrateLocal = window.confirm("发现这台设备上还有未关联学习记录。是否将它们导入到这个孩子的档案？");
+        }
+        await selectProfile(button.dataset.profile, { migrateLocal });
         renderAccount();
       }, { busyText: "正在切换…" });
     };
@@ -758,6 +839,7 @@ function renderAccount() {
           return;
         }
         const deletingActive = activeProfile?.id === profile.id;
+        await window.growthLoop?.clearScope?.({ household_id: profile.household_id, profile_id: profile.id });
         profiles = profiles.filter((item) => item.id !== profile.id);
         if (deletingActive) {
           activeProfile = null;
@@ -807,7 +889,10 @@ function renderAccount() {
     };
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async (event) => {
-    await runLockedAction(event.currentTarget, () => saveCloudState(true), { busyText: "正在同步…" });
+    await runLockedAction(event.currentTarget, async () => {
+      await saveCloudState(true);
+      if (activeProfile) await loadGrowthLoopProfile(activeProfile);
+    }, { busyText: "正在同步…" });
   });
   panel.querySelector("[data-export]")?.addEventListener("click", async (event) => {
     await runLockedAction(event.currentTarget, exportWorkspace, { busyText: "正在导出…" });
@@ -903,6 +988,13 @@ function renderAccount() {
       }
       profiles.push(data);
       await selectProfile(data.id);
+      await queueGrowthCloudActivity(
+        data,
+        ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
+        { source: "add_learner" },
+        `learner:${data.id}`,
+        { ensureScope: true },
+      );
       renderAccount();
       showToast("已添加新的学习者");
     }, { busyText: "正在添加…" });
@@ -988,22 +1080,58 @@ async function exportWorkspace() {
     stateRows = data || [];
   }
   const statesByProfile = new Map(stateRows.map((row) => [row.profile_id, row]));
+  const consentResult = await supabase
+    .from("learning_guardian_consents")
+    .select("household_id, consent_type, policy_version, consented_at, created_at")
+    .in("household_id", householdIds)
+    .eq("user_id", session.user.id);
+  const consents = consentResult.error ? [] : (consentResult.data || []);
+  const growthResults = await Promise.all(profilesForExport.map(async (profile) => ({
+    profile,
+    result: await fetchGrowthLoopSnapshot(supabase, {
+      householdId: profile.household_id,
+      profileId: profile.id,
+    }),
+  })));
+  const growthLoop = growthResults.reduce((result, current) => {
+    const localSnapshot = current.profile.id === activeProfile?.id && window.growthLoop?.getSnapshot?.();
+    const snapshot = localSnapshot
+      ? mergeGrowthLoopSnapshot(current.result.snapshot, localSnapshot)
+      : current.result.snapshot;
+    for (const item of snapshot.point_items) result.pointItems.set(item.id, item);
+    for (const reward of snapshot.rewards) result.rewards.set(reward.id, reward);
+    for (const binding of snapshot.profile_point_items) result.profilePointItems.set(`${binding.profile_id}:${binding.point_item_id}`, binding);
+    for (const binding of snapshot.profile_rewards) result.profileRewards.set(`${binding.profile_id}:${binding.reward_id}`, binding);
+    result.ledger.push(...snapshot.ledger);
+    result.redemptions.push(...snapshot.redemptions);
+    return result;
+  }, {
+    pointItems: new Map(),
+    profilePointItems: new Map(),
+    rewards: new Map(),
+    profileRewards: new Map(),
+    ledger: [],
+    redemptions: [],
+  });
+  growthLoop.pointItems = [...growthLoop.pointItems.values()];
+  growthLoop.profilePointItems = [...growthLoop.profilePointItems.values()];
+  growthLoop.rewards = [...growthLoop.rewards.values()];
+  growthLoop.profileRewards = [...growthLoop.profileRewards.values()];
   const household = {
     id: householdIds[0],
     name: householdName || "家庭",
   };
-  const payload = {
-    schema_version: 1,
-    product_id: PRODUCT_ID,
-    exported_at: new Date().toISOString(),
+  const payload = buildHouseholdExport({
     household,
+    consents,
     learners: profilesForExport.map((profile) => ({
       ...profile,
       state: statesByProfile.get(profile.id)?.state || {},
       state_version: statesByProfile.get(profile.id)?.version || null,
       state_updated_at: statesByProfile.get(profile.id)?.updated_at || null,
     })),
-  };
+    growthLoop,
+  });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1038,6 +1166,10 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
   activeProfile = profile;
   cloudSyncBlocked = false;
   localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
+  await window.learningDesk.setScope(
+    { household_id: profile.household_id, profile_id: profile.id },
+    { adoptPending: migrateLocal },
+  );
   const localState = window.learningDesk.getState();
   const { data, error } = await supabase
     .from("learning_profile_states")
@@ -1054,15 +1186,27 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
       await saveCloudState(true);
     }
   } else {
+    const normalizedRemote = normalizeCloudLearningState(data, {
+      household_id: profile.household_id,
+      profile_id: profile.id,
+    });
+    if (normalizedRemote.scope_mismatch) {
+      showToast("云端记录作用域不一致，已停止加载以保护孩子数据。", 6000);
+      return;
+    }
     lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
-    cloudVersion = data.version;
-    const merged = stateHasData(localState) ? mergeState(localState, data.state) : data.state;
+    cloudVersion = normalizedRemote.version;
+    const remoteLearningState = normalizedRemote.state.learning;
+    const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
     window.learningDesk.replaceState(merged, { persist: true });
-    if (JSON.stringify(merged) !== JSON.stringify(data.state)) {
+    if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
       await saveCloudState(true);
     }
   }
   setAccountState();
+  void loadGrowthLoopProfile(profile, { adoptPending: migrateLocal }).catch((growthError) => {
+    console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+  });
 }
 
 async function saveCloudState(manual = false) {
@@ -1077,11 +1221,10 @@ async function saveCloudState(manual = false) {
   let conflictRetries = 0;
   try {
     while (true) {
-      const currentState = window.learningDesk.getState();
+      const currentState = window.learningDesk.getEnvelope();
       const { data, error } = await supabase.rpc("learning_save_state", {
         p_profile_id: activeProfile.id,
-        p_state: currentState,
-        p_expected_version: cloudVersion,
+        ...buildCloudSavePayload(currentState, cloudVersion),
       });
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
@@ -1149,13 +1292,14 @@ async function saveCloudState(manual = false) {
 function scheduleSave() {
   if (cloudSyncBlocked) {
     clearTimeout(saveTimer);
-    return;
+  } else {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveCloudState(false), 500);
   }
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveCloudState(false), 500);
+  scheduleGrowthLoopSync();
 }
 
-window.cloudSync = { schedule: scheduleSave };
+window.cloudSync = { schedule: scheduleSave, scheduleGrowthLoop: scheduleGrowthLoopSync };
 
 async function maybePromptPasswordSetup(options = {}) {
   if (!session || passwordRecoveryActive) return false;
