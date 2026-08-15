@@ -28,11 +28,6 @@
 | `public/onnx/ort-wasm-simd-threaded.wasm` | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
 | `public/piper/piper_phonemize.wasm` | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
 | `public/piper/piper_phonemize.data` | 与上述 piper-tts-web 提交配套的运行时数据 |
-| `public/piper/en_US-lessac-high.onnx.part-00` | [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/lessac/high) 的 `en_US-lessac-high` 模型第 1 个分片；模型卡对应 Blizzard 2013 数据集及其许可 |
-| `public/piper/en_US-lessac-high.onnx.part-01` | 上述 `en_US-lessac-high` 模型第 2 个分片 |
-| `public/piper/en_US-lessac-high.onnx.json` | 上述模型的配置文件 |
-| `public/worker/OnnxWebWorker.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) 的 ONNX Runtime Web Worker 构建；文件头包含 ONNX Runtime Web 许可信息 |
-| `public/worker/PhonemizeWebWorker.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) 的 Piper phonemize Web Worker 构建；包含上游运行时许可声明 |
 
 eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
 
@@ -46,8 +41,3 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 | `public/onnx/ort-wasm-simd-threaded.wasm` | `207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea` |
 | `public/piper/piper_phonemize.data` | `a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa` |
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
-| `public/piper/en_US-lessac-high.onnx.part-00` | `e1d2ad3619d1061d4adb49814ad2bdf377ca50b936effc07598c0113ecccf63d` |
-| `public/piper/en_US-lessac-high.onnx.part-01` | `055cbdd4cf22b98bb6b4716f917dccf06ede3f1f7fad05f24a630b9b35b4d7ff` |
-| `public/piper/en_US-lessac-high.onnx.json` | `db42b97d9859f257bc1561b8ed980e7fb2398402050a74ddd6cbec931a92412f` |
-| `public/worker/OnnxWebWorker.js` | `2587dea03597266ae54daf2c76721953e163ce6b7ff4df3fabf0f35463a69c1a` |
-| `public/worker/PhonemizeWebWorker.js` | `a42c76cdaf2aad92a280a0afc35c03a8d812f00f249f8aa65240078e26ea895a` |
