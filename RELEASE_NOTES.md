@@ -1,5 +1,30 @@
 # Release Notes
 
+## v1.3.8 - 2026-08-15
+
+- 将无 GMS Android 的离线英语语音模型改为从 `voice.shadow.wang` CDN 分发（`en_US-ljspeech-medium`，约 63.5MB）：首次点击“听发音”时下载并缓存到浏览器，之后可离线合成，不上传录音。
+- 本地 Piper 推理改在主线程执行；移除本地分片模型与 Worker 运行时资源的使用。
+- 同步更新 README、使用指南、第三方许可清单与 CSP（`connect-src` 增加 `https://voice.shadow.wang`）。
+
+### 验证结果
+
+- PR #39 已 squash 合并到 `main`，合并提交为 `0ba5f29`。
+- `npm run verify`、CI（含全量 E2E）、CodeQL、Shared Supabase Policy、Vercel Preview 通过。
+- CDN CORS 已实测：`voice.shadow.wang` 对 `https://sm.shadow.wang` 返回允许跨域（`Access-Control-Allow-Origin`、`GET/HEAD/OPTIONS`，暴露 `Content-Length/Content-Range`），真实浏览器跨域拉取 `.onnx.json` 200、`.onnx` Range 206 均成功。
+- 已知技术债：`public/piper/en_US-lessac-high.onnx.part-*`（约 115MB）与 `public/worker/*` 仍保留在仓库与构建产物中但不再被引用，计划在后续版本清理。
+
+### 发布包
+
+文件：`shadow-mate-v1.3.8.zip`
+
+SHA-256：`待发布时填写`
+
+### 部署清单（待完成）
+
+- Git tag `v1.3.8` 创建并推送。
+- GitHub Release 发布并上传 `shadow-mate-v1.3.8.zip`，SHA-256 核对。
+- `https://sm.shadow.wang/` 验证为新版本，CSP 含 `voice.shadow.wang`，语音 CDN 下载与离线合成正常。
+
 ## v1.3.7 - 2026-08-13
 
 - 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；声音模型约 115MB，仍支持一次下载后离线使用。

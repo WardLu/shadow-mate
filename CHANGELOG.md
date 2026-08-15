@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.8] - 2026-08-15
+
+### Changed
+- 将离线英语语音模型改为从 `voice.shadow.wang` CDN 分发（`en_US-ljspeech-medium`，约 63.5MB）：首次使用时下载并缓存到浏览器，之后可离线合成，不上传录音。
+- 移除本地分片模型拼接与 Worker 运行时选择，本地 Piper 推理在主线程执行。
+- CSP `connect-src` 增加 `https://voice.shadow.wang`，并同步 README、使用指南与第三方许可清单中的语音分发方式。
+
 ## [1.3.7] - 2026-08-13
 
 ### Fixed
