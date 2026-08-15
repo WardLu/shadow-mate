@@ -17,13 +17,13 @@
 
 文件：`shadow-mate-v1.3.8.zip`
 
-SHA-256：`待发布时填写`
+SHA-256：`96fc34e1bc4de431dcc959780d03da9e9f27ed02e1329b28db718d7d8fb9a13a`
 
-### 部署清单（待完成）
+### 部署清单（已完成）
 
-- Git tag `v1.3.8` 创建并推送。
-- GitHub Release 发布并上传 `shadow-mate-v1.3.8.zip`，SHA-256 核对。
-- `https://sm.shadow.wang/` 验证为新版本，CSP 含 `voice.shadow.wang`，语音 CDN 下载与离线合成正常。
+- Git tag `v1.3.8` 已创建并推送，指向合并提交 `e14f4a7`。
+- GitHub Release 已发布并上传 `shadow-mate-v1.3.8.zip`，SHA-256 已核对。
+- `https://sm.shadow.wang/` 已验证为新版本，CSP 含 `voice.shadow.wang`，语音 CDN 跨域下载实测通过（200/206，`type: cors`）。
 
 ## v1.3.7 - 2026-08-13
 
