@@ -1,27 +1,19 @@
 /* 本地 Piper 英语语音兜底（无 GMS 的国产 Android）
  *
  * 系统语音（speechSynthesis）在无 GMS 的国产 Android 上通常不可用，
- * 影伴提供浏览器本地 Piper 合成作为兜底：模型与运行时全部托管在本应用内，
- * 不上传录音，可离线使用。
+ * 影伴提供浏览器本地 Piper 合成作为兜底：运行时托管在本应用内，模型首次从 CDN 下载，
+ * 下载完成后缓存到浏览器，不上传录音，可离线使用。
  *
  * 致谢（开源项目详见 README 致谢一节）：
  *  - piper-tts-web（MIT）
- *  - rhasspy/piper 语音模型 en_US-lessac-high
+ *  - rhasspy/piper 语音模型 en_US-ljspeech-medium（模型卡标注训练数据为 public domain）
  *  - ONNX Runtime Web（MIT）
  */
 
-export const VOICE = "/piper/en_US-lessac-high";
+export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
-export const VOICE_MODEL_PARTS = [VOICE + ".onnx.part-00", VOICE + ".onnx.part-01"];
-export const VOICE_FILES = [...VOICE_MODEL_PARTS, VOICE + ".onnx.json"];
-// Android 某些网络环境会隐藏响应的 Content-Length；这里用当前随包文件大小兜底计算百分比。
-// 替换语音模型文件时，需要同步更新这些数值。
-export const VOICE_FILE_SIZES = {
-  [VOICE_MODEL_PARTS[0]]: 62_914_560,
-  [VOICE_MODEL_PARTS[1]]: 50_980_641,
-  [VOICE + ".onnx.json"]: 4_883,
-};
+export const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
 export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
@@ -62,9 +54,7 @@ async function getContentLength(url, signal) {
 export async function isVoiceCached() {
   if (!("caches" in window)) return false;
   try {
-    const cache = await openVoiceCache();
-    const cachedFiles = await Promise.all(VOICE_FILES.map((url) => cache.match(url)));
-    return cachedFiles.every(Boolean);
+    return !!(await (await openVoiceCache()).match(VOICE + ".onnx"));
   } catch (_) {
     return false;
   }
@@ -78,10 +68,7 @@ export async function downloadVoice(onProgress, signal) {
   }
 
   const lengths = await Promise.all(pendingFiles.map((url) => getContentLength(url, signal)));
-  const progressLengths = lengths.map((length, index) => length || VOICE_FILE_SIZES[pendingFiles[index]] || 0);
-  const total = progressLengths.every((length) => length > 0)
-    ? progressLengths.reduce((sum, length) => sum + length, 0)
-    : 0;
+  const total = lengths.every((length) => length > 0) ? lengths.reduce((sum, length) => sum + length, 0) : 0;
   let receivedTotal = 0;
 
   for (let fileIndex = 0; fileIndex < pendingFiles.length; fileIndex += 1) {
@@ -89,7 +76,7 @@ export async function downloadVoice(onProgress, signal) {
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error("语音包下载失败");
-    const fileTotal = Number(res.headers.get("content-length")) || progressLengths[fileIndex] || 0;
+    const fileTotal = Number(res.headers.get("content-length")) || lengths[fileIndex] || 0;
     const reader = res.body.getReader();
     const chunks = [];
     let receivedFile = 0;
@@ -133,7 +120,7 @@ async function loadEngine() {
       const mod = await import(/* @vite-ignore */ ENGINE_URL);
       const voiceProvider = {
         async fetch(voice) {
-          const readResponse = async (url) => {
+          const read = async (url) => {
             let res = null;
             if ("caches" in window) {
               try {
@@ -144,24 +131,14 @@ async function loadEngine() {
             }
             if (!res) res = await fetch(url);
             if (!res.ok) throw new Error("语音模型读取失败");
-            return res;
+            return url.endsWith(".json") ? res.json() : URL.createObjectURL(await res.blob());
           };
-          const config = await (await readResponse(voice + ".onnx.json")).json();
-          const modelParts = await Promise.all(
-            VOICE_MODEL_PARTS.map(async (url) => (await readResponse(url)).blob())
-          );
-          const modelUrl = URL.createObjectURL(new Blob(modelParts, { type: "application/octet-stream" }));
-          return [config, modelUrl];
+          return Promise.all([read(voice + ".onnx.json"), read(voice + ".onnx")]);
         },
       };
-      const useWorkerRuntime = typeof Worker === "function"
-        && typeof mod.OnnxWebWorkerRuntime === "function"
-        && typeof mod.PhonemizeWebWorkerRuntime === "function";
-      const OnnxRuntime = useWorkerRuntime ? mod.OnnxWebWorkerRuntime : mod.OnnxWebRuntime;
-      const PhonemizeRuntime = useWorkerRuntime ? mod.PhonemizeWebWorkerRuntime : mod.PhonemizeWebRuntime;
       return new mod.PiperWebEngine({
-        onnxRuntime: new OnnxRuntime({ basePath: "/onnx/", numThreads: 1 }),
-        phonemizeRuntime: new PhonemizeRuntime({ basePath: "/piper/" }),
+        onnxRuntime: new mod.OnnxWebRuntime({ basePath: "/onnx/", numThreads: 1 }),
+        phonemizeRuntime: new mod.PhonemizeWebRuntime({ basePath: "/piper/" }),
         voiceProvider,
       });
     })().catch((err) => {
@@ -190,7 +167,7 @@ function buildDialog() {
   dlg.className = "voice-dialog";
   dlg.innerHTML =
     '<div class="voice-dialog-title">离线英语语音</div>' +
-    '<div class="voice-dialog-desc">当前设备没有可用的英语发音。影伴内置了约 115MB 的高质量离线英语语音包（一次性下载，之后可离线使用，不上传录音）。是否现在下载？</div>' +
+    '<div class="voice-dialog-desc">当前设备没有可用的英语发音。影伴内置了约 90MB 的离线英语语音包（一次性下载，之后可离线使用，不上传录音）。是否现在下载？</div>' +
     '<div class="voice-dialog-progress" hidden><div class="voice-dialog-bar"><i></i></div><span class="voice-dialog-pct">0%</span></div>' +
     '<div class="voice-dialog-actions">' +
     '<button type="button" class="voice-dialog-cancel" data-action="cancel">取消</button>' +

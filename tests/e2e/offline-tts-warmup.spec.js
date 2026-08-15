@@ -50,7 +50,7 @@ test.describe("Offline voice warmup", () => {
         `,
       });
     });
-    await page.route("**/piper/en_US-lessac-high.onnx*", async (route) => {
+    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx*", async (route) => {
       const request = route.request();
       const isConfig = request.url().endsWith(".json");
       if (request.method() === "HEAD") {
@@ -130,9 +130,8 @@ test.describe("Offline voice warmup", () => {
         value: function SpeechSynthesisUtterance() {},
       });
       const cacheStore = new Map([
-        ["/piper/en_US-lessac-high.onnx.part-00", new Response(new Blob(["cached model 00"]))],
-        ["/piper/en_US-lessac-high.onnx.part-01", new Response(new Blob(["cached model 01"]))],
-        ["/piper/en_US-lessac-high.onnx.json", new Response("{}")],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
       ]);
       Object.defineProperty(window, "caches", {
         configurable: true,
@@ -193,9 +192,8 @@ test.describe("Offline voice warmup", () => {
         value: function SpeechSynthesisUtterance() {},
       });
       const cacheStore = new Map([
-        ["/piper/en_US-lessac-high.onnx.part-00", new Response(new Blob(["cached model 00"]))],
-        ["/piper/en_US-lessac-high.onnx.part-01", new Response(new Blob(["cached model 01"]))],
-        ["/piper/en_US-lessac-high.onnx.json", new Response("{}")],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
       ]);
       Object.defineProperty(window, "caches", {
         configurable: true,
@@ -229,7 +227,7 @@ test.describe("Offline voice warmup", () => {
     await expect(page.locator("audio")).toHaveCount(0);
   });
 
-  test("runs local speech inference in worker runtimes when available", async ({ page }) => {
+  test("runs local speech inference on the main thread", async ({ page }) => {
     await disableWebAudio(page);
     await page.route("**/piper-tts-web.js*", async (route) => {
       await route.fulfill({
@@ -276,9 +274,8 @@ test.describe("Offline voice warmup", () => {
         value: function SpeechSynthesisUtterance() {},
       });
       const cacheStore = new Map([
-        ["/piper/en_US-lessac-high.onnx.part-00", new Response(new Blob(["cached model 00"]))],
-        ["/piper/en_US-lessac-high.onnx.part-01", new Response(new Blob(["cached model 01"]))],
-        ["/piper/en_US-lessac-high.onnx.json", new Response("{}")],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
       ]);
       Object.defineProperty(window, "caches", {
         configurable: true,
@@ -295,7 +292,7 @@ test.describe("Offline voice warmup", () => {
     await page.locator("[data-speak]").first().click();
 
     await expect.poll(() => page.evaluate(() => window.__ttsRuntimeKinds), { timeout: 3000 })
-      .toEqual(["worker", "worker"]);
+      .toEqual(["main", "main"]);
   });
 
   test("plays generated speech through a decoded Web Audio buffer when available", async ({ page }) => {
@@ -338,9 +335,8 @@ test.describe("Offline voice warmup", () => {
         value: function SpeechSynthesisUtterance() {},
       });
       const cacheStore = new Map([
-        ["/piper/en_US-lessac-high.onnx.part-00", new Response(new Blob(["cached model 00"]))],
-        ["/piper/en_US-lessac-high.onnx.part-01", new Response(new Blob(["cached model 01"]))],
-        ["/piper/en_US-lessac-high.onnx.json", new Response("{}")],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
       ]);
       Object.defineProperty(window, "caches", {
         configurable: true,
