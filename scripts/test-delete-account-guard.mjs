@@ -1,8 +1,39 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function loadLocalEnv() {
+  const envPath = path.join(projectRoot, ".env.local");
+  if (!fs.existsSync(envPath)) return;
+
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const separator = trimmed.indexOf("=");
+    if (separator < 1) continue;
+
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed
+      .slice(separator + 1)
+      .trim()
+      .replace(/^(["'])(.*)\1$/, "$2");
+
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+loadLocalEnv();
+
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const publishableKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 if (!supabaseUrl || !publishableKey) {
-  throw new Error("VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required");
+  throw new Error(
+    "VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required; set them in the environment or .env.local",
+  );
 }
 
 const email = `delete-guard-${Date.now()}@example.test`;
