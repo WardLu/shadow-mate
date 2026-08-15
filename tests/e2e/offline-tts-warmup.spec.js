@@ -250,8 +250,6 @@ test.describe("Offline voice warmup", () => {
           view.setUint32(40, 2, true);
           class OnnxWebRuntime { constructor() { this.kind = "main"; } }
           class PhonemizeWebRuntime { constructor() { this.kind = "main"; } }
-          class OnnxWebWorkerRuntime { constructor() { this.kind = "worker"; } }
-          class PhonemizeWebWorkerRuntime { constructor() { this.kind = "worker"; } }
           export class PiperWebEngine {
             constructor({ onnxRuntime, phonemizeRuntime }) {
               window.__ttsRuntimeKinds = [onnxRuntime.kind, phonemizeRuntime.kind];
@@ -260,7 +258,7 @@ test.describe("Offline voice warmup", () => {
               return { file: new Blob([wav], { type: "audio/wav" }), duration: 0.5 };
             }
           }
-          export { OnnxWebRuntime, PhonemizeWebRuntime, OnnxWebWorkerRuntime, PhonemizeWebWorkerRuntime };
+          export { OnnxWebRuntime, PhonemizeWebRuntime };
         `,
       });
     });

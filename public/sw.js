@@ -17,12 +17,6 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || !event.request.url.startsWith(self.location.origin)) return;
-  const pathname = new URL(event.request.url).pathname;
-  // 英语语音模型（约 115MB，拆分为多个静态分片）由页面独立缓存 shadow-mate-voice 管理，避免与 App Shell 重复缓存导致配额超限
-  if (/\/piper\/.*\.onnx(?:\.json|\.part-\d+)?$/.test(pathname)) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)

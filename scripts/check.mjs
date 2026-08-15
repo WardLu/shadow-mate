@@ -20,11 +20,6 @@ const requiredFiles = [
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
   "supabase/migrations/20260811202411_child_privacy_consent.sql",
-  "public/piper/en_US-lessac-high.onnx.part-00",
-  "public/piper/en_US-lessac-high.onnx.part-01",
-  "public/piper/en_US-lessac-high.onnx.json",
-  "public/worker/OnnxWebWorker.js",
-  "public/worker/PhonemizeWebWorker.js",
 ];
 
 for (const file of requiredFiles) {
