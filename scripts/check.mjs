@@ -112,7 +112,7 @@ if (/https:\/\/esm\.sh/i.test(cloud)) {
 
 const piper = await readFile("src/piper-tts.js", "utf8");
 for (const marker of [
-  'export const VOICE = "/piper/en_US-lessac-high"',
+  'export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium"',
   'export const VOICE_FILES',
 ]) {
   if (!piper.includes(marker)) throw new Error(`piper-tts.js is missing ${marker}`);
