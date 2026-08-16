@@ -176,6 +176,55 @@ export function getBalance(snapshot) {
   return activeLedgerEntries(snapshot).reduce((total, entry) => total + Number(entry.delta || 0), 0);
 }
 
+export function getOpeningBalance(snapshot) {
+  return activeLedgerEntries(snapshot).find((entry) => entry.entry_type === "initial_balance") || null;
+}
+
+export function applyOpeningBalance(
+  current,
+  { scope = current.scope, balance, note = "期初积分", request_id = createId("opening") } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  const delta = Math.trunc(Number(balance));
+  if (!Number.isFinite(delta) || delta <= 0 || delta > 1000000) {
+    return { snapshot, events: [], error: "opening_balance_invalid" };
+  }
+  const existing = getOpeningBalance(snapshot);
+  if (existing) {
+    return { snapshot, events: [], error: "opening_balance_already_confirmed", entry: existing };
+  }
+  const ledgerEntry = normalizeLedgerEntry({
+    id: createId("ledger"),
+    household_id: normalizedScope.household_id,
+    profile_id: normalizedScope.profile_id,
+    point_item_id: null,
+    delta,
+    entry_type: "initial_balance",
+    item_name_snapshot: "期初积分",
+    note: note || null,
+    request_id,
+    occurred_on: new Date().toISOString().slice(0, 10),
+    status: "pending",
+    metadata: { opening_balance: true },
+  }, normalizedScope);
+  snapshot.ledger.push(ledgerEntry);
+  return {
+    snapshot,
+    ledgerEntry,
+    events: [localEvent({
+      type: "opening_balance_confirm",
+      scope: normalizedScope,
+      request_id,
+      payload: {
+        profile_id: normalizedScope.profile_id,
+        delta,
+        note: note || null,
+      },
+    })],
+  };
+}
+
 export function getActivePointAction(snapshot, pointItemId, occurredOn) {
   const entries = activeLedgerEntries(snapshot).filter(
     (entry) => entry.point_item_id === pointItemId && entry.occurred_on === occurredOn,

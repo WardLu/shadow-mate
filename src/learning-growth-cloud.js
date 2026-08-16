@@ -60,6 +60,13 @@ export function createGrowthLoopTransport({ client } = {}) {
             p_note: payload.note || null,
             p_occurred_on: payload.occurred_on || new Date().toISOString().slice(0, 10),
           });
+        case "opening_balance_confirm":
+          return rpc(client, "learning_confirm_opening_balance", {
+            p_profile_id: payload.profile_id,
+            p_balance: payload.delta,
+            p_request_id: event.request_id,
+            p_note: payload.note || null,
+          });
         case "reward_upsert":
           return upsert(client, "learning_rewards", publicDefinition(payload.reward, REWARD_FIELDS));
         case "profile_reward_upsert": {

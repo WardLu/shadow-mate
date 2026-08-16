@@ -1,3 +1,5 @@
+import { normalizeContentConfig } from "./learning-content-package.js";
+
 const STATE_KEYS = ["checkins", "extra", "points", "bookShelf", "peanutLog", "peanutRead"];
 
 export const CHECKIN_GROUPS = {
@@ -28,6 +30,7 @@ export function createLearningState(initial = {}) {
     bookShelf: cloneRecord(source.bookShelf),
     peanutLog: Array.isArray(source.peanutLog) ? structuredClone(source.peanutLog) : [],
     peanutRead: cloneRecord(source.peanutRead),
+    content_config: normalizeContentConfig(source.content_config),
   };
 }
 
