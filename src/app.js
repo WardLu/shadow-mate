@@ -24,6 +24,7 @@ import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { getActivePointAction, getBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
+import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-sounds.js";
 
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
@@ -136,7 +137,14 @@ const PEANUT_BOOKS = [
 const STORE_KEY = "shadow_mate_workbench_v1";
 
 const growthLoopDb = createIndexedDbLearningDb();
-const growthLoopController = createGrowthLoopController({ db: growthLoopDb });
+const soundEffects = createSoundEngine();
+window.soundEffects = soundEffects;
+const growthLoopController = createGrowthLoopController({
+  db: growthLoopDb,
+  onRewardFulfilled: ({ redemption }) => {
+    if (redemption?.status === "fulfilled") soundEffects.play("reward_fulfilled");
+  },
+});
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";
 window.growthLoop = growthLoopController;
@@ -245,6 +253,7 @@ function toggleCheckin(mod){
     key: mod,
   });
   save();
+  if (isChecked(mod)) soundEffects.play("action_completed");
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
     { source: "checkin", entry_type: "manual" },
@@ -299,6 +308,8 @@ function togglePoint(itemId, day){
   const item = pointItemAt(itemId);
   if(!item) return;
   const requestId = clientRequestId("point");
+  const wasOn = pointOn(itemId, day);
+  const delta = Number(item.default_points ?? item.pts);
   void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
     void queueGrowthActivity(
       ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
@@ -308,6 +319,13 @@ function togglePoint(itemId, day){
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.CORE_ACTIVATION, { source: "point_item" }, "once");
     window.cloudSync?.scheduleGrowthLoop?.();
     renderPoints();
+    if (wasOn) {
+      soundEffects.play("try_again");
+    } else if (delta < 0) {
+      soundEffects.play("points_deducted");
+    } else {
+      soundEffects.play("points_earned");
+    }
   }).catch((error) => {
     console.error("Growth Loop local point write failed:", error);
     alert("本机记录没有保存成功，请稍后重试。");
@@ -410,6 +428,7 @@ function stopActivePlayback() {
 }
 
 async function speak(t, button){
+  soundEffects.setTtsActive(true);
   const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
   const showSpeechGuide = () => {
@@ -426,6 +445,7 @@ async function speak(t, button){
     button.after(guideLink);
   };
   const restore = () => {
+    soundEffects.setTtsActive(false);
     clearSystemTimer();
     if (!button) return;
     button.innerHTML = buttonContent("volume", originalLabel);
@@ -805,8 +825,8 @@ function renderMath(){
     const v = el("qa").value;
     const f = el("qf");
     if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
-    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
+    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; soundEffects.play("action_completed"); }
+    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; soundEffects.play("try_again"); }
   };
 
   // 数感：数字填写 1-100 找缺失
@@ -973,11 +993,19 @@ function renderGrow(){
       .filter((item) => item.reward_id === reward.id)
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
     const status = latest?.status === "pending" ? "待联网确认" : latest?.status === "fulfilled" ? "已兑现" : "";
+    const canFulfill = latest?.status === "pending" && latest?.confirmed && !latest?.fulfill_requested;
+    const fulfillRequested = latest?.status === "pending" && latest?.confirmed && latest?.fulfill_requested;
+    const fulfillAction = canFulfill
+      ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">待联网确认 · 兑现</button>`
+      : fulfillRequested
+        ? `<span class="pill reward-pill">兑现已请求</span>`
+        : "";
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
       <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
       <span class="pts-badge">${cost}分</span>
       <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${status || "兑换"}</button>
+      ${fulfillAction}
     </div>`;
   }).join("");
   const rewardCard = $(`<div class="card growth-reward-card">
@@ -1027,6 +1055,19 @@ function renderGrow(){
         return;
       }
       void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    };
+  });
+  rewardCard.querySelectorAll("[data-fulfill-id]").forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      const result = await window.growthLoop.fulfillRedemption({ redemption_id: button.dataset.fulfillId });
+      if (result.error) {
+        button.disabled = false;
+        alert("这个奖励暂时不能兑现，请稍后重试。");
+        return;
+      }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
     };
@@ -1422,6 +1463,82 @@ function checkinBtn(mod,label){
 }
 
 /* =========================================================
+   渲染：音效设置（设备级，仅本机）
+   ========================================================= */
+function renderSettings(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("settings","音效设置"));
+  const settings = soundEffects.getSettings();
+  main.appendChild($(`
+    <div class="card">
+      <h3>${icon("volume")} 音效总开关与音量</h3>
+      <div class="sound-row">
+        <span class="sound-label">启用界面音效</span>
+        <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
+      </div>
+      <div class="sound-row">
+        <span class="sound-label" id="snd-volume-label">总音量 ${Math.round(settings.volume*100)}%</span>
+        <input class="sound-range" type="range" id="snd-volume" min="0" max="100" step="5" value="${Math.round(settings.volume*100)}" aria-label="总音量">
+      </div>
+    </div>
+  `));
+  const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
+  main.appendChild(eventsCard);
+  const list = eventsCard.querySelector(".sound-events");
+  for (const key of SOUND_EVENT_KEYS) {
+    const def = SOUND_EVENTS[key];
+    const eventSettings = settings.events[key];
+    const variantOptions = Object.entries(def.variants).map(([variantKey, variant]) =>
+      `<option value="${variantKey}" ${variantKey===eventSettings.variant?"selected":""}>${variant.name}</option>`
+    ).join("");
+    list.appendChild($(`
+      <div class="sound-event" data-event="${key}">
+        <div class="sound-event-head">
+          <span class="sound-label">${def.label}</span>
+          <button class="sound-switch ${eventSettings.enabled?"on":""}" type="button" data-event-enable="${key}" role="switch" aria-checked="${eventSettings.enabled}">${eventSettings.enabled?"开":"关"}</button>
+        </div>
+        <div class="sound-event-controls">
+          <select data-event-variant="${key}" aria-label="${def.label}变体" ${eventSettings.enabled?"":"disabled"}>${variantOptions}</select>
+          <button class="checkin sound-preview" type="button" data-event-preview="${key}">${icon("play")} 试听</button>
+        </div>
+      </div>
+    `));
+  }
+  main.appendChild($(`
+    <div class="card">
+      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认音效设置</button>
+      <div class="desc">恢复为默认的总开关、音量与每个事件的变体选择。</div>
+    </div>
+  `));
+  main.appendChild($(`<div class="footer">${icon("settings")} 音效设置只保存在当前设备，不会同步到云端。</div>`));
+
+  el("snd-master").onclick = () => {
+    soundEffects.setEnabled(!soundEffects.getSettings().enabled);
+    renderSettings();
+  };
+  el("snd-volume").oninput = (event) => {
+    soundEffects.setVolume(Number(event.target.value) / 100);
+    const label = el("snd-volume-label");
+    if (label) label.textContent = `总音量 ${Math.round(soundEffects.getSettings().volume*100)}%`;
+  };
+  el("snd-reset").onclick = () => {
+    soundEffects.resetDefaults();
+    renderSettings();
+  };
+  main.querySelectorAll("[data-event-enable]").forEach((button) => button.onclick = () => {
+    soundEffects.setEventEnabled(button.dataset.eventEnable, !soundEffects.getSettings().events[button.dataset.eventEnable].enabled);
+    renderSettings();
+  });
+  main.querySelectorAll("[data-event-variant]").forEach((select) => select.onchange = () => {
+    soundEffects.setEventVariant(select.dataset.eventVariant, select.value);
+    renderSettings();
+  });
+  main.querySelectorAll("[data-event-preview]").forEach((button) => button.onclick = () => {
+    soundEffects.preview(button.dataset.eventPreview);
+  });
+}
+
+/* =========================================================
    导航切换
    ========================================================= */
 function switchMod(mod){
@@ -1440,6 +1557,7 @@ function switchMod(mod){
   else if(mod==="points") renderPoints();
   else if(mod==="grow") renderGrow();
   else if(mod==="guide") renderGuide();
+  else if(mod==="settings") renderSettings();
   // 绑定打卡按钮
   el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
     btn.onclick=()=>{
