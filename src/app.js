@@ -1587,18 +1587,23 @@ function renderGuide(){
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的高质量离线语音包（约 115MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
+          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的高质量离线语音包（约 63.5MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
         </div>
         <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
       </section>
 
+      <section class="guide-card" data-guide-section="points">
+        <div class="guide-section-heading"><span>03</span><div><h3>积分、奖励与兑换</h3><p>把好习惯变成看得见的成长：积分按孩子独立记录，奖励由家长确认。</p></div></div>
+        <div class="guide-facts"><div><strong>自定义积分项</strong><span>在“积分”页为每个孩子创建加分或扣分项，也可以选择推荐模板。</span></div><div><strong>加分与纠正</strong><span>记录一次行动加分；10 秒内可快捷撤销，历史纠错使用受控扣分。</span></div><div><strong>期初积分</strong><span>切换到新账本时为孩子确认一次期初积分；旧积分只读保留，不自动导入。</span></div><div><strong>奖励与兑换</strong><span>家长设置奖励和所需积分；孩子攒够后兑换，家长兑现后标记“已兑现”。</span></div><div><strong>界面音效</strong><span>完成行动、获得积分、再试一次、扣分和兑现会播放音效，可在“设置”页逐项开关。</span></div></div>
+      </section>
+
       <section class="guide-card" data-guide-section="sync">
-        <div class="guide-section-heading"><span>03</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
+        <div class="guide-section-heading"><span>04</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
         <div class="guide-facts"><div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div><div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div><div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div></div>
       </section>
 
       <section class="guide-card" data-guide-section="install">
-        <div class="guide-section-heading"><span>04</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
+        <div class="guide-section-heading"><span>05</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
         <div class="guide-install-grid"><div><strong>iPhone / iPad</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div><div><strong>Android</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕。</span></div><div><strong>电脑</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div></div>
       </section>
 
