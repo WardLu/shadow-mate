@@ -69,7 +69,7 @@ describe("multi-product password recovery email", () => {
       .split("\n")
       .filter((line) => line.startsWith("subject ="));
 
-    expect(subjects).toHaveLength(3);
+    expect(subjects).toHaveLength(6);
 
     for (const subject of subjects) {
       expect(subject).toContain("http://127.0.0.1:5173");
