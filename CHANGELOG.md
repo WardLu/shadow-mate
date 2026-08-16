@@ -14,8 +14,12 @@
 - 公开资料同步：README 标语与“现有能力”仅列已实现并验证的功能；页面 meta 与 PWA 安装描述统一文案；使用指南与应用内指南同步积分、奖励与兑换说明。
 - 修正应用内指南离线语音包体积描述（115MB → 63.5MB `en_US-ljspeech-medium`）。
 
+### Fixed
+- 移除引用未导入 `CHECKIN_GROUPS` 的孤儿 `CHECKIN_MODULES` 常量（W2 重构后已无使用），修复整页渲染 `ReferenceError`。
+- E2E 同步合并后的导航结构（学习页 → 模块入口）与指南语音包体积断言。
+
 ### Tests
-- 发布候选待全量验证：`npm run test:full`、构建产物、公开仓库与安全防线检查。
+- 发布候选全量验证通过：`npm run verify`（公开/安全/静态检查、构建、构建产物、覆盖率）、数据库 pgTAP 241/241、Edge Function 隔离守卫、E2E 66 通过 1 按环境跳过、`release:check` 通过（生产检查因无 `RELEASE_URL` 跳过）。
 
 ## [1.3.8] - 2026-08-15
 

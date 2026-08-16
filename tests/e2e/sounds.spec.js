@@ -138,7 +138,8 @@ test.describe("Sound effects settings and playback", () => {
   test("plays a completion sound when checking in", async ({ page }) => {
     await page.goto("/");
     await installPlaySpies(page);
-    await page.click('[data-mod="chinese"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
     await page.locator('[data-cmod="chinese-literacy"]').click();
     expect(await playedEvents(page, "play")).toContain("action_completed");
   });

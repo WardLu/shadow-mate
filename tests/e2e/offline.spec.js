@@ -133,7 +133,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("约 115MB");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("约 63.5MB");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
