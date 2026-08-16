@@ -93,7 +93,8 @@ test.describe("Offline voice warmup", () => {
     });
 
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
     await page.click('.voice-dialog-actions [data-action="ok"]');
@@ -144,7 +145,8 @@ test.describe("Offline voice warmup", () => {
     });
 
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
 
@@ -215,7 +217,8 @@ test.describe("Offline voice warmup", () => {
     });
 
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     await page.locator("[data-speak]").first().click();
 
     await expect.poll(() => page.evaluate(() => window.__audioPlayCalls || 0), { timeout: 3000 }).toBe(1);
@@ -286,7 +289,8 @@ test.describe("Offline voice warmup", () => {
     });
 
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     await page.locator("[data-speak]").first().click();
 
     await expect.poll(() => page.evaluate(() => window.__ttsRuntimeKinds), { timeout: 3000 })
@@ -371,7 +375,8 @@ test.describe("Offline voice warmup", () => {
     });
 
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     await page.locator("[data-speak]").first().click();
 
     await expect.poll(() => page.evaluate(() => ({

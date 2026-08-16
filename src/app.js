@@ -13,19 +13,24 @@ import {
 } from "./piper-tts.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
-  CHECKIN_GROUPS,
   createLearningState,
   hasCheckin,
   transitionLearningState,
 } from "./learning-state.js";
 import { getLearningStateStorageKey } from "./learning-state-envelope.js";
+import {
+  FOUNDATION_PACKAGE,
+  getContentModuleDefinition,
+  getEnabledModuleIds,
+  normalizeContentConfig,
+  setContentModuleEnabled,
+  setContentPackageEnabled,
+} from "./learning-content-package.js";
 import { loadLearningStateEnvelope, adoptPendingLearningState } from "./learning-state-storage.js";
 import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
-import { getActivePointAction, getBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
-
-const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
+import { getActivePointAction, getBalance, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 
 inject();
 installRapidActionGuard(document);
@@ -236,6 +241,27 @@ function dateKeyOffset(off){
 function isChecked(mod){
   const t = todayKey();
   return hasCheckin(store.checkins[t], mod);
+}
+
+function enabledModuleIds(){
+  return getEnabledModuleIds(store.content_config);
+}
+
+function updateContentPackage(enabled){
+  store = { ...store, content_config: setContentPackageEnabled(store.content_config, enabled) };
+  save();
+  switchMod(CURRENT_MOD);
+}
+
+function updateContentModule(moduleId, enabled){
+  store = { ...store, content_config: setContentModuleEnabled(store.content_config, moduleId, enabled) };
+  save();
+  switchMod(CURRENT_MOD);
+}
+
+function contentModuleLabel(moduleId){
+  const labels = { chinese: "语文学习", math: "数学与数感", english: "英语学习", book: "绘本读物" };
+  return labels[moduleId] || moduleId;
 }
 
 function toggleCheckin(mod){
@@ -661,47 +687,107 @@ function renderHome(){
   const hz = HANZI[(di*2)%HANZI.length];
   const poem = POEMS[di%POEMS.length];
   const en = ENGLISH[di%ENGLISH.length];
-  const checkedToday = CHECKIN_MODULES.filter(isChecked).length;
-  const m = new Date().getMonth()+1;
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
+  const checkedToday = enabled.filter(isChecked).length;
   const main = el("main");
   main.innerHTML = "";
   main.appendChild($(`
     <div class="banner">
       <div class="t">${icon("construction")} 挖掘机小队长，今天也要加油哦！</div>
-      <div class="d">今日已打卡 ${checkedToday}/${CHECKIN_MODULES.length} 个学习模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」</div>
+      <div class="d">${learningOn
+        ? `今日已打卡 ${checkedToday}/${enabled.length} 个学习模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」`
+        : `学习包还没有启用，去「学习」页为这个孩子开启学习模块吧`}</div>
     </div>
   `));
 
-  const stat = $(`
-    <div class="card">
-      <h3>${icon("chart")} 今日成长数据</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${checkedToday}/${CHECKIN_MODULES.length}</div><div class="t">今日打卡</div></div>
-        <div class="stat"><div class="n">${streak("chinese")}</div><div class="t">语文连续(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计打卡</div></div>
-        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计打卡</div></div>
+  if (learningOn) {
+    const moduleStats = enabled.map((module) => ({
+      value: module === "chinese" ? streak("chinese") : totalChecked(module),
+      caption: module === "chinese" ? "语文连续(天)" : `${contentModuleLabel(module)}累计打卡`,
+    }));
+    const stat = $(`
+      <div class="card">
+        <h3>${icon("chart")} 今日成长数据</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${checkedToday}/${enabled.length}</div><div class="t">今日打卡</div></div>
+          ${moduleStats.map((s) => `<div class="stat"><div class="n">${s.value}</div><div class="t">${s.caption}</div></div>`).join("")}
+        </div>
+        <div class="progressbar"><i></i></div>
       </div>
-      <div class="progressbar"><i></i></div>
-    </div>
-  `);
-  main.appendChild(stat);
-  stat.querySelector(".progressbar i").style.width = (checkedToday/CHECKIN_MODULES.length*100)+"%";
+    `);
+    main.appendChild(stat);
+    stat.querySelector(".progressbar i").style.width = (checkedToday/enabled.length*100)+"%";
+  }
 
-  // 三大模块快捷入口
-  const mk = (mod,iconName,t,d)=>$(`
+  // 统一学习入口 + 积分
+  const mk = (mod,iconName,t,d,pillText)=>$(`
     <button class="card card-action" type="button" data-go="${mod}">
       <h3>${icon(iconName)} ${t}</h3>
       <div class="desc">${d}</div>
-      <span class="pill">${isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡"}</span>
+      <span class="pill">${pillText || (isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡")}</span>
     </button>
   `);
-  main.appendChild(mk("chinese","book","语文学习","识字·古诗词·写字 每日打卡"));
-  main.appendChild(mk("math","calculator","数学与数感","口算·数感游戏·数独 每日打卡"));
-  main.appendChild(mk("english","languages","英语学习","主题单词 每日推送与朗读打卡"));
-  main.appendChild(mk("book","library","绘本读物","多地优质绘本 · 跟读+思考题"));
+  main.appendChild(mk("learning","graduation","学习", learningOn ? "语文 · 数学 · 英语 · 绘本，按孩子启停" : "学习包未启用，点此开启", learningOn ? "学习" : "未启用"));
   main.appendChild(mk("points","star","积分打卡","加分减分 · 月度行为积分表"));
   main.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 家长登录后自动同步云端</div>`));
+}
+
+function renderLearning(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("graduation","学习"));
+  const config = normalizeContentConfig(store.content_config);
+  const enabled = enabledModuleIds();
+  const settings = $(`
+    <div class="card">
+      <h3>${icon("grid")} 学习包设置</h3>
+      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
+      <label class="switch-row">
+        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
+        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
+      </label>
+      ${FOUNDATION_PACKAGE.modules.map((module) => `
+      <label class="switch-row">
+        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
+        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
+      </label>`).join("")}
+    </div>
+  `);
+  main.appendChild(settings);
+  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
+    input.onchange = () => updateContentPackage(input.checked);
+  });
+  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
+    input.onchange = () => updateContentModule(input.dataset.moduleId, input.checked);
+  });
+
+  if (enabled.length) {
+    const entries = enabled.map((moduleId) => {
+      const module = getContentModuleDefinition(moduleId);
+      const done = isChecked(moduleId);
+      return `<button class="card card-action" type="button" data-go="${escapeHtml(module.content_entry)}">
+        <h3>${icon(module.icon_key)} ${escapeHtml(module.name)}</h3>
+        <div class="desc">${done ? "今日已完成" : "今日待打卡"} · 累计 ${totalChecked(moduleId)} 天 · 连续 ${streak(moduleId)} 天</div>
+        <span class="pill">${done ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡"}</span>
+      </button>`;
+    }).join("");
+    main.appendChild($(`
+      <div class="card">
+        <h3>${icon("list")} 学习模块</h3>
+        ${entries}
+      </div>
+    `));
+    main.querySelectorAll("[data-go]").forEach((c) => (c.onclick = () => switchMod(c.dataset.go)));
+  } else {
+    main.appendChild($(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习包未启用</h3>
+        <div class="desc">开启上方「启用学习包」后，才能看到并进入学习模块。</div>
+      </div>
+    `));
+  }
+  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
 /* =========================================================
@@ -942,29 +1028,127 @@ function renderEnglish(){
 /* =========================================================
    渲染：成长
    ========================================================= */
+function openingStatusLabel(entry) {
+  if (!entry) return "";
+  if (entry.status === "pending" || entry.status === "retryable") return "待联网确认";
+  if (entry.status === "confirmed") return "已确认";
+  if (entry.status === "conflict") return "待处理";
+  return "确认失败";
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("sprout","成长记录"));
-  const total = CHECKIN_MODULES.reduce((sum, module) => sum + totalChecked(module), 0);
-  const card = $(`
-    <div class="card">
-      <h3>${icon("trophy")} 打卡总览</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${totalChecked("chinese")}</div><div class="t">语文累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("book")}</div><div class="t">绘本累计(天)</div></div>
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
+
+  if (learningOn) {
+    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
+    const overview = $(`
+      <div class="card">
+        <h3>${icon("trophy")} 打卡总览</h3>
+        <div class="stat-grid">
+          ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
+        </div>
+        <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
+        <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
+        <div class="progressbar"><i></i></div>
+        <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
       </div>
-      <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
-      <div class="desc mt-14">${icon("flame")} 连续打卡：语文 ${streak("chinese")} 天 · 数学 ${streak("math")} 天 · 英语 ${streak("english")} 天 · 绘本 ${streak("book")} 天</div>
-      <div class="progressbar"><i></i></div>
-      <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
-    </div>
-  `);
-  main.appendChild(card);
-  card.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+    `);
+    main.appendChild(overview);
+    overview.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+
+    // 日历式最近记录（只统计已启用模块）
+    let cells="";
+    for(let i=29;i>=0;i--){
+      const k=dateKeyOffset(i);
+      const c=store.checkins[k];
+      const n = enabled.filter((module) => hasCheckin(c, module)).length;
+      const day = Number(k.slice(-2));
+      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
+      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
+    }
+    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
+      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
+    ).join("");
+    const cal = $(`
+      <div class="card">
+        <h3>${icon("calendar")} 近 30 天打卡日历</h3>
+        <div class="cal-grid">${cells}</div>
+        <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
+        <div class="cal-legend" aria-label="成长日历图例">
+          ${legendLevels}
+          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+        </div>
+      </div>
+    `);
+    main.appendChild(cal);
+  } else {
+    const hint = $(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
+        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
+        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
+      </div>
+    `);
+    main.appendChild(hint);
+    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
+  }
 
   const balance = getBalance(growthLoopSnapshot);
+  const opening = getOpeningBalance(growthLoopSnapshot);
+  const openingCard = $(`
+    <div class="card growth-opening-card">
+      ${opening
+        ? `<h3>${icon("checkCircle")} 期初积分已确认</h3>
+           <div class="stat-grid">
+             <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
+             <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
+           </div>
+           <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>`
+        : `<h3>${icon("star")} 期初积分</h3>
+           <div class="desc">把旧记录里已经积累的积分带过来？期初积分由家长为当前孩子明确确认一次，不会自动导入旧流水；确认后如需调整，请用普通积分调整流水。</div>
+           <form id="openingBalanceForm" class="growth-form">
+             <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
+             <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+           </form>`
+      }
+    </div>
+  `);
+  main.appendChild(openingCard);
+  const openingForm = openingCard.querySelector("#openingBalanceForm");
+  if (openingForm) {
+    openingForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const value = Number(form.get("balance"));
+      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
+        alert("请填写 1 到 1000000 的整数积分。");
+        return;
+      }
+      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
+      try {
+        const result = await window.growthLoop.confirmOpeningBalance({
+          balance: value,
+          note: "期初积分",
+          request_id: clientRequestId("opening"),
+        });
+        if (result.error === "opening_balance_already_confirmed") {
+          alert("这个孩子的期初积分已经确认过了。");
+        } else if (result.error) {
+          alert("期初积分确认失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderGrow();
+        }
+      } catch (error) {
+        console.error("Growth Loop opening balance confirm failed:", error);
+        alert("期初积分没有保存成功，请稍后重试。");
+      }
+    };
+  }
+
   const rewards = window.growthLoop?.getRewards?.() || [];
   const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
   const rewardCards = rewards.map((reward) => {
@@ -1032,33 +1216,6 @@ function renderGrow(){
     };
   });
 
-  // 日历式最近记录
-  let cells="";
-  for(let i=29;i>=0;i--){
-    const k=dateKeyOffset(i);
-    const c=store.checkins[k];
-    const n = CHECKIN_MODULES.filter((module) => hasCheckin(c, module)).length;
-    const lvl = n;
-    const day = Number(k.slice(-2));
-    const label = `${k}，${n ? `已完成 ${n}/${CHECKIN_MODULES.length} 个学习模块` : "未打卡"}`;
-    cells += `<div class="cal-cell lvl-${lvl}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${CHECKIN_MODULES.length}</span></div>`;
-  }
-  const cal = $(`
-    <div class="card">
-      <h3>${icon("calendar")} 近 30 天打卡日历</h3>
-      <div class="cal-grid">${cells}</div>
-      <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${CHECKIN_MODULES.length} 个模块，边框表示今天。</div>
-      <div class="cal-legend" aria-label="成长日历图例">
-        <span class="cal-legend-item"><i class="cal-swatch lvl-0" aria-hidden="true"></i>0/${CHECKIN_MODULES.length} 未打卡</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-1" aria-hidden="true"></i>1/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-2" aria-hidden="true"></i>2/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-3" aria-hidden="true"></i>3/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-4" aria-hidden="true"></i>${CHECKIN_MODULES.length}/${CHECKIN_MODULES.length} 全部完成</span>
-        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
-      </div>
-    </div>
-  `);
-  main.appendChild(cal);
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
@@ -1433,6 +1590,7 @@ function switchMod(mod){
     else b.removeAttribute("aria-current");
   });
   if(mod==="home") renderHome();
+  else if(mod==="learning") renderLearning();
   else if(mod==="chinese") renderChinese();
   else if(mod==="math") renderMath();
   else if(mod==="english") renderEnglish();
