@@ -10,6 +10,12 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Agent runtime harness (local-only, must not enter public repo)
+.agent_context/
+.claude/
+.multica/
+/attachments/
+
 test-results/
 playwright-report/
 coverage/
