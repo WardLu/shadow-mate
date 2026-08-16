@@ -7,7 +7,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const shadowMateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const merchantAdminRoot = path.resolve(shadowMateRoot, '..', 'shadow-size', 'merchant-admin')
-const testPath = path.join(shadowMateRoot, 'supabase', 'tests', 'learning_rls_test.sql')
+const testsDir = path.join(shadowMateRoot, 'supabase', 'tests')
+
+function collectTestFiles() {
+  return fs
+    .readdirSync(testsDir)
+    .filter((entry) => entry.endsWith('.sql'))
+    .sort()
+    .map((entry) => path.join(testsDir, entry))
+}
 
 function validateLocalDatabaseUrl(databaseUrl, source) {
   let parsedUrl
@@ -75,8 +83,13 @@ export { buildTestDatabaseUrl }
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const databaseUrl = getDatabaseUrl()
   const testDatabaseUrl = buildTestDatabaseUrl(databaseUrl)
+  const testFiles = collectTestFiles()
 
-  console.log('🧪 运行 Shadow Mate learning RLS 测试（目标：loopback 本地数据库）')
+  if (testFiles.length === 0) {
+    throw new Error(`在 ${testsDir} 中没有找到任何 SQL 测试文件。`)
+  }
+
+  console.log(`🧪 运行 ${testFiles.length} 个 pgTAP 测试文件（目标：loopback 本地数据库）`)
   execFileSync(
     'npx',
     [
@@ -85,7 +98,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
       'db',
       '--db-url',
       testDatabaseUrl,
-      testPath,
+      ...testFiles,
     ],
     {
       cwd: shadowMateRoot,
