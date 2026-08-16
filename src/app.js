@@ -33,8 +33,6 @@ import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.j
 import { getActivePointAction, getBalance, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-sounds.js";
 
-const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
-
 inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
