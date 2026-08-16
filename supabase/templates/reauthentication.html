@@ -13,8 +13,9 @@
         .email-card { background-color: #141c22 !important; border-color: #35454d !important; }
         .email-border { border-color: #35454d !important; }
         .email-brand-name, .email-heading { color: #eef4f1 !important; }
-        .email-brand-meta, .email-copy, .email-note { color: #a3b1b7 !important; }
-        .email-action { background-color: #67cbe7 !important; color: #101820 !important; }
+        .email-brand-meta, .email-copy, .email-code-label, .email-expiry, .email-note { color: #a3b1b7 !important; }
+        .email-code-box { background-color: #203b46 !important; border-color: #3a6673 !important; }
+        .email-code, .email-link { color: #67cbe7 !important; }
         .email-footer { background-color: #1d2931 !important; }
       }
       [data-ogsc] .email-page { background-color: #101820 !important; }
@@ -22,11 +23,16 @@
       [data-ogsc] .email-card { background-color: #141c22 !important; border-color: #35454d !important; }
       [data-ogsc] .email-border { border-color: #35454d !important; }
       [data-ogsc] .email-brand-name, [data-ogsc] .email-heading { color: #eef4f1 !important; }
-      [data-ogsc] .email-brand-meta, [data-ogsc] .email-copy, [data-ogsc] .email-note { color: #a3b1b7 !important; }
-      [data-ogsc] .email-action { background-color: #67cbe7 !important; color: #101820 !important; }
+      [data-ogsc] .email-brand-meta, [data-ogsc] .email-copy, [data-ogsc] .email-code-label, [data-ogsc] .email-expiry, [data-ogsc] .email-note { color: #a3b1b7 !important; }
+      [data-ogsc] .email-code-box { background-color: #203b46 !important; border-color: #3a6673 !important; }
+      [data-ogsc] .email-code, [data-ogsc] .email-link { color: #67cbe7 !important; }
       [data-ogsc] .email-footer { background-color: #1d2931 !important; }
       @media (max-width: 480px) {
         .email-card { width: 100% !important; }
+        .email-code-box { table-layout: fixed !important; }
+        .email-code-box td { display: block !important; width: 100% !important; box-sizing: border-box !important; text-align: left !important; }
+        .email-code-box td:last-child { padding: 0 20px 16px !important; white-space: normal !important; }
+        .email-code { font-size: 32px !important; letter-spacing: .12em !important; }
         .email-footer table { table-layout: fixed !important; }
         .email-footer table td { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-right: 0 !important; text-align: left !important; white-space: normal !important; }
         .email-footer table td:last-child { padding-top: 10px !important; }
@@ -44,19 +50,20 @@
                   <td width="42" valign="middle" style="width:42px;padding-right:11px;">
                     {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .RedirectTo "http://localhost:5173") (eq .RedirectTo "http://localhost:5173/") (eq .RedirectTo "http://127.0.0.1:5173") (eq .RedirectTo "http://127.0.0.1:5173/") (eq .RedirectTo "http://localhost:3000") (eq .RedirectTo "http://localhost:3000/") (eq .Data.product_id "shadow-mate") }}<img src="https://shadow.wang/brand_assets/shadow_mate.svg" width="42" height="42" alt="影伴 Shadow Mate" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}<img src="https://shadow.wang/brand_assets/shadow_card_logo.png" width="42" height="42" alt="Shadow Card" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}<img src="https://shadow.wang/brand_assets/shadow_size.png" width="42" height="42" alt="Shadow Size" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}<img src="https://shadow.wang/brand_assets/shadow_flomo_sender.png" width="42" height="42" alt="Quick flomo" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />{{ else }}<img src="https://shadow.wang/shadow_portal_logo.png" width="42" height="42" alt="Shadow Nexus" style="display:block;width:42px;height:42px;border:0;border-radius:12px;background-color:#101a24;object-fit:contain;" />{{ end }}
                   </td>
-                  <td valign="middle"><div class="email-brand-name" style="color:#1d2730;font-size:15px;line-height:20px;font-weight:700;">{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .Data.product_id "shadow-mate") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}影裁 Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}Quick flomo{{ else }}Shadow Nexus{{ end }}</div><div class="email-brand-meta" style="margin-top:2px;color:#66737d;font-size:11px;line-height:16px;">by Shadow Nexus</div></td>
-                  <td align="right" valign="middle" class="email-brand-meta" style="color:#66737d;font-size:11px;line-height:16px;white-space:nowrap;">密码重设</td>
+                  <td valign="middle"><div class="email-brand-name" style="color:#1d2730;font-size:15px;line-height:20px;font-weight:700;">{{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .RedirectTo "https://shadow-mate.vercel.app") (eq .RedirectTo "https://shadow-mate.vercel.app/") (eq .Data.product_id "shadow-mate") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .RedirectTo "https://sbc.shadow.wang/") (eq .Data.product_id "shadow-card") }}Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}Quick flomo{{ else }}Shadow Nexus{{ end }}</div><div class="email-brand-meta" style="margin-top:2px;color:#66737d;font-size:11px;line-height:16px;">by Shadow Nexus</div></td>
+                  <td align="right" valign="middle" class="email-brand-meta" style="color:#66737d;font-size:11px;line-height:16px;white-space:nowrap;">安全确认</td>
                 </tr></table>
               </td>
             </tr>
             <tr>
               <td style="padding:34px 32px 24px;">
-                <h1 class="email-heading" style="max-width:450px;margin:0 0 15px;color:#1d2730;font-family:Georgia,'Songti SC','STSong',serif;font-size:31px;line-height:1.1;font-weight:500;letter-spacing:-0.035em;">设置一个新的密码。</h1>
-                <p class="email-copy" style="margin:0 0 26px;color:#66737d;font-size:15px;line-height:1.75;">我们收到了来自 {{ if or (eq .RedirectTo "https://sm.shadow.wang") (eq .RedirectTo "https://sm.shadow.wang/") (eq .Data.product_id "shadow-mate") }}影伴 Shadow Mate{{ else if or (eq .RedirectTo "https://sc.shadow.wang") (eq .RedirectTo "https://sc.shadow.wang/") (eq .RedirectTo "https://sbc.shadow.wang") (eq .Data.product_id "shadow-card") }}影匣 Shadow Card{{ else if or (eq .RedirectTo "https://ss.shadow.wang") (eq .RedirectTo "https://ss.shadow.wang/") (eq .Data.product_id "shadow-size") }}影裁 Shadow Size{{ else if or (eq .RedirectTo "https://flomo.shadow.wang") (eq .RedirectTo "https://flomo.shadow.wang/") (eq .Data.product_id "quick-flomo") }}Quick flomo{{ else }}Shadow Nexus{{ end }} 的密码重设请求。点击下面的按钮继续。</p>
-                <p style="margin:0;text-align:center;"><a class="email-action" href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 28px;border-radius:7px;background:#177fb9;color:#fff;text-decoration:none;font-weight:700;font-size:13px;">重设密码 ↗</a></p>
+                <h1 class="email-heading" style="max-width:450px;margin:0 0 15px;color:#1d2730;font-family:Georgia,'Songti SC','STSong',serif;font-size:31px;line-height:1.1;font-weight:500;letter-spacing:-0.035em;">确认是你本人。</h1>
+                <p class="email-copy" style="margin:0 0 26px;color:#66737d;font-size:15px;line-height:1.75;">为保护你的账号安全，这次敏感操作需要再次验证身份。请输入下面的验证码继续。</p>
+                <p class="email-code-label" style="margin:0 0 8px;color:#66737d;font-size:11px;line-height:16px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;">Your verification code</p>
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" class="email-code-box" style="width:100%;background-color:#e1f1f8;border:1px solid #177fb9;border-radius:7px;"><tr><td valign="middle" style="padding:18px 20px 17px;"><span class="email-code" style="color:#177fb9;font-family:'SF Mono','Roboto Mono','Courier New',monospace;font-size:36px;line-height:42px;font-weight:700;letter-spacing:.18em;">{{ .Token }}</span></td><td align="right" valign="middle" class="email-expiry" style="padding:18px 20px 17px 8px;color:#66737d;font-size:11px;line-height:16px;white-space:nowrap;">短时间内有效<br />仅可使用一次</td></tr></table>
                 <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="width:100%;margin:27px 0 20px;"><tr><td height="1" class="email-border" style="height:1px;border-top:1px solid #d9d8d0;font-size:0;line-height:0;">&nbsp;</td></tr></table>
-                <p class="email-note" style="margin:0 0 7px;color:#66737d;font-size:13px;line-height:1.7;">此链接只能使用一次，并将在短时间后失效。完成后请使用新密码登录。</p>
-                <p class="email-note" style="margin:0;color:#66737d;font-size:13px;line-height:1.7;">如果您没有请求重设密码，请忽略此邮件。</p>
+                <p class="email-note" style="margin:0 0 7px;color:#66737d;font-size:13px;line-height:1.7;">验证码只能使用一次。如果邮件客户端支持按钮，也可以点击下方按钮完成验证。</p>
+                <p style="margin:0;text-align:center;"><a class="email-link" href="{{ if .RedirectTo }}{{ .RedirectTo }}{{ else }}{{ .SiteURL }}{{ end }}?token_hash={{ .TokenHash }}&amp;type=reauthentication" style="display:inline-block;padding:12px 28px;border-radius:7px;background:#177fb9;color:#fff;text-decoration:none;font-weight:700;font-size:13px;">验证身份 ↗</a></p>
               </td>
             </tr>
             <tr>
