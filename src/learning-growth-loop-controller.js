@@ -63,7 +63,7 @@ function rebindSnapshotScope(input, scope) {
   return next;
 }
 
-export function createGrowthLoopController({ db } = {}) {
+export function createGrowthLoopController({ db, onRewardFulfilled = null } = {}) {
   if (!db) throw new Error("growth_loop_local_db_required");
   let scope = { household_id: null, profile_id: null };
   let scopeKey = scopeKeyForGrowthLoop(scope);
@@ -204,6 +204,30 @@ export function createGrowthLoopController({ db } = {}) {
     return clone(snapshot);
   }
 
+  async function fulfillRedemption({ redemption_id, request_id = createId() } = {}) {
+    const redemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
+    if (!redemption) return { ...clone(snapshot), error: "redemption_not_found" };
+    if (redemption.status !== "pending" || redemption.fulfill_requested) {
+      return { ...clone(snapshot), error: "redemption_not_pending" };
+    }
+    const next = normalizeGrowthLoopState(snapshot, scope);
+    const row = next.redemptions.find((entry) => entry.id === redemption_id);
+    row.fulfill_requested = true;
+    await db.appendOutbox({
+      event_id: createId(),
+      request_id,
+      scope_key: scopeKey,
+      household_id: scope.household_id,
+      profile_id: scope.profile_id,
+      type: "redemption_fulfill",
+      payload: { redemption_id },
+    });
+    await db.putSnapshot(scopeKey, next);
+    snapshot = next;
+    notify();
+    return clone(snapshot);
+  }
+
   async function queueActivity({ event_type, payload = {}, occurred_at, client_version, timezone, event_id }) {
     const event = buildActivityEvent({
       event_type,
@@ -260,8 +284,18 @@ export function createGrowthLoopController({ db } = {}) {
       const redemption = next.redemptions.find((entry) => entry.request_id === event.request_id);
       if (redemption) {
         Object.assign(redemption, remote || {}, { status: remote?.status || "pending" });
+        if (remote?.id) redemption.confirmed = true;
         const debit = next.ledger.find((entry) => entry.redemption_id === redemption.id);
         if (debit && remote?.id) debit.redemption_id = remote.id;
+      }
+    } else if (event.type === "redemption_fulfill") {
+      const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
+      if (redemption && remote?.status === "fulfilled") {
+        const alreadyFulfilled = redemption.status === "fulfilled";
+        Object.assign(redemption, remote, { status: "fulfilled", confirmed: true });
+        if (!alreadyFulfilled && typeof onRewardFulfilled === "function") {
+          onRewardFulfilled({ redemption: clone(redemption) });
+        }
       }
     }
     await db.putSnapshot(scopeKey, next);
@@ -360,6 +394,7 @@ export function createGrowthLoopController({ db } = {}) {
     closePeriod,
     createReward,
     redeemReward,
+    fulfillRedemption,
     queueActivity,
     mergeRemote,
     sync,
