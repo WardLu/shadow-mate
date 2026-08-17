@@ -169,6 +169,11 @@ async function sendLoginOtp(email) {
   });
 }
 
+async function checkAuthEmail(email) {
+  if (!supabase) return { data: null, error: new Error("Cloud authentication is unavailable") };
+  return supabase.functions.invoke("check-auth-email", { body: { email } });
+}
+
 function passwordPromptStorageKey() {
   return session?.user?.id ? `${PASSWORD_PROMPT_KEY}:${session.user.id}` : PASSWORD_PROMPT_KEY;
 }
@@ -298,7 +303,7 @@ function renderPasswordEditor({ mode = "setup" } = {}) {
 function renderPasswordRecoveryRequest(prefillEmail = "") {
   panel.innerHTML = `
     <div class="cloud-heading"><h2>${icon("cloud")} 找回密码</h2><button class="icon-button" type="button" data-recovery-back aria-label="返回登录">${icon("close")}</button></div>
-    <p>输入账号邮箱，我们会发送密码重设邮件。为了保护账号，无论邮箱是否存在，页面都会显示相同结果。</p>
+    <p>输入账号邮箱，我们会先确认账号是否存在，再发送密码重设邮件。</p>
     <form id="passwordRecoveryForm">
       <label class="cloud-field">账号邮箱<input name="email" type="email" autocomplete="email" required value="${escapeHtml(prefillEmail)}" placeholder="parent@example.com"></label>
       <div class="cloud-actions"><button class="cloud-action" type="submit">发送重设邮件</button><button class="cloud-action secondary" type="button" data-recovery-cancel>返回登录</button></div>
@@ -314,6 +319,15 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
     const submitButton = form.querySelector("[type=submit]");
     await runLockedAction(submitButton, async () => {
       const email = String(new FormData(form).get("email") || "").trim();
+      const { data: emailStatus, error: lookupError } = await checkAuthEmail(email);
+      if (lookupError || typeof emailStatus?.registered !== "boolean") {
+        showToast("暂时无法确认该邮箱，请稍后再试。", 6000);
+        return;
+      }
+      if (!emailStatus.registered) {
+        showToast("该邮箱尚未注册，请先注册账号或使用邮箱验证码登录。", 6000);
+        return;
+      }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin,
       });

@@ -82,19 +82,37 @@ npm.cmd run dev
 ```powershell
 npm.cmd run check
 npm.cmd run build
-npm.cmd run test:unit
-npm.cmd run test:e2e
+npm.cmd run test:fast
+npm.cmd run test:ui
 ```
 
 需要本地数据库测试时，先启动 Docker Desktop：
 
 ```powershell
-supabase start
-npm.cmd run test:db
-supabase db lint --local --schema public --level warning --fail-on error
+npm run supabase:local:start
+npm run test:db
+```
+
+`supabase:local:start` 会转到同级 `shadow-size/merchant-admin`，启动共享本地 Supabase，并按 Shadow Portal 控制面的 SHA-256 校验结果加载 Shadow Mate 的 `learning_*` 业务 schema。控制面历史快照只会应用到 `127.0.0.1:54322`，不会复制到生产迁移目录，也不会连接生产数据库。
+
+如果要验收登录、找回密码或其他 Edge Function，再开一个终端运行：
+
+```powershell
+npm run supabase:local:functions:serve
+```
+
+该命令会准备共享函数覆盖层并以前台方式运行本地函数服务；关闭该终端就会停止函数服务。
+
+如果要对共享本地数据库执行 lint，请在 merchant-admin 目录运行：
+
+```powershell
+cd ../shadow-size/merchant-admin
+npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
 `test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码、数据生命周期和云端冲突限次重试；真实 Supabase E2E 需要额外配置环境变量。
+
+日常开发按改动范围选择最小充分的检查：页面改动运行目标 UI 测试，数据库/认证/同步改动补充对应集成测试；合并或发布前运行 `npm.cmd run test:full`。`test:fast` 是静态检查加全部 unit test，不是 changed-only 测试。
 
 ## 工作方式
 
@@ -124,7 +142,7 @@ src/learning-state.js      学习状态机与四个模块的打卡分组
 src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
 src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
 src/icons.js               Lucide 图标渲染与图标 hydration
-supabase/migrations/       家庭数据、RLS、生命周期和删除权限
+supabase/migrations/       Shadow Mate 的 schema 提案与隔离 CI 测试副本
 supabase/functions/        账号级服务端删除
 tests/unit/                纯函数与学习状态机测试
 tests/e2e/                 离线、云端和数据生命周期测试
@@ -134,7 +152,15 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 当前部署配置位于 `src/config.js`，浏览器端只使用 publishable key。真正的数据隔离由 Supabase RLS、家庭成员关系和产品 ID 共同完成；绝不能把 secret key 或 `service_role` key 放进仓库。
 
-数据库迁移位于 `supabase/migrations/`，包括：
+### 共享 Supabase 与迁移边界
+
+影伴接入共享 Supabase 后，日常本地验收必须通过 `npm run supabase:local:start`，由同级 `shadow-size/merchant-admin` 启动共享本地实例，并加载经 Shadow Portal 控制面校验的 Shadow Mate `learning_*` schema。需要验收 Auth 或 Edge Functions 时，再在第二个终端运行 `npm run supabase:local:functions:serve`。
+
+仓库中的 `supabase/migrations/` 仍用于保存与代码同步的迁移提案和隔离 CI 测试副本，不是共享生产库的唯一发布目录。共享生产迁移的 canonical 文件、审批、发布和台账由 `shadow-portal/supabase/control-plane` 管理；不要在本仓库直接执行生产 `db push`、`migration repair` 或 linked SQL。
+
+`supabase/config.toml` 的独立端口和迁移配置仅供 CI/隔离测试使用。不要在影伴仓库根目录直接运行裸 `supabase start` 来代替共享本地启动。
+
+数据库迁移提案包括：
 
 - 项目登记和共享多租户兼容性
 - 家庭、成员、学习者和学习状态表

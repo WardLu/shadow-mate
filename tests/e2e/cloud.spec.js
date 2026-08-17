@@ -687,6 +687,13 @@ test.describe("Shared password authentication", () => {
       localStorage.clear();
       sessionStorage.clear();
     });
+    await page.route("**/functions/v1/check-auth-email", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ registered: true }),
+      });
+    });
     await page.route("**/auth/v1/recover**", async (route) => {
       await route.fulfill({
         status: 503,
@@ -805,11 +812,18 @@ test.describe("Shared password authentication", () => {
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
   });
 
-  test("requests a branded recovery email without revealing account existence", async ({ page }) => {
-    let recoveryRequestUrl = "";
+  test("blocks password recovery for an unregistered email", async ({ page }) => {
+    let recoveryRequestCount = 0;
     await page.addInitScript(() => { localStorage.clear(); sessionStorage.clear(); });
+    await page.route("**/functions/v1/check-auth-email", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ registered: false }),
+      });
+    });
     await page.route("**/auth/v1/recover**", async (route) => {
-      recoveryRequestUrl = route.request().url();
+      recoveryRequestCount += 1;
       await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
 
@@ -820,7 +834,7 @@ test.describe("Shared password authentication", () => {
     await page.click("[data-forgot-password]");
     await page.click('#passwordRecoveryForm button[type="submit"]');
 
-    await expect.poll(() => recoveryRequestUrl).toContain("redirect_to=http%3A%2F%2F127.0.0.1");
-    await expect(page.locator("#cloudPanel")).toContainText("如果该邮箱已注册，密码重设邮件已经发送");
+    await expect(page.locator("#syncToast")).toContainText("该邮箱尚未注册");
+    expect(recoveryRequestCount).toBe(0);
   });
 });
