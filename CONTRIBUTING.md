@@ -80,6 +80,27 @@ Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
 - 若 GitHub 插件返回仓库权限错误，先检查插件是否已授权目标仓库，再重试；不要创建重复 PR，也不要把令牌粘贴到终端或文档中。
 - CI 日志不得输出完整 `supabase status`、JWT、数据库密码或其他密钥字段；只保留必要的健康状态和测试结果。
 
+## PR 合并顺序与发布流程
+
+Growth Loop MVP 期间，多条 PR 相互依赖并存在合并顺序约束。本节随代码版本化，是合并顺序的权威说明（第 1 层）；实时状态以协调任务 SHA-4 为准（第 2 层）；执行按本顺序人工合并（第 3 层）。只记录已实现、已上线的状态，不提前宣称未完成的能力。
+
+### 当前合并顺序
+
+按以下顺序合并，前序完成后进行后序：
+
+1. **#47 `feat/email-templates`** 与 **#48 `feat/shared-supabase-routing`**——由已关闭的 #40 拆分而来，各自基于 `main`，可先行合并。
+2. **#43 `feat/growth-loop-integration`**——在 #47/#48 合入 `main` 之后合并。
+3. **#44/#45/#46**——基于 #43 分支的 growth-loop 叠加 PR 栈，最后按序合并。
+
+### 叠加 PR 栈去重说明
+
+#43 重放了与 #48 同源的共享 Supabase 测试路由提交（`feat(supabase): route local tests through shared host`、`chore(ci): 共享 Supabase 本地测试路由与测试层级约定`）。这是正常的叠加 PR 栈：先合并 #48 再合并 #43 时，git 会识别这些提交已应用，不会重复应用或产生冲突，无需手工去重。
+
+### 合并门槛
+
+- **#43 保持 Draft**，直至其新增的 8 个 `growth_loop_*` 迁移经 Shadow Portal 控制面登记并执行到生产，之后才允许合并；不做前端先行（frontend-first）。
+- **执行层**：MVP 阶段不启用 GitHub Merge Queue，按上述顺序人工合并；合并前仍须通过对应的完整门禁（见「Required checks」与「Release 闸门」）。
+
 ## Privacy review
 
 Any new learner field must document why it is necessary, where it is stored, its retention period, its deletion path, and whether explicit parent/guardian consent is required. Update `PRIVACY.md` and the relevant migration/tests in the same change.
