@@ -1,0 +1,103 @@
+name: Deploy release to production
+
+# GitHub Release 发布后，把 `production` 分支指针快进到该 release 的 commit，
+# 触发 Vercel 对 `production` 分支（Branch Tracking）的生产构建与部署。
+# 只更新指针、不创建新提交；strict fast-forward，绝不 force。
+# 发布前必须已通过 `.github/workflows/release.yml`（Release verification）的产物验证，
+# 「创建 GitHub Release」即代表该 tag 已验收（见 CONTRIBUTING.md「Release 闸门」）。
+#
+# 推送凭据：专用 deploy key（secret `PRODUCTION_DEPLOY_KEY`，SSH，仅本仓库写权限），
+# 在 `production` 分支保护 ruleset 中作为 bypass actor 更新指针。
+# `GITHUB_TOKEN` 只读（contents: read），无法触碰 `production`。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要部署的 Release tag，例如 v1.3.9（补发/重跑用；回滚请按 CONTRIBUTING.md 手动 force-with-lease）"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# 串行化 production 指针更新，避免连续发布时两个 run 竞争同一个分支。
+concurrency:
+  group: production-branch-update
+  cancel-in-progress: false
+
+jobs:
+  deploy-release:
+    name: fast-forward production to release commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve target tag
+        id: resolve
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          if [[ -z "$tag" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "No release tag resolved." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Target tag: $tag"
+
+      - name: Set up production deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+        run: |
+          if [[ -z "${DEPLOY_KEY}" ]]; then
+            echo "::error::Secret PRODUCTION_DEPLOY_KEY is not configured. Add the production deploy key as an Actions secret before running; refusing to update production without a dedicated deploy credential."
+            exit 1
+          fi
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          install -m 600 /dev/null "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "${DEPLOY_KEY}" > "$HOME/.ssh/id_ed25519"
+          # 固定 github.com 的 RSA host key（校验 SHA256 指纹，避免 TOFU 被中间人替换）。
+          # 指纹取 GitHub 官方 /meta 的权威值；GitHub 轮换 host key 后需同步更新此处。
+          ssh-keyscan -t rsa github.com > "$HOME/.ssh/known_hosts"
+          if ! ssh-keygen -lf "$HOME/.ssh/known_hosts" | grep -q 'SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s'; then
+            echo "::error::github.com SSH host key fingerprint mismatch; refusing to continue." >&2
+            exit 1
+          fi
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+          EOF
+
+      - name: Fast-forward production branch
+        env:
+          TARGET_TAG: ${{ steps.resolve.outputs.tag }}
+          GIT_SSH_COMMAND: "ssh -F $HOME/.ssh/config"
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse "${TARGET_TAG}^{commit}")"
+          echo "Target commit: ${commit} (${TARGET_TAG})"
+          git fetch origin production
+          current="$(git rev-parse origin/production)"
+          echo "Current production: ${current}"
+          if [[ "$current" == "$commit" ]]; then
+            echo "production is already at ${TARGET_TAG}; nothing to do."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$current" "$commit"; then
+            echo "Refusing non-fast-forward update: production (${current}) is not an ancestor of ${TARGET_TAG} (${commit})." >&2
+            echo "Rollback is a manual force-with-lease push; see CONTRIBUTING.md 'Release 闸门'." >&2
+            exit 1
+          fi
+          git push "git@github.com:${GITHUB_REPOSITORY}.git" "${commit}:refs/heads/production"
