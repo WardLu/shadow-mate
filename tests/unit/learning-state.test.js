@@ -23,6 +23,13 @@ describe("learning state machine", () => {
       bookShelf: {},
       peanutLog: [],
       peanutRead: {},
+      content_config: {
+        schema_version: 1,
+        package_id: "foundation-v1",
+        package_version: 1,
+        enabled: true,
+        modules: { chinese: true, math: true, english: true, book: true },
+      },
     });
   });
 
@@ -41,6 +48,13 @@ describe("learning state machine", () => {
       bookShelf: { "2": 1 },
       peanutLog: [],
       peanutRead: {},
+      content_config: {
+        schema_version: 1,
+        package_id: "foundation-v1",
+        package_version: 1,
+        enabled: true,
+        modules: { chinese: true, math: true, english: true, book: true },
+      },
     });
     expect(hasCheckin({ "chinese-literacy": true }, "chinese")).toBe(true);
     expect(hasCheckin(null, "chinese")).toBe(false);
@@ -157,6 +171,13 @@ describe("learning state machine", () => {
       bookShelf: {},
       peanutLog: [],
       peanutRead: {},
+      content_config: {
+        schema_version: 1,
+        package_id: "foundation-v1",
+        package_version: 1,
+        enabled: true,
+        modules: { chinese: true, math: true, english: true, book: true },
+      },
     });
     expect(initial.points["2026-8"]).toEqual({ "0": { "1": 1 } });
   });

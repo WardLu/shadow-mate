@@ -1,10 +1,12 @@
 import {
+  applyOpeningBalance,
   applyPointAction,
   applyPointItemCreation,
   applyRedemption,
   applyRewardCreation,
   closePointPeriod,
   createGrowthLoopState,
+  getOpeningBalance,
   mergeGrowthLoopSnapshot,
   normalizeGrowthLoopState,
   recommendedPointItems,
@@ -123,6 +125,20 @@ export function createGrowthLoopController({ db } = {}) {
     return { ...scope };
   }
 
+  function openingBalance() {
+    const entry = getOpeningBalance(snapshot);
+    return entry ? clone(entry) : null;
+  }
+
+  async function confirmOpeningBalance({ balance, note = "期初积分", request_id = createId() }) {
+    const result = applyOpeningBalance(snapshot, { scope, balance, note, request_id });
+    if (result.error) {
+      return { ...clone(snapshot), error: result.error, entry: result.entry ? clone(result.entry) : null };
+    }
+    await persist(result.snapshot, result.events);
+    return clone(snapshot);
+  }
+
   function getPointItems({ includeRecommendations = true } = {}) {
     if (!includeRecommendations) return clone(snapshot.point_items);
     const existingNames = new Set(snapshot.point_items.map((item) => item.name));
@@ -235,6 +251,11 @@ export function createGrowthLoopController({ db } = {}) {
     } else if (event.type === "reward_upsert" && remote?.id) {
       const row = next.rewards.find((reward) => reward.id === event.payload.reward?.id);
       if (row) Object.assign(row, remote);
+    } else if (event.type === "opening_balance_confirm") {
+      const row = next.ledger.find((entry) => entry.request_id === event.request_id);
+      if (row) {
+        Object.assign(row, remote || {}, { status: "confirmed" });
+      }
     } else if (event.type === "reward_redeem") {
       const redemption = next.redemptions.find((entry) => entry.request_id === event.request_id);
       if (redemption) {
@@ -251,6 +272,10 @@ export function createGrowthLoopController({ db } = {}) {
   async function reconcileRejected(event, result) {
     const next = normalizeGrowthLoopState(snapshot, scope);
     if (event.type === "point_record") {
+      const row = next.ledger.find((entry) => entry.request_id === event.request_id);
+      if (row) Object.assign(row, { status: result.status, sync_error: result.error_code || "rejected" });
+    }
+    if (event.type === "opening_balance_confirm") {
       const row = next.ledger.find((entry) => entry.request_id === event.request_id);
       if (row) Object.assign(row, { status: result.status, sync_error: result.error_code || "rejected" });
     }
@@ -326,6 +351,8 @@ export function createGrowthLoopController({ db } = {}) {
     loadScope,
     getSnapshot,
     getScope,
+    openingBalance,
+    confirmOpeningBalance,
     getPointItems,
     getRewards,
     createPointItem,

@@ -57,7 +57,8 @@ test.describe("System speech fallback", () => {
       });
     });
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
 
     const button = page.locator("[data-speak]").first();
     await button.click();

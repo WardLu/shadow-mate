@@ -1,3 +1,5 @@
+import { defaultContentConfig } from "./learning-content-package.js";
+
 const LEGACY_STATE_KEYS = new Set([
   "checkins",
   "extra",
@@ -6,19 +8,6 @@ const LEGACY_STATE_KEYS = new Set([
   "peanutLog",
   "peanutRead",
 ]);
-
-const DEFAULT_CONTENT_CONFIG = {
-  schema_version: 1,
-  package_id: "foundation-v1",
-  package_version: 1,
-  enabled: true,
-  modules: {
-    chinese: true,
-    math: true,
-    english: true,
-    book: true,
-  },
-};
 
 function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -84,7 +73,7 @@ export function migrateLegacyLearningState(source, scope = {}) {
       bookShelf: cloneRecord(legacy.bookShelf),
       peanutLog: cloneArray(legacy.peanutLog),
       peanutRead: cloneRecord(legacy.peanutRead),
-      content_config: structuredClone(DEFAULT_CONTENT_CONFIG),
+      content_config: defaultContentConfig(),
     },
     legacy: {
       points_readonly: cloneRecord(legacy.points),
