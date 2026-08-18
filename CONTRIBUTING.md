@@ -73,7 +73,7 @@ Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
 - **触发**：GitHub Release 发布（`release: published`）后自动快进；需要补发/重跑时可手动 `workflow_dispatch` 指定同一个 Tag（同样只允许 fast-forward）。
 - **安全**：只允许 strict fast-forward——目标 commit 必须是当前 `production` 指针的后代，否则工作流失败并明确报错，绝不 force。发布前仍需先通过 `Release verification`（见上第 2、3 条），创建 GitHub Release 即代表该 Tag 已验收。
 - **回滚**：生产异常时把 `production` 指针退回上一个已验收 Tag。回滚无法快进，需维护者手动执行 `git push --force-with-lease origin <上一个vX.Y.Z>^{commit}:production`，随后可运行 `Release production verification` 复核恢复后的站点。
-- **保护分支取舍**：`production` 当前未设分支保护，工作流用 `GITHUB_TOKEN`（`contents: write`）更新指针。若后续启用保护，`GITHUB_TOKEN` 无法推送，需改用细粒度 PAT 或 deploy key（存为 secret），或改用 environment 保护。
+- **分支保护**：`production` 已启用仓库 ruleset 保护，不允许无门禁直接推送。工作流通过专用 deploy key（Actions secret `PRODUCTION_DEPLOY_KEY`，SSH，仅本仓库写权限）更新指针，deploy key 在 `require_pull_request`（1 个审查）规则下作为 bypass actor；同时 `non_fast_forward`（禁止 force push，仅 admin 可 force 以支持回滚）与 `deletion`（禁止删除）规则独立生效。`GITHUB_TOKEN` 在本工作流中为只读，无法触碰 `production`；新增任何写入 `production` 的通道前，先确认其已加入对应 ruleset 的允许 bypass 集合。
 
 普通项目复用这套流程时，只复制通用闸门；在 `release-gate.config.json` 中按项目调整产物目录、第三方资源、发布说明标记和生产响应头，不要照搬影伴的 Piper、Vercel 或 Supabase 假设。
 
