@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyOpeningBalance,
   applyPointAction,
   applyRedemption,
   closePointPeriod,
   createGrowthLoopState,
   getActivePointAction,
   getBalance,
+  getOpeningBalance,
   getPointPeriodTotal,
   mergeGrowthLoopSnapshot,
   recommendedPointItems,
@@ -148,5 +150,56 @@ describe("Growth Loop local projection", () => {
     expect(getPointPeriodTotal(closed.snapshot, "item-1", "2026-08")).toBe(0);
     expect(closed.snapshot.ledger[0]).toEqual(expect.objectContaining({ request_id: "request-1", delta: 2 }));
     expect(closed.events).toEqual([expect.objectContaining({ type: "point_record" })]);
+  });
+});
+
+describe("Growth Loop opening balance", () => {
+  it("confirms an opening balance once and counts it in the balance", () => {
+    const state = createGrowthLoopState(scope);
+    const result = applyOpeningBalance(state, {
+      scope,
+      balance: 128,
+      note: "期初积分",
+      request_id: "opening-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot.ledger).toEqual([
+      expect.objectContaining({
+        delta: 128,
+        entry_type: "initial_balance",
+        item_name_snapshot: "期初积分",
+        request_id: "opening-1",
+        status: "pending",
+      }),
+    ]);
+    expect(result.events).toEqual([
+      expect.objectContaining({ type: "opening_balance_confirm", request_id: "opening-1" }),
+    ]);
+    expect(getOpeningBalance(result.snapshot)).toEqual(expect.objectContaining({ delta: 128, entry_type: "initial_balance" }));
+    expect(getBalance(result.snapshot)).toBe(128);
+  });
+
+  it("rejects a second confirmation for the same child", () => {
+    const first = applyOpeningBalance(createGrowthLoopState(scope), { scope, balance: 50, request_id: "opening-1" });
+    const second = applyOpeningBalance(first.snapshot, { scope, balance: 200, request_id: "opening-2" });
+
+    expect(second.error).toBe("opening_balance_already_confirmed");
+    expect(second.entry).toEqual(expect.objectContaining({ delta: 50 }));
+    expect(second.snapshot.ledger).toHaveLength(1);
+  });
+
+  it("rejects invalid opening balances", () => {
+    for (const invalid of [0, -5, 1000001, "abc", undefined, null]) {
+      const result = applyOpeningBalance(createGrowthLoopState(scope), { scope, balance: invalid });
+      expect(result.error).toBe("opening_balance_invalid");
+      expect(result.snapshot.ledger).toHaveLength(0);
+      expect(result.events).toEqual([]);
+    }
+  });
+
+  it("keeps opening balance out of effective-action metrics", () => {
+    const result = applyOpeningBalance(createGrowthLoopState(scope), { scope, balance: 10, request_id: "opening-1" });
+    expect(result.snapshot.ledger.map((entry) => entry.entry_type)).toEqual(["initial_balance"]);
   });
 });

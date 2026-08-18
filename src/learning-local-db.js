@@ -49,6 +49,7 @@ function rehomeOutboxEvent(event, scopeKey, scope) {
       payload.profile_point_item.profile_id = scope.profile_id;
     }
     if (next.type === "point_record" && payload) payload.profile_id = scope.profile_id;
+    if (next.type === "opening_balance_confirm" && payload) payload.profile_id = scope.profile_id;
     if (next.type === "reward_upsert" && payload.reward) {
       payload.reward.household_id = scope.household_id;
     }
