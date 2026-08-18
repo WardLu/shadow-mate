@@ -61,9 +61,19 @@ Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
 1. 先同步 `package.json`、`package-lock.json`、`README.md`、`CHANGELOG.md` 和 `RELEASE_NOTES.md` 的版本号。
 2. 在目标 commit 创建匹配的 `vX.Y.Z` Tag；Tag 推送后等待 `Release verification` 全绿。
 3. 自动检查版本和 Tag 一致性、发布说明部署清单、最终 `dist`/压缩包的敏感内容、构建产物、第三方资源 SHA-256 和许可证清单。
-4. 部署完成后手动运行 `Release production verification`，填写同一个 Tag 和生产 HTTPS 地址，验收首页、Manifest、CSP、HSTS、X-Frame-Options 等响应头。
-5. 创建 GitHub Release 前人工核对：Release 页面 Tag 与已验收 Tag 相同；附件来自已扫描的最终压缩包；附件 SHA-256 与本地/CI 记录一致；没有额外未扫描附件。
-6. 涉及 Supabase 迁移时，发布人必须在生产 Supabase 确认目标迁移已执行，再在发布说明记录结果；自动化测试不等于生产迁移已完成。
+4. 创建 GitHub Release 前人工核对：Release 页面 Tag 与已验收 Tag 相同；附件来自已扫描的最终压缩包；附件 SHA-256 与本地/CI 记录一致；没有额外未扫描附件。
+5. GitHub Release 发布后自动部署：`Deploy release to production` 将 `production` 分支指针快进到该 Tag 的 commit（只快进、不 force、不并入 `main` 开发内容），Vercel 的 Branch Tracking 随之触发生产构建与部署。
+6. 部署完成后手动运行 `Release production verification`，填写同一个 Tag 和生产 HTTPS 地址，验收首页、Manifest、CSP、HSTS、X-Frame-Options 等响应头。
+7. 涉及 Supabase 迁移时，发布人必须在生产 Supabase 确认目标迁移已执行，再在发布说明记录结果；自动化测试不等于生产迁移已完成。
+
+### production 分支与生产部署
+
+`production` 是纯指针分支：内容 = 最近一次发布的 commit，只被 `.github/workflows/release-to-production.yml` 更新，不在其上直接提交或合并 `main` 开发内容。
+
+- **触发**：GitHub Release 发布（`release: published`）后自动快进；需要补发/重跑时可手动 `workflow_dispatch` 指定同一个 Tag（同样只允许 fast-forward）。
+- **安全**：只允许 strict fast-forward——目标 commit 必须是当前 `production` 指针的后代，否则工作流失败并明确报错，绝不 force。发布前仍需先通过 `Release verification`（见上第 2、3 条），创建 GitHub Release 即代表该 Tag 已验收。
+- **回滚**：生产异常时把 `production` 指针退回上一个已验收 Tag。回滚无法快进，需维护者手动执行 `git push --force-with-lease origin <上一个vX.Y.Z>^{commit}:production`，随后可运行 `Release production verification` 复核恢复后的站点。
+- **保护分支取舍**：`production` 当前未设分支保护，工作流用 `GITHUB_TOKEN`（`contents: write`）更新指针。若后续启用保护，`GITHUB_TOKEN` 无法推送，需改用细粒度 PAT 或 deploy key（存为 secret），或改用 environment 保护。
 
 普通项目复用这套流程时，只复制通用闸门；在 `release-gate.config.json` 中按项目调整产物目录、第三方资源、发布说明标记和生产响应头，不要照搬影伴的 Piper、Vercel 或 Supabase 假设。
 
