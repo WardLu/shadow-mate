@@ -1,6 +1,22 @@
-function classifyError(error = {}) {
-  const status = Number(error.status || error.code);
-  const message = String(error.message || error.error_description || "").toLowerCase();
+const CONFLICT_BUSINESS_ERRORS = new Set([
+  "learning_request_reuse_conflict",
+]);
+
+const REJECTED_BUSINESS_ERRORS = new Set([
+  "learning_legacy_points_already_imported",
+  "learning_opening_balance_already_confirmed",
+]);
+
+function classifyError(error = {}, responseStatus = null) {
+  const status = Number(responseStatus ?? error.status ?? error.code);
+  const message = String(error.message || error.error_description || "").trim().toLowerCase();
+  const businessError = /^learning_[a-z0-9_]+$/.test(message) ? message : null;
+  if (CONFLICT_BUSINESS_ERRORS.has(businessError)) {
+    return { status: "conflict", error_code: businessError, error_message: error.message || null };
+  }
+  if (REJECTED_BUSINESS_ERRORS.has(businessError)) {
+    return { status: "rejected", error_code: businessError, error_message: error.message || null };
+  }
   if (status === 409 || message.includes("conflict") || message.includes("idempotency")) {
     return { status: "conflict", error_code: message.includes("idempotency") ? "idempotency_conflict" : "cloud_conflict", error_message: error.message || null };
   }
@@ -8,21 +24,21 @@ function classifyError(error = {}) {
     return { status: "rejected", error_code: "permission_denied", error_message: error.message || null };
   }
   if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
-    return { status: "rejected", error_code: error.code || "request_rejected", error_message: error.message || null };
+    return { status: "rejected", error_code: businessError || error.code || "request_rejected", error_message: error.message || null };
   }
   return { status: "retryable", error_code: status === 429 ? "rate_limited" : "network_or_server_error", error_message: error.message || null };
 }
 
 async function rpc(client, name, args) {
-  const { data, error } = await client.rpc(name, args);
-  if (error) return classifyError(error);
-  const normalized = Array.isArray(data) ? data[0] : data;
+  const result = await client.rpc(name, args);
+  if (result.error) return classifyError(result.error, result.status);
+  const normalized = Array.isArray(result.data) ? result.data[0] : result.data;
   return { status: "confirmed", data: normalized || null };
 }
 
 async function upsert(client, table, values) {
   const result = await client.from(table).upsert(values, { onConflict: "id" }).select().single();
-  if (result.error) return classifyError(result.error);
+  if (result.error) return classifyError(result.error, result.status);
   return { status: "confirmed", data: result.data };
 }
 
@@ -48,7 +64,7 @@ export function createGrowthLoopTransport({ client } = {}) {
           return upsert(client, "learning_point_items", publicDefinition(payload.point_item, POINT_ITEM_FIELDS));
         case "profile_point_item_upsert": {
           const result = await client.from("learning_profile_point_items").upsert(publicDefinition(payload.profile_point_item, PROFILE_POINT_ITEM_FIELDS), { onConflict: "profile_id,point_item_id" }).select().single();
-          return result.error ? classifyError(result.error) : { status: "confirmed", data: result.data };
+          return result.error ? classifyError(result.error, result.status) : { status: "confirmed", data: result.data };
         }
         case "point_record":
           return rpc(client, "learning_record_points", {
@@ -83,7 +99,7 @@ export function createGrowthLoopTransport({ client } = {}) {
           return upsert(client, "learning_rewards", publicDefinition(payload.reward, REWARD_FIELDS));
         case "profile_reward_upsert": {
           const result = await client.from("learning_profile_rewards").upsert(publicDefinition(payload.profile_reward, PROFILE_REWARD_FIELDS), { onConflict: "profile_id,reward_id" }).select().single();
-          return result.error ? classifyError(result.error) : { status: "confirmed", data: result.data };
+          return result.error ? classifyError(result.error, result.status) : { status: "confirmed", data: result.data };
         }
         case "reward_redeem":
           return rpc(client, "learning_redeem_reward", {
@@ -126,7 +142,14 @@ async function fetchLedgerRows(client, profileId) {
       .limit(LEDGER_PAGE_SIZE);
     if (cursor) query = query.gt("id", cursor);
     const result = await query;
-    if (result.error) return { data: rows, error: result.error };
+    if (result.error) {
+      return {
+        data: rows,
+        error: result.error,
+        status: result.status,
+        statusText: result.statusText,
+      };
+    }
     const page = result.data || [];
     rows.push(...page);
     if (page.length < LEDGER_PAGE_SIZE) return { data: rows, error: null };
@@ -146,7 +169,13 @@ export async function fetchGrowthLoopSnapshot(client, { householdId, profileId }
     profileFilter(client.from("learning_redemptions").select("*")),
   ]);
   const errors = [pointItems, profilePointItems, rewards, profileRewards, ledger, redemptions]
-    .map((result) => result?.error)
+    .map((result) => result?.error ? {
+      code: result.error.code,
+      details: result.error.details,
+      hint: result.error.hint,
+      message: result.error.message,
+      status: result.status ?? result.error.status,
+    } : null)
     .filter(Boolean);
   return {
     snapshot: {

@@ -18,6 +18,9 @@ export const PRIVACY_POLICY_VERSION = "privacy-v1";
 const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
+const GROWTH_LOOP_SYNC_DEBOUNCE_MS = 500;
+const GROWTH_LOOP_REMOTE_RETRY_MS = 1000;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -58,6 +61,7 @@ let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
 let growthLoopSyncTimer = null;
+let growthLoopSyncAt = null;
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -101,14 +105,25 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
   await window.growthLoop.loadScope(scope, { adoptPending });
   await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED, {}, "once");
   if (!growthLoopTransport) return;
-  const remote = await fetchGrowthLoopSnapshot(supabase, {
-    householdId: profile.household_id,
-    profileId: profile.id,
-  });
+  let remote;
+  try {
+    remote = await fetchGrowthLoopSnapshot(supabase, {
+      householdId: profile.household_id,
+      profileId: profile.id,
+    });
+  } catch (error) {
+    scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
+    throw error;
+  }
   if (window.growthLoop.getScope().profile_id !== profile.id) return;
   // A not-yet-migrated environment must not overwrite local records with an
   // empty fallback snapshot. Release-time migrations enable this path.
-  if (remote.errors.length) return;
+  if (remote.errors.length) {
+    if (remote.errors.some(isRetryableGrowthLoopFetchError)) {
+      scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
+    }
+    return { skipped: true, reason: "remote_fetch_failed", errors: remote.errors };
+  }
   await window.growthLoop.mergeRemote(remote.snapshot);
   if (window.growthLoop.getScope().profile_id !== profile.id) return;
   const report = await window.growthLoop.sync({ transport: growthLoopTransport });
@@ -118,8 +133,13 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
       error_code: report.conflict ? "conflict" : report.rejected ? "rejected" : "retryable",
       retryable: Boolean(report.retryable),
     }, `sync:${new Date().toISOString().slice(0, 13)}`);
+  }
+  if (report.next_attempt_at !== null && report.next_attempt_at !== undefined) {
+    void scheduleGrowthLoopRetry({ notBefore: report.next_attempt_at });
+  } else if (report.retryable || report.conflict || report.rejected) {
     scheduleGrowthLoopSync();
   }
+  return report;
 }
 
 async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false } = {}) {
@@ -147,13 +167,66 @@ async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucke
   }
 }
 
-function scheduleGrowthLoopSync() {
+function isRetryableGrowthLoopFetchError(error = {}) {
+  const status = Number(error.status ?? error.code);
+  return !Number.isFinite(status) || status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+function nextGrowthLoopAttemptAt(events, now = Date.now()) {
+  // The outbox is FIFO, so the queue head is the earliest eligible attempt;
+  // later pending events cannot skip a retryable head that is backing off.
+  const next = (events || [])
+    .filter((event) => event.status === "pending" || event.status === "retryable")
+    .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0))[0];
+  if (!next) return null;
+  return Math.max(now, Number(next.next_attempt_at || 0));
+}
+
+function scheduleGrowthLoopSyncAt(targetAt) {
+  if (!activeProfile) return null;
+  const now = Date.now();
+  const normalizedTarget = Number(targetAt);
+  const scheduledAt = Math.max(
+    now,
+    Number.isFinite(normalizedTarget) ? normalizedTarget : now + GROWTH_LOOP_SYNC_DEBOUNCE_MS,
+  );
+  if (growthLoopSyncTimer && growthLoopSyncAt !== null && growthLoopSyncAt <= scheduledAt) {
+    return growthLoopSyncAt;
+  }
   clearTimeout(growthLoopSyncTimer);
+  growthLoopSyncAt = scheduledAt;
   growthLoopSyncTimer = setTimeout(() => {
+    growthLoopSyncTimer = null;
+    growthLoopSyncAt = null;
     if (activeProfile) void loadGrowthLoopProfile(activeProfile).catch((error) => {
       console.warn("Growth Loop cloud sync deferred:", error);
+      scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
     });
-  }, 500);
+  }, Math.min(MAX_TIMER_DELAY_MS, Math.max(0, scheduledAt - now)));
+  return scheduledAt;
+}
+
+async function scheduleGrowthLoopRetry({
+  notBefore = Date.now(),
+  fallbackDelayMs = GROWTH_LOOP_REMOTE_RETRY_MS,
+} = {}) {
+  if (!activeProfile) return null;
+  const profileId = activeProfile.id;
+  const now = Date.now();
+  let scheduledAt = Math.max(Number(notBefore) || now, now + fallbackDelayMs);
+  try {
+    const events = await window.growthLoop?.pendingOutbox?.();
+    if (activeProfile?.id !== profileId) return null;
+    const nextAttemptAt = nextGrowthLoopAttemptAt(events, now);
+    if (nextAttemptAt !== null) scheduledAt = Math.max(Number(notBefore) || now, nextAttemptAt);
+  } catch (error) {
+    console.warn("Growth Loop retry schedule deferred:", error);
+  }
+  return scheduleGrowthLoopSyncAt(scheduledAt);
+}
+
+function scheduleGrowthLoopSync() {
+  return scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_SYNC_DEBOUNCE_MS);
 }
 
 function guardianConsentField() {
@@ -1314,6 +1387,9 @@ function scheduleSave() {
 }
 
 window.cloudSync = { schedule: scheduleSave, scheduleGrowthLoop: scheduleGrowthLoopSync };
+window.addEventListener("online", () => {
+  void scheduleGrowthLoopRetry({ fallbackDelayMs: 0 });
+});
 
 async function maybePromptPasswordSetup(options = {}) {
   if (!session || passwordRecoveryActive) return false;

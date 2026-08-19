@@ -30,12 +30,34 @@ export function createOutboxSync({
 
   async function syncScope(scopeKey, options = {}) {
     const limit = options.limit || 100;
-    const events = await db.listOutbox(scopeKey, {
+    const queuedEvents = await db.listOutbox(scopeKey, {
       statuses: ["pending", "retryable"],
-      now: now(),
+      now: Number.MAX_SAFE_INTEGER,
       limit,
     });
-    const report = { confirmed: 0, duplicate: 0, retryable: 0, conflict: 0, rejected: 0, pending: events.length, blocked: false };
+    const currentTime = now();
+    const events = [];
+    let nextAttemptAt = null;
+    for (const event of queuedEvents) {
+      const eventAttemptAt = Number(event.next_attempt_at || 0);
+      if (eventAttemptAt > currentTime) {
+        // Preserve FIFO: a later pending event must not bypass the retryable
+        // queue head while its backoff window is still active.
+        nextAttemptAt = eventAttemptAt;
+        break;
+      }
+      events.push(event);
+    }
+    const report = {
+      confirmed: 0,
+      duplicate: 0,
+      retryable: 0,
+      conflict: 0,
+      rejected: 0,
+      pending: queuedEvents.length,
+      blocked: queuedEvents.length > 0 && events.length === 0,
+      next_attempt_at: nextAttemptAt,
+    };
     for (const event of events) {
       const claimed = await db.claimOutbox?.(event.event_id, {
         worker_id: workerId,
@@ -67,10 +89,11 @@ export function createOutboxSync({
       }
       if (status === "retryable") {
         const attempts = Number(event.attempts || 0) + 1;
+        const retryAt = now() + retryDelay(attempts, retryBaseMs, jitter, random);
         await db.updateOutbox(event.event_id, {
           status: "retryable",
           attempts,
-          next_attempt_at: now() + retryDelay(attempts, retryBaseMs, jitter, random),
+          next_attempt_at: retryAt,
           error_code: result?.error_code || "retryable_error",
           error_message: result?.error_message || null,
           processing_by: null,
@@ -79,6 +102,7 @@ export function createOutboxSync({
         await onRetryable(event, { ...result, status: "retryable" });
         report.retryable += 1;
         report.blocked = true;
+        report.next_attempt_at = retryAt;
         break;
       }
       const terminalStatus = status === "conflict" ? "conflict" : "rejected";
@@ -95,6 +119,7 @@ export function createOutboxSync({
       report.blocked = true;
       break;
     }
+    if (report.next_attempt_at !== null && report.pending > 0) report.blocked = true;
     return report;
   }
 

@@ -138,6 +138,12 @@ test.describe("Growth Loop local-first boundary", () => {
     page.on("dialog", (dialog) => dialog.accept());
     await card.locator("#legacyImportBtn").click();
 
+    await expect(card).toContainText("本机已导入，待云端确认");
+    await expect.poll(() => page.evaluate(async () => {
+      const events = await window.growthLoop.pendingOutbox();
+      return events.some((event) => event.type === "legacy_points_import");
+    })).toBe(true);
+
     await page.evaluate(() => window.growthLoop.sync({
       transport: {
         send: async (event) => event.type === "legacy_points_import"

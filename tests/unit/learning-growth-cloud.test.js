@@ -36,6 +36,57 @@ describe("Growth Loop Supabase transport", () => {
       .resolves.toEqual(expect.objectContaining({ status: "conflict", error_code: "idempotency_conflict" }));
   });
 
+  it.each([
+    {
+      name: "request reuse",
+      event: { type: "legacy_points_import", request_id: "batch-1", payload: { entries: [] } },
+      message: "learning_request_reuse_conflict",
+      expectedStatus: "conflict",
+    },
+    {
+      name: "legacy points already imported",
+      event: { type: "legacy_points_import", request_id: "batch-1", payload: { entries: [] } },
+      message: "learning_legacy_points_already_imported",
+      expectedStatus: "rejected",
+    },
+    {
+      name: "opening balance already confirmed",
+      event: { type: "opening_balance_confirm", request_id: "opening-1", payload: {} },
+      message: "learning_opening_balance_already_confirmed",
+      expectedStatus: "rejected",
+    },
+  ])("maps an actual-shaped $name RPC error to terminal $expectedStatus", async ({ event, message, expectedStatus }) => {
+    const rpcResult = {
+      data: null,
+      error: { code: "P0001", details: null, hint: null, message },
+      status: 400,
+      statusText: "Bad Request",
+    };
+    const transport = createGrowthLoopTransport({ client: { rpc: vi.fn(async () => rpcResult) } });
+
+    await expect(transport.send(event)).resolves.toEqual({
+      status: expectedStatus,
+      error_code: message,
+      error_message: message,
+    });
+  });
+
+  it("uses the RPC result HTTP status when PostgrestError has no status", async () => {
+    const rpcResult = {
+      data: null,
+      error: { code: "22023", details: null, hint: null, message: "learning_legacy_entry_delta_invalid" },
+      status: 400,
+      statusText: "Bad Request",
+    };
+    const transport = createGrowthLoopTransport({ client: { rpc: vi.fn(async () => rpcResult) } });
+
+    await expect(transport.send({ type: "point_record", request_id: "request-1", payload: {} }))
+      .resolves.toEqual(expect.objectContaining({
+        status: "rejected",
+        error_code: "learning_legacy_entry_delta_invalid",
+      }));
+  });
+
   it("strips local-only metadata before writing public product tables", async () => {
     const upsert = vi.fn(() => ({
       select: () => ({ single: async () => ({ data: { id: "item-1" }, error: null }) }),
