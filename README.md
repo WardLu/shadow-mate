@@ -183,7 +183,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.3.9，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴当前仓库版本为 v1.3.9，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据；另有与 Vercel 分离、不可由普通用户读取的私有后端活动事件，用于内测指标和有限故障诊断，原始记录保留 180 天。具体字段、导出边界和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 ### 英语发音
 

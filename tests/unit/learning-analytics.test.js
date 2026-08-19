@@ -14,6 +14,7 @@ describe("Growth Loop activity events", () => {
         child_name: "不应上传",
         email: "parent@example.com",
         error: "自由文本不应上传",
+        client: "unbounded-client-label",
       },
     });
 

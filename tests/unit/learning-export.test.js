@@ -13,7 +13,12 @@ describe("household export boundary", () => {
         grade_level: 0,
         created_at: "2026-08-01T08:00:00.000Z",
         updated_at: "2026-08-14T08:00:00.000Z",
-        state: { schema_version: 2, learning: { checkins: {} } },
+        state: {
+          schema_version: 2,
+          learning: { checkins: {} },
+          activity_events: [{ event_type: "core_activation" }],
+          beta_batches: [{ batch: "dogfood" }],
+        },
         state_version: 4,
         state_updated_at: "2026-08-14T08:00:00.000Z",
         auth_email: "parent@example.com",
@@ -25,7 +30,7 @@ describe("household export boundary", () => {
       consents: [{
         household_id: "household-1",
         consent_type: "learner_data_processing",
-        policy_version: "privacy-v1",
+        policy_version: "privacy-v2",
         consented_at: "2026-08-01T08:00:00.000Z",
         created_at: "2026-08-01T08:00:00.000Z",
       }],
@@ -36,7 +41,11 @@ describe("household export boundary", () => {
         profileRewards: [{ profile_id: "profile-1", reward_id: "reward-1" }],
         ledger: [{ id: "ledger-1", profile_id: "profile-1", delta: 2 }],
         redemptions: [{ id: "redemption-1", profile_id: "profile-1", status: "pending" }],
+        activityEvents: [{ event_type: "core_activation" }],
+        betaBatches: [{ household_id: "household-1", batch: "dogfood" }],
       },
+      activityEvents: [{ event_type: "sync_failed" }],
+      betaBatches: [{ household_id: "household-1", status: "active" }],
     });
 
     expect(payload).toMatchObject({
@@ -50,7 +59,7 @@ describe("household export boundary", () => {
         state_version: 4,
         state: { schema_version: 2 },
       }],
-      consents: [{ consent_type: "learner_data_processing", policy_version: "privacy-v1", created_at: "2026-08-01T08:00:00.000Z" }],
+      consents: [{ consent_type: "learner_data_processing", policy_version: "privacy-v2", created_at: "2026-08-01T08:00:00.000Z" }],
       growth_loop: {
         point_items: [{ id: "item-1" }],
         profile_point_items: [{ profile_id: "profile-1" }],
@@ -66,6 +75,9 @@ describe("household export boundary", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("sound_preferences");
     expect(serialized).not.toContain("activity_events");
+    expect(serialized).not.toContain("activityEvents");
+    expect(serialized).not.toContain("beta_batches");
+    expect(serialized).not.toContain("betaBatches");
     expect(serialized).not.toContain("server_audit_log");
     expect(serialized).not.toContain("internalAuditLog");
   });

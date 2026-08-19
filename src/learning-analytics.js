@@ -10,7 +10,7 @@ export const ACTIVITY_EVENT_TYPES = Object.freeze({
 });
 
 const ALLOWED_TYPES = new Set(Object.values(ACTIVITY_EVENT_TYPES));
-const COMMON_PAYLOAD_KEYS = new Set(["source", "entry_type", "error_code", "retryable", "client", "days", "count"]);
+const COMMON_PAYLOAD_KEYS = new Set(["source", "entry_type", "error_code", "retryable", "days", "count"]);
 
 function clone(value) {
   return structuredClone(value);

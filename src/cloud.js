@@ -15,7 +15,8 @@ const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
 export const GUARDIAN_CONSENT_TYPE = "learner_data_processing";
-export const PRIVACY_POLICY_VERSION = "privacy-v1";
+export const PRIVACY_POLICY_VERSION = "privacy-v2";
+const ACCEPTED_PRIVACY_POLICY_VERSIONS = Object.freeze(["privacy-v1", PRIVACY_POLICY_VERSION]);
 const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
@@ -881,7 +882,7 @@ function renderAccount() {
     <p class="cloud-sync-copy">家庭空间统一管理，学习记录按孩子分别同步。切换孩子后会加载对应的学习记录。</p>
     <div class="learner-list">${choices}</div>
     <form id="addLearnerForm">
-      ${hasGuardianConsent ? '<p class="cloud-hint">家长同意已记录（隐私说明版本 privacy-v1）。</p>' : `<p class="cloud-hint">添加学习者前，需要由家长或监护人确认隐私说明。</p>${guardianConsentField()}`}
+      ${hasGuardianConsent ? '<p class="cloud-hint">家长同意已记录（当前或兼容的历史隐私说明版本）。</p>' : `<p class="cloud-hint">添加学习者前，需要由家长或监护人确认隐私说明。</p>${guardianConsentField()}`}
       <label class="cloud-field">
         添加学习者
         <input name="learner" maxlength="30" required placeholder="例如：弟弟">
@@ -1125,7 +1126,7 @@ async function fetchWorkspace() {
     .in("household_id", householdIds)
     .eq("user_id", session.user.id)
     .eq("consent_type", GUARDIAN_CONSENT_TYPE)
-    .eq("policy_version", PRIVACY_POLICY_VERSION);
+    .in("policy_version", ACCEPTED_PRIVACY_POLICY_VERSIONS);
   if (consentError) throw consentError;
   guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
   const { data: profileRows, error: profileError } = await supabase

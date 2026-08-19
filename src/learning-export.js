@@ -11,6 +11,7 @@ const SENSITIVE_KEY_PATTERNS = [
   /device/i,
   /sound/i,
   /activity.?event/i,
+  /beta.?batch/i,
   /analytics/i,
   /server.?audit/i,
   /internal.?audit/i,
@@ -82,8 +83,8 @@ function exportRows(rows) {
 
 /**
  * Build the user-owned data export. The field allowlists keep credentials,
- * device preferences, raw analytics, and server-only audit data out of the
- * portable product history.
+ * device preferences, raw analytics/activity events, private beta batches,
+ * and server-only audit data out of the portable product history.
  */
 export function buildHouseholdExport(input = {}) {
   const household = input.household || {};

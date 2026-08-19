@@ -1,5 +1,5 @@
 begin;
-select plan(58);
+select plan(60);
 
 -- Final product identity and migration state.
 select is(
@@ -222,9 +222,9 @@ select lives_ok(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       '11111111-1111-4111-8111-111111111111',
       'learner_data_processing',
-      'privacy-v1'
+      'privacy-v2'
     )$$,
-  'owner can create a guardian consent record'
+  'owner can create a privacy-v2 guardian consent record'
 );
 
 select lives_ok(
@@ -245,6 +245,56 @@ select lives_ok(
       '{"points": 10}'::jsonb
     )$$,
   'owner can create profile state'
+);
+
+select lives_ok(
+$legacy_household$
+do $block$
+begin
+  insert into public.learning_households (id, name, owner_user_id)
+  values (
+    'bbbbbbbb-aaaa-4bbb-8bbb-bbbbbbbbbbbb',
+    '历史同意家庭',
+    '11111111-1111-4111-8111-111111111111'
+  );
+
+  insert into public.learning_household_members (household_id, user_id, role)
+  values (
+    'bbbbbbbb-aaaa-4bbb-8bbb-bbbbbbbbbbbb',
+    '11111111-1111-4111-8111-111111111111',
+    'owner'
+  );
+end;
+$block$;
+$legacy_household$,
+  'owner can create a second household for legacy-consent compatibility'
+);
+
+set local role postgres;
+
+insert into public.learning_guardian_consents (
+  household_id,
+  user_id,
+  consent_type,
+  policy_version
+) values (
+  'bbbbbbbb-aaaa-4bbb-8bbb-bbbbbbbbbbbb',
+  '11111111-1111-4111-8111-111111111111',
+  'learner_data_processing',
+  'privacy-v1'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+
+select lives_ok(
+  $$insert into public.learning_profiles (household_id, display_name, grade_level)
+    values (
+      'bbbbbbbb-aaaa-4bbb-8bbb-bbbbbbbbbbbb',
+      '历史同意学习者',
+      3
+    )$$,
+  'historical privacy-v1 consent remains valid for learner creation'
 );
 
 select is(
@@ -337,6 +387,8 @@ select lives_ok(
   $$select public.learning_delete_household('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')$$,
   'the household owner can delete the complete family workspace'
 );
+
+select public.learning_delete_household('bbbbbbbb-aaaa-4bbb-8bbb-bbbbbbbbbbbb');
 
 select is(
   (select count(*) from public.learning_households),

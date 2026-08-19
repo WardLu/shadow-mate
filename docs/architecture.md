@@ -124,7 +124,7 @@ erDiagram
 
 限制与演进条件：
 
-- 如果需要排行榜、日级报表或推荐模型，应新增 append-only `learning_activity_events`；
+- Growth Loop 使用 private、append-only 的 `learning_activity_events` 记录有界后端事件，用于内测漏斗和故障诊断；它不保存自由文本或学习内容，普通用户不可读取，原始记录按 `received_at` 保留 180 天。排行榜、推荐模型等新用途仍需另行评审；
 - 如果内容编辑频繁或需要付费授权，应新增内容集合、内容项和 entitlement 表；
 - 如果状态接近 1 MB、冲突频率升高或查询需要跨用户聚合，应将相关字段拆表；
 - 不直接删除 JSONB 状态；先双写、回填、验证，再切换读取。
@@ -146,7 +146,7 @@ erDiagram
 - 创建家庭时 `owner_user_id` 必须等于 `auth.uid()`。
 - 家庭 owner 只能为自己创建初始 owner membership。
 - owner/guardian 可创建和修改 learner profile/state。
-- 创建 learner profile 还必须存在当前 owner/guardian 的 `privacy-v1` 确认记录；记录只允许服务端默认时间戳写入，客户端无更新/删除权限。
+- 创建 learner profile 还必须存在当前 owner/guardian 的有效 `privacy-v1` 或 `privacy-v2` 确认记录；新确认写入 `privacy-v2`，历史 `privacy-v1` 继续有效。记录只允许服务端默认时间戳写入，客户端无更新/删除权限。
 - `learning_save_state` 是 `SECURITY INVOKER`，不会绕过 RLS。
 - `learning_is_household_owner` 是唯一的 `SECURITY DEFINER` 授权辅助函数：固定空 `search_path`、仅返回当前用户是否为指定家庭 owner、仅授予 `authenticated` 执行权，用于打断 household 与 membership 策略之间的递归。
 - 更新策略同时具有 `USING` 与 `WITH CHECK`。

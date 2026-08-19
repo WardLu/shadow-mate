@@ -49,7 +49,7 @@
 
         <section id="zh" class="language-section" lang="zh-CN">
           <h2 class="language-title">影伴隐私说明</h2>
-          <p class="meta">产品：影伴 Shadow Mate　·　当前版本：privacy-v1　·　生效日期：2026 年 8 月 12 日</p>
+          <p class="meta">产品：影伴 Shadow Mate　·　当前版本：privacy-v2　·　生效日期：2026 年 8 月 20 日</p>
 
           <p>影伴面向家庭和未成年学习者，默认遵循数据最小化原则。本说明描述当前 Dogfooding 和小规模内测版本的技术行为。</p>
 
@@ -58,34 +58,42 @@
             <li>家长用于登录的邮箱，由 Supabase Auth 处理。</li>
             <li>家庭空间名称。</li>
             <li>学习者显示名称和年级。建议使用昵称，不填写真实姓名。</li>
-            <li>打卡、积分、书架和阅读日志等学习状态。</li>
+            <li>打卡、积分、书架、阅读日志、奖励和兑换等学习状态。</li>
+            <li>私有后端活动事件：产品标识、随机事件 ID、内部家庭和学习者 ID、协议允许的事件类型、事件发生和服务端接收时间、家庭时区、客户端版本、操作用户 ID，以及少量有类型和长度限制的枚举、布尔值或计数诊断字段。</li>
           </ul>
           <p>当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。</p>
+          <p>后端活动事件只用于内测漏斗、留存和连续使用统计，以及同步和本地朗读故障诊断。事件类型仅限家庭启用、学习者创建、核心激活、有效成长行为、留存达标、奖励兑现、同步失败和本地朗读失败。它们不接受自由文本、完整错误堆栈、页面 URL、邮箱、儿童显示名称、学习内容或语音文本；业务事实仍以积分、奖励和兑换等业务表为准。</p>
 
-          <h2>分析服务和朗读功能</h2>
-          <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。页面访问数据可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
+          <h2>Vercel Analytics、后端活动事件和朗读功能</h2>
+          <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前不向 Vercel Analytics 发送自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。页面访问数据可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
+          <p>“不向 Vercel Analytics 发送自定义事件”不表示影伴后端完全不记录事件。上述后端活动事件保存在 Shadow Mate 的私有 Supabase schema 中，与 Vercel Analytics 分开处理和保留。</p>
           <p>当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。</p>
 
           <h2>家长同意和学习者档案</h2>
-          <p>学习者不是独立登录账号。创建第一个学习者或添加学习者前，登录用户必须确认自己是家长或监护人，并阅读本隐私说明。系统会在 Supabase 数据库记录家庭 ID、认证用户 ID、同意类型 <code>learner_data_processing</code>、隐私说明版本 <code>privacy-v1</code> 和数据库生成的同意时间。客户端不能修改同意时间戳，也不能在没有同意记录的情况下通过公开 API 创建新的学习者档案。</p>
+          <p>学习者不是独立登录账号。创建第一个学习者或添加学习者前，登录用户必须确认自己是家长或监护人，并阅读本隐私说明。系统会在 Supabase 数据库记录家庭 ID、认证用户 ID、同意类型 <code>learner_data_processing</code>、隐私说明版本和数据库生成的同意时间。客户端不能修改同意时间戳，也不能在没有有效同意记录的情况下通过公开 API 创建新的学习者档案。</p>
+          <p><code>privacy-v2</code> 明确披露私有后端活动事件、180 天保留期和导出边界。新同意记录使用 <code>privacy-v2</code>；已有 <code>privacy-v1</code> 记录继续作为有效的历史同意，不改写原始同意时间，也不要求仅因本次说明更新而重新确认。</p>
 
           <h2>数据存放和访问</h2>
           <ul>
             <li>离线学习状态保存在当前设备的浏览器存储中。</li>
             <li>登录后，家庭和学习状态同步到项目配置的 Supabase 数据库。</li>
             <li>登录会话使用浏览器会话存储；关闭对应浏览器会话后需要重新登录。</li>
-            <li>学习数据按家庭隔离，登录用户仍必须通过家庭成员关系和 RLS 才能读取或修改记录。</li>
+            <li>学习数据按家庭隔离，登录用户仍必须通过 <code>project_id = 'shadow-mate'</code>、家庭成员关系和 RLS 才能读取或修改记录。</li>
+            <li>后端活动事件和内测批次记录位于私有 schema。浏览器、普通登录用户和家庭成员不能直接读取这些表或执行聚合/清理函数；owner/guardian 只能通过受控 RPC 写入协议允许的事件字段。</li>
           </ul>
           <p>本机缓存通常会在关闭浏览器后继续保留，直到用户清除该网站的浏览器数据、使用隐私/无痕窗口、浏览器或系统自动清理，或更换访问域名。登录并同步后，云端家庭记录才是跨设备恢复来源。</p>
 
           <h2>删除、导出和保留</h2>
           <ul>
             <li>“清除本机数据”只删除当前设备的离线学习记录并退出登录，不删除云端记录。</li>
-            <li>家庭所有者可以从账号面板导出完整家庭 JSON 数据，也可以使用“删除全部家庭数据”删除当前家庭的云端记录、清理本机数据并退出登录。</li>
+            <li>家庭 JSON 导出包含家庭 ID/名称、学习者档案和状态、同意记录，以及 Growth Loop 的积分项目、学习者绑定、奖励、积分流水和兑换记录。</li>
+            <li>导出不包含 Supabase Auth 身份或邮箱、会话/设备数据、Vercel Analytics 数据、私有后端原始活动事件 <code>private.learning_activity_events</code>，也不包含私有内测批次记录 <code>private.learning_beta_batches</code>。</li>
+            <li>原始后端活动事件从服务端 <code>received_at</code> 起保留 180 天；超过 180 天的记录由受信清理任务删除。删除家庭或学习者时，关联活动事件通过外键级联删除，不等待保留期结束。</li>
+            <li>内测批次记录随家庭删除级联删除。“删除全部家庭数据”覆盖家庭业务数据、同意记录、关联活动事件和内测批次记录，并清理本机数据和退出登录。</li>
             <li>共享 Supabase 项目中的家庭数据删除不会删除 Supabase Auth 身份；用户仍可使用同一邮箱重新登录。</li>
             <li>删除学习者或家庭时，同意记录随家庭或学习者所属家庭级联删除。</li>
           </ul>
-          <p>当前没有独立的“撤回同意但保留家庭”的自助流程。数据保留期限、删除、导出、更正和撤回请求会根据产品运营地区和适用法律持续更新。</p>
+          <p>当前没有独立的“撤回同意但保留家庭”的自助流程。身份删除只在专用、隔离且经过服务端授权的账号删除流程中启用。</p>
 
           <h2>安全问题</h2>
           <p>请不要在公开 Issue 中提交个人数据或安全漏洞。安全问题请通过仓库的私密漏洞报告功能提交。</p>
@@ -93,7 +101,7 @@
 
         <section id="en" class="language-section" lang="en">
           <h2 class="language-title">Shadow Mate Privacy Policy</h2>
-          <p class="meta">Product: Shadow Mate　·　Current version: privacy-v1　·　Effective date: August 12, 2026</p>
+          <p class="meta">Product: Shadow Mate　·　Current version: privacy-v2　·　Effective date: August 20, 2026</p>
 
           <p>Shadow Mate is designed for families and learners who may be minors. We follow data minimization by default. This policy describes the technical behavior of the current Dogfooding and small-scale beta version.</p>
 
@@ -102,40 +110,48 @@
             <li>The parent's email address used to sign in, handled by Supabase Auth.</li>
             <li>The family space name.</li>
             <li>The learner's display name and grade. We recommend using a nickname instead of a real name.</li>
-            <li>Learning activity such as check-ins, points, bookshelf items, and reading logs.</li>
+            <li>Learning state such as check-ins, points, bookshelf and reading logs, rewards, and redemptions.</li>
+            <li>Private backend activity events: product identifier, random event ID, internal household and learner identifiers, an allowlisted event type, occurrence and server receipt timestamps, household timezone, client version, actor user ID, and a small typed and length-bounded set of enum, boolean, or count diagnostic fields.</li>
           </ul>
           <p>The current version does not require a child to provide an email address, phone number, birthday, school, address, precise location, or photo. It does not contain advertising.</p>
+          <p>Backend activity events are used only for beta funnel, retention, and sustained-use metrics, and for sync and local text-to-speech diagnostics. Event types are limited to household activation, learner creation, core activation, effective growth activity, retention qualification, reward redemption, sync failure, and local text-to-speech failure. They do not accept free text, full error stacks, page URLs, email addresses, learner display names, learning content, or speech text. Product facts remain in the point, reward, and redemption records.</p>
 
-          <h2>Analytics and Reading Aloud</h2>
-          <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data. It currently sends no custom events and does not send learning status, email addresses, or learner display names as custom Analytics fields. Page-visit data may include the time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
+          <h2>Vercel Analytics, Backend Activity Events, and Reading Aloud</h2>
+          <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data. It currently sends no custom events to Vercel Analytics and does not send learning state, email addresses, or learner display names as custom Analytics fields. Page-visit data may include time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
+          <p>“No custom events sent to Vercel Analytics” does not mean the Shadow Mate backend records no events. The private backend activity events described above are stored in Shadow Mate's private Supabase schema and have separate access and retention rules.</p>
           <p>The local Piper text-to-speech feature does not send text to Shadow Mate servers in the current version. Shadow Mate does not record microphone audio.</p>
 
           <h2>Parental Consent and Learner Profiles</h2>
-          <p>A learner is not an independent login account. Before creating or adding a learner, the signed-in user must confirm that they are the child's parent or guardian and read this policy. Supabase stores the household ID, authenticated user ID, consent type <code>learner_data_processing</code>, policy version <code>privacy-v1</code>, and a database-generated consent timestamp. The client cannot change the timestamp, and the public API cannot create a new learner profile without a consent record.</p>
+          <p>A learner is not an independent login account. Before creating or adding a learner, the signed-in user must confirm that they are the child's parent or guardian and read this policy. Supabase stores the household ID, authenticated user ID, consent type <code>learner_data_processing</code>, policy version, and a database-generated consent timestamp. The client cannot change the timestamp, and the public API cannot create a new learner profile without a valid consent record.</p>
+          <p><code>privacy-v2</code> expressly documents private backend activity events, their 180-day retention, and the export boundary. New consent records use <code>privacy-v2</code>. Existing <code>privacy-v1</code> records remain valid historical consent; their original timestamps are not rewritten, and this policy update alone does not require a new confirmation.</p>
 
           <h2>Where Data Is Stored and Who Can Access It</h2>
           <ul>
             <li>Offline learning state is stored in the browser storage on the current device.</li>
             <li>After sign-in, household and learning state sync to the Supabase database configured for the project.</li>
             <li>The sign-in session uses browser session storage; a new browser session may require signing in again.</li>
-            <li>Learning data is isolated by household. Signed-in users must still pass household membership checks and Row Level Security (RLS) to read or change records.</li>
+            <li>Learning data is isolated by household. Signed-in users must still pass <code>project_id = 'shadow-mate'</code>, household membership, and Row Level Security (RLS) checks.</li>
+            <li>Backend activity events and beta batch records are in a private schema. Browsers, ordinary authenticated users, and household members cannot directly read those tables or execute aggregation or cleanup functions. An owner or guardian may write only allowlisted event fields through a guarded RPC.</li>
           </ul>
           <p>Local cache normally remains after the browser closes until the site's browser data is cleared, a private/incognito session is used, the browser or operating system cleans it up, or the site domain changes. After synchronization, the cloud household record is the source for cross-device recovery.</p>
 
           <h2>Deletion, Export, and Retention</h2>
           <ul>
             <li>“Clear local data” removes only offline learning records from the current device and signs the user out; it does not delete cloud records.</li>
-            <li>The household owner can export the full household data as JSON or use “Delete all household data” to remove the current household's cloud records, clear local data, and sign out.</li>
+            <li>The household JSON export includes household ID/name, learner profiles and state, consent records, and Growth Loop point items, learner bindings, rewards, point ledger, and redemption records.</li>
+            <li>The export excludes the Supabase Auth identity or email, session/device data, Vercel Analytics data, raw private backend activity events in <code>private.learning_activity_events</code>, and private beta batch records in <code>private.learning_beta_batches</code>.</li>
+            <li>Raw backend activity events are retained for 180 days from server <code>received_at</code>; trusted cleanup deletes records older than 180 days. Deleting a household or learner cascades to its activity events without waiting for the retention period.</li>
+            <li>Beta batch records cascade when the household is deleted. “Delete all household data” covers household business data, consent records, related activity events, and beta batch records, then clears local data and signs the user out.</li>
             <li>Deleting household data in the shared Supabase project does not delete the Supabase Auth identity; the user can sign in again with the same email.</li>
             <li>When a learner or household is deleted, its consent record is deleted through the household-level cascade.</li>
           </ul>
-          <p>There is currently no self-service flow to withdraw consent while keeping the household. Data retention periods and requests for deletion, export, correction, or withdrawal will be updated as the operating region and applicable laws require.</p>
+          <p>There is currently no self-service flow to withdraw consent while keeping the household. Identity deletion is available only in a dedicated, isolated, server-authorized account deletion flow.</p>
 
           <h2>Security Issues</h2>
           <p>Do not submit personal data or security vulnerabilities in public issues. Please use the repository's private vulnerability reporting process for security issues.</p>
         </section>
       </article>
-      <footer class="site-footer">影伴 Shadow Mate · privacy-v1 · 2026</footer>
+      <footer class="site-footer">影伴 Shadow Mate · privacy-v2 · 2026</footer>
     </main>
   </body>
 </html>

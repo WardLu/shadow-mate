@@ -385,6 +385,10 @@ test.describe("Authenticated cloud workspace", () => {
 
     await expect.poll(() => api.createdHouseholds.length).toBe(1);
     await expect.poll(() => api.createdConsents.length).toBe(1);
+    expect(api.createdConsents[0]).toEqual(expect.objectContaining({
+      consent_type: "learner_data_processing",
+      policy_version: "privacy-v2",
+    }));
   });
 
   test("loads a learner profile and completes a manual cloud sync", async ({ page }) => {

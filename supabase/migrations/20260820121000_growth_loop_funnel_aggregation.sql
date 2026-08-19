@@ -9,7 +9,8 @@
 --   * 有效成长日 = 按家庭时区一天内至少一条有效记录，同一天只计一次。
 --   * F0 = 内测批次家庭（分母）+ 家庭空间 + >=1 孩子档案 + 家长同意。
 --   * F1 = 有 >=1 可用积分项目（is_active）。
---   * F2 = 首次有效成长日；F2 日期 = 首个有效成长日；72h 快速激活单独报告。
+--   * F2 = 服务端首次观察到有效成长行为；延迟同步可形成成长日，但不能按旧发生日倒推激活；
+--     72h 快速激活按 created_at / received_at 单独报告。
 --   * F3 = 创建并启用 >=1 奖励（learning_rewards.is_active 且 learning_profile_rewards.enabled）。
 --   * F4 = 首次成功兑换 = 第一条 status='fulfilled' 的 learning_redemptions（F4 日期 = fulfilled_at）。
 --   * F5 = 首次兑现后 7 天内再次产生有效行为（(f4_at, f4_at + 7 天]）。
@@ -20,7 +21,8 @@
 -- 隐私边界：与 private.learning_activity_events 一致，客户端无 schema/表/函数读取权限；
 -- 不含儿童姓名/学习内容/邮箱/原始错误文本。
 
--- 有效成长日：每家庭每天一行（去重）。
+-- 有效成长日：每家庭每天一行（去重）。first_behavior_at 是服务端首次观察时间，
+-- 用于 F2/F5，避免补记或延迟同步按 occurred_on/occurred_at 倒推激活。
 create or replace view private.learning_growth_days
 with (security_invoker = true) as
 select
@@ -28,24 +30,45 @@ select
   behaviors.growth_date,
   min(behaviors.behavior_at) as first_behavior_at
 from (
-  -- 正常积分记录（业务事实，唯一权威）：entry_type='manual'，且为及时记录（非补记）
+  -- 正常积分记录（业务事实，唯一权威）：entry_type='manual'，且为及时记录（非补记）。
+  -- ledger 只有家庭本地日期，没有发生时刻，因此 cohort 边界按家庭本地日期判断，
+  -- 同时要求服务端创建时间不早于 cohort_start。
   select
     ledger.household_id,
     ledger.occurred_on as growth_date,
     ledger.created_at as behavior_at
   from public.learning_point_ledger ledger
+  join public.learning_households household
+    on household.id = ledger.household_id
+  join private.learning_beta_batches batch
+    on batch.household_id = ledger.household_id
   where ledger.entry_type = 'manual'
-    and (ledger.created_at::date - ledger.occurred_on) between 0 and 7
+    and household.project_id = 'shadow-mate'
+    and (
+      (ledger.created_at at time zone coalesce(nullif(household.timezone, ''), 'Asia/Shanghai'))::date
+      - ledger.occurred_on
+    ) between 0 and 7
+    and ledger.occurred_on >= (
+      coalesce(batch.joined_at, batch.invited_at)
+      at time zone coalesce(nullif(household.timezone, ''), 'Asia/Shanghai')
+    )::date
+    and ledger.created_at >= coalesce(batch.joined_at, batch.invited_at)
   union all
-  -- 学习模块有效打卡：仅活动事件来源（打卡不产生积分流水）
+  -- 学习模块有效打卡：仅活动事件来源（打卡不产生积分流水）。
+  -- received_at 与 occurred_at 相差超过 7 天不进入成长日；F2 使用 received_at，
+  -- 允许有效的离线延迟同步，但不能倒推激活日期或 72h 快速激活。
   select
     event.household_id,
     ((event.occurred_at at time zone coalesce(nullif(household.timezone, ''), 'Asia/Shanghai'))::date) as growth_date,
-    event.occurred_at as behavior_at
+    event.received_at as behavior_at
   from private.learning_activity_events event
   join public.learning_households household on household.id = event.household_id
+  join private.learning_beta_batches batch on batch.household_id = event.household_id
   where event.event_type = 'growth_activity_recorded'
+    and household.project_id = 'shadow-mate'
     and event.payload ->> 'source' = 'checkin'
+    and event.received_at - event.occurred_at between interval '0 seconds' and interval '7 days'
+    and event.occurred_at >= coalesce(batch.joined_at, batch.invited_at)
 ) behaviors
 group by behaviors.household_id, behaviors.growth_date;
 
@@ -78,7 +101,7 @@ returns table (
   growth_days_after_activation integer
 )
 language sql stable security definer
-set search_path = public, private
+set search_path = ''
 as $$
 with cohort as (
   select
@@ -86,6 +109,7 @@ with cohort as (
     batch.batch,
     coalesce(batch.joined_at, batch.invited_at) as cohort_start,
     batch.status as cohort_status,
+    coalesce(nullif(household.timezone, ''), 'Asia/Shanghai') as timezone,
     exists (
       select 1 from public.learning_profiles profile
       where profile.household_id = batch.household_id
@@ -95,6 +119,8 @@ with cohort as (
       where consent.household_id = batch.household_id
     ) as has_consent
   from private.learning_beta_batches batch
+  join public.learning_households household on household.id = batch.household_id
+  where household.project_id = 'shadow-mate'
 ),
 funnel as (
   select
@@ -102,13 +128,15 @@ funnel as (
     cohort.batch,
     cohort.cohort_start,
     cohort.cohort_status,
+    cohort.timezone,
     cohort.has_profile,
     cohort.has_consent,
-    first_growth.f2_at,
+    first_growth.f2_observed_at,
+    (first_growth.f2_observed_at at time zone cohort.timezone)::date as f2_at,
     redemption.f4_at
   from cohort
   left join lateral (
-    select min(growth.growth_date) as f2_at
+    select min(growth.first_behavior_at) as f2_observed_at
     from private.learning_growth_days growth
     where growth.household_id = cohort.household_id
   ) first_growth on true
@@ -130,12 +158,12 @@ select
     where item.household_id = funnel.household_id
       and item.is_active
   ) as f1_point_item,
-  funnel.f2_at is not null as f2_activated,
+  funnel.f2_observed_at is not null as f2_activated,
   funnel.f2_at,
-  exists (
-    select 1 from private.learning_growth_days growth
-    where growth.household_id = funnel.household_id
-      and growth.first_behavior_at <= funnel.cohort_start + interval '72 hours'
+  (
+    funnel.f2_observed_at is not null
+    and funnel.f2_observed_at >= funnel.cohort_start
+    and funnel.f2_observed_at <= funnel.cohort_start + interval '72 hours'
   ) as f2_within_72h,
   exists (
     select 1
@@ -155,6 +183,7 @@ select
       and funnel.f4_at is not null
       and growth.first_behavior_at > funnel.f4_at
       and growth.first_behavior_at <= funnel.f4_at + interval '7 days'
+      and growth.growth_date >= (funnel.f4_at at time zone funnel.timezone)::date
   ) as f5_behavior_after_redemption,
   (funnel.f2_at is not null and (
     select count(distinct growth.growth_date) >= 3
@@ -186,12 +215,13 @@ revoke all on function private.learning_funnel_status() from authenticated;
 create or replace function private.learning_funnel_report(p_as_of timestamptz default now())
 returns table (stage text, numerator bigint, denominator bigint, rate numeric)
 language sql stable security definer
-set search_path = public, private
+set search_path = ''
 as $$
 with status as (
   select s.*, household.timezone
   from private.learning_funnel_status() s
   join public.learning_households household on household.id = s.household_id
+  where household.project_id = 'shadow-mate'
 ),
 counts as (
   select
@@ -272,7 +302,7 @@ returns table (
   cohort_household_count bigint
 )
 language sql stable security definer
-set search_path = public, private
+set search_path = ''
 as $$
 with weekly as (
   select
@@ -282,11 +312,15 @@ with weekly as (
     (growth.growth_date - ((extract(dow from growth.growth_date)::int + 6) % 7)) as week_start
   from private.learning_growth_days growth
   join public.learning_households household on household.id = growth.household_id
+  where household.project_id = 'shadow-mate'
 ),
 frozen as (
   select household_id, growth_date, week_start
   from weekly
-  where week_start + 13 <= (p_as_of at time zone coalesce(nullif(timezone, ''), 'Asia/Shanghai'))::date
+  where p_as_of >= (
+    (week_start + 14)::timestamp
+    at time zone coalesce(nullif(timezone, ''), 'Asia/Shanghai')
+  )
 ),
 qualified as (
   select growth.household_id, growth.week_start
@@ -303,6 +337,7 @@ cohort_weeks as (
       - ((extract(dow from (coalesce(batch.joined_at, batch.invited_at) at time zone coalesce(nullif(household.timezone, ''), 'Asia/Shanghai'))::date)::int + 6) % 7)) as cohort_week_start
   from private.learning_beta_batches batch
   join public.learning_households household on household.id = batch.household_id
+  where household.project_id = 'shadow-mate'
 )
 select
   qualified.week_start,

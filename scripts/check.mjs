@@ -20,6 +20,9 @@ const requiredFiles = [
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
   "supabase/migrations/20260811202411_child_privacy_consent.sql",
+  "supabase/migrations/20260820120000_growth_loop_beta_batches.sql",
+  "supabase/migrations/20260820121000_growth_loop_funnel_aggregation.sql",
+  "supabase/migrations/20260820122000_growth_loop_activity_cleanup.sql",
 ];
 
 for (const file of requiredFiles) {
@@ -104,6 +107,51 @@ for (const marker of [
 if (/https:\/\/esm\.sh/i.test(cloud)) {
   throw new Error("Runtime CDN imports are not allowed");
 }
+for (const marker of [
+  'export const PRIVACY_POLICY_VERSION = "privacy-v2"',
+  'Object.freeze(["privacy-v1", PRIVACY_POLICY_VERSION])',
+  '.in("policy_version", ACCEPTED_PRIVACY_POLICY_VERSIONS)',
+]) {
+  if (!cloud.includes(marker)) throw new Error(`cloud.js is missing privacy migration step: ${marker}`);
+}
+
+const privacyMarkdown = await readFile("PRIVACY.md", "utf8");
+const privacyHtml = await readFile("privacy-policy.html", "utf8");
+for (const [source, content, markers] of [
+  ["PRIVACY.md", privacyMarkdown, [
+    "privacy-v2",
+    "2026 年 8 月 20 日",
+    "August 20, 2026",
+    "180 天",
+    "180 days",
+    "private.learning_activity_events",
+    "private.learning_beta_batches",
+    "不向 Vercel Analytics 发送自定义事件",
+    "No custom events sent to Vercel Analytics",
+    "已有 `privacy-v1` 记录继续作为有效的历史同意",
+    "Existing `privacy-v1` records remain valid historical consent",
+  ]],
+  ["privacy-policy.html", privacyHtml, [
+    "当前版本：privacy-v2",
+    "Current version: privacy-v2",
+    "2026 年 8 月 20 日",
+    "August 20, 2026",
+    "180 天",
+    "180 days",
+    "private.learning_activity_events",
+    "private.learning_beta_batches",
+    "不向 Vercel Analytics 发送自定义事件",
+    "No custom events sent to Vercel Analytics",
+    "已有 <code>privacy-v1</code> 记录继续作为有效的历史同意",
+    "Existing <code>privacy-v1</code> records remain valid historical consent",
+  ]],
+]) {
+  for (const marker of markers) {
+    if (!content.includes(marker)) {
+      throw new Error(`${source} is missing privacy-v2 consistency marker: ${marker}`);
+    }
+  }
+}
 
 const piper = await readFile("src/piper-tts.js", "utf8");
 for (const marker of [
@@ -115,6 +163,16 @@ for (const marker of [
 
 const migrationDir = "supabase/migrations";
 const migrations = (await readdir(migrationDir)).filter((name) => name.endsWith(".sql")).sort();
+const migrationsByVersion = new Map();
+for (const migration of migrations) {
+  const version = migration.match(/^(\d{14})_/)?.[1];
+  if (!version) throw new Error(`Supabase migration is missing a 14-digit version: ${migration}`);
+  const existing = migrationsByVersion.get(version);
+  if (existing) {
+    throw new Error(`Supabase migration version ${version} is duplicated by ${existing} and ${migration}`);
+  }
+  migrationsByVersion.set(version, migration);
+}
 const registryMigrationName = migrations.find((name) => name.endsWith("_projects_registry_compat.sql"));
 const registryRestrictionName = migrations.find((name) =>
   name.endsWith("_restrict_project_registry_access.sql")

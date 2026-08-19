@@ -9,7 +9,7 @@
 --   H7 3 周前自然周内仅 2 个有效成长日 => F6 假，WMGH 不计
 
 begin;
-select plan(43);
+select plan(53);
 
 -- 视图与函数存在性、客户端无访问权
 select is(
@@ -72,6 +72,22 @@ select ok(
   'authenticated users cannot execute the funnel report function'
 );
 
+select is(
+  (select count(*)
+   from pg_proc function
+   join pg_namespace namespace on namespace.oid = function.pronamespace
+   where namespace.nspname = 'private'
+     and function.proname in (
+       'learning_funnel_status',
+       'learning_funnel_report',
+       'learning_wmgh_weekly'
+     )
+     and function.prosecdef
+     and function.proconfig @> array['search_path=""']::text[]),
+  3::bigint,
+  'all funnel security definer functions fix an empty search_path'
+);
+
 set local role postgres;
 
 create temp table wmgh_weeks as
@@ -126,11 +142,11 @@ insert into public.learning_point_items (id, household_id, name, default_points,
 insert into public.learning_point_ledger
   (household_id, profile_id, point_item_id, delta, entry_type, item_name_snapshot, request_id, occurred_on, created_at)
 values
-  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 6, now() - interval '6 days'),
-  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', -3, 'manual', '运动', gen_random_uuid(), current_date - 6, now() - interval '6 days'),
-  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 2, now() - interval '2 days'),
-  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 1, now() - interval '1 day'),
-  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date, now());
+  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 6, ((current_date - 6) + time '10:00') at time zone 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', -3, 'manual', '运动', gen_random_uuid(), current_date - 6, ((current_date - 6) + time '11:00') at time zone 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 2, ((current_date - 2) + time '10:00') at time zone 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date - 1, ((current_date - 1) + time '10:00') at time zone 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 5, 'manual', '阅读', gen_random_uuid(), current_date, (current_date + time '10:00') at time zone 'Asia/Shanghai');
 
 -- H3 被排除的记录：补记（今天记录 20 天前的行为，created_at=now）、修正、期初积分；另有 1 条打卡事件
 insert into public.learning_point_ledger
@@ -150,7 +166,7 @@ values (
   '30000000-0000-4000-8000-000000000003',
   now() - interval '5 days',
   'Asia/Shanghai',
-  '{"source":"checkin"}'::jsonb,
+  '{"source":"checkin","entry_type":"manual"}'::jsonb,
   'funnel-test-hash',
   now() - interval '5 days'
 );
@@ -160,7 +176,7 @@ insert into public.learning_point_ledger
   (household_id, profile_id, point_item_id, delta, entry_type, item_name_snapshot, request_id, occurred_on, created_at)
 values (
   '20000000-0000-4000-8000-000000000004', '30000000-0000-4000-8000-000000000004', null, 5, 'manual', '阅读',
-  gen_random_uuid(), current_date - 9, now() - interval '9 days'
+  gen_random_uuid(), current_date - 9, ((current_date - 9) + time '10:00') at time zone 'Asia/Shanghai'
 );
 
 -- H6 2 周前自然周内 3 个有效成长日
@@ -422,10 +438,18 @@ select is(
 
 select is(
   (select count(*) from private.learning_wmgh_weekly(
-     p_as_of => ((select ws from wmgh_weeks) + 12) at time zone 'Asia/Shanghai')
+     p_as_of => (((select ws from wmgh_weeks) + 14)::timestamp at time zone 'Asia/Shanghai') - interval '1 second')
    where week_start = (select ws from wmgh_weeks)),
   0::bigint,
-  'WMGH week is not reported before the 7-day freeze'
+  'WMGH week is not reported one second before the 7-day freeze boundary'
+);
+
+select is(
+  (select wmgh_household_count from private.learning_wmgh_weekly(
+     p_as_of => ((select ws from wmgh_weeks) + 14)::timestamp at time zone 'Asia/Shanghai')
+   where week_start = (select ws from wmgh_weeks)),
+  1::bigint,
+  'WMGH week freezes exactly seven days after the local week ends'
 );
 
 select is(
@@ -433,6 +457,151 @@ select is(
    where week_start = current_date - ((extract(dow from current_date)::int + 6) % 7)),
   0::bigint,
   'WMGH does not report the unfrozen current week'
+);
+
+-- ===== 延迟上报、cohort_start 与家庭时区边界 =====
+insert into public.learning_households (id, name, owner_user_id, timezone) values
+  ('20000000-0000-4000-8000-000000000008', 'H8 delayed over 7d', '10000000-0000-4000-8000-000000000001', 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000009', 'H9 delayed activation', '10000000-0000-4000-8000-000000000001', 'Asia/Shanghai'),
+  ('20000000-0000-4000-8000-000000000010', 'H10 ledger cohort timezone', '10000000-0000-4000-8000-000000000001', 'Pacific/Kiritimati'),
+  ('20000000-0000-4000-8000-000000000011', 'H11 event cohort timezone', '10000000-0000-4000-8000-000000000001', 'Pacific/Kiritimati'),
+  ('20000000-0000-4000-8000-000000000012', 'H12 pre-cohort F5', '10000000-0000-4000-8000-000000000001', 'Asia/Shanghai');
+
+insert into public.learning_profiles (id, household_id, display_name, grade_level) values
+  ('30000000-0000-4000-8000-000000000008', '20000000-0000-4000-8000-000000000008', 'P8', 4),
+  ('30000000-0000-4000-8000-000000000009', '20000000-0000-4000-8000-000000000009', 'P9', 4),
+  ('30000000-0000-4000-8000-000000000010', '20000000-0000-4000-8000-000000000010', 'P10', 4),
+  ('30000000-0000-4000-8000-000000000011', '20000000-0000-4000-8000-000000000011', 'P11', 4),
+  ('30000000-0000-4000-8000-000000000012', '20000000-0000-4000-8000-000000000012', 'P12', 4);
+
+insert into public.learning_guardian_consents (household_id, user_id, consent_type, policy_version)
+select id, '10000000-0000-4000-8000-000000000001', 'learner_data_processing', 'privacy-v1'
+from public.learning_households
+where id between '20000000-0000-4000-8000-000000000008' and '20000000-0000-4000-8000-000000000012';
+
+insert into private.learning_beta_batches (household_id, batch, invited_at, joined_at) values
+  ('20000000-0000-4000-8000-000000000008', 'b2', now() - interval '11 days', now() - interval '10 days'),
+  ('20000000-0000-4000-8000-000000000009', 'b2', now() - interval '5 days', now() - interval '4 days'),
+  ('20000000-0000-4000-8000-000000000010', 'b2', '2026-08-01T09:00:00Z', '2026-08-01T10:00:00Z'),
+  ('20000000-0000-4000-8000-000000000011', 'b2', '2026-08-01T08:30:00Z', '2026-08-01T09:30:00Z'),
+  ('20000000-0000-4000-8000-000000000012', 'b2', now() - interval '4 days', now() - interval '3 days');
+
+-- H8: received_at - occurred_at > 7 days; diagnostics may remain stored but cannot form a growth day.
+insert into private.learning_activity_events
+  (event_id, product_id, event_type, household_id, profile_id, occurred_at, timezone, payload, payload_hash, received_at)
+values (
+  '70000000-0000-4000-8000-000000000008', 'shadow-mate', 'growth_activity_recorded',
+  '20000000-0000-4000-8000-000000000008', '30000000-0000-4000-8000-000000000008',
+  now() - interval '8 days 1 second', 'Asia/Shanghai',
+  '{"source":"checkin","entry_type":"manual"}'::jsonb, 'funnel-test-late-over-7d', now()
+);
+
+select is(
+  (select growth_days_total from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000008'),
+  0,
+  'activity received more than 7 days late is excluded from effective growth days'
+);
+
+-- H9: an event occurred within 72h but arrived after 72h. It counts as a timely growth day,
+-- while F2 is observed on receipt and cannot be backdated to the occurrence date.
+insert into private.learning_activity_events
+  (event_id, product_id, event_type, household_id, profile_id, occurred_at, timezone, payload, payload_hash, received_at)
+values (
+  '70000000-0000-4000-8000-000000000009', 'shadow-mate', 'growth_activity_recorded',
+  '20000000-0000-4000-8000-000000000009', '30000000-0000-4000-8000-000000000009',
+  now() - interval '3 days', 'Asia/Shanghai',
+  '{"source":"checkin","entry_type":"manual"}'::jsonb, 'funnel-test-delayed-activation', now()
+);
+
+select is(
+  (select f2_at from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000009'),
+  (now() at time zone 'Asia/Shanghai')::date,
+  'delayed activity activates on the server receipt day instead of backdating F2'
+);
+
+select is(
+  (select f2_within_72h from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000009'),
+  false,
+  'delayed receipt after 72h does not retroactively qualify fast activation'
+);
+
+-- H10: ledger dates are household-local dates. Three days in the Jul 27 week are
+-- before the Aug 2 cohort date in UTC+14 and must not qualify F2/F6/WMGH.
+insert into public.learning_point_ledger
+  (household_id, profile_id, point_item_id, delta, entry_type, item_name_snapshot, request_id, occurred_on, created_at)
+values
+  ('20000000-0000-4000-8000-000000000010', '30000000-0000-4000-8000-000000000010', null, 5, 'manual', '阅读', gen_random_uuid(), '2026-07-27', '2026-07-27T12:00:00Z'),
+  ('20000000-0000-4000-8000-000000000010', '30000000-0000-4000-8000-000000000010', null, 5, 'manual', '阅读', gen_random_uuid(), '2026-07-28', '2026-07-28T12:00:00Z'),
+  ('20000000-0000-4000-8000-000000000010', '30000000-0000-4000-8000-000000000010', null, 5, 'manual', '阅读', gen_random_uuid(), '2026-07-29', '2026-07-29T12:00:00Z');
+
+select is(
+  (select growth_days_total from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000010'),
+  0,
+  'ledger behavior before the household-local cohort date is excluded'
+);
+
+select is(
+  (select count(*) from private.learning_wmgh_weekly()
+   where week_start = '2026-07-27'::date),
+  0::bigint,
+  'three pre-cohort ledger days cannot qualify a frozen WMGH week'
+);
+
+-- H11: one event is before the exact cohort instant and one crosses local midnight after it.
+insert into private.learning_activity_events
+  (event_id, product_id, event_type, household_id, profile_id, occurred_at, timezone, payload, payload_hash, received_at)
+values
+  ('70000000-0000-4000-8000-000000000011', 'shadow-mate', 'growth_activity_recorded',
+   '20000000-0000-4000-8000-000000000011', '30000000-0000-4000-8000-000000000011',
+   '2026-08-01T09:00:00Z', 'Pacific/Kiritimati', '{"source":"checkin","entry_type":"manual"}'::jsonb,
+   'funnel-test-before-cohort', '2026-08-01T09:00:00Z'),
+  ('70000000-0000-4000-8000-000000000012', 'shadow-mate', 'growth_activity_recorded',
+   '20000000-0000-4000-8000-000000000011', '30000000-0000-4000-8000-000000000011',
+   '2026-08-01T10:30:00Z', 'Pacific/Kiritimati', '{"source":"checkin","entry_type":"manual"}'::jsonb,
+   'funnel-test-after-midnight', '2026-08-01T10:30:00Z');
+
+select is(
+  (select f2_at from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000011'),
+  '2026-08-02'::date,
+  'event cohort filtering and F2 day use the household timezone at local midnight'
+);
+
+select is(
+  (select growth_days_total from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000011'),
+  1,
+  'event before cohort_start is excluded while the post-midnight event remains'
+);
+
+-- H12: behavior after fulfillment but before beta join cannot qualify F5.
+insert into public.learning_rewards (id, household_id, name, cost_points, reward_kind, category, is_active)
+values ('50000000-0000-4000-8000-000000000012', '20000000-0000-4000-8000-000000000012', '奖励', 10, 'custom', 'family', true);
+
+insert into public.learning_redemptions
+  (id, household_id, profile_id, reward_id, reward_name_snapshot, cost_points_snapshot, status, request_id, fulfilled_at)
+values (
+  '60000000-0000-4000-8000-000000000012', '20000000-0000-4000-8000-000000000012',
+  '30000000-0000-4000-8000-000000000012', '50000000-0000-4000-8000-000000000012',
+  '奖励', 10, 'fulfilled', gen_random_uuid(), now() - interval '10 days'
+);
+
+insert into public.learning_point_ledger
+  (household_id, profile_id, point_item_id, delta, entry_type, item_name_snapshot, request_id, occurred_on, created_at)
+values (
+  '20000000-0000-4000-8000-000000000012', '30000000-0000-4000-8000-000000000012',
+  null, 5, 'manual', '阅读', gen_random_uuid(), current_date - 9, now() - interval '9 days'
+);
+
+select is(
+  (select f5_behavior_after_redemption from private.learning_funnel_status()
+   where household_id = '20000000-0000-4000-8000-000000000012'),
+  false,
+  'pre-cohort ledger behavior cannot qualify F5 even when it follows fulfillment'
 );
 
 rollback;
