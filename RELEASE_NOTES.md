@@ -1,5 +1,32 @@
 # Release Notes
 
+## v1.3.9 - 2026-08-19
+
+- Growth Loop 积分模块上线：积分账本、自定义积分项/自定义成长项目、奖励与兑换；后端表与 RPC 已部署共享 Supabase（控制面执行并登记）。
+- **期初积分恢复**：已打开过新版导致积分显示为 0 的用户，家长/监护人打开新版后确认一次「期初积分」，即可把旧积分结转进新账本（受控 RPC `learning_confirm_opening_balance`，每孩子仅一次、request_id 幂等）。旧积分一直完整保留在云端 envelope 快照中，本次结转不丢数据。
+- 邮箱变更、邀请、二次认证、密码找回统一品牌邮件模板。
+- 共享 Supabase 本地测试改经统一宿主路由，测试层级约定见 `docs/`。
+- 发布流程加固：GitHub Release 发布后自动快进 `production` 分支；`production` 分支启用 ruleset 保护。
+
+### 验证结果
+
+- PR #43（Growth Loop MVP）、#44（期初积分 + 学习包启停）、#47/#48（品牌邮件、本地测试路由）、#55（release-to-production 工作流）均已合入 `main`。
+- 期初积分迁移 `20260816120000_growth_loop_opening_balance.sql` 已于 2026-08-19 经 Shadow Portal 控制面在生产执行并登记 `applied`（`schema_migrations` statement_count=7）；执行后核验：函数存在、delta CHECK 放宽生效（仅 `initial_balance` ±1000000）、函数 ACL 仅 `authenticated`、表 RLS 基线不变。
+- 本地 `npm run verify` 通过（125 个单测全绿、构建/安全/公开检查通过）；`npm run release:check` 通过。
+- 事故与流程记录见 `docs/incidents/2026-08-18-production-points-zeroed.md`。
+
+### 发布包
+
+文件：`shadow-mate-v1.3.9.zip`
+
+SHA-256：发布时以 `release.yml` 产物为准回填。
+
+### 部署清单（完成）
+
+- Git tag `v1.3.9` 已创建并推送，指向 `main` 合并提交。
+- GitHub Release 已发布并上传 `shadow-mate-v1.3.9.zip`，SHA-256 已核对。
+- 期初积分迁移已先于前端发布在生产落地，`release-to-production` 工作流将 `production` 快进到本版本触发 Vercel 部署。
+
 ## v1.3.8 - 2026-08-15
 
 - 将无 GMS Android 的离线英语语音模型改为从 `voice.shadow.wang` CDN 分发（`en_US-ljspeech-medium`，约 63.5MB）：首次点击“听发音”时下载并缓存到浏览器，之后可离线合成，不上传录音。
