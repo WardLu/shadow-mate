@@ -8,6 +8,7 @@ import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "./learning-g
 import { buildHouseholdExport } from "./learning-export.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { mergeGrowthLoopSnapshot } from "./learning-growth-loop.js";
+import { createGrowthLoopRetryScheduler } from "./learning-growth-loop-retry.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
@@ -19,8 +20,7 @@ const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
 const GROWTH_LOOP_SYNC_DEBOUNCE_MS = 500;
-const GROWTH_LOOP_REMOTE_RETRY_MS = 1000;
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const GROWTH_LOOP_RETRY_FALLBACK_MS = 1000;
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -60,8 +60,16 @@ let localResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
-let growthLoopSyncTimer = null;
-let growthLoopSyncAt = null;
+
+const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
+  onTimer() {
+    const profile = activeProfile;
+    if (!profile) return;
+    void loadGrowthLoopProfile(profile).catch((error) => {
+      console.warn("Growth Loop cloud sync deferred:", error);
+    });
+  },
+});
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
@@ -99,6 +107,14 @@ function showToast(message, duration = 2800) {
   toastTimer = setTimeout(hideToast, duration);
 }
 
+function isActiveGrowthLoopProfile(profile) {
+  const scope = window.growthLoop?.getScope?.() || {};
+  return activeProfile?.id === profile?.id
+    && activeProfile?.household_id === profile?.household_id
+    && scope.profile_id === profile?.id
+    && scope.household_id === profile?.household_id;
+}
+
 async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
   if (!profile || !window.growthLoop || !window.learningDesk) return;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
@@ -112,20 +128,21 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
       profileId: profile.id,
     });
   } catch (error) {
-    scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
+    if (isActiveGrowthLoopProfile(profile)) scheduleGrowthLoopRemoteRetry();
     throw error;
   }
-  if (window.growthLoop.getScope().profile_id !== profile.id) return;
+  if (!isActiveGrowthLoopProfile(profile)) return;
   // A not-yet-migrated environment must not overwrite local records with an
   // empty fallback snapshot. Release-time migrations enable this path.
   if (remote.errors.length) {
     if (remote.errors.some(isRetryableGrowthLoopFetchError)) {
-      scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
+      scheduleGrowthLoopRemoteRetry();
     }
     return { skipped: true, reason: "remote_fetch_failed", errors: remote.errors };
   }
+  resetGrowthLoopRemoteRetry();
   await window.growthLoop.mergeRemote(remote.snapshot);
-  if (window.growthLoop.getScope().profile_id !== profile.id) return;
+  if (!isActiveGrowthLoopProfile(profile)) return;
   const report = await window.growthLoop.sync({ transport: growthLoopTransport });
   if (report.retryable || report.conflict || report.rejected) {
     await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.SYNC_FAILED, {
@@ -184,31 +201,21 @@ function nextGrowthLoopAttemptAt(events, now = Date.now()) {
 
 function scheduleGrowthLoopSyncAt(targetAt) {
   if (!activeProfile) return null;
-  const now = Date.now();
-  const normalizedTarget = Number(targetAt);
-  const scheduledAt = Math.max(
-    now,
-    Number.isFinite(normalizedTarget) ? normalizedTarget : now + GROWTH_LOOP_SYNC_DEBOUNCE_MS,
-  );
-  if (growthLoopSyncTimer && growthLoopSyncAt !== null && growthLoopSyncAt <= scheduledAt) {
-    return growthLoopSyncAt;
-  }
-  clearTimeout(growthLoopSyncTimer);
-  growthLoopSyncAt = scheduledAt;
-  growthLoopSyncTimer = setTimeout(() => {
-    growthLoopSyncTimer = null;
-    growthLoopSyncAt = null;
-    if (activeProfile) void loadGrowthLoopProfile(activeProfile).catch((error) => {
-      console.warn("Growth Loop cloud sync deferred:", error);
-      scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_REMOTE_RETRY_MS);
-    });
-  }, Math.min(MAX_TIMER_DELAY_MS, Math.max(0, scheduledAt - now)));
-  return scheduledAt;
+  return growthLoopRetryScheduler.scheduleAt(targetAt);
+}
+
+function scheduleGrowthLoopRemoteRetry() {
+  if (!activeProfile) return null;
+  return growthLoopRetryScheduler.recordRemoteFailure();
+}
+
+function resetGrowthLoopRemoteRetry() {
+  growthLoopRetryScheduler.resetRemoteFailures({ clearTimer: true });
 }
 
 async function scheduleGrowthLoopRetry({
   notBefore = Date.now(),
-  fallbackDelayMs = GROWTH_LOOP_REMOTE_RETRY_MS,
+  fallbackDelayMs = GROWTH_LOOP_RETRY_FALLBACK_MS,
 } = {}) {
   if (!activeProfile) return null;
   const profileId = activeProfile.id;
@@ -246,6 +253,7 @@ function guardianConsentPayload(householdId) {
 }
 
 async function clearLocalAccountState() {
+  resetGrowthLoopRemoteRetry();
   let signOutError = null;
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
@@ -929,6 +937,7 @@ function renderAccount() {
         await window.growthLoop?.clearScope?.({ household_id: profile.household_id, profile_id: profile.id });
         profiles = profiles.filter((item) => item.id !== profile.id);
         if (deletingActive) {
+          resetGrowthLoopRemoteRetry();
           activeProfile = null;
           cloudVersion = null;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
@@ -1105,6 +1114,7 @@ async function fetchWorkspace() {
   if (!memberships.length) {
     profiles = [];
     guardianConsentHouseholds = new Set();
+    resetGrowthLoopRemoteRetry();
     activeProfile = null;
     return;
   }
@@ -1250,6 +1260,9 @@ async function loadWorkspace(preferredProfileId = null, options = {}) {
 async function selectProfile(profileId, { migrateLocal = false } = {}) {
   const profile = profiles.find((item) => item.id === profileId);
   if (!profile) return;
+  if (activeProfile?.id !== profile.id || activeProfile?.household_id !== profile.household_id) {
+    resetGrowthLoopRemoteRetry();
+  }
   activeProfile = profile;
   cloudSyncBlocked = false;
   localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
@@ -1350,6 +1363,7 @@ async function saveCloudState(manual = false) {
       if (remoteError || !remote) {
         if (remoteError?.code === "PGRST116" || (!remoteError && !remote)) {
           // 目标 profile 在云端已不存在 → 熔断自动同步，避免每次编辑都触发一次无效冲突往返
+          resetGrowthLoopRemoteRetry();
           activeProfile = null;
           cloudSyncBlocked = true;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
@@ -1388,7 +1402,7 @@ function scheduleSave() {
 
 window.cloudSync = { schedule: scheduleSave, scheduleGrowthLoop: scheduleGrowthLoopSync };
 window.addEventListener("online", () => {
-  void scheduleGrowthLoopRetry({ fallbackDelayMs: 0 });
+  if (activeProfile) growthLoopRetryScheduler.scheduleNow();
 });
 
 async function maybePromptPasswordSetup(options = {}) {
@@ -1412,6 +1426,7 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
+  resetGrowthLoopRemoteRetry();
   session = nextSession;
   memberships = [];
   profiles = [];

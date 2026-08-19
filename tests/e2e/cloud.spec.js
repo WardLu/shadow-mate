@@ -45,6 +45,7 @@ async function mockCloudApi(page, {
   rpcResponses = ["success"],
   legacyImportResponses = ["success"],
   growthPointItemsFailures = 0,
+  growthPointItemsResponses = null,
   hasPassword = true,
   createDelayMs = 0,
   householdCreateDelayMs = 0,
@@ -55,6 +56,7 @@ async function mockCloudApi(page, {
   let rpcIndex = 0;
   let legacyImportIndex = 0;
   let growthPointItemsRequests = 0;
+  let growthPointItemsResponseIndex = 0;
   const rpcPayloads = [];
   const legacyImportPayloads = [];
   const activityPayloads = [];
@@ -133,7 +135,10 @@ async function mockCloudApi(page, {
 
     if (path.endsWith("/learning_point_items")) {
       growthPointItemsRequests += 1;
-      if (growthPointItemsRequests <= growthPointItemsFailures) {
+      const response = growthPointItemsResponses?.[
+        Math.min(growthPointItemsResponseIndex++, growthPointItemsResponses.length - 1)
+      ] || (growthPointItemsRequests <= growthPointItemsFailures ? "retryable" : "success");
+      if (response === "retryable") {
         await route.fulfill({
           status: 502,
           contentType: "application/json",
@@ -267,6 +272,19 @@ async function mockCloudApi(page, {
 }
 
 test.describe("Authenticated cloud workspace", () => {
+  test("backs off repeated Growth Loop snapshot 5xx responses instead of polling every second", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    const requestsBeforeWindow = api.getGrowthPointItemsRequests();
+    // Negative timing assertion: fixed 1s polling reaches at least four calls
+    // in this window, while exponential backoff adds at most two calls.
+    await page.waitForTimeout(4500);
+    expect(api.getGrowthPointItemsRequests() - requestsBeforeWindow).toBeLessThanOrEqual(2);
+  });
+
   test("retries the first Growth Loop snapshot fetch failure", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { growthPointItemsFailures: 1 });
@@ -275,6 +293,46 @@ test.describe("Authenticated cloud workspace", () => {
 
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await expect.poll(() => api.getGrowthPointItemsRequests(), { timeout: 5000 }).toBe(2);
+  });
+
+  test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+    const requestsBeforeOnline = api.getGrowthPointItemsRequests();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.clock.runFor(0);
+
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(requestsBeforeOnline + 1);
+  });
+
+  test("resets snapshot backoff after a successful fetch", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      growthPointItemsResponses: ["retryable", "success", "retryable", "success"],
+    });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(1);
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(2);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.evaluate(() => window.cloudSync.scheduleGrowthLoop());
+    await page.clock.runFor(600);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(3);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(4);
   });
 
   test("retries the same legacy import batch after the browser comes online", async ({ page }) => {
