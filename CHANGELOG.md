@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.9] - 2026-08-19
+
+### Added
+- Growth Loop 积分模块：积分账本、自定义积分项/自定义成长项目、奖励与兑换（对应后端表与 RPC 已部署共享 Supabase）。
+- 期初积分恢复：家长/监护人确认一次即可把旧积分结转进新账本（受控 RPC `learning_confirm_opening_balance`，每孩子仅一次，幂等），修复已打开新版本用户积分显示为 0 的问题。
+- 邮箱变更、邀请、二次认证、密码找回统一品牌邮件模板。
+
+### Changed
+- 共享 Supabase 本地测试改经统一宿主路由，测试层级与本地数据库测试路由约定见 `docs/`。
+- GitHub Release 发布后自动快进 `production` 分支触发部署，并为 `production` 分支启用 ruleset 保护，防止绕过发布闸门。
+
+### Removed
+- 移除不再引用的 legacy 语音资源文件。
+
 ## [1.3.8] - 2026-08-15
 
 ### Changed
