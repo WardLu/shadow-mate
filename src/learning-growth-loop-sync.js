@@ -23,6 +23,7 @@ export function createOutboxSync({
   workerId = createWorkerId(),
   leaseMs = 30_000,
   onConfirmed = async () => {},
+  onRetryable = async () => {},
   onRejected = async () => {},
 } = {}) {
   if (!db || !transport?.send) throw new Error("outbox_sync_dependencies_required");
@@ -75,6 +76,7 @@ export function createOutboxSync({
           processing_by: null,
           lease_until: 0,
         });
+        await onRetryable(event, { ...result, status: "retryable" });
         report.retryable += 1;
         report.blocked = true;
         break;

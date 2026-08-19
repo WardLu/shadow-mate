@@ -259,7 +259,7 @@ describe("Legacy points import", () => {
     expect(result.snapshot.ledger.map((entry) => entry.delta)).toEqual([2, 3, -10]);
     expect(getBalance(result.snapshot)).toBe(-5);
     expect(getLegacyPointsImport(result.snapshot)).toEqual(
-      expect.objectContaining({ count: 3, total: -5, pending: true }),
+      expect.objectContaining({ count: 3, total: -5, pending: true, status: "pending" }),
     );
     expect(result.events).toEqual([
       expect.objectContaining({
@@ -277,6 +277,72 @@ describe("Legacy points import", () => {
         }),
       }),
     ]);
+  });
+
+  it("reports retryable and rejected legacy import attempts without calling them confirmed", () => {
+    const retryable = createGrowthLoopState(scope);
+    retryable.ledger = [{
+      id: "legacy-retryable",
+      request_id: "entry-retryable",
+      profile_id: scope.profile_id,
+      delta: 2,
+      entry_type: "legacy_import",
+      status: "retryable",
+      sync_error: "network_or_server_error",
+    }];
+    expect(getLegacyPointsImport(retryable)).toEqual(expect.objectContaining({
+      status: "retryable",
+      pending: true,
+      error_code: "network_or_server_error",
+    }));
+
+    const rejected = createGrowthLoopState(scope);
+    rejected.ledger = [{
+      id: "legacy-rejected",
+      request_id: "entry-rejected",
+      profile_id: scope.profile_id,
+      delta: 2,
+      entry_type: "legacy_import",
+      status: "rejected",
+      sync_error: "permission_denied",
+    }];
+    expect(getLegacyPointsImport(rejected)).toEqual(expect.objectContaining({
+      status: "rejected",
+      pending: false,
+      error_code: "permission_denied",
+    }));
+  });
+
+  it("keeps a confirmed cloud import authoritative over a later rejected local attempt", () => {
+    const state = createGrowthLoopState(scope);
+    state.ledger = [
+      {
+        id: "legacy-confirmed",
+        request_id: "entry-confirmed",
+        legacy_import_batch_id: "batch-confirmed",
+        profile_id: scope.profile_id,
+        delta: 5,
+        entry_type: "legacy_import",
+        status: "confirmed",
+        created_at: "2026-08-19T10:00:00Z",
+      },
+      {
+        id: "legacy-rejected",
+        request_id: "entry-rejected",
+        legacy_import_batch_id: "batch-rejected",
+        profile_id: scope.profile_id,
+        delta: 1000,
+        entry_type: "legacy_import",
+        status: "rejected",
+        created_at: "2026-08-19T10:01:00Z",
+      },
+    ];
+
+    expect(getLegacyPointsImport(state)).toEqual(expect.objectContaining({
+      status: "confirmed",
+      count: 1,
+      total: 5,
+    }));
   });
 
   it("rejects a second import for the same child", () => {
@@ -305,6 +371,23 @@ describe("Legacy points import", () => {
     });
 
     expect(result.error).toBe("legacy_points_already_imported");
+  });
+
+  it("blocks a local opening balance after legacy recovery was selected", () => {
+    const imported = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [{ occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务" }],
+      request_id: "legacy-1",
+    });
+
+    const opening = applyOpeningBalance(imported.snapshot, {
+      scope,
+      balance: 50,
+      request_id: "opening-1",
+    });
+
+    expect(opening.error).toBe("opening_balance_already_confirmed");
+    expect(opening.snapshot.ledger).toHaveLength(1);
   });
 
   it("rejects the whole batch when any entry is malformed, matching the server", () => {

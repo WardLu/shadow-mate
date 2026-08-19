@@ -112,6 +112,29 @@ function rowsOrEmpty(result) {
   return result?.error ? [] : result?.data || [];
 }
 
+const LEDGER_PAGE_SIZE = 1000;
+
+async function fetchLedgerRows(client, profileId) {
+  const rows = [];
+  let cursor = null;
+  while (true) {
+    let query = client
+      .from("learning_point_ledger")
+      .select("*")
+      .eq("profile_id", profileId)
+      .order("id", { ascending: true })
+      .limit(LEDGER_PAGE_SIZE);
+    if (cursor) query = query.gt("id", cursor);
+    const result = await query;
+    if (result.error) return { data: rows, error: result.error };
+    const page = result.data || [];
+    rows.push(...page);
+    if (page.length < LEDGER_PAGE_SIZE) return { data: rows, error: null };
+    cursor = page.at(-1)?.id || null;
+    if (!cursor) return { data: rows, error: new Error("growth_loop_ledger_cursor_missing") };
+  }
+}
+
 export async function fetchGrowthLoopSnapshot(client, { householdId, profileId }) {
   const profileFilter = (query) => query.eq("profile_id", profileId);
   const [pointItems, profilePointItems, rewards, profileRewards, ledger, redemptions] = await Promise.all([
@@ -119,7 +142,7 @@ export async function fetchGrowthLoopSnapshot(client, { householdId, profileId }
     profileFilter(client.from("learning_profile_point_items").select("*")),
     client.from("learning_rewards").select("*").eq("household_id", householdId).eq("is_active", true),
     profileFilter(client.from("learning_profile_rewards").select("*")),
-    profileFilter(client.from("learning_point_ledger").select("*")),
+    fetchLedgerRows(client, profileId),
     profileFilter(client.from("learning_redemptions").select("*")),
   ]);
   const errors = [pointItems, profilePointItems, rewards, profileRewards, ledger, redemptions]

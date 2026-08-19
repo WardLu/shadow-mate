@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGrowthLoopTransport } from "../../src/learning-growth-cloud.js";
+import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "../../src/learning-growth-cloud.js";
+import { createGrowthLoopState, getBalance, mergeGrowthLoopSnapshot } from "../../src/learning-growth-loop.js";
 
 describe("Growth Loop Supabase transport", () => {
   it("maps a point event to the idempotent point RPC", async () => {
@@ -83,5 +84,69 @@ describe("Growth Loop Supabase transport", () => {
         { request_id: "entry-2", occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
       ],
     });
+  });
+});
+
+describe("Growth Loop Supabase snapshot", () => {
+  it("restores a 1001-row cloud ledger on another device despite the Data API row cap", async () => {
+    const ledgerRows = Array.from({ length: 1001 }, (_, index) => ({
+      id: `ledger-${String(index + 1).padStart(4, "0")}`,
+      profile_id: "profile-1",
+      delta: 1,
+      entry_type: "legacy_import",
+      request_id: `request-${String(index + 1).padStart(4, "0")}`,
+    }));
+    const ledgerRequests = [];
+    const client = {
+      from(table) {
+        const state = { cursor: null, limit: 1000, orders: [] };
+        const query = {
+          select: () => query,
+          eq: () => query,
+          order(field, options) {
+            state.orders.push([field, options]);
+            return query;
+          },
+          gt(field, value) {
+            if (field === "id") state.cursor = value;
+            return query;
+          },
+          limit(value) {
+            state.limit = value;
+            return query;
+          },
+          then(resolve, reject) {
+            let data = [];
+            if (table === "learning_point_ledger") {
+              ledgerRequests.push(structuredClone(state));
+              data = ledgerRows
+                .filter((row) => state.cursor === null || row.id > state.cursor)
+                .slice(0, state.limit);
+            }
+            return Promise.resolve({ data, error: null }).then(resolve, reject);
+          },
+        };
+        return query;
+      },
+    };
+
+    const result = await fetchGrowthLoopSnapshot(client, {
+      householdId: "household-1",
+      profileId: "profile-1",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.snapshot.ledger).toHaveLength(1001);
+    expect(result.snapshot.ledger.every((row) => row.status === "confirmed")).toBe(true);
+    const secondDevice = mergeGrowthLoopSnapshot(
+      result.snapshot,
+      createGrowthLoopState({ household_id: "household-1", profile_id: "profile-1" }),
+    );
+    expect(secondDevice.ledger).toHaveLength(1001);
+    expect(getBalance(secondDevice)).toBe(1001);
+    expect(ledgerRequests).toEqual([
+      expect.objectContaining({ cursor: null, orders: [["id", { ascending: true }]] }),
+      expect.objectContaining({ cursor: "ledger-1000", orders: [["id", { ascending: true }]] }),
+    ]);
   });
 });

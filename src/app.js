@@ -1037,6 +1037,51 @@ function openingStatusLabel(entry) {
   return "确认失败";
 }
 
+function legacyImportPresentation(status) {
+  switch (status) {
+    case "confirmed":
+      return {
+        iconName: "checkCircle",
+        title: "旧积分已导入",
+        statusLabel: "云端已确认",
+        description: "旧积分打卡明细已由云端确认，余额已恢复；导入记录只计入余额，不计入行为统计。如需纠错，请使用普通积分调整流水。",
+        canRetry: false,
+      };
+    case "retryable":
+      return {
+        iconName: "refresh",
+        title: "旧积分等待云端重试",
+        statusLabel: "等待重试",
+        description: "本机明细已保留，云端确认暂时失败，将自动重试；当前状态不能视为云端导入完成。",
+        canRetry: false,
+      };
+    case "rejected":
+      return {
+        iconName: "alert",
+        title: "旧积分导入未完成",
+        statusLabel: "云端已拒绝",
+        description: "云端拒绝了这次导入，本机尝试未计入当前余额。请检查登录与家庭权限后重新导入。",
+        canRetry: true,
+      };
+    case "conflict":
+      return {
+        iconName: "alert",
+        title: "旧积分导入发生冲突",
+        statusLabel: "需要处理",
+        description: "云端发现批次或积分明细冲突，本机尝试未计入当前余额。请刷新云端记录后再重新导入。",
+        canRetry: true,
+      };
+    default:
+      return {
+        iconName: "refresh",
+        title: "本机已导入，待云端确认",
+        statusLabel: "待云端确认",
+        description: "旧积分明细已安全保存在本机，正在等待云端确认；确认前不能视为导入完成，也不会显示成云端已恢复。",
+        canRetry: false,
+      };
+  }
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("sprout","成长记录"));
@@ -1117,14 +1162,17 @@ function renderGrow(){
       </div>
     `);
   } else if (legacyImport) {
+    const presentation = legacyImportPresentation(legacyImport.status);
     openingCard = $(`
       <div class="card growth-opening-card">
-        <h3>${icon("checkCircle")} 旧积分已导入</h3>
+        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
         <div class="stat-grid">
           <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
           <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
+          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
         </div>
-        <div class="desc">旧积分打卡明细已导入，余额已恢复；导入记录只计入余额，不计入行为统计。如需纠错，请使用普通积分调整流水。</div>
+        <div class="desc">${presentation.description}</div>
+        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
       </div>
     `);
   } else if (legacyEntries.length > 0) {

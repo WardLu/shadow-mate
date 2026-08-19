@@ -134,6 +134,7 @@ function normalizeLedgerEntry(entry, scope) {
     status: entry.status || "confirmed",
     metadata: isRecord(entry.metadata) ? clone(entry.metadata) : {},
     redemption_id: entry.redemption_id ?? null,
+    legacy_import_batch_id: entry.legacy_import_batch_id ?? entry.metadata?.legacy_import_batch_id ?? null,
   };
 }
 
@@ -191,7 +192,8 @@ export function applyOpeningBalance(
     return { snapshot, events: [], error: "opening_balance_invalid" };
   }
   const existing = getOpeningBalance(snapshot);
-  if (existing) {
+  const legacyImport = getLegacyPointsImport(snapshot);
+  if (existing || (legacyImport && !["rejected", "conflict"].includes(legacyImport.status))) {
     return { snapshot, events: [], error: "opening_balance_already_confirmed", entry: existing };
   }
   const ledgerEntry = normalizeLedgerEntry({
@@ -300,12 +302,39 @@ export function buildLegacyPointEntries(pointsRecord = {}) {
 }
 
 export function getLegacyPointsImport(snapshot) {
-  const entries = activeLedgerEntries(snapshot).filter((entry) => entry.entry_type === "legacy_import");
-  if (!entries.length) return null;
+  const attempts = (snapshot.ledger || []).filter((entry) => entry.entry_type === "legacy_import");
+  if (!attempts.length) return null;
+  const batches = new Map();
+  for (const [index, entry] of attempts.entries()) {
+    const batchId = entry.legacy_import_batch_id || entry.metadata?.legacy_import_batch_id || "legacy-import";
+    const batch = batches.get(batchId) || { entries: [], latestIndex: -1, latestCreatedAt: "" };
+    batch.entries.push(entry);
+    const createdAt = String(entry.created_at || "");
+    if (createdAt > batch.latestCreatedAt || (createdAt === batch.latestCreatedAt && index > batch.latestIndex)) {
+      batch.latestCreatedAt = createdAt;
+      batch.latestIndex = index;
+    }
+    batches.set(batchId, batch);
+  }
+  const batchList = [...batches.values()];
+  const confirmedBatches = batchList.filter((batch) => (
+    batch.entries.some((entry) => (entry.status || "confirmed") === "confirmed")
+  ));
+  const latestBatch = (confirmedBatches.length ? confirmedBatches : batchList).sort((left, right) => (
+    left.latestCreatedAt.localeCompare(right.latestCreatedAt) || left.latestIndex - right.latestIndex
+  )).at(-1);
+  const entries = latestBatch.entries;
+  const statuses = new Set(entries.map((entry) => entry.status || "confirmed"));
+  const status = ["conflict", "rejected", "retryable", "pending", "confirmed"]
+    .find((candidate) => statuses.has(candidate)) || "pending";
+  const failedEntry = entries.find((entry) => entry.status === status && entry.sync_error);
   return {
     count: entries.length,
     total: entries.reduce((sum, entry) => sum + Number(entry.delta || 0), 0),
-    pending: entries.some((entry) => entry.status !== "confirmed"),
+    status,
+    pending: status === "pending" || status === "retryable",
+    error_code: failedEntry?.sync_error || null,
+    batch_id: entries[0]?.legacy_import_batch_id || entries[0]?.metadata?.legacy_import_batch_id || null,
   };
 }
 
@@ -332,7 +361,8 @@ export function applyLegacyPointsImport(
   if (entries.length > MAX_LEGACY_POINT_ENTRIES) {
     return { snapshot, events: [], error: "legacy_points_entries_too_many" };
   }
-  if (getOpeningBalance(snapshot) || getLegacyPointsImport(snapshot)) {
+  const existingImport = getLegacyPointsImport(snapshot);
+  if (getOpeningBalance(snapshot) || (existingImport && !["rejected", "conflict"].includes(existingImport.status))) {
     return { snapshot, events: [], error: "legacy_points_already_imported" };
   }
   // Fail fast on any malformed entry so the local projection matches what the
@@ -372,9 +402,10 @@ export function applyLegacyPointsImport(
     item_name_snapshot: entry.item_name_snapshot,
     note: entry.note ?? "旧积分记录",
     request_id: entry.request_id,
+    legacy_import_batch_id: request_id,
     occurred_on: entry.occurred_on,
     status: "pending",
-    metadata: { legacy_import: true },
+    metadata: { legacy_import: true, legacy_import_batch_id: request_id },
   }, normalizedScope));
   snapshot.ledger.push(...ledgerEntries);
   return {

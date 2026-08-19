@@ -292,7 +292,7 @@ export function createGrowthLoopController({ db } = {}) {
     notify();
   }
 
-  async function reconcileRejected(event, result) {
+  async function reconcileUnconfirmed(event, result) {
     const next = normalizeGrowthLoopState(snapshot, scope);
     if (event.type === "point_record") {
       const row = next.ledger.find((entry) => entry.request_id === event.request_id);
@@ -327,7 +327,8 @@ export function createGrowthLoopController({ db } = {}) {
       db,
       transport,
       onConfirmed: reconcileConfirmed,
-      onRejected: reconcileRejected,
+      onRetryable: reconcileUnconfirmed,
+      onRejected: reconcileUnconfirmed,
     });
     const report = await syncEngine.syncScope(scopeKey, { limit });
     snapshot.sync = { ...snapshot.sync, blocked: report.blocked, last_sync_report: report, last_server_sync_at: report.blocked ? snapshot.sync.last_server_sync_at : new Date().toISOString() };

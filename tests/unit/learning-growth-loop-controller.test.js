@@ -91,6 +91,27 @@ describe("Growth Loop controller legacy points import", () => {
 
     const ledger = controller.getSnapshot().ledger;
     expect(ledger.every((entry) => entry.status === "rejected")).toBe(true);
-    expect(controller.legacyPointsImportStatus()).toBeNull();
+    expect(controller.legacyPointsImportStatus()).toEqual(expect.objectContaining({
+      status: "rejected",
+      error_code: "learning_point_forbidden",
+    }));
+  });
+
+  it("marks the imported rows retryable when cloud confirmation is temporarily unavailable", async () => {
+    const controller = createGrowthLoopController({ db: createMemoryLearningDb() });
+    await controller.loadScope(scope);
+    await controller.importLegacyPoints({ entries, request_id: "legacy-import-1" });
+
+    await controller.sync({
+      transport: {
+        send: async () => ({ status: "retryable", error_code: "network_or_server_error" }),
+      },
+    });
+
+    expect(controller.getSnapshot().ledger.every((entry) => entry.status === "retryable")).toBe(true);
+    expect(controller.legacyPointsImportStatus()).toEqual(expect.objectContaining({
+      status: "retryable",
+      error_code: "network_or_server_error",
+    }));
   });
 });

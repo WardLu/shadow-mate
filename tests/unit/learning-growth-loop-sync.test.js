@@ -26,7 +26,16 @@ describe("Growth Loop outbox sync", () => {
     await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_item_upsert" });
     await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", type: "point_record" });
     const send = vi.fn(async () => ({ status: "retryable", error_code: "timeout" }));
-    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, retryBaseMs: 100, jitter: 0, random: () => 0 });
+    const onRetryable = vi.fn();
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      now: () => 1000,
+      retryBaseMs: 100,
+      jitter: 0,
+      random: () => 0,
+      onRetryable,
+    });
 
     await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({ retryable: 1, pending: 2 }));
     expect(send).toHaveBeenCalledTimes(1);
@@ -35,6 +44,10 @@ describe("Growth Loop outbox sync", () => {
       attempts: 1,
       next_attempt_at: 1100,
     }));
+    expect(onRetryable).toHaveBeenCalledWith(
+      expect.objectContaining({ event_id: "event-1" }),
+      expect.objectContaining({ status: "retryable", error_code: "timeout" }),
+    );
   });
 
   it("records a conflict and does not silently delete the event", async () => {

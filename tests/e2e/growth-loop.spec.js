@@ -103,10 +103,50 @@ test.describe("Growth Loop local-first boundary", () => {
 
     page.on("dialog", (dialog) => dialog.accept());
     await card.locator("#legacyImportBtn").click();
-    await expect(card).toContainText("旧积分已导入");
+    await expect(card).toContainText("本机已导入，待云端确认");
     await expect(card).toContainText("10");
 
     // The imported daily detail shows in the recent history list.
     await expect(page.locator(".growth-history-list li")).toHaveCount(4);
+
+    await page.evaluate(() => window.growthLoop.sync({
+      transport: {
+        send: async (event) => event.type === "legacy_points_import"
+          ? { status: "rejected", error_code: "permission_denied" }
+          : { status: "confirmed" },
+      },
+    }));
+    await expect(card).toContainText("旧积分导入未完成");
+    await expect(card).toContainText("云端拒绝了这次导入");
+    await expect(card.locator("#legacyImportBtn")).toContainText("重新导入");
+  });
+
+  test("shows retryable legacy imports as waiting for cloud retry", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("shadow_mate_workbench_v1", JSON.stringify({
+        points: { "2026-8": { "0": { 5: 1 } } },
+        checkins: {},
+        extra: {},
+        bookShelf: {},
+        peanutLog: [],
+        peanutRead: {},
+      }));
+    });
+    await page.goto("/");
+    await page.click('[data-mod="grow"]');
+    const card = page.locator(".growth-opening-card");
+    page.on("dialog", (dialog) => dialog.accept());
+    await card.locator("#legacyImportBtn").click();
+
+    await page.evaluate(() => window.growthLoop.sync({
+      transport: {
+        send: async (event) => event.type === "legacy_points_import"
+          ? { status: "retryable", error_code: "network_or_server_error" }
+          : { status: "confirmed" },
+      },
+    }));
+
+    await expect(card).toContainText("旧积分等待云端重试");
+    await expect(card).toContainText("云端确认暂时失败，将自动重试");
   });
 });
