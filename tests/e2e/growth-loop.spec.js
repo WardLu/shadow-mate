@@ -76,4 +76,37 @@ test.describe("Growth Loop local-first boundary", () => {
     expect(sends).toBe(pendingCount);
     await context.close();
   });
+
+  test("auto-detects legacy points and imports them with one click from the grow page", async ({ page }) => {
+    // Seed the pre-Growth-Loop daily records before the app boots; the app
+    // migrates them into the envelope's legacy.points_readonly.
+    await page.addInitScript(() => {
+      localStorage.setItem("shadow_mate_workbench_v1", JSON.stringify({
+        points: {
+          "2026-7": { "0": { 5: 1, 6: 1 }, "3": { 7: 1 } },
+          "2026-8": { "1": { 2: 1 } },
+        },
+        checkins: {},
+        extra: {},
+        bookShelf: {},
+        peanutLog: [],
+        peanutRead: {},
+      }));
+    });
+    await page.goto("/");
+
+    await page.click('[data-mod="grow"]');
+    const card = page.locator(".growth-opening-card");
+    await expect(card).toContainText("恢复旧积分");
+    await expect(card).toContainText("10"); // 2+2+3+3 合计
+    await expect(card.locator(".legacy-row")).toHaveCount(4);
+
+    page.on("dialog", (dialog) => dialog.accept());
+    await card.locator("#legacyImportBtn").click();
+    await expect(card).toContainText("旧积分已导入");
+    await expect(card).toContainText("10");
+
+    // The imported daily detail shows in the recent history list.
+    await expect(page.locator(".growth-history-list li")).toHaveCount(4);
+  });
 });
