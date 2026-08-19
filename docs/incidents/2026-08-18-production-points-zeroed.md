@@ -1,7 +1,7 @@
 # 事故记录：2026-08-18 未完成测试的功能进入生产，用户积分显示被清零
 
 - **严重级别**：P1（生产环境错误版本上线 + 用户可见数据异常）
-- **状态**：已止血（production 已回滚至 v1.3.8），修复与后端补齐进行中（见「后续行动」）
+- **状态**：已解决（期初积分迁移已生产执行，v1.3.9 正式发布上线，受影响用户可确认一次恢复积分）
 - **关联 issue**：SHA-12
 
 ## 概要
@@ -45,11 +45,11 @@ Growth Loop 核心 8 条迁移（`supabase/migrations/20260814*_growth_loop_*.sq
 - **流程加固（PR #55）**：`production` 分支 ruleset 保护（PR 必须 1 审查、禁止 force push 与删除）；`release-to-production.yml` 仅在 GitHub Release 发布后严格快进 production；GITHUB_TOKEN 降为只读。
 - **积分恢复第一步**：合入 PR #44（期初积分受控 RPC + 前端确认流程），代码进入 main，等待上述迁移部署后随正式 Release 发布。
 
-## 后续行动（进行中）
+## 后续行动（已基本完成）
 
-1. 期初积分迁移 `20260816120000_growth_loop_opening_balance.sql`（已随 PR #44 合入 main，SHA-256 `6eeb08485aa6cdcc97f7497f3e7509cf0b5c1b57b8c18a3ab1c36c8530aa9fa0`）走 Shadow Portal 控制面提案、审批、执行；生产 schema 就绪后再发布包含 Growth Loop 的版本。
-2. 发布 checklist 增加跨 PR 依赖核对项：确认本版本前端调用的全部表与 RPC 已在生产 schema 存在。
-3. 包含 Growth Loop 的正式 Release 发布时，验证期初积分结转流程端到端可用，并通知受影响用户通过「期初积分」恢复旧积分。
+1. ✅ 期初积分迁移 `20260816120000_growth_loop_opening_balance.sql` 于 2026-08-19 经 Shadow Portal 控制面在生产执行并登记 `applied`（`schema_migrations` statement_count=7；函数/约束/ACL 核验通过，见控制面台账）。生产 schema 就绪后，包含 Growth Loop 的 v1.3.9 已于 2026-08-19 正式发布并上线（production 指向 `54c6cb1`，`release-to-production` 工作流快进成功，线上已确认包含期初积分恢复功能）。
+2. 发布 checklist 增加跨 PR 依赖核对项：确认本版本前端调用的全部表与 RPC 已在生产 schema 存在。（流程项，待随发布 checklist 修订落地）
+3. 端到端验证期初积分结转并通知受影响用户通过「期初积分」恢复旧积分：待受影响用户打开 v1.3.9 后由家长确认一次完成，恢复入口已随 v1.3.9 上线。
 
 ## 经验教训
 
