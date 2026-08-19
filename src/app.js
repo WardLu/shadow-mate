@@ -30,7 +30,7 @@ import { loadLearningStateEnvelope, adoptPendingLearningState } from "./learning
 import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
-import { getActivePointAction, getBalance, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
+import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 
 inject();
 installRapidActionGuard(document);
@@ -345,7 +345,8 @@ function itemMonthTotal(itemId){
   return getPointPeriodTotal(growthLoopSnapshot, item.id, currentPeriodKey());
 }
 function monthTotal(){
-  return visiblePointItems().reduce((total, item) => total + itemMonthTotal(item.id), 0);
+  return visiblePointItems().reduce((total, item) => total + itemMonthTotal(item.id), 0)
+    + getLegacyPeriodTotal(growthLoopSnapshot, currentPeriodKey());
 }
 function currentPeriodKey(){
   const d = new Date();
@@ -1098,24 +1099,62 @@ function renderGrow(){
 
   const balance = getBalance(growthLoopSnapshot);
   const opening = getOpeningBalance(growthLoopSnapshot);
-  const openingCard = $(`
-    <div class="card growth-opening-card">
-      ${opening
-        ? `<h3>${icon("checkCircle")} 期初积分已确认</h3>
-           <div class="stat-grid">
-             <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
-             <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
-           </div>
-           <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>`
-        : `<h3>${icon("star")} 期初积分</h3>
-           <div class="desc">把旧记录里已经积累的积分带过来？期初积分由家长为当前孩子明确确认一次，不会自动导入旧流水；确认后如需调整，请用普通积分调整流水。</div>
-           <form id="openingBalanceForm" class="growth-form">
-             <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
-             <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
-           </form>`
-      }
-    </div>
-  `);
+  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
+  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
+  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
+  const legacyPreview = legacyEntries.slice(-6).reverse();
+
+  let openingCard;
+  if (opening) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("checkCircle")} 期初积分已确认</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
+          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
+      </div>
+    `);
+  } else if (legacyImport) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("checkCircle")} 旧积分已导入</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
+          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
+        </div>
+        <div class="desc">旧积分打卡明细已导入，余额已恢复；导入记录只计入余额，不计入行为统计。如需纠错，请使用普通积分调整流水。</div>
+      </div>
+    `);
+  } else if (legacyEntries.length > 0) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("download")} 恢复旧积分</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
+          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
+        </div>
+        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
+        <div class="legacy-preview">
+          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
+          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
+        </div>
+        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
+      </div>
+    `);
+  } else {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("star")} 期初积分</h3>
+        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
+        <form id="openingBalanceForm" class="growth-form">
+          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
+          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+        </form>
+      </div>
+    `);
+  }
   main.appendChild(openingCard);
   const openingForm = openingCard.querySelector("#openingBalanceForm");
   if (openingForm) {
@@ -1145,6 +1184,32 @@ function renderGrow(){
       } catch (error) {
         console.error("Growth Loop opening balance confirm failed:", error);
         alert("期初积分没有保存成功，请稍后重试。");
+      }
+    };
+  }
+  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
+  if (legacyImportBtn) {
+    legacyImportBtn.onclick = async () => {
+      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
+      legacyImportBtn.disabled = true;
+      try {
+        const result = await window.growthLoop.importLegacyPoints({
+          entries: legacyEntries,
+          request_id: clientRequestId("legacy-import"),
+        });
+        if (result.error === "legacy_points_already_imported") {
+          alert("这个孩子的旧积分已经导入过了。");
+        } else if (result.error) {
+          alert("旧积分导入失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderGrow();
+        }
+      } catch (error) {
+        console.error("Growth Loop legacy points import failed:", error);
+        alert("旧积分没有导入成功，请稍后重试。");
+      } finally {
+        legacyImportBtn.disabled = false;
       }
     };
   }
@@ -1215,6 +1280,26 @@ function renderGrow(){
       renderGrow();
     };
   });
+
+  const historyEntries = growthLoopSnapshot.ledger
+    .filter((entry) => !["rejected", "conflict"].includes(entry.status))
+    .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
+      || String(right.created_at || "").localeCompare(String(left.created_at || "")))
+    .slice(0, 20);
+  const historyCard = $(`<div class="card growth-history-card">
+      <h3>${icon("list")} 最近积分明细</h3>
+      ${historyEntries.length
+        ? `<ul class="growth-history-list">
+             ${historyEntries.map((entry) => {
+               const dateLabel = escapeHtml(entry.occurred_on || "");
+               const nameLabel = escapeHtml(entry.item_name_snapshot || "积分调整");
+               const entryClass = entry.entry_type === "redemption" ? "neg" : entry.delta > 0 ? "pos" : "neg";
+               return `<li><span class="date">${dateLabel}</span><span class="name">${nameLabel}</span><span class="pts ${entryClass}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></li>`;
+             }).join("")}
+           </ul>`
+        : `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`}
+    </div>`);
+  main.appendChild(historyCard);
 
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }

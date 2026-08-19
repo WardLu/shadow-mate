@@ -67,6 +67,18 @@ export function createGrowthLoopTransport({ client } = {}) {
             p_request_id: event.request_id,
             p_note: payload.note || null,
           });
+        case "legacy_points_import":
+          return rpc(client, "learning_import_legacy_points", {
+            p_profile_id: payload.profile_id,
+            p_request_id: event.request_id,
+            p_entries: (payload.entries || []).map((entry) => ({
+              request_id: entry.request_id,
+              occurred_on: entry.occurred_on,
+              delta: entry.delta,
+              item_name_snapshot: entry.item_name_snapshot,
+              note: entry.note || null,
+            })),
+          });
         case "reward_upsert":
           return upsert(client, "learning_rewards", publicDefinition(payload.reward, REWARD_FIELDS));
         case "profile_reward_upsert": {

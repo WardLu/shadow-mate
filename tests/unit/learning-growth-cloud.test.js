@@ -59,4 +59,29 @@ describe("Growth Loop Supabase transport", () => {
 
     expect(upsert).toHaveBeenCalledWith(expect.not.objectContaining({ source: "local" }), { onConflict: "id" });
   });
+
+  it("maps a legacy import event to the batch import RPC", async () => {
+    const rpc = vi.fn(async () => ({ data: [{ id: "row-1" }, { id: "row-2" }], error: null }));
+    const transport = createGrowthLoopTransport({ client: { rpc } });
+
+    await expect(transport.send({
+      type: "legacy_points_import",
+      request_id: "legacy-import-1",
+      payload: {
+        profile_id: "profile-1",
+        entries: [
+          { request_id: "entry-1", occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+          { request_id: "entry-2", occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+        ],
+      },
+    })).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+    expect(rpc).toHaveBeenCalledWith("learning_import_legacy_points", {
+      p_profile_id: "profile-1",
+      p_request_id: "legacy-import-1",
+      p_entries: [
+        { request_id: "entry-1", occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+        { request_id: "entry-2", occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+      ],
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import {
+  applyLegacyPointsImport,
   applyOpeningBalance,
   applyPointAction,
   applyPointItemCreation,
@@ -6,6 +7,7 @@ import {
   applyRewardCreation,
   closePointPeriod,
   createGrowthLoopState,
+  getLegacyPointsImport,
   getOpeningBalance,
   mergeGrowthLoopSnapshot,
   normalizeGrowthLoopState,
@@ -139,6 +141,20 @@ export function createGrowthLoopController({ db } = {}) {
     return clone(snapshot);
   }
 
+  function legacyPointsImportStatus() {
+    const summary = getLegacyPointsImport(snapshot);
+    return summary ? { ...summary } : null;
+  }
+
+  async function importLegacyPoints({ entries, request_id = createId() }) {
+    const result = applyLegacyPointsImport(snapshot, { scope, entries, request_id });
+    if (result.error) {
+      return { ...clone(snapshot), error: result.error };
+    }
+    await persist(result.snapshot, result.events);
+    return clone(snapshot);
+  }
+
   function getPointItems({ includeRecommendations = true } = {}) {
     if (!includeRecommendations) return clone(snapshot.point_items);
     const existingNames = new Set(snapshot.point_items.map((item) => item.name));
@@ -256,6 +272,13 @@ export function createGrowthLoopController({ db } = {}) {
       if (row) {
         Object.assign(row, remote || {}, { status: "confirmed" });
       }
+    } else if (event.type === "legacy_points_import") {
+      const requestIds = new Set((event.payload.entries || []).map((entry) => entry.request_id));
+      for (const row of next.ledger) {
+        if (row.entry_type === "legacy_import" && requestIds.has(row.request_id)) {
+          Object.assign(row, { status: "confirmed" });
+        }
+      }
     } else if (event.type === "reward_redeem") {
       const redemption = next.redemptions.find((entry) => entry.request_id === event.request_id);
       if (redemption) {
@@ -278,6 +301,14 @@ export function createGrowthLoopController({ db } = {}) {
     if (event.type === "opening_balance_confirm") {
       const row = next.ledger.find((entry) => entry.request_id === event.request_id);
       if (row) Object.assign(row, { status: result.status, sync_error: result.error_code || "rejected" });
+    }
+    if (event.type === "legacy_points_import") {
+      const requestIds = new Set((event.payload.entries || []).map((entry) => entry.request_id));
+      for (const row of next.ledger) {
+        if (row.entry_type === "legacy_import" && requestIds.has(row.request_id)) {
+          Object.assign(row, { status: result.status, sync_error: result.error_code || "rejected" });
+        }
+      }
     }
     if (event.type === "reward_redeem") {
       const redemption = next.redemptions.find((entry) => entry.request_id === event.request_id);
@@ -353,6 +384,8 @@ export function createGrowthLoopController({ db } = {}) {
     getScope,
     openingBalance,
     confirmOpeningBalance,
+    legacyPointsImportStatus,
+    importLegacyPoints,
     getPointItems,
     getRewards,
     createPointItem,

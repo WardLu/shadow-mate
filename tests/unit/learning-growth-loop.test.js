@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyLegacyPointsImport,
   applyOpeningBalance,
   applyPointAction,
   applyRedemption,
+  buildLegacyPointEntries,
   closePointPeriod,
   createGrowthLoopState,
   getActivePointAction,
   getBalance,
+  getLegacyPointsImport,
   getOpeningBalance,
   getPointPeriodTotal,
   mergeGrowthLoopSnapshot,
@@ -201,5 +204,141 @@ describe("Growth Loop opening balance", () => {
   it("keeps opening balance out of effective-action metrics", () => {
     const result = applyOpeningBalance(createGrowthLoopState(scope), { scope, balance: 10, request_id: "opening-1" });
     expect(result.snapshot.ledger.map((entry) => entry.entry_type)).toEqual(["initial_balance"]);
+  });
+});
+
+describe("Legacy points import", () => {
+  it("rebuilds the old daily check-in records into ordered ledger entries", () => {
+    const entries = buildLegacyPointEntries({
+      "2026-7": { "0": { 5: 1, 6: 1 }, "3": { 7: 1 } },
+      "2026-08": { "1": { 1: 1 }, "4": { 2: 1 } },
+    });
+
+    expect(entries).toEqual([
+      { occurred_on: "2026-07-05", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+      { occurred_on: "2026-07-06", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+      { occurred_on: "2026-07-07", delta: 3, item_name_snapshot: "古诗词跟读", note: "旧积分记录" },
+      { occurred_on: "2026-08-01", delta: 3, item_name_snapshot: "认真完成学习", note: "旧积分记录" },
+      { occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+    ]);
+  });
+
+  it("skips unknown item indexes, non-existent dates, and duplicate records", () => {
+    const entries = buildLegacyPointEntries({
+      "2026-8": { "0": { 5: 1, 5: 1 }, "99": { 1: 1 } },
+      "bad-month": { "0": { 1: 1 } },
+      "2026-02": { "0": { 31: 1 } },
+    });
+
+    expect(entries).toEqual([
+      { occurred_on: "2026-08-05", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+    ]);
+  });
+
+  it("returns an empty list for missing or empty records", () => {
+    expect(buildLegacyPointEntries()).toEqual([]);
+    expect(buildLegacyPointEntries({})).toEqual([]);
+    expect(buildLegacyPointEntries(null)).toEqual([]);
+  });
+
+  it("imports a full daily batch into pending ledger entries and one sync event", () => {
+    const result = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [
+        { occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+        { occurred_on: "2026-08-02", delta: 3, item_name_snapshot: "认真完成学习", note: "旧积分记录" },
+        { occurred_on: "2026-08-03", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+      ],
+      request_id: "legacy-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot.ledger).toHaveLength(3);
+    expect(result.snapshot.ledger.every((entry) => entry.entry_type === "legacy_import")).toBe(true);
+    expect(result.snapshot.ledger.every((entry) => entry.status === "pending")).toBe(true);
+    expect(result.snapshot.ledger.map((entry) => entry.delta)).toEqual([2, 3, -10]);
+    expect(getBalance(result.snapshot)).toBe(-5);
+    expect(getLegacyPointsImport(result.snapshot)).toEqual(
+      expect.objectContaining({ count: 3, total: -5, pending: true }),
+    );
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        type: "legacy_points_import",
+        request_id: "legacy-1",
+        payload: expect.objectContaining({
+          profile_id: "profile-1",
+          entries: result.snapshot.ledger.map((entry) => ({
+            request_id: entry.request_id,
+            occurred_on: entry.occurred_on,
+            delta: entry.delta,
+            item_name_snapshot: entry.item_name_snapshot,
+            note: "旧积分记录",
+          })),
+        }),
+      }),
+    ]);
+  });
+
+  it("rejects a second import for the same child", () => {
+    const first = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [{ occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务" }],
+      request_id: "legacy-1",
+    });
+    const second = applyLegacyPointsImport(first.snapshot, {
+      scope,
+      entries: [{ occurred_on: "2026-08-02", delta: 3, item_name_snapshot: "认真完成学习" }],
+      request_id: "legacy-2",
+    });
+
+    expect(second.error).toBe("legacy_points_already_imported");
+    expect(second.snapshot.ledger).toHaveLength(1);
+    expect(second.events).toEqual([]);
+  });
+
+  it("blocks legacy import when a manual opening balance is already confirmed", () => {
+    const withOpening = applyOpeningBalance(createGrowthLoopState(scope), { scope, balance: 50, request_id: "opening-1" });
+    const result = applyLegacyPointsImport(withOpening.snapshot, {
+      scope,
+      entries: [{ occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务" }],
+      request_id: "legacy-1",
+    });
+
+    expect(result.error).toBe("legacy_points_already_imported");
+  });
+
+  it("rejects the whole batch when any entry is malformed, matching the server", () => {
+    const badDate = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [
+        { occurred_on: "2026-02-31", delta: 2, item_name_snapshot: "一起做家务" },
+        { occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务" },
+      ],
+      request_id: "legacy-1",
+    });
+    expect(badDate.error).toBe("legacy_points_entries_invalid");
+    expect(badDate.snapshot.ledger).toHaveLength(0);
+
+    const badDelta = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [{ occurred_on: "2026-08-01", delta: 2000, item_name_snapshot: "一起做家务" }],
+      request_id: "legacy-2",
+    });
+    expect(badDelta.error).toBe("legacy_points_entries_invalid");
+
+    const badName = applyLegacyPointsImport(createGrowthLoopState(scope), {
+      scope,
+      entries: [{ occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "" }],
+      request_id: "legacy-3",
+    });
+    expect(badName.error).toBe("legacy_points_entries_invalid");
+  });
+
+  it("requires a non-empty batch", () => {
+    const empty = applyLegacyPointsImport(createGrowthLoopState(scope), { scope, entries: [] });
+    expect(empty.error).toBe("legacy_points_entries_required");
+
+    const missing = applyLegacyPointsImport(createGrowthLoopState(scope), { scope });
+    expect(missing.error).toBe("legacy_points_entries_required");
   });
 });
