@@ -134,6 +134,7 @@ function normalizeLedgerEntry(entry, scope) {
     status: entry.status || "confirmed",
     metadata: isRecord(entry.metadata) ? clone(entry.metadata) : {},
     redemption_id: entry.redemption_id ?? null,
+    legacy_import_batch_id: entry.legacy_import_batch_id ?? entry.metadata?.legacy_import_batch_id ?? null,
   };
 }
 
@@ -191,7 +192,8 @@ export function applyOpeningBalance(
     return { snapshot, events: [], error: "opening_balance_invalid" };
   }
   const existing = getOpeningBalance(snapshot);
-  if (existing) {
+  const legacyImport = getLegacyPointsImport(snapshot);
+  if (existing || (legacyImport && !["rejected", "conflict"].includes(legacyImport.status))) {
     return { snapshot, events: [], error: "opening_balance_already_confirmed", entry: existing };
   }
   const ledgerEntry = normalizeLedgerEntry({
@@ -220,6 +222,202 @@ export function applyOpeningBalance(
         profile_id: normalizedScope.profile_id,
         delta,
         note: note || null,
+      },
+    })],
+  };
+}
+
+/* 旧版（Growth Loop 之前）积分打卡项。旧应用把每日打卡存成
+   {ym: {itemIdx: {day:1}}}，itemIdx 就是这个固定列表的下标。 */
+export const LEGACY_POINT_ITEMS = [
+  { name: "一起做家务", pts: 2 },
+  { name: "认真完成学习", pts: 3 },
+  { name: "帮带带弟弟", pts: 2 },
+  { name: "古诗词跟读", pts: 3 },
+  { name: "撒谎", pts: -10 },
+  { name: "白天摸当众摸鸡鸡", pts: -2 },
+  { name: "不收玩具", pts: -3 },
+];
+
+export const MAX_LEGACY_POINT_ENTRIES = 10000;
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function parseLegacyMonth(ym) {
+  const parts = String(ym || "").split("-").map(Number);
+  if (parts.length !== 2 || !parts.every(Number.isInteger)) return null;
+  return { year: parts[0], month: parts[1] };
+}
+
+function parseLegacyDate(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+function isValidIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+/**
+ * 把旧版每日积分打卡记录重建为可导入的账本条目。
+ * 旧结构 {ym: {itemIdx: {day:1}}}，返回按日期升序、按 (occurred_on, 项目) 去重。
+ */
+export function buildLegacyPointEntries(pointsRecord = {}) {
+  const seen = new Set();
+  const entries = [];
+  for (const [ym, byItem] of Object.entries(pointsRecord || {})) {
+    const parsed = parseLegacyMonth(ym);
+    if (!parsed) continue;
+    for (const [itemKey, byDay] of Object.entries(byItem || {})) {
+      const item = LEGACY_POINT_ITEMS[Number(itemKey)];
+      if (!item || !isRecord(byDay)) continue;
+      for (const [dayKey, flagged] of Object.entries(byDay)) {
+        if (!flagged) continue;
+        const occurredOn = parseLegacyDate(parsed.year, parsed.month, Number(dayKey));
+        if (!occurredOn) continue;
+        const dedupeKey = `${occurredOn}:${itemKey}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        entries.push({
+          occurred_on: occurredOn,
+          delta: item.pts,
+          item_name_snapshot: item.name,
+          note: "旧积分记录",
+        });
+      }
+    }
+  }
+  return entries.sort((left, right) => left.occurred_on.localeCompare(right.occurred_on));
+}
+
+export function getLegacyPointsImport(snapshot) {
+  const attempts = (snapshot.ledger || []).filter((entry) => entry.entry_type === "legacy_import");
+  if (!attempts.length) return null;
+  const batches = new Map();
+  for (const [index, entry] of attempts.entries()) {
+    const batchId = entry.legacy_import_batch_id || entry.metadata?.legacy_import_batch_id || "legacy-import";
+    const batch = batches.get(batchId) || { entries: [], latestIndex: -1, latestCreatedAt: "" };
+    batch.entries.push(entry);
+    const createdAt = String(entry.created_at || "");
+    if (createdAt > batch.latestCreatedAt || (createdAt === batch.latestCreatedAt && index > batch.latestIndex)) {
+      batch.latestCreatedAt = createdAt;
+      batch.latestIndex = index;
+    }
+    batches.set(batchId, batch);
+  }
+  const batchList = [...batches.values()];
+  const confirmedBatches = batchList.filter((batch) => (
+    batch.entries.some((entry) => (entry.status || "confirmed") === "confirmed")
+  ));
+  const latestBatch = (confirmedBatches.length ? confirmedBatches : batchList).sort((left, right) => (
+    left.latestCreatedAt.localeCompare(right.latestCreatedAt) || left.latestIndex - right.latestIndex
+  )).at(-1);
+  const entries = latestBatch.entries;
+  const statuses = new Set(entries.map((entry) => entry.status || "confirmed"));
+  const status = ["conflict", "rejected", "retryable", "pending", "confirmed"]
+    .find((candidate) => statuses.has(candidate)) || "pending";
+  const failedEntry = entries.find((entry) => entry.status === status && entry.sync_error);
+  return {
+    count: entries.length,
+    total: entries.reduce((sum, entry) => sum + Number(entry.delta || 0), 0),
+    status,
+    pending: status === "pending" || status === "retryable",
+    error_code: failedEntry?.sync_error || null,
+    batch_id: entries[0]?.legacy_import_batch_id || entries[0]?.metadata?.legacy_import_batch_id || null,
+  };
+}
+
+export function getLegacyPeriodTotal(snapshot, periodKey) {
+  const prefix = String(periodKey || "");
+  return activeLedgerEntries(snapshot)
+    .filter((entry) => entry.entry_type === "legacy_import" && String(entry.occurred_on || "").startsWith(prefix))
+    .reduce((total, entry) => total + Number(entry.delta || 0), 0);
+}
+
+/**
+ * 一次性导入旧积分打卡明细：逐条写为 legacy_import 账本行，余额等于明细之和，
+ * 不再单独记期初积分（避免重复计分）。每个孩子只能导入一次。
+ */
+export function applyLegacyPointsImport(
+  current,
+  { scope = current.scope, entries, request_id = createId("legacy-import") } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return { snapshot, events: [], error: "legacy_points_entries_required" };
+  }
+  if (entries.length > MAX_LEGACY_POINT_ENTRIES) {
+    return { snapshot, events: [], error: "legacy_points_entries_too_many" };
+  }
+  const existingImport = getLegacyPointsImport(snapshot);
+  if (getOpeningBalance(snapshot) || (existingImport && !["rejected", "conflict"].includes(existingImport.status))) {
+    return { snapshot, events: [], error: "legacy_points_already_imported" };
+  }
+  // Fail fast on any malformed entry so the local projection matches what the
+  // server RPC accepts (all-or-nothing batch, mirroring learning_import_legacy_points).
+  const normalizedEntries = [];
+  for (const entry of entries) {
+    const delta = Math.trunc(Number(entry.delta));
+    if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1000) {
+      return { snapshot, events: [], error: "legacy_points_entries_invalid" };
+    }
+    const occurredOn = String(entry.occurred_on || "");
+    if (!isValidIsoDate(occurredOn)) {
+      return { snapshot, events: [], error: "legacy_points_entries_invalid" };
+    }
+    const name = String(entry.item_name_snapshot || "").trim().slice(0, 60);
+    if (!name) {
+      return { snapshot, events: [], error: "legacy_points_entries_invalid" };
+    }
+    normalizedEntries.push({
+      request_id: createId("ledger"),
+      occurred_on: occurredOn,
+      delta,
+      item_name_snapshot: name,
+      note: entry.note ? String(entry.note).slice(0, 200) : null,
+    });
+  }
+  if (normalizedEntries.length === 0) {
+    return { snapshot, events: [], error: "legacy_points_entries_required" };
+  }
+  const ledgerEntries = normalizedEntries.map((entry) => normalizeLedgerEntry({
+    id: createId("ledger"),
+    household_id: normalizedScope.household_id,
+    profile_id: normalizedScope.profile_id,
+    point_item_id: null,
+    delta: entry.delta,
+    entry_type: "legacy_import",
+    item_name_snapshot: entry.item_name_snapshot,
+    note: entry.note ?? "旧积分记录",
+    request_id: entry.request_id,
+    legacy_import_batch_id: request_id,
+    occurred_on: entry.occurred_on,
+    status: "pending",
+    metadata: { legacy_import: true, legacy_import_batch_id: request_id },
+  }, normalizedScope));
+  snapshot.ledger.push(...ledgerEntries);
+  return {
+    snapshot,
+    entries: ledgerEntries,
+    events: [localEvent({
+      type: "legacy_points_import",
+      scope: normalizedScope,
+      request_id,
+      payload: {
+        profile_id: normalizedScope.profile_id,
+        entries: normalizedEntries,
       },
     })],
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGrowthLoopTransport } from "../../src/learning-growth-cloud.js";
+import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "../../src/learning-growth-cloud.js";
+import { createGrowthLoopState, getBalance, mergeGrowthLoopSnapshot } from "../../src/learning-growth-loop.js";
 
 describe("Growth Loop Supabase transport", () => {
   it("maps a point event to the idempotent point RPC", async () => {
@@ -35,6 +36,57 @@ describe("Growth Loop Supabase transport", () => {
       .resolves.toEqual(expect.objectContaining({ status: "conflict", error_code: "idempotency_conflict" }));
   });
 
+  it.each([
+    {
+      name: "request reuse",
+      event: { type: "legacy_points_import", request_id: "batch-1", payload: { entries: [] } },
+      message: "learning_request_reuse_conflict",
+      expectedStatus: "conflict",
+    },
+    {
+      name: "legacy points already imported",
+      event: { type: "legacy_points_import", request_id: "batch-1", payload: { entries: [] } },
+      message: "learning_legacy_points_already_imported",
+      expectedStatus: "rejected",
+    },
+    {
+      name: "opening balance already confirmed",
+      event: { type: "opening_balance_confirm", request_id: "opening-1", payload: {} },
+      message: "learning_opening_balance_already_confirmed",
+      expectedStatus: "rejected",
+    },
+  ])("maps an actual-shaped $name RPC error to terminal $expectedStatus", async ({ event, message, expectedStatus }) => {
+    const rpcResult = {
+      data: null,
+      error: { code: "P0001", details: null, hint: null, message },
+      status: 400,
+      statusText: "Bad Request",
+    };
+    const transport = createGrowthLoopTransport({ client: { rpc: vi.fn(async () => rpcResult) } });
+
+    await expect(transport.send(event)).resolves.toEqual({
+      status: expectedStatus,
+      error_code: message,
+      error_message: message,
+    });
+  });
+
+  it("uses the RPC result HTTP status when PostgrestError has no status", async () => {
+    const rpcResult = {
+      data: null,
+      error: { code: "22023", details: null, hint: null, message: "learning_legacy_entry_delta_invalid" },
+      status: 400,
+      statusText: "Bad Request",
+    };
+    const transport = createGrowthLoopTransport({ client: { rpc: vi.fn(async () => rpcResult) } });
+
+    await expect(transport.send({ type: "point_record", request_id: "request-1", payload: {} }))
+      .resolves.toEqual(expect.objectContaining({
+        status: "rejected",
+        error_code: "learning_legacy_entry_delta_invalid",
+      }));
+  });
+
   it("strips local-only metadata before writing public product tables", async () => {
     const upsert = vi.fn(() => ({
       select: () => ({ single: async () => ({ data: { id: "item-1" }, error: null }) }),
@@ -58,5 +110,94 @@ describe("Growth Loop Supabase transport", () => {
     });
 
     expect(upsert).toHaveBeenCalledWith(expect.not.objectContaining({ source: "local" }), { onConflict: "id" });
+  });
+
+  it("maps a legacy import event to the batch import RPC", async () => {
+    const rpc = vi.fn(async () => ({ data: [{ id: "row-1" }, { id: "row-2" }], error: null }));
+    const transport = createGrowthLoopTransport({ client: { rpc } });
+
+    await expect(transport.send({
+      type: "legacy_points_import",
+      request_id: "legacy-import-1",
+      payload: {
+        profile_id: "profile-1",
+        entries: [
+          { request_id: "entry-1", occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+          { request_id: "entry-2", occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+        ],
+      },
+    })).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+    expect(rpc).toHaveBeenCalledWith("learning_import_legacy_points", {
+      p_profile_id: "profile-1",
+      p_request_id: "legacy-import-1",
+      p_entries: [
+        { request_id: "entry-1", occurred_on: "2026-08-01", delta: 2, item_name_snapshot: "一起做家务", note: "旧积分记录" },
+        { request_id: "entry-2", occurred_on: "2026-08-02", delta: -10, item_name_snapshot: "撒谎", note: "旧积分记录" },
+      ],
+    });
+  });
+});
+
+describe("Growth Loop Supabase snapshot", () => {
+  it("restores a 1001-row cloud ledger on another device despite the Data API row cap", async () => {
+    const ledgerRows = Array.from({ length: 1001 }, (_, index) => ({
+      id: `ledger-${String(index + 1).padStart(4, "0")}`,
+      profile_id: "profile-1",
+      delta: 1,
+      entry_type: "legacy_import",
+      request_id: `request-${String(index + 1).padStart(4, "0")}`,
+    }));
+    const ledgerRequests = [];
+    const client = {
+      from(table) {
+        const state = { cursor: null, limit: 1000, orders: [] };
+        const query = {
+          select: () => query,
+          eq: () => query,
+          order(field, options) {
+            state.orders.push([field, options]);
+            return query;
+          },
+          gt(field, value) {
+            if (field === "id") state.cursor = value;
+            return query;
+          },
+          limit(value) {
+            state.limit = value;
+            return query;
+          },
+          then(resolve, reject) {
+            let data = [];
+            if (table === "learning_point_ledger") {
+              ledgerRequests.push(structuredClone(state));
+              data = ledgerRows
+                .filter((row) => state.cursor === null || row.id > state.cursor)
+                .slice(0, state.limit);
+            }
+            return Promise.resolve({ data, error: null }).then(resolve, reject);
+          },
+        };
+        return query;
+      },
+    };
+
+    const result = await fetchGrowthLoopSnapshot(client, {
+      householdId: "household-1",
+      profileId: "profile-1",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.snapshot.ledger).toHaveLength(1001);
+    expect(result.snapshot.ledger.every((row) => row.status === "confirmed")).toBe(true);
+    const secondDevice = mergeGrowthLoopSnapshot(
+      result.snapshot,
+      createGrowthLoopState({ household_id: "household-1", profile_id: "profile-1" }),
+    );
+    expect(secondDevice.ledger).toHaveLength(1001);
+    expect(getBalance(secondDevice)).toBe(1001);
+    expect(ledgerRequests).toEqual([
+      expect.objectContaining({ cursor: null, orders: [["id", { ascending: true }]] }),
+      expect.objectContaining({ cursor: "ledger-1000", orders: [["id", { ascending: true }]] }),
+    ]);
   });
 });

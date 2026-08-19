@@ -43,6 +43,9 @@ async function seedAuthenticatedSession(page) {
 async function mockCloudApi(page, {
   remoteState = emptyState,
   rpcResponses = ["success"],
+  legacyImportResponses = ["success"],
+  growthPointItemsFailures = 0,
+  growthPointItemsResponses = null,
   hasPassword = true,
   createDelayMs = 0,
   householdCreateDelayMs = 0,
@@ -51,7 +54,12 @@ async function mockCloudApi(page, {
   let state = structuredClone(remoteState);
   let version = 3;
   let rpcIndex = 0;
+  let legacyImportIndex = 0;
+  let growthPointItemsRequests = 0;
+  let growthPointItemsResponseIndex = 0;
   const rpcPayloads = [];
+  const legacyImportPayloads = [];
+  const activityPayloads = [];
   const deletedProfiles = [];
   const deletedHouseholds = [];
   const createdProfiles = [];
@@ -94,8 +102,62 @@ async function mockCloudApi(page, {
       return;
     }
 
+    if (path.endsWith("/rpc/learning_import_legacy_points")) {
+      const payload = JSON.parse(request.postData() || "{}");
+      legacyImportPayloads.push(payload);
+      const response = legacyImportResponses[Math.min(legacyImportIndex++, legacyImportResponses.length - 1)];
+      if (response === "retryable") {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST000", details: null, hint: null, message: "upstream unavailable" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ id: "legacy-ledger-1" }]),
+      });
+      return;
+    }
+
+    if (path.endsWith("/rpc/learning_record_activity_event")) {
+      activityPayloads.push(JSON.parse(request.postData() || "{}"));
+      await route.fulfill({ status: 200, contentType: "application/json", body: "null" });
+      return;
+    }
+
     if (path.endsWith("/rpc/learning_has_password")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(hasPassword) });
+      return;
+    }
+
+    if (path.endsWith("/learning_point_items")) {
+      growthPointItemsRequests += 1;
+      const response = growthPointItemsResponses?.[
+        Math.min(growthPointItemsResponseIndex++, growthPointItemsResponses.length - 1)
+      ] || (growthPointItemsRequests <= growthPointItemsFailures ? "retryable" : "success");
+      if (response === "retryable") {
+        await route.fulfill({
+          status: 502,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST000", details: null, hint: null, message: "snapshot unavailable" }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+
+    if ([
+      "/learning_profile_point_items",
+      "/learning_rewards",
+      "/learning_profile_rewards",
+      "/learning_point_ledger",
+      "/learning_redemptions",
+    ].some((suffix) => path.endsWith(suffix))) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       return;
     }
 
@@ -197,16 +259,115 @@ async function mockCloudApi(page, {
 
   return {
     rpcPayloads,
+    legacyImportPayloads,
+    activityPayloads,
     deletedProfiles,
     deletedHouseholds,
     createdProfiles,
     createdHouseholds,
     createdConsents,
+    getGrowthPointItemsRequests: () => growthPointItemsRequests,
     getState: () => state,
   };
 }
 
 test.describe("Authenticated cloud workspace", () => {
+  test("backs off repeated Growth Loop snapshot 5xx responses instead of polling every second", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    const requestsBeforeWindow = api.getGrowthPointItemsRequests();
+    // Negative timing assertion: fixed 1s polling reaches at least four calls
+    // in this window, while exponential backoff adds at most two calls.
+    await page.waitForTimeout(4500);
+    expect(api.getGrowthPointItemsRequests() - requestsBeforeWindow).toBeLessThanOrEqual(2);
+  });
+
+  test("retries the first Growth Loop snapshot fetch failure", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: 1 });
+
+    await page.goto("/");
+
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.getGrowthPointItemsRequests(), { timeout: 5000 }).toBe(2);
+  });
+
+  test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    const requestsBeforeOnline = api.getGrowthPointItemsRequests();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.clock.runFor(0);
+
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(requestsBeforeOnline + 1);
+  });
+
+  test("resets snapshot backoff after a successful fetch", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      growthPointItemsResponses: ["retryable", "success", "retryable", "success"],
+    });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(1);
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(2);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.evaluate(() => window.cloudSync.scheduleGrowthLoop());
+    await page.clock.runFor(600);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(3);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(4);
+  });
+
+  test("retries the same legacy import batch after the browser comes online", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { legacyImportResponses: ["retryable", "success"] });
+    const batchId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.activityPayloads.length).toBeGreaterThan(0);
+    await page.evaluate(async ({ batchId }) => {
+      await window.growthLoop.importLegacyPoints({
+        request_id: batchId,
+        entries: [{
+          occurred_on: "2026-08-01",
+          delta: 2,
+          item_name_snapshot: "一起做家务",
+          note: "旧积分记录",
+        }],
+      });
+      window.cloudSync.scheduleGrowthLoop();
+    }, { batchId });
+
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(1);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(2);
+    expect(api.legacyImportPayloads[1]).toEqual(api.legacyImportPayloads[0]);
+    expect(api.legacyImportPayloads[1]).toEqual(expect.objectContaining({
+      p_profile_id: PROFILE_ID,
+      p_request_id: batchId,
+      p_entries: [expect.objectContaining({ delta: 2 })],
+    }));
+    expect(api.legacyImportPayloads[1].p_entries[0].request_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   test("creates only one household after rapid repeated setup clicks", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { noMembership: true, householdCreateDelayMs: 500 });
