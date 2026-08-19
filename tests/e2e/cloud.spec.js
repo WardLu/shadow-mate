@@ -297,12 +297,12 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
     await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
 
     await page.goto("/");
     await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
-    await page.clock.pauseAt(await page.evaluate(() => Date.now()));
     const requestsBeforeOnline = api.getGrowthPointItemsRequests();
 
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
