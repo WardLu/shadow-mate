@@ -104,7 +104,7 @@
       "runner": "npm-script",
       "working_directory": ".",
       "port": 5173,
-      "args": ["run", "dev"]
+      "args": ["run", "dev", "--", "--host", "127.0.0.1"]
     }
   ],
   "optional_features": [
