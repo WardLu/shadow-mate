@@ -144,7 +144,7 @@ const PROFILE_SCOPE_BLOCKED_KEY = "shadow_mate_profile_scope_blocked";
 const growthLoopDb = createIndexedDbLearningDb();
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
-  canWrite: () => sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+  canWrite: () => localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
     && window.cloudSync?.canWriteLocalState?.() !== false,
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
@@ -181,7 +181,7 @@ function learningStateFromEnvelope(envelope) {
 }
 
 function learningStateReadStorage() {
-  if (sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") return localStorage;
+  if (localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") return localStorage;
   // Storage migration helpers are intentionally read-only while a prior
   // profile operation is fail-closed, including during a same-tab reload.
   return {
@@ -208,7 +208,7 @@ function canWriteLearningState({ allowScopeTransition = false } = {}) {
   const cloudWriteCheck = allowScopeTransition
     ? window.cloudSync?.canWriteScopeTransition?.()
     : window.cloudSync?.canWriteLocalState?.();
-  return sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+  return localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
     && cloudWriteCheck !== false;
 }
 

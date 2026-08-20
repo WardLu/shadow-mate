@@ -40,6 +40,15 @@ const supabase = cloudEnabled
   : null;
 const growthLoopTransport = cloudEnabled ? createGrowthLoopTransport({ client: supabase }) : null;
 
+function readProfileScopeBlock() {
+  const blocked = localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
+    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+  if (blocked && localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  }
+  return blocked;
+}
+
 let session = null;
 let memberships = [];
 let profiles = [];
@@ -53,7 +62,7 @@ let saveTimer = null;
 let saveInFlight = false;
 let saveQueued = null;
 let cloudSyncBlocked = false;
-let profileScopeWriteBlocked = sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+let profileScopeWriteBlocked = readProfileScopeBlock();
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
@@ -130,7 +139,7 @@ function sameProfileScope(left = {}, right = {}) {
 
 function failClosedProfileScope() {
   profileScopeWriteBlocked = true;
-  sessionStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   profileOperationGeneration += 1;
   clearTimeout(saveTimer);
   saveTimer = null;
@@ -413,6 +422,7 @@ async function clearLocalAccountState() {
     signOutError = error;
   }
   if (AUTH_STORAGE_KEY) sessionStorage.clear();
+  localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
   sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
   await window.growthLoop?.clearAllLocalData?.();
@@ -832,6 +842,7 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录。此操作不可撤销，是否继续？");
     if (!confirmed) return;
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
     await window.growthLoop?.clearAllLocalData?.();
     window.learningDesk.clearLocalData();
   };
@@ -1787,8 +1798,7 @@ async function onAuthChange(nextSession, event = "") {
   const changeVersion = ++authChangeVersion;
   profileOperationGeneration += 1;
   resetGrowthLoopRemoteRetry();
-  const existingScopeBlock = profileScopeWriteBlocked
-    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+  const existingScopeBlock = profileScopeWriteBlocked || readProfileScopeBlock();
   session = nextSession;
   memberships = [];
   profiles = [];
@@ -1797,7 +1807,7 @@ async function onAuthChange(nextSession, event = "") {
   lastSyncAt = null;
   cloudSyncBlocked = false;
   profileScopeWriteBlocked = existingScopeBlock;
-  if (profileScopeWriteBlocked) sessionStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  if (profileScopeWriteBlocked) localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   if (!session) {
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;

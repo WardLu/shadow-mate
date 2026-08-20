@@ -44,8 +44,11 @@ async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
   const projectRef = new URL(configuredUrl).hostname.split(".")[0];
   await page.addInitScript(({ projectRef, userId }) => {
-    localStorage.clear();
-    sessionStorage.clear();
+    if (window.name !== "shadow-mate-e2e-seeded") {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.name = "shadow-mate-e2e-seeded";
+    }
     const now = Math.floor(Date.now() / 1000);
     sessionStorage.setItem(
       `sb-${projectRef}-auth-token`,
