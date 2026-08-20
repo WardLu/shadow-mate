@@ -139,7 +139,11 @@ function sameProfileScope(left = {}, right = {}) {
 
 function failClosedProfileScope() {
   profileScopeWriteBlocked = true;
-  localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  try {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  } catch (error) {
+    console.warn("Unable to persist the profile scope block:", error);
+  }
   profileOperationGeneration += 1;
   clearTimeout(saveTimer);
   saveTimer = null;
@@ -150,7 +154,7 @@ function failClosedProfileScope() {
   cloudSyncBlocked = true;
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
   setAccountState();
-  showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请退出登录后重试。", 7000);
+  showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请在账号面板点击“清除本机数据”后重试。", 7000);
 }
 
 async function restoreScopeWithCas({ name, getScope, restoreScope, previousScope, targetScope }) {
@@ -414,6 +418,13 @@ function guardianConsentPayload(householdId) {
 async function clearLocalAccountState() {
   profileOperationGeneration += 1;
   resetGrowthLoopRemoteRetry();
+  profileScopeWriteBlocked = true;
+  cloudSyncBlocked = true;
+  try {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  } catch (error) {
+    console.warn("Unable to persist the profile scope block before cleanup:", error);
+  }
   let signOutError = null;
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
@@ -421,12 +432,36 @@ async function clearLocalAccountState() {
   } catch (error) {
     signOutError = error;
   }
-  if (AUTH_STORAGE_KEY) sessionStorage.clear();
-  localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
-  sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
-  localStorage.removeItem(ACTIVE_PROFILE_KEY);
-  await window.growthLoop?.clearAllLocalData?.();
-  window.learningDesk.clearLocalData({ reload: false });
+  try {
+    if (AUTH_STORAGE_KEY) sessionStorage.clear();
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    await window.growthLoop?.clearAllLocalData?.();
+    window.learningDesk.clearLocalData({ reload: false });
+  } catch (error) {
+    profileScopeWriteBlocked = true;
+    cloudSyncBlocked = true;
+    try {
+      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+    } catch (markerError) {
+      console.warn("Unable to persist the profile scope block after cleanup failure:", markerError);
+    }
+    setAccountState();
+    throw error;
+  }
+  try {
+    localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
+    sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
+  } catch (error) {
+    profileScopeWriteBlocked = true;
+    cloudSyncBlocked = true;
+    try {
+      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+    } catch (markerError) {
+      console.warn("Unable to restore the profile scope block:", markerError);
+    }
+    setAccountState();
+    throw error;
+  }
   session = null;
   memberships = [];
   profiles = [];
@@ -440,7 +475,15 @@ async function clearLocalAccountState() {
 
 async function completeLocalAccountReset(successMessage) {
   localResetInProgress = true;
-  const signOutError = await clearLocalAccountState();
+  let signOutError;
+  try {
+    signOutError = await clearLocalAccountState();
+  } catch (error) {
+    localResetInProgress = false;
+    console.warn("Local account cleanup failed; fail-closed protection remains:", error);
+    showToast("本机数据清理未完成，保护模式仍保持；请重试。", 7000);
+    return false;
+  }
   closeDialog();
   showToast(
     signOutError
@@ -841,10 +884,9 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
   panel.querySelector("[data-clear-local]").onclick = async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录。此操作不可撤销，是否继续？");
     if (!confirmed) return;
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
-    await window.growthLoop?.clearAllLocalData?.();
-    window.learningDesk.clearLocalData();
+    await runLockedAction(panel.querySelector("[data-clear-local]"), () => (
+      completeLocalAccountReset("本机数据已清除")
+    ), { busyText: "正在清除…" });
   };
   panel.querySelector("[data-toggle-login-password]")?.addEventListener("click", (event) => {
     const input = panel.querySelector("[name=password]");

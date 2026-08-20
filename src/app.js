@@ -146,6 +146,8 @@ const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
   canWrite: () => localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
     && window.cloudSync?.canWriteLocalState?.() !== false,
+  canTransition: () => localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+    && window.cloudSync?.canWriteScopeTransition?.() !== false,
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";

@@ -13,10 +13,12 @@ function createOperationId() {
 
 function createOperationContext(scopeKey, canCommit, suppliedContext = null) {
   const guard = suppliedContext?.canCommit || canCommit;
+  const signal = suppliedContext?.signal || null;
   const context = {
     scope_key: suppliedContext?.scope_key || scopeKey,
     operation_id: suppliedContext?.operation_id || createOperationId(),
-    canCommit: () => guard() !== false,
+    canCommit: () => !signal?.aborted && guard() !== false,
+    signal,
   };
   return Object.freeze(context);
 }
@@ -104,12 +106,14 @@ export function createOutboxSync({
         now: now(),
         lease_ms: leaseMs,
         canCommit,
+        signal: operationContext.signal,
       });
       if (db.claimOutbox && !claimed) continue;
 
       let lease = claimed;
-      if (db.claimOutbox && claimed === true) {
-        lease = await db.getOutbox?.(event.event_id);
+      if (db.claimOutbox) {
+        const rereadLease = await db.getOutbox?.(event.event_id);
+        if (rereadLease) lease = rereadLease;
       }
       if (db.claimOutbox && !claimMatches(lease, {
         eventId: event.event_id,
@@ -148,8 +152,16 @@ export function createOutboxSync({
         return { ...report, skipped: true, reason: "stale_profile_scope" };
       }
       const status = result?.status || "retryable";
+      const expectedClaim = db.claimOutbox
+        ? {
+            worker_id: workerId,
+            operation_id: operationContext.operation_id,
+            lease_id: lease.lease_id,
+            now: now(),
+          }
+        : undefined;
       if (status === "confirmed" || status === "duplicate") {
-        await db.updateOutbox(event.event_id, {
+        const updated = await db.updateOutbox(event.event_id, {
           status: "confirmed",
           confirmed_at: new Date(now()).toISOString(),
           error_code: null,
@@ -159,7 +171,14 @@ export function createOutboxSync({
           lease_until: 0,
           lease_id: null,
           operation_id: null,
-        }, { canCommit });
+        }, {
+          canCommit,
+          signal: operationContext.signal,
+          expectedClaim,
+        });
+        if (updated === null || updated === false) {
+          return { ...report, skipped: true, reason: "stale_profile_scope" };
+        }
         if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
         await onConfirmed(claimedEvent, result);
         report[status] += 1;
@@ -169,7 +188,7 @@ export function createOutboxSync({
       if (status === "retryable") {
         const attempts = Number(event.attempts || 0) + 1;
         const retryAt = now() + retryDelay(attempts, retryBaseMs, jitter, random);
-        await db.updateOutbox(event.event_id, {
+        const updated = await db.updateOutbox(event.event_id, {
           status: "retryable",
           attempts,
           next_attempt_at: retryAt,
@@ -179,7 +198,14 @@ export function createOutboxSync({
           lease_until: 0,
           lease_id: null,
           operation_id: null,
-        }, { canCommit });
+        }, {
+          canCommit,
+          signal: operationContext.signal,
+          expectedClaim,
+        });
+        if (updated === null || updated === false) {
+          return { ...report, skipped: true, reason: "stale_profile_scope" };
+        }
         if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
         await onRetryable(claimedEvent, { ...result, status: "retryable" });
         report.retryable += 1;
@@ -188,7 +214,7 @@ export function createOutboxSync({
         break;
       }
       const terminalStatus = status === "conflict" ? "conflict" : "rejected";
-      await db.updateOutbox(event.event_id, {
+      const updated = await db.updateOutbox(event.event_id, {
         status: terminalStatus,
         error_code: result?.error_code || `${terminalStatus}_error`,
         error_message: result?.error_message || null,
@@ -196,7 +222,14 @@ export function createOutboxSync({
         lease_until: 0,
         lease_id: null,
         operation_id: null,
-      }, { canCommit });
+      }, {
+        canCommit,
+        signal: operationContext.signal,
+        expectedClaim,
+      });
+      if (updated === null || updated === false) {
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
+      }
       if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
       await onRejected(claimedEvent, { ...result, status: terminalStatus });
       report[terminalStatus] += 1;

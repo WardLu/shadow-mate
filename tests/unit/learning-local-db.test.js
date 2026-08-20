@@ -128,6 +128,29 @@ describe("local Growth Loop database", () => {
     }));
   });
 
+  it("does not replace a live lease with a new operation from the same worker", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+
+    const first = await db.claimOutbox("event-1", {
+      worker_id: "worker-a",
+      operation_id: "operation-a",
+      now: 1000,
+      lease_ms: 5000,
+    });
+    await expect(db.claimOutbox("event-1", {
+      worker_id: "worker-a",
+      operation_id: "operation-b",
+      now: 1000,
+      lease_ms: 5000,
+    })).resolves.toBe(false);
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      processing_by: "worker-a",
+      operation_id: "operation-a",
+      lease_id: first.lease_id,
+    }));
+  });
+
   it("moves pending local records and outbox events into the authenticated scope", async () => {
     const db = createMemoryLearningDb();
     await db.putSnapshot("pending:pending", { scope: { household_id: null, profile_id: null }, value: 1 });
@@ -249,6 +272,64 @@ describe("local Growth Loop database", () => {
       "household-1:profile-1",
       { scope: { household_id: "household-1", profile_id: "profile-1" } },
       { canCommit: () => current },
+    )).rejects.toMatchObject({ code: "profile_scope_write_stale" });
+    expect(requestSucceeded).toBe(true);
+    expect(transactionCompleted).toBe(false);
+    await expect(db.getSnapshot("household-1:profile-1")).resolves.toBeNull();
+  });
+
+  it("aborts when an operation signal fires in the microtask before transaction complete", async () => {
+    const snapshots = new Map();
+    const operation = new AbortController();
+    let requestSucceeded = false;
+    let transactionCompleted = false;
+    const database = {
+      transaction(storeNames, mode) {
+        expect(storeNames).toEqual(["snapshots"]);
+        const transaction = {
+          error: null,
+          objectStore(storeName) {
+            expect(storeName).toBe("snapshots");
+            return {
+              put(row) {
+                snapshots.set(row.scope_key, row);
+                const request = {};
+                queueMicrotask(() => {
+                  request.result = row;
+                  requestSucceeded = true;
+                  request.onsuccess?.();
+                  queueMicrotask(() => operation.abort());
+                  queueMicrotask(() => {
+                    if (transaction.aborted) return;
+                    transactionCompleted = true;
+                    transaction.oncomplete?.();
+                  });
+                });
+                transaction.abort = () => {
+                  if (transaction.aborted) return;
+                  transaction.aborted = true;
+                  snapshots.delete(row.scope_key);
+                  transaction.error = new Error("indexeddb_transaction_aborted");
+                  transaction.onabort?.();
+                };
+                return request;
+              },
+              get(scopeKey) {
+                return requestThatResolves(snapshots.get(scopeKey));
+              },
+            };
+          },
+        };
+        return transaction;
+      },
+    };
+    const indexedDB = { open: () => requestThatResolves(database) };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.putSnapshot(
+      "household-1:profile-1",
+      { scope: { household_id: "household-1", profile_id: "profile-1" } },
+      { canCommit: () => true, signal: operation.signal },
     )).rejects.toMatchObject({ code: "profile_scope_write_stale" });
     expect(requestSucceeded).toBe(true);
     expect(transactionCompleted).toBe(false);

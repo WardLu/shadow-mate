@@ -144,6 +144,77 @@ describe("Growth Loop outbox sync", () => {
     await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
   });
 
+  it("does not send the same event twice when concurrent operations share one worker", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    let sends = 0;
+    const transport = {
+      send: vi.fn(async () => {
+        sends += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return { status: "confirmed", data: { id: "remote-1" } };
+      }),
+    };
+    const createSync = () => createOutboxSync({
+      db,
+      transport,
+      workerId: "same-worker",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    const [first, second] = await Promise.all([
+      createSync().syncScope("h:p"),
+      createSync().syncScope("h:p"),
+    ]);
+
+    expect(sends).toBe(1);
+    expect(first.confirmed + second.confirmed).toBe(1);
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+  });
+
+  it("re-reads the current lease immediately before sending", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    const originalGetOutbox = db.getOutbox.bind(db);
+    let replaced = false;
+    db.getOutbox = async (eventId) => {
+      const current = await originalGetOutbox(eventId);
+      if (!replaced && current?.processing_by === "worker-a") {
+        replaced = true;
+        await db.updateOutbox(eventId, {
+          processing_by: "worker-b",
+          operation_id: "operation-b",
+          lease_id: "lease-b",
+          lease_until: 6000,
+        });
+      }
+      return originalGetOutbox(eventId);
+    };
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "worker-a",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(
+      expect.objectContaining({ confirmed: 0, pending: 1 }),
+    );
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      processing_by: "worker-b",
+      operation_id: "operation-b",
+      lease_id: "lease-b",
+    }));
+  });
+
   it("does not send after the immutable operation becomes stale immediately after claim", async () => {
     const db = createMemoryLearningDb();
     await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });

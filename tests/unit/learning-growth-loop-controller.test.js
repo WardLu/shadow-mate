@@ -3,6 +3,24 @@ import { createMemoryLearningDb } from "../../src/learning-local-db.js";
 import { createGrowthLoopController } from "../../src/learning-growth-loop-controller.js";
 
 describe("Growth Loop controller scope adoption", () => {
+  it("does not hydrate or create a local snapshot while the global write guard is blocked", async () => {
+    const db = createMemoryLearningDb();
+    let writes = 0;
+    const putSnapshot = db.putSnapshot.bind(db);
+    db.putSnapshot = async (...args) => {
+      writes += 1;
+      return putSnapshot(...args);
+    };
+    const controller = createGrowthLoopController({ db, canWrite: () => false });
+
+    await controller.hydrate();
+    await controller.loadScope({ household_id: "household-1", profile_id: "profile-1" });
+
+    expect(writes).toBe(0);
+    expect(await db.getSnapshot("pending:pending")).toBeNull();
+    expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+  });
+
   it("does not move pending data when the database transaction becomes stale", async () => {
     const db = createMemoryLearningDb();
     const controller = createGrowthLoopController({ db });

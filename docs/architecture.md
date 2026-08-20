@@ -164,7 +164,7 @@ erDiagram
 
 ## 6. 同步与冲突处理
 
-1. 所有操作先写 localStorage，保证离线体验。
+1. Learning Desk 操作先写 localStorage，Growth Loop 操作写入按家庭/学习者隔离的 IndexedDB，保证离线体验。
 2. 登录并选择学习者后，读取 `learning_profile_states`。
 3. 云端为空时，上传旧版本机状态。
 4. 两端都有数据时：
@@ -176,6 +176,13 @@ erDiagram
 7. 客户端重新读取、合并并最多重试 2 次，每次逐步退避；超过上限则触发熔断（`cloudSyncBlocked`），暂停自动同步，直到用户手动点击同步按钮重试。避免多标签页冲突风暴。
 
 这不是通用 CRDT，但足以覆盖家庭低并发、离线打卡场景；比“最后写入覆盖全部数据”安全。
+
+### 6.1 本机双存储、fail-closed 与事务租约
+
+- Learning Desk 的兼容状态位于 localStorage；Growth Loop 的快照、activity event 和 outbox 位于 IndexedDB，二者都必须经过当前 profile scope 的写入 guard。
+- fail-closed marker 使用 localStorage 持久化。重开页面、刷新、普通退出登录和 Auth session 变化都不会解除 marker；marker 存在时，hydrate/loadScope 只允许保持内存只读状态，不创建 IndexedDB readwrite transaction，也不迁移或写入 localStorage。只有账号面板明确执行本机清理且两种本机存储都清理成功后才移除 marker；失败时 marker 保持并允许重试。
+- 每个 IndexedDB readwrite transaction 都绑定当前 operation 的 `canCommit` 与可同步取消的 `AbortSignal`。request success 到 transaction complete 之间若 scope 失效或 operation 被取消，会立即 abort；这覆盖单个 microtask 内完成的 stale window，不能只依赖定时轮询。
+- outbox claim 由 `(worker_id, operation_id, lease_id)` 组成。有效 lease 期间同一 worker 的新 operation 也不能覆盖旧 claim；发送前必须从 IndexedDB 重读并验证完整 tuple 与 lease expiry，失效 claim 释放/跳过，不发送 cloud request。发送结果只能更新仍匹配该 tuple 的 outbox 行。
 
 ## 7. 内容策略
 

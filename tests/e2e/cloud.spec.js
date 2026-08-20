@@ -1105,15 +1105,52 @@ test.describe("Authenticated cloud workspace", () => {
 
     // A closed tab clears sessionStorage, but must not clear the fail-closed
     // marker. Only the explicit local-data cleanup flow may remove it.
+    await page.addInitScript(() => {
+      window.__readwriteLearningTransactions = 0;
+      window.__localStorageWrites = [];
+      const originalTransaction = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (...args) {
+        if (args[1] === "readwrite") window.__readwriteLearningTransactions += 1;
+        return originalTransaction.apply(this, args);
+      };
+      const originalSetItem = Storage.prototype.setItem;
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "setItem", key, value });
+        return originalSetItem.call(this, key, value);
+      };
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "removeItem", key });
+        return originalRemoveItem.call(this, key);
+      };
+    });
     await page.evaluate(() => sessionStorage.clear());
     await page.reload();
     await expect.poll(() => page.evaluate(() => ({
       blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
       marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
     }))).toEqual({ blocked: true, marker: "1" });
+    expect(await page.evaluate(() => window.__readwriteLearningTransactions)).toBe(0);
+    expect(await page.evaluate(() => window.__localStorageWrites.filter(({ key }) => (
+      key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")
+    )))).toEqual([]);
 
     page.once("dialog", (dialog) => dialog.accept());
     await page.click("#accountButton");
+    await page.evaluate(() => {
+      window.__originalClearAllLocalData = window.growthLoop.clearAllLocalData.bind(window.growthLoop);
+      window.growthLoop.clearAllLocalData = async () => {
+        throw new Error("injected_clear_failure");
+      };
+    });
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    await page.evaluate(() => {
+      window.growthLoop.clearAllLocalData = window.__originalClearAllLocalData;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
     await page.locator("[data-clear-local]").click();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
   });
