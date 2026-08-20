@@ -1155,6 +1155,71 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
   });
 
+  test("aborts the controller operation before a real IndexedDB transaction can commit a stale row", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+
+    const result = await page.evaluate(async () => {
+      await window.growthLoop.clearAllLocalData();
+      const originalPut = IDBObjectStore.prototype.put;
+      const originalSetInterval = window.setInterval;
+      const originalAbort = AbortController.prototype.abort;
+      let requestSucceeded = false;
+      let abortCount = 0;
+      window.setInterval = () => 0;
+      AbortController.prototype.abort = function (...args) {
+        abortCount += 1;
+        return originalAbort.apply(this, args);
+      };
+      IDBObjectStore.prototype.put = function (...args) {
+        const request = originalPut.apply(this, args);
+        if (this.name === "snapshots") {
+          request.addEventListener("success", () => queueMicrotask(() => {
+            requestSucceeded = true;
+            localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
+            window.growthLoop.invalidateWriteOperations?.();
+          }), { once: true });
+        }
+        return request;
+      };
+
+      try {
+        await window.growthLoop.recordPoint({
+          item: { id: "stale-item", name: "不应落盘", default_points: 1 },
+          occurred_on: "2026-08-20",
+          request_id: "stale-real-idb-row",
+        });
+      } finally {
+        IDBObjectStore.prototype.put = originalPut;
+        window.setInterval = originalSetInterval;
+        AbortController.prototype.abort = originalAbort;
+      }
+
+      const persisted = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("shadow-mate-learning-v1", 1);
+        request.onerror = () => reject(request.error || new Error("open_failed"));
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction(["snapshots"], "readonly");
+          const read = transaction.objectStore("snapshots").get("pending:pending");
+          read.onerror = () => reject(read.error || new Error("read_failed"));
+          read.onsuccess = () => {
+            resolve(read.result?.snapshot?.ledger?.some((entry) => entry.request_id === "stale-real-idb-row") || false);
+            database.close();
+          };
+        };
+      });
+      return { requestSucceeded, abortCount, persisted_row: persisted };
+    });
+
+    expect(result.requestSucceeded).toBe(true);
+    expect(result.abortCount).toBeGreaterThan(0);
+    expect(result.persisted_row).toBe(false);
+  });
+
   test("fails closed when Learning rollback fails after Growth rollback succeeds", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
@@ -1239,6 +1304,57 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.activityPayloads).toEqual([]);
     expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBeNull();
+  });
+
+  test("cleans every Learning Desk key and retains the marker when one deletion fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const envelope = JSON.stringify({ schema_version: 2, learning: {} });
+      localStorage.setItem("shadow_mate_workbench_v1", "legacy");
+      localStorage.setItem("shadow_mate_learning_v2:household-a:profile-a", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:household-b:profile-b", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:legacy_backup:test", "legacy-backup");
+    });
+
+    await page.click("#accountButton");
+    await expect(page.locator("[data-clear-local]")).toBeVisible();
+    await page.evaluate(() => {
+      window.__originalLearningRemoveItem = Storage.prototype.removeItem;
+      const blockedKey = "shadow_mate_learning_v2:household-b:profile-b";
+      Storage.prototype.removeItem = function (key) {
+        if (key === blockedKey) throw new Error("injected_learning_key_delete_failure");
+        return window.__originalLearningRemoveItem.call(this, key);
+      };
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    const failedCleanupKeys = await page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null));
+    expect(failedCleanupKeys).toContain("shadow_mate_learning_v2:household-b:profile-b");
+
+    await page.evaluate(() => {
+      Storage.prototype.removeItem = window.__originalLearningRemoveItem;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
+    await expect.poll(() => page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null))).toEqual([]);
   });
 
   test("does not let a delayed background refresh overwrite a newer learner", async ({ page }) => {
@@ -1459,6 +1575,61 @@ test.describe("Authenticated cloud workspace", () => {
 
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
   });
+});
+
+test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
+    window.__blockedStorageTrace = {
+      opens: 0,
+      versionchanges: 0,
+      readwrites: 0,
+      localWrites: [],
+    };
+    const originalOpen = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (...args) => {
+      window.__blockedStorageTrace.opens += 1;
+      const request = originalOpen(...args);
+      request.addEventListener("upgradeneeded", () => {
+        window.__blockedStorageTrace.versionchanges += 1;
+      });
+      return request;
+    };
+    const originalTransaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      if (args[1] === "readwrite") window.__blockedStorageTrace.readwrites += 1;
+      return originalTransaction.apply(this, args);
+    };
+    const originalSetItem = Storage.prototype.setItem;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "setItem", key, value });
+      }
+      return originalSetItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "removeItem", key });
+      }
+      return originalRemoveItem.call(this, key);
+    };
+  });
+  await page.goto("/");
+  await page.waitForTimeout(300);
+
+  await expect.poll(() => page.evaluate(() => window.__blockedStorageTrace)).toEqual({
+    opens: 0,
+    versionchanges: 0,
+    readwrites: 0,
+    localWrites: [],
+  });
+  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).filter(
+    ({ name }) => name === "shadow-mate-learning-v1",
+  ))).toEqual([]);
+  await context.close();
 });
 
 test.describe("Email OTP sign-in", () => {
