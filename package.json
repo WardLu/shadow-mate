@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "local-dev": "node scripts/start-local-dev.mjs",
     "build": "vite build",
     "check": "node scripts/check.mjs",
     "public:check": "node scripts/public-check.mjs",
