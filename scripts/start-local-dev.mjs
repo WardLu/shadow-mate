@@ -20,6 +20,7 @@ if (!fs.existsSync(cliPath)) {
 
 const result = spawnSync(process.execPath, [cliPath, ...process.argv.slice(2)], {
   cwd: runtimeRoot,
+  env: { ...process.env, LOCAL_DEV_ENTRY_PROJECT: 'shadow-mate' },
   stdio: 'inherit',
 })
 if (result.error) throw result.error
