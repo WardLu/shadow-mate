@@ -108,8 +108,18 @@ describe("local Growth Loop database", () => {
     const db = createMemoryLearningDb();
     await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
 
-    await expect(db.claimOutbox("event-1", { worker_id: "tab-a", now: 1000, lease_ms: 5000 }))
-      .resolves.toBe(true);
+    await expect(db.claimOutbox("event-1", {
+      worker_id: "tab-a",
+      operation_id: "operation-a",
+      now: 1000,
+      lease_ms: 5000,
+    })).resolves.toEqual(expect.objectContaining({
+      event_id: "event-1",
+      processing_by: "tab-a",
+      lease_until: 6000,
+      operation_id: "operation-a",
+      lease_id: expect.any(String),
+    }));
     await expect(db.claimOutbox("event-1", { worker_id: "tab-b", now: 1000, lease_ms: 5000 }))
       .resolves.toBe(false);
     await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({

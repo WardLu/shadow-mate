@@ -3,6 +3,7 @@ export const LEARNING_LOCAL_DB_VERSION = 1;
 
 const OUTBOX_STATUSES = new Set(["pending", "retryable", "conflict", "rejected", "confirmed"]);
 const STALE_WRITE_ERROR_CODE = "profile_scope_write_stale";
+const transactionStaleErrors = new WeakMap();
 
 function clone(value) {
   return value === undefined ? undefined : structuredClone(value);
@@ -12,17 +13,37 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function throwIfStale(canCommit, transaction = null) {
-  if (canCommit && !canCommit()) {
-    try {
-      transaction?.abort?.();
-    } catch (_) {
-      // The transaction may already be completing; the stale write remains rejected.
-    }
-    const error = new Error("profile_scope_write_stale");
-    error.code = STALE_WRITE_ERROR_CODE;
-    throw error;
+function createLeaseId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `lease-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function staleWriteError() {
+  const error = new Error("profile_scope_write_stale");
+  error.code = STALE_WRITE_ERROR_CODE;
+  return error;
+}
+
+function abortStaleTransaction(transaction) {
+  const error = staleWriteError();
+  if (transaction) transactionStaleErrors.set(transaction, error);
+  try {
+    transaction?.abort?.();
+  } catch (_) {
+    // The transaction may already be completing; the stale write remains rejected.
   }
+  return error;
+}
+
+function throwIfStale(canCommit, transaction = null) {
+  if (canCommit && !canCommit()) throw abortStaleTransaction(transaction);
+}
+
+function watchWriteRequest(request, transaction, canCommit) {
+  if (!request || !canCommit) return;
+  request.onsuccess = () => {
+    if (!canCommit()) abortStaleTransaction(transaction);
+  };
 }
 
 function normalizeOutboxEvent(event, sequence) {
@@ -41,6 +62,8 @@ function normalizeOutboxEvent(event, sequence) {
     error_message: event.error_message || null,
     processing_by: event.processing_by || null,
     lease_until: Number(event.lease_until || 0),
+    lease_id: event.lease_id || null,
+    operation_id: event.operation_id || null,
   };
 }
 
@@ -52,6 +75,8 @@ function rehomeOutboxEvent(event, scopeKey, scope) {
     profile_id: scope.profile_id,
     processing_by: null,
     lease_until: 0,
+    lease_id: null,
+    operation_id: null,
   }, event.sequence);
   const payload = next.payload && typeof next.payload === "object" ? clone(next.payload) : null;
   if (payload) {
@@ -130,7 +155,13 @@ function makeMemoryStore() {
       outbox.set(eventId, next);
       return clone(next);
     },
-    async claimOutbox(eventId, { worker_id, now = Date.now(), lease_ms = 30_000, canCommit } = {}) {
+    async claimOutbox(eventId, {
+      worker_id,
+      operation_id = null,
+      now = Date.now(),
+      lease_ms = 30_000,
+      canCommit,
+    } = {}) {
       throwIfStale(canCommit);
       const current = outbox.get(eventId);
       if (!current || !worker_id) return false;
@@ -142,6 +173,23 @@ function makeMemoryStore() {
         ...current,
         processing_by: worker_id,
         lease_until: Number(now) + Number(lease_ms),
+        lease_id: createLeaseId(),
+        operation_id,
+      }, current.sequence);
+      outbox.set(eventId, next);
+      return clone(next);
+    },
+    async releaseOutboxClaim(eventId, { worker_id, lease_id, operation_id } = {}) {
+      const current = outbox.get(eventId);
+      if (!current || current.processing_by !== worker_id) return false;
+      if (lease_id && current.lease_id !== lease_id) return false;
+      if (operation_id && current.operation_id !== operation_id) return false;
+      const next = normalizeOutboxEvent({
+        ...current,
+        processing_by: null,
+        lease_until: 0,
+        lease_id: null,
+        operation_id: null,
       }, current.sequence);
       outbox.set(eventId, next);
       return true;
@@ -291,11 +339,33 @@ function requestPromise(request) {
   });
 }
 
-function transactionPromise(transaction) {
+function transactionPromise(transaction, { canCommit } = {}) {
   return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error || new Error("indexeddb_transaction_failed"));
-    transaction.onabort = () => reject(transaction.error || new Error("indexeddb_transaction_aborted"));
+    let settled = false;
+    let monitor = null;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      if (monitor) clearInterval(monitor);
+      callback(value);
+    };
+    const checkStale = () => {
+      if (settled || !canCommit || canCommit()) return;
+      finish(reject, abortStaleTransaction(transaction));
+    };
+    transaction.oncomplete = () => finish(resolve);
+    transaction.onerror = () => finish(
+      reject,
+      transactionStaleErrors.get(transaction) || transaction.error || new Error("indexeddb_transaction_failed"),
+    );
+    transaction.onabort = () => finish(
+      reject,
+      transactionStaleErrors.get(transaction) || transaction.error || new Error("indexeddb_transaction_aborted"),
+    );
+    if (canCommit) {
+      monitor = setInterval(checkStale, 1);
+      queueMicrotask(checkStale);
+    }
   });
 }
 
@@ -385,9 +455,13 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
         const transaction = database.transaction(["snapshots"], "readwrite");
         const store = transaction.objectStore("snapshots");
         throwIfStale(canCommit, transaction);
-        store.put({ scope_key: scopeKey, snapshot: clone(snapshot), updated_at: nowIso() });
+        watchWriteRequest(
+          store.put({ scope_key: scopeKey, snapshot: clone(snapshot), updated_at: nowIso() }),
+          transaction,
+          canCommit,
+        );
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return clone(snapshot);
       });
     },
@@ -411,9 +485,9 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
           .reduce((max, item) => Math.max(max, Number(item.sequence || 0)), 0) + 1;
         const normalized = normalizeOutboxEvent(event, nextSequence);
         throwIfStale(canCommit, transaction);
-        store.put(normalized);
+        watchWriteRequest(store.put(normalized), transaction, canCommit);
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return clone(normalized);
       });
     },
@@ -451,16 +525,24 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
         const next = normalizeOutboxEvent({ ...current, ...clone(patch), updated_at: nowIso() }, current.sequence);
         if (!OUTBOX_STATUSES.has(next.status)) throw new Error("outbox_status_invalid");
         throwIfStale(canCommit);
-        store.put(next);
+        watchWriteRequest(store.put(next), transaction, canCommit);
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return clone(next);
       });
     },
-    async claimOutbox(eventId, { worker_id, now = Date.now(), lease_ms = 30_000, canCommit } = {}) {
+    async claimOutbox(eventId, {
+      worker_id,
+      operation_id = null,
+      now = Date.now(),
+      lease_ms = 30_000,
+      canCommit,
+    } = {}) {
       if (!worker_id) return false;
       return useDatabase(async (database) => {
-        if (database.kind === "memory") return database.claimOutbox(eventId, { worker_id, now, lease_ms, canCommit });
+        if (database.kind === "memory") {
+          return database.claimOutbox(eventId, { worker_id, operation_id, now, lease_ms, canCommit });
+        }
         const transaction = database.transaction(["outbox"], "readwrite");
         const store = transaction.objectStore("outbox");
         const current = await requestPromise(store.get(eventId));
@@ -473,12 +555,47 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
           && current.processing_by !== worker_id;
         if (activeLease || !["pending", "retryable"].includes(current.status)) return false;
         throwIfStale(canCommit);
-        store.put(normalizeOutboxEvent({
+        const next = normalizeOutboxEvent({
           ...current,
           processing_by: worker_id,
           lease_until: Number(now) + Number(lease_ms),
-        }, current.sequence));
+          lease_id: createLeaseId(),
+          operation_id,
+        }, current.sequence);
+        watchWriteRequest(store.put(next), transaction, canCommit);
         throwIfStale(canCommit, transaction);
+        await transactionPromise(transaction, { canCommit });
+        return clone(next);
+      });
+    },
+    async releaseOutboxClaim(eventId, { worker_id, lease_id, operation_id } = {}) {
+      return useDatabase(async (database) => {
+        if (database.kind === "memory") {
+          return database.releaseOutboxClaim(eventId, { worker_id, lease_id, operation_id });
+        }
+        const transaction = database.transaction(["outbox"], "readwrite");
+        const store = transaction.objectStore("outbox");
+        const current = await requestPromise(store.get(eventId));
+        if (!current || current.processing_by !== worker_id) {
+          await transactionPromise(transaction);
+          return false;
+        }
+        if (lease_id && current.lease_id !== lease_id) {
+          await transactionPromise(transaction);
+          return false;
+        }
+        if (operation_id && current.operation_id !== operation_id) {
+          await transactionPromise(transaction);
+          return false;
+        }
+        const released = normalizeOutboxEvent({
+          ...current,
+          processing_by: null,
+          lease_until: 0,
+          lease_id: null,
+          operation_id: null,
+        }, current.sequence);
+        store.put(released);
         await transactionPromise(transaction);
         return true;
       });
@@ -491,10 +608,10 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
         const existing = await requestPromise(store.get(event.event_id));
         if (!existing) {
           throwIfStale(canCommit);
-          store.put(clone(event));
+          watchWriteRequest(store.put(clone(event)), transaction, canCommit);
           throwIfStale(canCommit, transaction);
         }
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return clone(existing || event);
       });
     },
@@ -514,14 +631,18 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
           if (existingIds.has(event.event_id)) continue;
           throwIfStale(canCommit, transaction);
           sequence += 1;
-          outboxStore.put(normalizeOutboxEvent(event, sequence));
+          watchWriteRequest(outboxStore.put(normalizeOutboxEvent(event, sequence)), transaction, canCommit);
           existingIds.add(event.event_id);
           throwIfStale(canCommit, transaction);
         }
         throwIfStale(canCommit, transaction);
-        snapshotsStore.put({ scope_key: scopeKey, snapshot: clone(snapshot), updated_at: nowIso() });
+        watchWriteRequest(
+          snapshotsStore.put({ scope_key: scopeKey, snapshot: clone(snapshot), updated_at: nowIso() }),
+          transaction,
+          canCommit,
+        );
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return true;
       });
     },
@@ -538,7 +659,7 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
         throwIfStale(canCommit);
         if (!existingActivity) {
           throwIfStale(canCommit, transaction);
-          activityStore.put(clone(event));
+          watchWriteRequest(activityStore.put(clone(event)), transaction, canCommit);
           throwIfStale(canCommit, transaction);
         }
         if (!outboxRows.some((item) => item.event_id === outboxEvent.event_id)) {
@@ -547,11 +668,11 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
             .filter((item) => item.scope_key === scopeKey)
             .reduce((max, item) => Math.max(max, Number(item.sequence || 0)), 0) + 1;
           throwIfStale(canCommit, transaction);
-          outboxStore.put(normalizeOutboxEvent(outboxEvent, sequence));
+          watchWriteRequest(outboxStore.put(normalizeOutboxEvent(outboxEvent, sequence)), transaction, canCommit);
           throwIfStale(canCommit, transaction);
         }
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return true;
       });
     },
@@ -614,26 +735,30 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
           sequence += 1;
           const next = rehomeOutboxEvent(event, toScopeKey, scope);
           next.sequence = sequence;
-          outboxStore.put(next);
+          watchWriteRequest(outboxStore.put(next), transaction, canCommit);
           throwIfStale(canCommit, transaction);
         }
         for (const event of activityRows.filter((item) => item.scope_key === fromScopeKey)) {
           throwIfStale(canCommit, transaction);
           activityStore.delete(event.event_id);
-          activityStore.put({
+          watchWriteRequest(activityStore.put({
             ...clone(event),
             scope_key: toScopeKey,
             household_id: scope.household_id,
             profile_id: scope.profile_id,
-          });
+          }), transaction, canCommit);
           throwIfStale(canCommit, transaction);
         }
         if (targetSnapshot !== undefined) {
           throwIfStale(canCommit, transaction);
-          snapshotsStore.put({ scope_key: toScopeKey, snapshot: clone(targetSnapshot), updated_at: nowIso() });
+          watchWriteRequest(
+            snapshotsStore.put({ scope_key: toScopeKey, snapshot: clone(targetSnapshot), updated_at: nowIso() }),
+            transaction,
+            canCommit,
+          );
         }
         throwIfStale(canCommit, transaction);
-        await transactionPromise(transaction);
+        await transactionPromise(transaction, { canCommit });
         return clone(snapshot || null);
       });
     },

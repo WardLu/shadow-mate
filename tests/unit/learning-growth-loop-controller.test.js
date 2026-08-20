@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryLearningDb } from "../../src/learning-local-db.js";
 import { createGrowthLoopController } from "../../src/learning-growth-loop-controller.js";
 
@@ -141,6 +141,39 @@ describe("Growth Loop controller scope adoption", () => {
     expect(snapshotWrites).toBe(0);
     expect(controller.getScope()).toEqual({ household_id: null, profile_id: null });
     expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+  });
+
+  it("does not send a claimed event after a newer scope replaces its operation guard", async () => {
+    const db = createMemoryLearningDb();
+    const controller = createGrowthLoopController({ db });
+    const firstScope = { household_id: "household-1", profile_id: "profile-1" };
+    const secondScope = { household_id: "household-1", profile_id: "profile-2" };
+    await controller.loadScope(firstScope);
+    await controller.recordPoint({
+      item: { id: "item-1", name: "整理玩具", default_points: 2 },
+      occurred_on: "2026-08-14",
+      request_id: "request-1",
+    });
+
+    const claimOutbox = db.claimOutbox.bind(db);
+    db.claimOutbox = async (...args) => {
+      const claimed = await claimOutbox(...args);
+      await controller.loadScope(secondScope);
+      return claimed;
+    };
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+
+    await expect(controller.sync({ transport: { send } })).resolves.toEqual(
+      expect.objectContaining({ skipped: true, reason: "stale_profile_scope" }),
+    );
+    expect(send).not.toHaveBeenCalled();
+    expect(controller.getScope()).toEqual(secondScope);
+    await expect(db.getOutbox("request-1")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      processing_by: null,
+      lease_id: null,
+      operation_id: null,
+    }));
   });
 
   it("rebinds pending local actions before the first cloud sync", async () => {

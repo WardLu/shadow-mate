@@ -168,5 +168,12 @@ describe("Growth Loop outbox sync", () => {
       expect.objectContaining({ skipped: true, reason: "stale_profile_scope" }),
     );
     expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      processing_by: null,
+      lease_until: 0,
+      lease_id: null,
+      operation_id: null,
+    }));
   });
 });

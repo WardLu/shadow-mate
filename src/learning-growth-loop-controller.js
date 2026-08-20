@@ -78,7 +78,11 @@ export function createGrowthLoopController({ db, canWrite = () => true } = {}) {
   }
 
   function currentWriteGuard() {
-    return () => isWriteAllowed();
+    const operationScopeKey = scopeKey;
+    const operationGuard = scopeWriteGuard;
+    return () => canWrite() !== false
+      && scopeKey === operationScopeKey
+      && (!operationGuard || operationGuard() !== false);
   }
 
   function isStaleWrite(error) {
@@ -376,6 +380,11 @@ export function createGrowthLoopController({ db, canWrite = () => true } = {}) {
   async function sync({ transport, limit = 100 } = {}) {
     if (!transport || !isWriteAllowed()) return { skipped: true, reason: "cloud_unavailable" };
     const canCommit = currentWriteGuard();
+    const operationContext = Object.freeze({
+      scope_key: scopeKey,
+      operation_id: createId(),
+      canCommit,
+    });
     const syncEngine = createOutboxSync({
       db,
       transport,
@@ -385,7 +394,7 @@ export function createGrowthLoopController({ db, canWrite = () => true } = {}) {
     });
     let report;
     try {
-      report = await syncEngine.syncScope(scopeKey, { limit, canCommit });
+      report = await syncEngine.syncScope(scopeKey, { limit, canCommit, operationContext });
     } catch (error) {
       if (isStaleWrite(error)) return { skipped: true, reason: "stale_profile_scope" };
       throw error;

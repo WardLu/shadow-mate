@@ -6,6 +6,34 @@ function createWorkerId() {
   return `growth-sync-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function createOperationId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `growth-operation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createOperationContext(scopeKey, canCommit, suppliedContext = null) {
+  const guard = suppliedContext?.canCommit || canCommit;
+  const context = {
+    scope_key: suppliedContext?.scope_key || scopeKey,
+    operation_id: suppliedContext?.operation_id || createOperationId(),
+    canCommit: () => guard() !== false,
+  };
+  return Object.freeze(context);
+}
+
+function claimMatches(claim, { eventId, scopeKey, workerId, operationContext, now }) {
+  return Boolean(
+    claim
+      && typeof claim === "object"
+      && claim.event_id === eventId
+      && claim.scope_key === scopeKey
+      && claim.processing_by === workerId
+      && claim.operation_id === operationContext.operation_id
+      && claim.lease_id
+      && Number(claim.lease_until || 0) > Number(now),
+  );
+}
+
 function retryDelay(attempts, base, jitter, random = Math.random) {
   const exponential = Math.min(MAX_RETRY_DELAY_MS, base * (2 ** Math.max(0, attempts - 1)));
   const spread = Math.max(0, Math.min(1, jitter));
@@ -30,7 +58,15 @@ export function createOutboxSync({
 
   async function syncScope(scopeKey, options = {}) {
     const limit = options.limit || 100;
-    const canCommit = options.canCommit || (() => true);
+    const operationContext = createOperationContext(
+      scopeKey,
+      options.canCommit || (() => true),
+      options.operationContext,
+    );
+    const canCommit = operationContext.canCommit;
+    if (operationContext.scope_key !== scopeKey) {
+      return { skipped: true, reason: "stale_profile_scope" };
+    }
     if (!canCommit()) return { skipped: true, reason: "stale_profile_scope" };
     const queuedEvents = await db.listOutbox(scopeKey, {
       statuses: ["pending", "retryable"],
@@ -64,16 +100,52 @@ export function createOutboxSync({
       if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
       const claimed = await db.claimOutbox?.(event.event_id, {
         worker_id: workerId,
+        operation_id: operationContext.operation_id,
         now: now(),
         lease_ms: leaseMs,
         canCommit,
       });
       if (db.claimOutbox && !claimed) continue;
+
+      let lease = claimed;
+      if (db.claimOutbox && claimed === true) {
+        lease = await db.getOutbox?.(event.event_id);
+      }
+      if (db.claimOutbox && !claimMatches(lease, {
+        eventId: event.event_id,
+        scopeKey,
+        workerId,
+        operationContext,
+        now: now(),
+      })) {
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+        continue;
+      }
+      if (!canCommit()) {
+        await db.releaseOutboxClaim?.(event.event_id, {
+          worker_id: workerId,
+          lease_id: lease?.lease_id,
+          operation_id: operationContext.operation_id,
+        });
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
+      }
+
+      const claimedEvent = lease && typeof lease === "object"
+        ? { ...event, ...lease }
+        : event;
       let result;
       try {
-        result = await transport.send(event);
+        result = await transport.send(claimedEvent, { operationContext, lease });
       } catch (error) {
         result = { status: "retryable", error_code: "network_error", error_message: error?.message || "network_error" };
+      }
+      if (!canCommit()) {
+        await db.releaseOutboxClaim?.(event.event_id, {
+          worker_id: workerId,
+          lease_id: lease?.lease_id,
+          operation_id: operationContext.operation_id,
+        });
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
       }
       const status = result?.status || "retryable";
       if (status === "confirmed" || status === "duplicate") {
@@ -85,9 +157,11 @@ export function createOutboxSync({
           response: result?.data || null,
           processing_by: null,
           lease_until: 0,
+          lease_id: null,
+          operation_id: null,
         }, { canCommit });
         if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
-        await onConfirmed(event, result);
+        await onConfirmed(claimedEvent, result);
         report[status] += 1;
         report.pending -= 1;
         continue;
@@ -103,9 +177,11 @@ export function createOutboxSync({
           error_message: result?.error_message || null,
           processing_by: null,
           lease_until: 0,
+          lease_id: null,
+          operation_id: null,
         }, { canCommit });
         if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
-        await onRetryable(event, { ...result, status: "retryable" });
+        await onRetryable(claimedEvent, { ...result, status: "retryable" });
         report.retryable += 1;
         report.blocked = true;
         report.next_attempt_at = retryAt;
@@ -118,9 +194,11 @@ export function createOutboxSync({
         error_message: result?.error_message || null,
         processing_by: null,
         lease_until: 0,
+        lease_id: null,
+        operation_id: null,
       }, { canCommit });
       if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
-      await onRejected(event, { ...result, status: terminalStatus });
+      await onRejected(claimedEvent, { ...result, status: terminalStatus });
       report[terminalStatus] += 1;
       report.pending -= 1;
       report.blocked = true;
