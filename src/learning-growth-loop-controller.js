@@ -65,54 +65,102 @@ function rebindSnapshotScope(input, scope) {
   return next;
 }
 
-export function createGrowthLoopController({ db } = {}) {
+export function createGrowthLoopController({ db, canWrite = () => true } = {}) {
   if (!db) throw new Error("growth_loop_local_db_required");
   let scope = { household_id: null, profile_id: null };
   let scopeKey = scopeKeyForGrowthLoop(scope);
   let snapshot = createGrowthLoopState(scope);
   const listeners = new Set();
+  let scopeWriteGuard = null;
+
+  function isWriteAllowed() {
+    return canWrite() !== false && (!scopeWriteGuard || scopeWriteGuard() !== false);
+  }
+
+  function currentWriteGuard() {
+    return () => isWriteAllowed();
+  }
+
+  function isStaleWrite(error) {
+    return error?.code === "profile_scope_write_stale";
+  }
 
   function notify() {
     const value = clone(snapshot);
     for (const listener of listeners) listener(value);
   }
 
-  async function persist(nextSnapshot, events = []) {
+  async function persist(nextSnapshot, events = [], { canCommit = isWriteAllowed } = {}) {
     // The local event and its outbox entry are durable before the projection
     // becomes visible to the UI. A failed local write must not look successful.
-    for (const event of events) await db.appendOutbox(event);
-    await db.putSnapshot(scopeKey, nextSnapshot);
+    if (!isWriteAllowed() || !canCommit()) return clone(snapshot);
+    try {
+      if (db.persistScope) {
+        const committed = await db.persistScope(scopeKey, nextSnapshot, events, { canCommit });
+        if (committed === false) return clone(snapshot);
+      } else {
+        for (const event of events) await db.appendOutbox(event, { canCommit });
+        await db.putSnapshot(scopeKey, nextSnapshot, { canCommit });
+      }
+    } catch (error) {
+      if (isStaleWrite(error)) return clone(snapshot);
+      throw error;
+    }
     snapshot = normalizeGrowthLoopState(nextSnapshot, scope);
     notify();
     return clone(snapshot);
   }
 
-  async function loadScope(nextScope = {}, { adoptPending = false } = {}) {
+  async function loadScope(nextScope = {}, { adoptPending = false, canCommit = () => true } = {}) {
     const normalizedScope = {
       household_id: nextScope.household_id ?? nextScope.householdId ?? null,
       profile_id: nextScope.profile_id ?? nextScope.profileId ?? null,
     };
     const nextScopeKey = scopeKeyForGrowthLoop(normalizedScope);
-    let nextSnapshot = await db.getSnapshot(nextScopeKey);
-    if (adoptPending && nextScopeKey !== "pending:pending") {
-      const pending = await db.getSnapshot("pending:pending");
-      if (pending) {
-        const reboundPending = rebindSnapshotScope(pending, normalizedScope);
-        await db.moveScope("pending:pending", nextScopeKey, normalizedScope);
-        nextSnapshot = nextSnapshot
-          ? mergeGrowthLoopSnapshot(nextSnapshot, reboundPending)
-          : reboundPending;
+    const previousWriteGuard = scopeWriteGuard;
+    scopeWriteGuard = canCommit;
+    let committed = false;
+    let nextSnapshot;
+    let pendingMovedWithSnapshot = false;
+    try {
+      nextSnapshot = await db.getSnapshot(nextScopeKey);
+      if (!canCommit()) return clone(snapshot);
+      if (adoptPending && nextScopeKey !== "pending:pending") {
+        const pending = await db.getSnapshot("pending:pending");
+        if (!canCommit()) return clone(snapshot);
+        if (pending) {
+          const reboundPending = rebindSnapshotScope(pending, normalizedScope);
+          if (!canCommit()) return clone(snapshot);
+          nextSnapshot = nextSnapshot
+            ? mergeGrowthLoopSnapshot(nextSnapshot, reboundPending)
+            : reboundPending;
+          await db.moveScope("pending:pending", nextScopeKey, normalizedScope, {
+            canCommit,
+            targetSnapshot: nextSnapshot,
+          });
+          pendingMovedWithSnapshot = true;
+        }
       }
+      if (!nextSnapshot) {
+        nextSnapshot = createGrowthLoopState(normalizedScope);
+      }
+      if (!canCommit()) return clone(snapshot);
+      if (!pendingMovedWithSnapshot) {
+        await db.putSnapshot(nextScopeKey, nextSnapshot, { canCommit });
+      }
+      if (!canCommit()) return clone(snapshot);
+      scope = normalizedScope;
+      scopeKey = nextScopeKey;
+      snapshot = normalizeGrowthLoopState(nextSnapshot, scope);
+      committed = true;
+      notify();
+      return clone(snapshot);
+    } catch (error) {
+      if (isStaleWrite(error)) return clone(snapshot);
+      throw error;
+    } finally {
+      if (!committed && scopeWriteGuard === canCommit) scopeWriteGuard = previousWriteGuard;
     }
-    if (!nextSnapshot) {
-      nextSnapshot = createGrowthLoopState(normalizedScope);
-    }
-    await db.putSnapshot(nextScopeKey, nextSnapshot);
-    scope = normalizedScope;
-    scopeKey = nextScopeKey;
-    snapshot = normalizeGrowthLoopState(nextSnapshot, scope);
-    notify();
-    return clone(snapshot);
   }
 
   async function hydrate() {
@@ -221,6 +269,8 @@ export function createGrowthLoopController({ db } = {}) {
   }
 
   async function queueActivity({ event_type, payload = {}, occurred_at, client_version, timezone, event_id }) {
+    if (!isWriteAllowed()) return null;
+    const canCommit = currentWriteGuard();
     const event = buildActivityEvent({
       event_type,
       household_id: scope.household_id,
@@ -240,20 +290,26 @@ export function createGrowthLoopController({ db } = {}) {
       type: "activity_event",
       payload: { event },
     };
-    await db.putActivityEvent(event);
-    await db.appendOutbox(outboxEvent);
-    return event;
+    try {
+      if (db.persistActivity) {
+        const committed = await db.persistActivity(event, outboxEvent, { canCommit });
+        return committed === false ? null : event;
+      }
+      await db.putActivityEvent(event, { canCommit });
+      await db.appendOutbox(outboxEvent, { canCommit });
+      return event;
+    } catch (error) {
+      if (isStaleWrite(error)) return null;
+      throw error;
+    }
   }
 
   async function mergeRemote(remoteSnapshot) {
     const merged = mergeGrowthLoopSnapshot(remoteSnapshot, snapshot);
-    await db.putSnapshot(scopeKey, merged);
-    snapshot = merged;
-    notify();
-    return clone(snapshot);
+    return persist(merged);
   }
 
-  async function reconcileConfirmed(event, result) {
+  async function reconcileConfirmed(event, result, canCommit = isWriteAllowed) {
     const next = normalizeGrowthLoopState(snapshot, scope);
     const remote = result?.data;
     if (event.type === "point_record") {
@@ -287,12 +343,10 @@ export function createGrowthLoopController({ db } = {}) {
         if (debit && remote?.id) debit.redemption_id = remote.id;
       }
     }
-    await db.putSnapshot(scopeKey, next);
-    snapshot = next;
-    notify();
+    await persist(next, [], { canCommit });
   }
 
-  async function reconcileUnconfirmed(event, result) {
+  async function reconcileUnconfirmed(event, result, canCommit = isWriteAllowed) {
     const next = normalizeGrowthLoopState(snapshot, scope);
     if (event.type === "point_record") {
       const row = next.ledger.find((entry) => entry.request_id === event.request_id);
@@ -316,24 +370,36 @@ export function createGrowthLoopController({ db } = {}) {
       const debit = next.ledger.find((entry) => entry.request_id === `${event.request_id}:debit`);
       if (debit) Object.assign(debit, { status: result.status, sync_error: result.error_code || "rejected" });
     }
-    await db.putSnapshot(scopeKey, next);
-    snapshot = next;
-    notify();
+    await persist(next, [], { canCommit });
   }
 
   async function sync({ transport, limit = 100 } = {}) {
-    if (!transport) return { skipped: true, reason: "cloud_unavailable" };
+    if (!transport || !isWriteAllowed()) return { skipped: true, reason: "cloud_unavailable" };
+    const canCommit = currentWriteGuard();
     const syncEngine = createOutboxSync({
       db,
       transport,
-      onConfirmed: reconcileConfirmed,
-      onRetryable: reconcileUnconfirmed,
-      onRejected: reconcileUnconfirmed,
+      onConfirmed: (event, result) => reconcileConfirmed(event, result, canCommit),
+      onRetryable: (event, result) => reconcileUnconfirmed(event, result, canCommit),
+      onRejected: (event, result) => reconcileUnconfirmed(event, result, canCommit),
     });
-    const report = await syncEngine.syncScope(scopeKey, { limit });
-    snapshot.sync = { ...snapshot.sync, blocked: report.blocked, last_sync_report: report, last_server_sync_at: report.blocked ? snapshot.sync.last_server_sync_at : new Date().toISOString() };
-    await db.putSnapshot(scopeKey, snapshot);
-    notify();
+    let report;
+    try {
+      report = await syncEngine.syncScope(scopeKey, { limit, canCommit });
+    } catch (error) {
+      if (isStaleWrite(error)) return { skipped: true, reason: "stale_profile_scope" };
+      throw error;
+    }
+    const next = {
+      ...snapshot,
+      sync: {
+        ...snapshot.sync,
+        blocked: report.blocked,
+        last_sync_report: report,
+        last_server_sync_at: report.blocked ? snapshot.sync.last_server_sync_at : new Date().toISOString(),
+      },
+    };
+    await persist(next, [], { canCommit });
     return report;
   }
 
@@ -342,6 +408,7 @@ export function createGrowthLoopController({ db } = {}) {
   }
 
   async function clearScope(targetScope = null) {
+    if (!isWriteAllowed()) return;
     if (targetScope) {
       await db.clearScope(scopeKeyForGrowthLoop(targetScope));
       if (scopeKeyForGrowthLoop(targetScope) !== scopeKey) return;
@@ -357,6 +424,7 @@ export function createGrowthLoopController({ db } = {}) {
     scope = { household_id: null, profile_id: null };
     scopeKey = scopeKeyForGrowthLoop(scope);
     snapshot = createGrowthLoopState(scope);
+    scopeWriteGuard = null;
     notify();
   }
 

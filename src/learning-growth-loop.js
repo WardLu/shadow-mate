@@ -132,6 +132,7 @@ function normalizeLedgerEntry(entry, scope) {
     occurred_on: entry.occurred_on || new Date().toISOString().slice(0, 10),
     created_at: entry.created_at || new Date().toISOString(),
     status: entry.status || "confirmed",
+    sync_error: entry.sync_error ?? null,
     metadata: isRecord(entry.metadata) ? clone(entry.metadata) : {},
     redemption_id: entry.redemption_id ?? null,
     legacy_import_batch_id: entry.legacy_import_batch_id ?? entry.metadata?.legacy_import_batch_id ?? null,

@@ -3,6 +3,146 @@ import { createMemoryLearningDb } from "../../src/learning-local-db.js";
 import { createGrowthLoopController } from "../../src/learning-growth-loop-controller.js";
 
 describe("Growth Loop controller scope adoption", () => {
+  it("does not move pending data when the database transaction becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope({ household_id: null, profile_id: null });
+    await controller.recordPoint({
+      item: { id: "item-1", name: "整理玩具", default_points: 2 },
+      occurred_on: "2026-08-14",
+      request_id: "request-1",
+    });
+
+    const moveScope = db.moveScope.bind(db);
+    let resolveStarted;
+    let release;
+    const started = new Promise((resolve) => { resolveStarted = resolve; });
+    const blocked = new Promise((resolve) => { release = resolve; });
+    db.moveScope = async (...args) => {
+      resolveStarted();
+      await blocked;
+      return moveScope(...args);
+    };
+
+    let current = true;
+    const switching = controller.loadScope(
+      { household_id: "household-1", profile_id: "profile-1" },
+      { adoptPending: true, canCommit: () => current },
+    );
+    await started;
+    current = false;
+    release();
+    await switching;
+
+    expect(await db.getSnapshot("pending:pending")).not.toBeNull();
+    expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+    expect(controller.getScope()).toEqual({ household_id: null, profile_id: null });
+  });
+
+  it("rolls back a pending move when the database guard turns stale mid-transaction", async () => {
+    const db = createMemoryLearningDb();
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope({ household_id: null, profile_id: null });
+    await controller.recordPoint({
+      item: { id: "item-1", name: "整理玩具", default_points: 2 },
+      occurred_on: "2026-08-14",
+      request_id: "request-1",
+    });
+
+    const moveScope = db.moveScope.bind(db);
+    db.moveScope = async (fromScopeKey, toScopeKey, scope, options = {}) => {
+      let guardChecks = 0;
+      return moveScope(fromScopeKey, toScopeKey, scope, {
+        ...options,
+        canCommit: () => guardChecks++ !== 2 && options.canCommit?.() !== false,
+      });
+    };
+
+    await controller.loadScope(
+      { household_id: "household-1", profile_id: "profile-1" },
+      { adoptPending: true },
+    );
+
+    expect(await db.getSnapshot("pending:pending")).not.toBeNull();
+    expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+    expect(controller.getScope()).toEqual({ household_id: null, profile_id: null });
+  });
+
+  it("does not commit a snapshot when its database write becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope({ household_id: null, profile_id: null });
+
+    const putSnapshot = db.putSnapshot.bind(db);
+    let resolveStarted;
+    let release;
+    const started = new Promise((resolve) => { resolveStarted = resolve; });
+    const blocked = new Promise((resolve) => { release = resolve; });
+    db.putSnapshot = async (...args) => {
+      resolveStarted();
+      await blocked;
+      return putSnapshot(...args);
+    };
+
+    let current = true;
+    const switching = controller.loadScope(
+      { household_id: "household-1", profile_id: "profile-1" },
+      { canCommit: () => current },
+    );
+    await started;
+    current = false;
+    release();
+    await switching;
+
+    expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+    expect(controller.getScope()).toEqual({ household_id: null, profile_id: null });
+  });
+
+  it("does not persist activity after its atomic write guard becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    let writable = true;
+    const controller = createGrowthLoopController({ db, canWrite: () => writable });
+    await controller.loadScope({ household_id: "household-1", profile_id: "profile-1" });
+
+    db.persistActivity = async (event, outboxEvent, { canCommit } = {}) => {
+      writable = false;
+      if (!canCommit?.()) return false;
+      await db.putActivityEvent(event);
+      await db.appendOutbox(outboxEvent);
+      return true;
+    };
+
+    await controller.queueActivity({
+      event_type: "household_activated",
+      event_id: "activity-1",
+    });
+
+    expect(await db.listActivityEvents("household-1:profile-1")).toEqual([]);
+    expect(await db.listOutbox("household-1:profile-1", { statuses: ["pending"] })).toEqual([]);
+  });
+
+  it("does not persist a scope after its commit guard becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    const controller = createGrowthLoopController({ db });
+    let snapshotWrites = 0;
+    const putSnapshot = db.putSnapshot.bind(db);
+    db.putSnapshot = async (...args) => {
+      snapshotWrites += 1;
+      return putSnapshot(...args);
+    };
+
+    await controller.loadScope({ household_id: null, profile_id: null });
+    snapshotWrites = 0;
+    await controller.loadScope(
+      { household_id: "household-1", profile_id: "profile-1" },
+      { canCommit: () => false },
+    );
+
+    expect(snapshotWrites).toBe(0);
+    expect(controller.getScope()).toEqual({ household_id: null, profile_id: null });
+    expect(await db.getSnapshot("household-1:profile-1")).toBeNull();
+  });
+
   it("rebinds pending local actions before the first cloud sync", async () => {
     const controller = createGrowthLoopController({ db: createMemoryLearningDb() });
     await controller.loadScope({ household_id: null, profile_id: null });

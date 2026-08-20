@@ -139,9 +139,14 @@ const PEANUT_BOOKS = [
    状态 / 存档层（localStorage 永久存档）
    ========================================================= */
 const STORE_KEY = "shadow_mate_workbench_v1";
+const PROFILE_SCOPE_BLOCKED_KEY = "shadow_mate_profile_scope_blocked";
 
 const growthLoopDb = createIndexedDbLearningDb();
-const growthLoopController = createGrowthLoopController({ db: growthLoopDb });
+const growthLoopController = createGrowthLoopController({
+  db: growthLoopDb,
+  canWrite: () => sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+    && window.cloudSync?.canWriteLocalState?.() !== false,
+});
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";
 window.growthLoop = growthLoopController;
@@ -175,8 +180,18 @@ function learningStateFromEnvelope(envelope) {
   return envelope?.schema_version === 2 && envelope.learning ? envelope.learning : envelope;
 }
 
+function learningStateReadStorage() {
+  if (sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") return localStorage;
+  // Storage migration helpers are intentionally read-only while a prior
+  // profile operation is fail-closed, including during a same-tab reload.
+  return {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: () => {},
+  };
+}
+
 function readStoredState(){
-  return learningStateFromEnvelope(loadLearningStateEnvelope(localStorage, {}));
+  return learningStateFromEnvelope(loadLearningStateEnvelope(learningStateReadStorage(), {}));
 }
 
 let store = createLearningState(readStoredState());
@@ -187,9 +202,18 @@ if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
 if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
 
-let learningEnvelope = loadLearningStateEnvelope(localStorage, {});
+let learningEnvelope = loadLearningStateEnvelope(learningStateReadStorage(), {});
 
-function persistLearningState(){
+function canWriteLearningState({ allowScopeTransition = false } = {}) {
+  const cloudWriteCheck = allowScopeTransition
+    ? window.cloudSync?.canWriteScopeTransition?.()
+    : window.cloudSync?.canWriteLocalState?.();
+  return sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+    && cloudWriteCheck !== false;
+}
+
+function persistLearningState({ canCommit = () => true, allowScopeTransition = false } = {}){
+  if (!canWriteLearningState({ allowScopeTransition }) || !canCommit()) return false;
   learningEnvelope = {
     ...learningEnvelope,
     schema_version: 2,
@@ -201,14 +225,18 @@ function persistLearningState(){
   // 兼容旧版本的低风险学习状态读取和既有冲突测试；新 Growth Loop
   // 账本永远不写入旧 state.points。
   localStorage.setItem(STORE_KEY, JSON.stringify({ ...store, points: {} }));
+  return true;
 }
 
 function save(){
+  if (!canWriteLearningState()) return false;
   persistLearningState();
   window.cloudSync?.schedule();
+  return true;
 }
 
-async function setLearningScope(scope, { adoptPending = false } = {}) {
+async function setLearningScope(scope, { adoptPending = false, canCommit = () => true } = {}) {
+  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
   learningEnvelope = adoptPending
     ? adoptPendingLearningState(localStorage, scope)
     : loadLearningStateEnvelope(localStorage, scope);
@@ -219,7 +247,8 @@ async function setLearningScope(scope, { adoptPending = false } = {}) {
   if(!store.bookShelf) store.bookShelf = {};
   if(!store.peanutLog) store.peanutLog = [];
   if(!store.peanutRead) store.peanutRead = {};
-  persistLearningState();
+  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
+  persistLearningState({ canCommit, allowScopeTransition: true });
   switchMod(CURRENT_MOD);
   return structuredClone(learningEnvelope);
 }
@@ -248,12 +277,14 @@ function enabledModuleIds(){
 }
 
 function updateContentPackage(enabled){
+  if (!canWriteLearningState()) return;
   store = { ...store, content_config: setContentPackageEnabled(store.content_config, enabled) };
   save();
   switchMod(CURRENT_MOD);
 }
 
 function updateContentModule(moduleId, enabled){
+  if (!canWriteLearningState()) return;
   store = { ...store, content_config: setContentModuleEnabled(store.content_config, moduleId, enabled) };
   save();
   switchMod(CURRENT_MOD);
@@ -265,6 +296,7 @@ function contentModuleLabel(moduleId){
 }
 
 function toggleCheckin(mod){
+  if (!canWriteLearningState()) return;
   store = transitionLearningState(store, {
     type: "CHECKIN_TOGGLED",
     date: todayKey(),
@@ -322,6 +354,7 @@ function pointOn(itemId, day){
   return getActivePointAction(growthLoopSnapshot, item.id, dateKeyForDay(day));
 }
 function togglePoint(itemId, day){
+  if (!canWriteLearningState()) return;
   const item = pointItemAt(itemId);
   if(!item) return;
   const requestId = clientRequestId("point");
@@ -1562,6 +1595,7 @@ function renderBook(){
   card2.querySelectorAll("[data-bk]").forEach(c=>{
     c.style.opacity = store.bookShelf[+c.dataset.bk] ? 1 : 0.55;
     c.onclick=()=>{
+      if (!canWriteLearningState()) return;
       const i=+c.dataset.bk;
       store = transitionLearningState(store, { type: "SHELF_TOGGLED", bookIndex: i });
       save(); renderBook();
@@ -1609,6 +1643,7 @@ function renderBook(){
   card3.querySelectorAll("[data-pb]").forEach(c=>{
     c.style.opacity = store.peanutRead[+c.dataset.pb] ? 1 : 0.6;
     c.onclick=()=>{
+    if (!canWriteLearningState()) return;
     const i=+c.dataset.pb;
     store = transitionLearningState(store, { type: "PEANUT_READ_TOGGLED", bookIndex: i });
     save(); renderBook();
@@ -1626,6 +1661,7 @@ function renderBook(){
   starEls.forEach(s=>s.onclick=()=>{ rating=+s.dataset.n; paintStars(rating); });
   // 绑定：添加记录
   el("pbAdd").onclick=()=>{
+    if (!canWriteLearningState()) return;
     const title = el("pbTitle").value.trim();
     if(!title){ alert("请先输入书名"); return; }
     const d = new Date();
@@ -1638,6 +1674,7 @@ function renderBook(){
   };
   // 绑定：删除记录
   card3.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
+    if (!canWriteLearningState()) return;
     const i = +x.dataset.del;
     store = transitionLearningState(store, {
       type: "READING_LOG_REMOVED",
@@ -1796,9 +1833,11 @@ window.learningDesk = {
     return structuredClone(pending);
   },
   replaceState(next, options = {}){
+    if (!canWriteLearningState()) return false;
     store = transitionLearningState(store, { type: "STATE_REPLACED", state: learningStateFromEnvelope(next) });
     if(options.persist) persistLearningState();
     switchMod(CURRENT_MOD);
+    return true;
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};

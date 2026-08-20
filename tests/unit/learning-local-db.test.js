@@ -1,5 +1,63 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryLearningDb } from "../../src/learning-local-db.js";
+import { createIndexedDbLearningDb, createMemoryLearningDb } from "../../src/learning-local-db.js";
+
+function requestThatResolves(result) {
+  const request = {};
+  queueMicrotask(() => {
+    request.result = result;
+    request.onsuccess?.();
+  });
+  return request;
+}
+
+function requestThatRejects(error) {
+  const request = {};
+  queueMicrotask(() => {
+    request.error = error;
+    request.onerror?.();
+  });
+  return request;
+}
+
+function pendingRequest() {
+  const request = {};
+  return {
+    request,
+    resolve(result) {
+      request.result = result;
+      request.onsuccess?.();
+    },
+  };
+}
+
+function closingDatabase(error) {
+  return {
+    transaction() {
+      throw error;
+    },
+  };
+}
+
+function snapshotDatabase(readSnapshot) {
+  return {
+    transaction(storeNames, mode) {
+      expect(storeNames).toEqual(["snapshots"]);
+      expect(mode).toBe("readonly");
+      return {
+        objectStore(storeName) {
+          expect(storeName).toBe("snapshots");
+          return { get: (scopeKey) => requestThatResolves(readSnapshot(scopeKey)) };
+        },
+      };
+    },
+  };
+}
+
+function closingError(message = "The database connection is closing.") {
+  const error = new Error(message);
+  error.name = "InvalidStateError";
+  return error;
+}
 
 describe("local Growth Loop database", () => {
   it("isolates snapshots by household and profile scope", async () => {
@@ -84,5 +142,140 @@ describe("local Growth Loop database", () => {
       profile_id: "profile-1",
       payload: { profile_id: "profile-1" },
     }));
+  });
+
+  it("rolls back an atomic scope persist when its guard becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    let checks = 0;
+
+    await expect(db.persistScope(
+      "household-1:profile-1",
+      { scope: { household_id: "household-1", profile_id: "profile-1" } },
+      [{ event_id: "event-1", scope_key: "household-1:profile-1", type: "point_record" }],
+      { canCommit: () => checks++ !== 2 },
+    )).rejects.toMatchObject({ code: "profile_scope_write_stale" });
+
+    await expect(db.getSnapshot("household-1:profile-1")).resolves.toBeNull();
+    await expect(db.getOutbox("event-1")).resolves.toBeNull();
+  });
+
+  it("rolls back activity and outbox together when their guard becomes stale", async () => {
+    const db = createMemoryLearningDb();
+    let checks = 0;
+    const event = {
+      event_id: "activity-1",
+      scope_key: "household-1:profile-1",
+      household_id: "household-1",
+      profile_id: "profile-1",
+      event_type: "household_activated",
+    };
+    const outboxEvent = {
+      event_id: "activity-1",
+      scope_key: "household-1:profile-1",
+      type: "activity_event",
+      payload: { event },
+    };
+
+    await expect(db.persistActivity(event, outboxEvent, {
+      canCommit: () => checks++ !== 2,
+    })).rejects.toMatchObject({ code: "profile_scope_write_stale" });
+
+    await expect(db.listActivityEvents("household-1:profile-1")).resolves.toEqual([]);
+    await expect(db.getOutbox("activity-1")).resolves.toBeNull();
+  });
+
+  it("keeps the requested learner scope when recovering a closing IndexedDB connection", async () => {
+    let openCount = 0;
+    const scopeKey = "household-1:profile-2";
+    const requestedScopes = [];
+    const healthyDatabase = snapshotDatabase((requestedScopeKey) => {
+      requestedScopes.push(requestedScopeKey);
+      return { snapshot: { scope_key: requestedScopeKey } };
+    });
+    const indexedDB = {
+      open() {
+        openCount += 1;
+        return requestThatResolves(openCount === 1 ? closingDatabase(closingError()) : healthyDatabase);
+      },
+    };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.getSnapshot(scopeKey)).resolves.toEqual({ scope_key: scopeKey });
+    expect(requestedScopes).toEqual([scopeKey]);
+    expect(openCount).toBe(2);
+  });
+
+  it("propagates non-closing IndexedDB errors without reopening", async () => {
+    let openCount = 0;
+    const error = closingError("The transaction is inactive.");
+    const indexedDB = {
+      open() {
+        openCount += 1;
+        return requestThatResolves(closingDatabase(error));
+      },
+    };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.getSnapshot("household-1:profile-2")).rejects.toBe(error);
+    expect(openCount).toBe(1);
+  });
+
+  it("retries a closing IndexedDB operation only once", async () => {
+    let openCount = 0;
+    const firstError = closingError();
+    const retryError = closingError();
+    const indexedDB = {
+      open() {
+        openCount += 1;
+        return requestThatResolves(closingDatabase(openCount === 1 ? firstError : retryError));
+      },
+    };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.getSnapshot("household-1:profile-2")).rejects.toBe(retryError);
+    expect(openCount).toBe(2);
+  });
+
+  it("propagates a failed IndexedDB reopen instead of falling back to memory", async () => {
+    let openCount = 0;
+    const reopenError = new Error("indexeddb_reopen_failed");
+    const indexedDB = {
+      open() {
+        openCount += 1;
+        return openCount === 1
+          ? requestThatResolves(closingDatabase(closingError()))
+          : requestThatRejects(reopenError);
+      },
+    };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.getSnapshot("household-1:profile-2")).rejects.toBe(reopenError);
+    expect(openCount).toBe(2);
+  });
+
+  it("single-flights concurrent recovery of a closing IndexedDB connection", async () => {
+    let openCount = 0;
+    const reopen = pendingRequest();
+    const healthyDatabase = snapshotDatabase((scopeKey) => ({ snapshot: { scope_key: scopeKey } }));
+    const indexedDB = {
+      open() {
+        openCount += 1;
+        return openCount === 1
+          ? requestThatResolves(closingDatabase(closingError()))
+          : reopen.request;
+      },
+    };
+    const db = createIndexedDbLearningDb({ indexedDB });
+    const firstRead = db.getSnapshot("household-1:profile-1");
+    const secondRead = db.getSnapshot("household-1:profile-2");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(openCount).toBe(2);
+
+    reopen.resolve(healthyDatabase);
+    await expect(Promise.all([firstRead, secondRead])).resolves.toEqual([
+      { scope_key: "household-1:profile-1" },
+      { scope_key: "household-1:profile-2" },
+    ]);
   });
 });

@@ -30,6 +30,8 @@ export function createOutboxSync({
 
   async function syncScope(scopeKey, options = {}) {
     const limit = options.limit || 100;
+    const canCommit = options.canCommit || (() => true);
+    if (!canCommit()) return { skipped: true, reason: "stale_profile_scope" };
     const queuedEvents = await db.listOutbox(scopeKey, {
       statuses: ["pending", "retryable"],
       now: Number.MAX_SAFE_INTEGER,
@@ -59,10 +61,12 @@ export function createOutboxSync({
       next_attempt_at: nextAttemptAt,
     };
     for (const event of events) {
+      if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
       const claimed = await db.claimOutbox?.(event.event_id, {
         worker_id: workerId,
         now: now(),
         lease_ms: leaseMs,
+        canCommit,
       });
       if (db.claimOutbox && !claimed) continue;
       let result;
@@ -81,7 +85,8 @@ export function createOutboxSync({
           response: result?.data || null,
           processing_by: null,
           lease_until: 0,
-        });
+        }, { canCommit });
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
         await onConfirmed(event, result);
         report[status] += 1;
         report.pending -= 1;
@@ -98,7 +103,8 @@ export function createOutboxSync({
           error_message: result?.error_message || null,
           processing_by: null,
           lease_until: 0,
-        });
+        }, { canCommit });
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
         await onRetryable(event, { ...result, status: "retryable" });
         report.retryable += 1;
         report.blocked = true;
@@ -112,7 +118,8 @@ export function createOutboxSync({
         error_message: result?.error_message || null,
         processing_by: null,
         lease_until: 0,
-      });
+      }, { canCommit });
+      if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
       await onRejected(event, { ...result, status: terminalStatus });
       report[terminalStatus] += 1;
       report.pending -= 1;

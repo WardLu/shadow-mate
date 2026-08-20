@@ -14,6 +14,7 @@ const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
+const PROFILE_SCOPE_BLOCKED_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_profile_scope_blocked`;
 export const GUARDIAN_CONSENT_TYPE = "learner_data_processing";
 export const PRIVACY_POLICY_VERSION = "privacy-v1";
 const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
@@ -50,8 +51,9 @@ let householdName = "";
 let cloudVersion = null;
 let saveTimer = null;
 let saveInFlight = false;
-let saveQueued = false;
+let saveQueued = null;
 let cloudSyncBlocked = false;
+let profileScopeWriteBlocked = sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
@@ -60,12 +62,18 @@ let localResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
+let profileOperationQueue = Promise.resolve();
+let profileOperationGeneration = 0;
 
 const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
   onTimer() {
+    if (profileScopeWriteBlocked) return;
     const profile = activeProfile;
     if (!profile) return;
-    void loadGrowthLoopProfile(profile).catch((error) => {
+    void enqueueProfileOperation(
+      (generation) => loadGrowthLoopProfile(profile, { generation }),
+      { advanceGeneration: false },
+    ).catch((error) => {
       console.warn("Growth Loop cloud sync deferred:", error);
     });
   },
@@ -115,11 +123,147 @@ function isActiveGrowthLoopProfile(profile) {
     && scope.household_id === profile?.household_id;
 }
 
-async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
-  if (!profile || !window.growthLoop || !window.learningDesk) return;
+function sameProfileScope(left = {}, right = {}) {
+  return left?.household_id === right?.household_id
+    && left?.profile_id === right?.profile_id;
+}
+
+function failClosedProfileScope() {
+  profileScopeWriteBlocked = true;
+  sessionStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  profileOperationGeneration += 1;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saveQueued = null;
+  resetGrowthLoopRemoteRetry();
+  activeProfile = null;
+  cloudVersion = null;
+  cloudSyncBlocked = true;
+  localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  setAccountState();
+  showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请退出登录后重试。", 7000);
+}
+
+async function restoreScopeWithCas({ name, getScope, restoreScope, previousScope, targetScope }) {
+  try {
+    const currentScope = getScope?.() || {};
+    if (sameProfileScope(currentScope, previousScope)) return { restored: true, already: true };
+    if (!sameProfileScope(currentScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
+    const compareScope = getScope?.() || {};
+    if (!sameProfileScope(compareScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
+    await restoreScope?.(previousScope, { adoptPending: false });
+    const restoredScope = getScope?.() || {};
+    if (!sameProfileScope(restoredScope, previousScope)) {
+      throw new Error(`${name}_scope_rollback_not_committed`);
+    }
+    return { restored: true };
+  } catch (rollbackError) {
+    console.warn(`${name} profile scope rollback failed:`, rollbackError);
+    return { failed: true };
+  }
+}
+
+async function restoreProfileScopes(previousGrowthScope, previousLearningScope, targetScope) {
+  const growthResult = await restoreScopeWithCas({
+    name: "Growth Loop",
+    getScope: () => window.growthLoop?.getScope?.(),
+    restoreScope: (scope, options) => window.growthLoop?.loadScope?.(scope, options),
+    previousScope: previousGrowthScope,
+    targetScope,
+  });
+  const learningResult = await restoreScopeWithCas({
+    name: "Learning Desk",
+    getScope: () => window.learningDesk?.getEnvelope?.()?.scope,
+    restoreScope: (scope, options) => window.learningDesk?.setScope?.(scope, options),
+    previousScope: previousLearningScope,
+    targetScope,
+  });
+
+  const growthScope = window.growthLoop?.getScope?.() || {};
+  const learningScope = window.learningDesk?.getEnvelope?.()?.scope || {};
+  const rollbackFailed = growthResult.failed || learningResult.failed;
+  if (
+    rollbackFailed
+    || !sameProfileScope(growthScope, previousGrowthScope)
+    || !sameProfileScope(learningScope, previousLearningScope)
+  ) {
+    failClosedProfileScope();
+    return false;
+  }
+  return true;
+}
+
+function captureProfileCommitState() {
+  return {
+    activeProfile: activeProfile ? structuredClone(activeProfile) : null,
+    activeProfileKey: localStorage.getItem(ACTIVE_PROFILE_KEY),
+    cloudVersion,
+    cloudSyncBlocked,
+    lastSyncAt,
+    growthScope: window.growthLoop?.getScope?.() || {},
+    learningScope: window.learningDesk?.getEnvelope?.()?.scope || {},
+  };
+}
+
+function sameActiveProfile(left, right) {
+  return (left?.id || null) === (right?.id || null)
+    && (left?.household_id || null) === (right?.household_id || null);
+}
+
+function restoreActiveProfileTuple(previous, targetProfile) {
+  const targetTuple = activeProfile?.id === targetProfile?.id
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === targetProfile?.id;
+  const alreadyPrevious = sameActiveProfile(activeProfile, previous.activeProfile)
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null);
+  if (!targetTuple && !alreadyPrevious) return false;
+
+  activeProfile = previous.activeProfile ? structuredClone(previous.activeProfile) : null;
+  cloudVersion = previous.cloudVersion;
+  cloudSyncBlocked = previous.cloudSyncBlocked;
+  lastSyncAt = previous.lastSyncAt;
+  if (previous.activeProfileKey) localStorage.setItem(ACTIVE_PROFILE_KEY, previous.activeProfileKey);
+  else localStorage.removeItem(ACTIVE_PROFILE_KEY);
+
+  return sameActiveProfile(activeProfile, previous.activeProfile)
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null)
+    && cloudVersion === previous.cloudVersion
+    && sameProfileScope(window.growthLoop?.getScope?.() || {}, previous.growthScope)
+    && sameProfileScope(window.learningDesk?.getEnvelope?.()?.scope || {}, previous.learningScope);
+}
+
+async function restoreProfileCommit(previous, targetProfile) {
+  const restoredScopes = await restoreProfileScopes(previous.growthScope, previous.learningScope, {
+    household_id: targetProfile?.household_id,
+    profile_id: targetProfile?.id,
+  });
+  if (!restoredScopes || !restoreActiveProfileTuple(previous, targetProfile)) {
+    if (!profileScopeWriteBlocked) failClosedProfileScope();
+    return false;
+  }
+  setAccountState();
+  return true;
+}
+
+function enqueueProfileOperation(operation, { advanceGeneration = true } = {}) {
+  const generation = advanceGeneration ? ++profileOperationGeneration : profileOperationGeneration;
+  const result = profileOperationQueue.then(() => operation(generation));
+  profileOperationQueue = result.catch(() => false);
+  return result;
+}
+
+function isCurrentProfileOperation(generation) {
+  return !profileScopeWriteBlocked
+    && (generation === null || generation === profileOperationGeneration);
+}
+
+async function loadGrowthLoopProfile(profile, { adoptPending = false, generation = null } = {}) {
+  const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
+  if (profileScopeWriteBlocked || !profile || !window.growthLoop || !window.learningDesk || !isCurrent()) return;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
-  await window.growthLoop.loadScope(scope, { adoptPending });
-  await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED, {}, "once");
+  await window.growthLoop.loadScope(scope, { adoptPending, canCommit: isCurrent });
+  if (!isCurrent()) return;
+  await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED, {}, "once", { generation });
+  if (!isCurrent()) return;
   if (!growthLoopTransport) return;
   let remote;
   try {
@@ -128,10 +272,10 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
       profileId: profile.id,
     });
   } catch (error) {
-    if (isActiveGrowthLoopProfile(profile)) scheduleGrowthLoopRemoteRetry();
+    if (isCurrent()) scheduleGrowthLoopRemoteRetry();
     throw error;
   }
-  if (!isActiveGrowthLoopProfile(profile)) return;
+  if (!isCurrent()) return;
   // A not-yet-migrated environment must not overwrite local records with an
   // empty fallback snapshot. Release-time migrations enable this path.
   if (remote.errors.length) {
@@ -140,36 +284,41 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false } = {}) {
     }
     return { skipped: true, reason: "remote_fetch_failed", errors: remote.errors };
   }
+  if (!isCurrent()) return;
   resetGrowthLoopRemoteRetry();
   await window.growthLoop.mergeRemote(remote.snapshot);
-  if (!isActiveGrowthLoopProfile(profile)) return;
+  if (!isCurrent()) return;
   const report = await window.growthLoop.sync({ transport: growthLoopTransport });
+  if (!isCurrent()) return;
   if (report.retryable || report.conflict || report.rejected) {
     await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.SYNC_FAILED, {
       source: "growth_loop_sync",
       error_code: report.conflict ? "conflict" : report.rejected ? "rejected" : "retryable",
       retryable: Boolean(report.retryable),
-    }, `sync:${new Date().toISOString().slice(0, 13)}`);
+    }, `sync:${new Date().toISOString().slice(0, 13)}`, { generation });
   }
+  if (!isCurrent()) return;
   if (report.next_attempt_at !== null && report.next_attempt_at !== undefined) {
-    void scheduleGrowthLoopRetry({ notBefore: report.next_attempt_at });
+    void scheduleGrowthLoopRetry({ notBefore: report.next_attempt_at, generation });
   } else if (report.retryable || report.conflict || report.rejected) {
     scheduleGrowthLoopSync();
   }
   return report;
 }
 
-async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false } = {}) {
-  if (!profile || !window.growthLoop) return null;
+async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false, generation = null } = {}) {
+  if (profileScopeWriteBlocked || !profile || !window.growthLoop) return null;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
   if (!scope.household_id || !scope.profile_id) return null;
+  const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
   try {
+    if (!isCurrent()) return null;
     const currentScope = window.growthLoop.getScope();
     if (currentScope.household_id !== scope.household_id || currentScope.profile_id !== scope.profile_id) {
       if (!ensureScope) return null;
-      await window.growthLoop.loadScope(scope, { adoptPending: false });
+      await window.growthLoop.loadScope(scope, { adoptPending: false, canCommit: isCurrent });
     }
-    if (window.growthLoop.getScope().profile_id !== scope.profile_id) return null;
+    if (!isCurrent() || window.growthLoop.getScope().profile_id !== scope.profile_id) return null;
     const event = await window.growthLoop.queueActivity({
       event_type,
       event_id: activityEventIdFor({ ...scope, event_type, bucket }),
@@ -200,7 +349,7 @@ function nextGrowthLoopAttemptAt(events, now = Date.now()) {
 }
 
 function scheduleGrowthLoopSyncAt(targetAt) {
-  if (!activeProfile) return null;
+  if (profileScopeWriteBlocked || !activeProfile) return null;
   return growthLoopRetryScheduler.scheduleAt(targetAt);
 }
 
@@ -216,14 +365,15 @@ function resetGrowthLoopRemoteRetry() {
 async function scheduleGrowthLoopRetry({
   notBefore = Date.now(),
   fallbackDelayMs = GROWTH_LOOP_RETRY_FALLBACK_MS,
+  generation = null,
 } = {}) {
-  if (!activeProfile) return null;
+  if (profileScopeWriteBlocked || !activeProfile || !isCurrentProfileOperation(generation)) return null;
   const profileId = activeProfile.id;
   const now = Date.now();
   let scheduledAt = Math.max(Number(notBefore) || now, now + fallbackDelayMs);
   try {
     const events = await window.growthLoop?.pendingOutbox?.();
-    if (activeProfile?.id !== profileId) return null;
+    if (!isCurrentProfileOperation(generation) || activeProfile?.id !== profileId) return null;
     const nextAttemptAt = nextGrowthLoopAttemptAt(events, now);
     if (nextAttemptAt !== null) scheduledAt = Math.max(Number(notBefore) || now, nextAttemptAt);
   } catch (error) {
@@ -253,6 +403,7 @@ function guardianConsentPayload(householdId) {
 }
 
 async function clearLocalAccountState() {
+  profileOperationGeneration += 1;
   resetGrowthLoopRemoteRetry();
   let signOutError = null;
   try {
@@ -262,6 +413,7 @@ async function clearLocalAccountState() {
     signOutError = error;
   }
   if (AUTH_STORAGE_KEY) sessionStorage.clear();
+  sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
   await window.growthLoop?.clearAllLocalData?.();
   window.learningDesk.clearLocalData({ reload: false });
@@ -270,6 +422,8 @@ async function clearLocalAccountState() {
   profiles = [];
   guardianConsentHouseholds = new Set();
   activeProfile = null;
+  profileScopeWriteBlocked = false;
+  cloudSyncBlocked = false;
   setAccountState();
   return signOutError;
 }
@@ -821,14 +975,19 @@ function renderSetup() {
         showToast(formatCloudError(profileError, "创建学习者失败，请稍后再试。"), 5000);
         return;
       }
-      await loadWorkspace(profileId, { migrateLocal: true });
-      await queueGrowthCloudActivity(
-        { household_id: householdId, id: profileId },
-        ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
-        { source: "household_setup" },
-        `learner:${profileId}`,
-        { ensureScope: true },
-      );
+      await loadWorkspace(profileId, { migrateLocal: true, deferGrowthLoopSync: true });
+      void enqueueProfileOperation(
+        (generation) => queueGrowthCloudActivity(
+          { household_id: householdId, id: profileId },
+          ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
+          { source: "household_setup" },
+          `learner:${profileId}`,
+          { ensureScope: true, generation },
+        ),
+        { advanceGeneration: false },
+      ).catch((error) => {
+        console.warn("Growth Loop learner-created activity deferred:", error);
+      });
       showToast("家庭学习空间已建立，正在同步本机记录");
       renderPanel();
       const prompted = await maybePromptPasswordSetup({ force: true });
@@ -909,11 +1068,23 @@ function renderAccount() {
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await runLockedAction(button, async () => {
-        let migrateLocal = false;
-        if (button.dataset.profile !== activeProfile?.id && await window.growthLoop?.hasPendingData?.()) {
-          migrateLocal = window.confirm("发现这台设备上还有未关联学习记录。是否将它们导入到这个孩子的档案？");
-        }
-        await selectProfile(button.dataset.profile, { migrateLocal });
+        await enqueueProfileOperation(async (generation) => {
+          let migrateLocal = false;
+          try {
+            if (button.dataset.profile !== activeProfile?.id && await window.growthLoop?.hasPendingData?.()) {
+              if (!isCurrentProfileOperation(generation)) return false;
+              migrateLocal = window.confirm("发现这台设备上还有未关联学习记录。是否将它们导入到这个孩子的档案？");
+            }
+          } catch (growthError) {
+            console.warn("Growth Loop profile switch blocked:", growthError);
+            if (isCurrentProfileOperation(generation)) {
+              showToast("孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。", 6000);
+            }
+            return false;
+          }
+          if (!isCurrentProfileOperation(generation)) return false;
+          return selectProfileNow(button.dataset.profile, { migrateLocal }, generation);
+        });
         renderAccount();
       }, { busyText: "正在切换…" });
     };
@@ -986,8 +1157,19 @@ function renderAccount() {
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async (event) => {
     await runLockedAction(event.currentTarget, async () => {
-      await saveCloudState(true);
-      if (activeProfile) await loadGrowthLoopProfile(activeProfile);
+      await enqueueProfileOperation(async (generation) => {
+        const profile = activeProfile;
+        if (!profile) return;
+        const request = captureSaveRequest(true);
+        if (!request) return;
+        await saveCloudState(true, request);
+        if (!isCurrentProfileOperation(generation) || !isActiveGrowthLoopProfile(profile)) return;
+        try {
+          await loadGrowthLoopProfile(profile, { generation });
+        } catch (growthError) {
+          console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+        }
+      }, { advanceGeneration: false });
     }, { busyText: "正在同步…" });
   });
   panel.querySelector("[data-export]")?.addEventListener("click", async (event) => {
@@ -1083,13 +1265,18 @@ function renderAccount() {
         return;
       }
       profiles.push(data);
-      await selectProfile(data.id);
+      const selected = await selectProfile(data.id);
+      if (!selected) {
+        renderAccount();
+        return;
+      }
+      const selectedGeneration = profileOperationGeneration;
       await queueGrowthCloudActivity(
         data,
         ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
         { source: "add_learner" },
         `learner:${data.id}`,
-        { ensureScope: true },
+        { ensureScope: true, generation: selectedGeneration },
       );
       renderAccount();
       showToast("已添加新的学习者");
@@ -1245,87 +1432,235 @@ async function loadWorkspace(preferredProfileId = null, options = {}) {
   await fetchWorkspace();
   if (!memberships.length) {
     renderPanel();
-    return;
+    return false;
   }
   const remembered = preferredProfileId || readRememberedProfileId();
   if (remembered && !profiles.some((item) => item.id === remembered)) {
     // 残留引用指向已不存在的 profile（如云端删除 / household 残留）→ 清除，
     // 避免后续对不存在的 profile 发起无效同步（曾在生产触发 not_found 冲突风暴）。
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    if (!profileScopeWriteBlocked) localStorage.removeItem(ACTIVE_PROFILE_KEY);
   }
   const profile = profiles.find((item) => item.id === remembered) || profiles[0] || null;
-  if (profile) await selectProfile(profile.id, options);
+  return profile ? selectProfile(profile.id, options) : false;
 }
 
-async function selectProfile(profileId, { migrateLocal = false } = {}) {
+function selectProfile(profileId, options = {}) {
+  return enqueueProfileOperation((generation) => selectProfileNow(profileId, options, generation));
+}
+
+async function selectProfileNow(profileId, { migrateLocal = false, deferGrowthLoopSync = false } = {}, generation) {
+  const isCurrent = () => isCurrentProfileOperation(generation);
+  if (profileScopeWriteBlocked) return false;
   const profile = profiles.find((item) => item.id === profileId);
-  if (!profile) return;
-  if (activeProfile?.id !== profile.id || activeProfile?.household_id !== profile.household_id) {
-    resetGrowthLoopRemoteRetry();
-  }
-  activeProfile = profile;
-  cloudSyncBlocked = false;
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
-  await window.learningDesk.setScope(
-    { household_id: profile.household_id, profile_id: profile.id },
-    { adoptPending: migrateLocal },
-  );
-  const localState = window.learningDesk.getState();
+  if (!profile) return false;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  const profileChanged = activeProfile?.id !== profile.id
+    || activeProfile?.household_id !== profile.household_id;
+  const previousProfileState = captureProfileCommitState();
   const { data, error } = await supabase
     .from("learning_profile_states")
     .select("state, version, updated_at")
     .eq("profile_id", profile.id)
     .maybeSingle();
+  if (!isCurrent()) return false;
   if (error) {
     showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
-    return;
+    return false;
   }
+  const normalizedRemote = data
+    ? normalizeCloudLearningState(data, scope)
+    : null;
+  if (normalizedRemote?.scope_mismatch) {
+    showToast("云端记录作用域不一致，已停止加载以保护孩子数据。", 6000);
+    return false;
+  }
+
+  // The Growth Loop controller commits its scope only after the local database
+  // load succeeds. Make it the profile-switch commit barrier so a failed
+  // IndexedDB reopen cannot leave the UI on a new learner and Growth Loop on
+  // the old scope.
+  try {
+    await window.growthLoop?.loadScope?.(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
+    if (!isCurrent()) {
+      await restoreProfileCommit(previousProfileState, profile);
+      return false;
+    }
+    const growthScope = window.growthLoop?.getScope?.();
+    if (growthScope && (growthScope.household_id !== scope.household_id || growthScope.profile_id !== scope.profile_id)) {
+      throw new Error("growth_loop_scope_not_ready");
+    }
+  } catch (growthError) {
+    console.warn("Growth Loop profile switch blocked:", growthError);
+    const restored = await restoreProfileCommit(previousProfileState, profile);
+    if (!restored) return false;
+    if (!isCurrent()) return false;
+    showToast("孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。", 6000);
+    return false;
+  }
+
+  try {
+    await window.learningDesk.setScope(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
+    if (!isCurrent()) {
+      await restoreProfileCommit(previousProfileState, profile);
+      return false;
+    }
+  } catch (scopeError) {
+    console.warn("Learning profile switch rolled back:", scopeError);
+    const restored = await restoreProfileCommit(previousProfileState, profile);
+    if (!restored) return false;
+    if (!isCurrent()) return false;
+    showToast("孩子切换未完成，本机学习记录暂时不可用；当前孩子未变，请重试。", 6000);
+    return false;
+  }
+
+  const localState = window.learningDesk.getState();
+  if (!isCurrent()) {
+    await restoreProfileCommit(previousProfileState, profile);
+    return false;
+  }
+  if (profileChanged) resetGrowthLoopRemoteRetry();
+  activeProfile = profile;
+  cloudSyncBlocked = false;
+  localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
   if (!data) {
     cloudVersion = null;
     if (migrateLocal || stateHasData(localState)) {
-      await saveCloudState(true);
+      await saveCloudState(true, { generation, profileId: profile.id });
+      if (!isCurrent()) {
+        await restoreProfileCommit(previousProfileState, profile);
+        return false;
+      }
+      if (activeProfile?.id !== profile.id) return false;
     }
   } else {
-    const normalizedRemote = normalizeCloudLearningState(data, {
-      household_id: profile.household_id,
-      profile_id: profile.id,
-    });
-    if (normalizedRemote.scope_mismatch) {
-      showToast("云端记录作用域不一致，已停止加载以保护孩子数据。", 6000);
-      return;
-    }
     lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
     cloudVersion = normalizedRemote.version;
     const remoteLearningState = normalizedRemote.state.learning;
     const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
     window.learningDesk.replaceState(merged, { persist: true });
     if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
-      await saveCloudState(true);
+      await saveCloudState(true, { generation, profileId: profile.id });
+      if (!isCurrent()) {
+        await restoreProfileCommit(previousProfileState, profile);
+        return false;
+      }
+      if (activeProfile?.id !== profile.id) return false;
     }
   }
+  if (!isCurrent() || activeProfile?.id !== profile.id) {
+    if (!isCurrent()) {
+      await restoreProfileCommit(previousProfileState, profile);
+      return false;
+    }
+    return false;
+  }
   setAccountState();
-  void loadGrowthLoopProfile(profile, { adoptPending: migrateLocal }).catch((growthError) => {
-    console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
-  });
+  const finishGrowthLoopLoad = async (loadGeneration) => {
+    try {
+      await loadGrowthLoopProfile(profile, { adoptPending: migrateLocal, generation: loadGeneration });
+    } catch (growthError) {
+      console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+    }
+  };
+  if (deferGrowthLoopSync) {
+    void enqueueProfileOperation(
+      (backgroundGeneration) => finishGrowthLoopLoad(backgroundGeneration),
+      { advanceGeneration: false },
+    ).catch((error) => {
+      console.warn("Growth Loop cloud refresh deferred:", error);
+    });
+  } else {
+    await finishGrowthLoopLoad(generation);
+  }
+  return isCurrent() && activeProfile?.id === profile.id;
 }
 
-async function saveCloudState(manual = false) {
-  if (!session || !activeProfile || saveInFlight) {
-    if (saveInFlight) saveQueued = true;
+function captureSaveRequest(manual = false) {
+  if (profileScopeWriteBlocked || !session || !activeProfile) return null;
+  return {
+    profileId: activeProfile.id,
+    generation: profileOperationGeneration,
+    manual: Boolean(manual),
+    requestSession: session,
+    state: window.learningDesk.getEnvelope(),
+    expectedVersion: cloudVersion,
+    fromDebounce: true,
+  };
+}
+
+async function saveCloudState(manual = false, {
+  generation = null,
+  profileId = null,
+  requestSession = null,
+  state = null,
+  expectedVersion = undefined,
+  fromDebounce = false,
+} = {}) {
+  if (profileScopeWriteBlocked) return;
+  const requestedProfileId = profileId ?? activeProfile?.id ?? null;
+  const requestedGeneration = generation ?? profileOperationGeneration;
+  const saveSession = requestSession ?? session;
+  const requestedState = state ? structuredClone(state) : null;
+  const requestedVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
+  if (requestSession && session !== requestSession) return;
+  if (saveInFlight) {
+    if (session && saveSession === session && requestedProfileId) {
+      const queuedRequest = {
+        profileId: requestedProfileId,
+        generation: requestedGeneration,
+        manual: Boolean(manual),
+        requestSession: saveSession,
+        state: requestedState,
+        expectedVersion: requestedVersion,
+        fromDebounce: Boolean(fromDebounce),
+      };
+      saveQueued = {
+        ...queuedRequest,
+        manual: queuedRequest.manual || (
+          saveQueued?.profileId === queuedRequest.profileId
+          && saveQueued?.generation === queuedRequest.generation
+          && saveQueued.manual
+        ),
+      };
+    }
     return;
   }
+  if (!session || !saveSession || session !== saveSession || !requestedProfileId) return;
+  const saveProfile = profiles.find((profile) => profile.id === requestedProfileId)
+    || (activeProfile?.id === requestedProfileId ? activeProfile : null);
+  if (!saveProfile) return;
+  const requestScope = requestedState?.scope;
+  if (requestScope?.profile_id && !sameProfileScope(requestScope, {
+    household_id: saveProfile.household_id,
+    profile_id: saveProfile.id,
+  })) return;
+  const saveGeneration = requestedGeneration;
+  const canWrite = () => !profileScopeWriteBlocked
+    && session === saveSession
+    && (fromDebounce || (
+      isCurrentProfileOperation(saveGeneration)
+      && activeProfile?.id === saveProfile.id
+      && requestedProfileId === saveProfile.id
+    ));
+  const canApplyActiveState = () => !profileScopeWriteBlocked
+    && session === saveSession
+    && isCurrentProfileOperation(saveGeneration)
+    && activeProfile?.id === saveProfile.id;
+  if (!canWrite()) return;
   if (cloudSyncBlocked && !manual) return;
   if (manual) cloudSyncBlocked = false;
   saveInFlight = true;
-  let saved = false;
   let conflictRetries = 0;
+  let requestState = requestedState || window.learningDesk.getEnvelope();
+  let requestVersion = requestedVersion;
   try {
     while (true) {
-      const currentState = window.learningDesk.getEnvelope();
+      if (!canWrite()) break;
       const { data, error } = await supabase.rpc("learning_save_state", {
-        p_profile_id: activeProfile.id,
-        ...buildCloudSavePayload(currentState, cloudVersion),
+        p_profile_id: saveProfile.id,
+        ...buildCloudSavePayload(requestState, requestVersion),
       });
+      if (!canWrite()) break;
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
           showToast("操作过于频繁，请稍后再试。", 5000);
@@ -1339,18 +1674,19 @@ async function saveCloudState(manual = false) {
       } else {
         const row = Array.isArray(data) ? data[0] : data;
         if (row) {
-          cloudVersion = row?.version ?? cloudVersion;
-          lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-          updateSyncStatus();
+          if (canApplyActiveState()) {
+            cloudVersion = row?.version ?? cloudVersion;
+            lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+            updateSyncStatus();
+          }
           if (manual) showToast("云端记录已更新");
-          saved = true;
           break;
         }
         // 空集 = 版本冲突（服务端不再 raise，避免事务回滚绕过限流）→ 走下方统一冲突处理。
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
-        cloudSyncBlocked = true;
+        if (canApplyActiveState()) cloudSyncBlocked = true;
         showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
         break;
       }
@@ -1358,15 +1694,18 @@ async function saveCloudState(manual = false) {
       const { data: remote, error: remoteError } = await supabase
         .from("learning_profile_states")
         .select("state, version")
-        .eq("profile_id", activeProfile.id)
+        .eq("profile_id", saveProfile.id)
         .single();
+      if (!canWrite()) break;
       if (remoteError || !remote) {
         if (remoteError?.code === "PGRST116" || (!remoteError && !remote)) {
           // 目标 profile 在云端已不存在 → 熔断自动同步，避免每次编辑都触发一次无效冲突往返
-          resetGrowthLoopRemoteRetry();
-          activeProfile = null;
-          cloudSyncBlocked = true;
-          localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          if (canApplyActiveState()) {
+            resetGrowthLoopRemoteRetry();
+            activeProfile = null;
+            cloudSyncBlocked = true;
+            localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          }
           showToast("云端记录已不存在，已停止自动同步。", 6000);
         } else {
           showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
@@ -1374,8 +1713,13 @@ async function saveCloudState(manual = false) {
         break;
       }
 
-      cloudVersion = remote.version;
-      window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
+      if (!canWrite()) break;
+      requestVersion = remote.version;
+      requestState = mergeState(requestState, remote.state);
+      if (canApplyActiveState()) {
+        cloudVersion = remote.version;
+        window.learningDesk.replaceState(requestState, { persist: true });
+      }
       conflictRetries += 1;
       await new Promise((resolve) => window.setTimeout(resolve, CONFLICT_RETRY_DELAY_MS * conflictRetries));
     }
@@ -1384,25 +1728,40 @@ async function saveCloudState(manual = false) {
   }
 
   const queuedAfterSave = saveQueued;
-  saveQueued = false;
-  if (saved && queuedAfterSave) {
-    await saveCloudState(false);
+  saveQueued = null;
+  if (queuedAfterSave) {
+    await saveCloudState(queuedAfterSave.manual, queuedAfterSave);
   }
 }
 
-function scheduleSave() {
-  if (cloudSyncBlocked) {
-    clearTimeout(saveTimer);
-  } else {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveCloudState(false), 500);
+function scheduleSave(manual = false) {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (manual && !profileScopeWriteBlocked) cloudSyncBlocked = false;
+  const request = captureSaveRequest(manual);
+  if (!cloudSyncBlocked && request) {
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void saveCloudState(request.manual, request);
+    }, 500);
   }
   scheduleGrowthLoopSync();
 }
 
-window.cloudSync = { schedule: scheduleSave, scheduleGrowthLoop: scheduleGrowthLoopSync };
+window.cloudSync = {
+  schedule: scheduleSave,
+  scheduleGrowthLoop: scheduleGrowthLoopSync,
+  isProfileScopeWriteBlocked: () => profileScopeWriteBlocked,
+  canWriteLocalState: () => !profileScopeWriteBlocked && (!session || Boolean(activeProfile)),
+  canWriteScopeTransition: () => !profileScopeWriteBlocked && Boolean(session),
+  getProfileCommitState: () => ({
+    active_profile_id: activeProfile?.id || null,
+    active_profile_key: localStorage.getItem(ACTIVE_PROFILE_KEY),
+    cloud_version: cloudVersion,
+  }),
+};
 window.addEventListener("online", () => {
-  if (activeProfile) growthLoopRetryScheduler.scheduleNow();
+  if (activeProfile && !profileScopeWriteBlocked) growthLoopRetryScheduler.scheduleNow();
 });
 
 async function maybePromptPasswordSetup(options = {}) {
@@ -1426,7 +1785,10 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
+  profileOperationGeneration += 1;
   resetGrowthLoopRemoteRetry();
+  const existingScopeBlock = profileScopeWriteBlocked
+    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
   session = nextSession;
   memberships = [];
   profiles = [];
@@ -1434,6 +1796,8 @@ async function onAuthChange(nextSession, event = "") {
   cloudVersion = null;
   lastSyncAt = null;
   cloudSyncBlocked = false;
+  profileScopeWriteBlocked = existingScopeBlock;
+  if (profileScopeWriteBlocked) sessionStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   if (!session) {
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
@@ -1443,8 +1807,8 @@ async function onAuthChange(nextSession, event = "") {
   if (session) {
     workspaceLoading = loadWorkspace();
     try {
-      await workspaceLoading;
-      if (changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+      const selected = await workspaceLoading;
+      if (selected && changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
         showToast("已连接云端学习空间");
       }
     } catch (error) {
