@@ -144,7 +144,7 @@ function failClosedProfileScope() {
   } catch (error) {
     console.warn("Unable to persist the profile scope block:", error);
   }
-  profileOperationGeneration += 1;
+  advanceProfileOperationGeneration();
   clearTimeout(saveTimer);
   saveTimer = null;
   saveQueued = null;
@@ -258,10 +258,18 @@ async function restoreProfileCommit(previous, targetProfile) {
 }
 
 function enqueueProfileOperation(operation, { advanceGeneration = true } = {}) {
-  const generation = advanceGeneration ? ++profileOperationGeneration : profileOperationGeneration;
+  const generation = advanceGeneration
+    ? advanceProfileOperationGeneration()
+    : profileOperationGeneration;
   const result = profileOperationQueue.then(() => operation(generation));
   profileOperationQueue = result.catch(() => false);
   return result;
+}
+
+function advanceProfileOperationGeneration() {
+  profileOperationGeneration += 1;
+  window.growthLoop?.invalidateWriteOperations?.();
+  return profileOperationGeneration;
 }
 
 function isCurrentProfileOperation(generation) {
@@ -416,7 +424,6 @@ function guardianConsentPayload(householdId) {
 }
 
 async function clearLocalAccountState() {
-  profileOperationGeneration += 1;
   resetGrowthLoopRemoteRetry();
   profileScopeWriteBlocked = true;
   cloudSyncBlocked = true;
@@ -425,6 +432,7 @@ async function clearLocalAccountState() {
   } catch (error) {
     console.warn("Unable to persist the profile scope block before cleanup:", error);
   }
+  advanceProfileOperationGeneration();
   let signOutError = null;
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
@@ -1838,7 +1846,7 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
-  profileOperationGeneration += 1;
+  advanceProfileOperationGeneration();
   resetGrowthLoopRemoteRetry();
   const existingScopeBlock = profileScopeWriteBlocked || readProfileScopeBlock();
   session = nextSession;

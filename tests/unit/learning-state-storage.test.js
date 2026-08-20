@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getLearningStateStorageKey, migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
 import {
+  clearLearningDeskStorage,
   adoptPendingLearningState,
   loadLearningStateEnvelope,
 } from "../../src/learning-state-storage.js";
@@ -9,6 +10,12 @@ function memoryStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
   return {
     data,
+    get length() {
+      return data.size;
+    },
+    key(index) {
+      return [...data.keys()][index] ?? null;
+    },
     getItem(key) {
       return data.has(key) ? data.get(key) : null;
     },
@@ -119,5 +126,39 @@ describe("learning state storage", () => {
     const result = adoptPendingLearningState(storage, scope);
 
     expect(result.learning.checkins).toEqual({ existing: { math: 1 } });
+  });
+
+  it("clears every app-owned profile, pending, legacy, and backup key", () => {
+    const storage = memoryStorage({
+      shadow_mate_workbench_v1: "legacy",
+      "shadow_mate_learning_v2:pending": "pending",
+      "shadow_mate_learning_v2:household-a:profile-a": "profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b": "profile-b",
+      "shadow_mate_learning_v2:legacy_backup:one": "backup",
+      unrelated: "keep",
+    });
+
+    expect(clearLearningDeskStorage(storage)).toEqual(expect.arrayContaining([
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:pending",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:one",
+    ]));
+    expect(storage.data).toEqual(new Map([["unrelated", "keep"]]));
+  });
+
+  it("throws after a failed key deletion instead of reporting cleanup success", () => {
+    const storage = memoryStorage({
+      "shadow_mate_learning_v2:household-a:profile-a": "profile-a",
+    });
+    const originalRemove = storage.removeItem.bind(storage);
+    storage.removeItem = (key) => {
+      if (key.includes("profile-a")) return;
+      originalRemove(key);
+    };
+
+    expect(() => clearLearningDeskStorage(storage)).toThrow(/cleanup_failed/);
+    expect(storage.getItem("shadow_mate_learning_v2:household-a:profile-a")).toBe("profile-a");
   });
 });

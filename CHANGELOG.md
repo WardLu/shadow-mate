@@ -5,7 +5,7 @@
 ### Fixed
 - 修复孩子切换并发期间的完整 active tuple 回滚：active profile、profile key、cloud version、Growth Loop 和 Learning Desk 必须一起回到原作用域，否则 fail-closed。
 - fail-closed 标记改为跨 browsing session 持久化，并将本机清理作为应用内唯一解除入口；旧 outbox claim 通过 immutable operation context/lease 绑定到发送前复核。
-- IndexedDB 写入覆盖 request-success 到 transaction-complete 的 stale 窗口，发现作用域失效时主动 abort，避免旧学习者数据落盘。
+- profile-scoped business IndexedDB 写入覆盖 request-success 到 transaction-complete 的 stale 窗口，发现作用域失效时主动 abort，避免旧学习者数据落盘；tuple-safe claim release 与显式 cleanup 保持各自的保护边界。
 - 同一 worker 的 live `(worker_id, operation_id, lease_id)` claim 不能被并发 operation 覆盖；发送前重读并校验当前 lease，失效 claim 不会触发 cloud send。
 - 本机清理成功前始终保持 fail-closed；清理失败可重试且不会因重开页面恢复本机写入。
 

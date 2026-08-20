@@ -411,10 +411,10 @@ export function createMemoryLearningDb() {
   return makeMemoryStore();
 }
 
-export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } = {}) {
+export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB, deferOpen = false } = {}) {
   if (!indexedDB) return makeMemoryStore();
   let activeDatabase;
-  let databasePromise;
+  let databasePromise = null;
   let reopeningPromise = null;
 
   function rememberDatabase(database) {
@@ -423,13 +423,20 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
     return database;
   }
 
-  databasePromise = openDatabase(indexedDB).then(
-    rememberDatabase,
-    () => rememberDatabase(makeMemoryStore()),
-  );
+  function ensureDatabasePromise() {
+    if (!databasePromise) {
+      databasePromise = openDatabase(indexedDB).then(
+        rememberDatabase,
+        () => rememberDatabase(makeMemoryStore()),
+      );
+    }
+    return databasePromise;
+  }
+
+  if (!deferOpen) ensureDatabasePromise();
 
   function reopenDatabase(staleDatabase) {
-    if (staleDatabase !== activeDatabase) return databasePromise;
+    if (staleDatabase !== activeDatabase) return ensureDatabasePromise();
     if (!reopeningPromise) {
       const openingPromise = openDatabase(indexedDB);
       reopeningPromise = openingPromise;
@@ -444,7 +451,7 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB } =
   }
 
   async function useDatabase(operation) {
-    const database = await databasePromise;
+    const database = await ensureDatabasePromise();
     try {
       return await operation(database);
     } catch (error) {

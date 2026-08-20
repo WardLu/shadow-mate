@@ -60,6 +60,21 @@ function closingError(message = "The database connection is closing.") {
 }
 
 describe("local Growth Loop database", () => {
+  it("defers the IndexedDB open when the caller is fail-closed", () => {
+    let opens = 0;
+    createIndexedDbLearningDb({
+      deferOpen: true,
+      indexedDB: {
+        open() {
+          opens += 1;
+          throw new Error("open_should_be_deferred");
+        },
+      },
+    });
+
+    expect(opens).toBe(0);
+  });
+
   it("isolates snapshots by household and profile scope", async () => {
     const db = createMemoryLearningDb();
     await db.putSnapshot("household-1:profile-1", { scope: { profile_id: "profile-1" }, value: 1 });

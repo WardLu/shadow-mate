@@ -361,8 +361,9 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
-    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
-    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    const clockStart = new Date(Date.now() + 60_000);
+    await page.clock.install({ time: clockStart });
+    await page.clock.pauseAt(clockStart);
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
 
@@ -1155,69 +1156,74 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
   });
 
-  test("aborts the controller operation before a real IndexedDB transaction can commit a stale row", async ({ page }) => {
-    await seedAuthenticatedSession(page);
-    await mockCloudApi(page);
+  test("aborts the controller operation before a real IndexedDB transaction can commit a stale row", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto("/");
+      await page.waitForTimeout(500);
 
-    await page.goto("/");
-    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-
-    const result = await page.evaluate(async () => {
-      await window.growthLoop.clearAllLocalData();
-      const originalPut = IDBObjectStore.prototype.put;
-      const originalSetInterval = window.setInterval;
-      const originalAbort = AbortController.prototype.abort;
-      let requestSucceeded = false;
-      let abortCount = 0;
-      window.setInterval = () => 0;
-      AbortController.prototype.abort = function (...args) {
-        abortCount += 1;
-        return originalAbort.apply(this, args);
-      };
-      IDBObjectStore.prototype.put = function (...args) {
-        const request = originalPut.apply(this, args);
-        if (this.name === "snapshots") {
-          request.addEventListener("success", () => queueMicrotask(() => {
-            requestSucceeded = true;
-            localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
-            window.growthLoop.invalidateWriteOperations?.();
-          }), { once: true });
-        }
-        return request;
-      };
-
-      try {
-        await window.growthLoop.recordPoint({
-          item: { id: "stale-item", name: "不应落盘", default_points: 1 },
-          occurred_on: "2026-08-20",
-          request_id: "stale-real-idb-row",
-        });
-      } finally {
-        IDBObjectStore.prototype.put = originalPut;
-        window.setInterval = originalSetInterval;
-        AbortController.prototype.abort = originalAbort;
-      }
-
-      const persisted = await new Promise((resolve, reject) => {
-        const request = indexedDB.open("shadow-mate-learning-v1", 1);
-        request.onerror = () => reject(request.error || new Error("open_failed"));
-        request.onsuccess = () => {
-          const database = request.result;
-          const transaction = database.transaction(["snapshots"], "readonly");
-          const read = transaction.objectStore("snapshots").get("pending:pending");
-          read.onerror = () => reject(read.error || new Error("read_failed"));
-          read.onsuccess = () => {
-            resolve(read.result?.snapshot?.ledger?.some((entry) => entry.request_id === "stale-real-idb-row") || false);
-            database.close();
-          };
+      const result = await page.evaluate(async () => {
+        await window.growthLoop.clearAllLocalData();
+        const { createIndexedDbLearningDb } = await import("/src/learning-local-db.js");
+        const { createGrowthLoopController } = await import("/src/learning-growth-loop-controller.js");
+        const controller = createGrowthLoopController({ db: createIndexedDbLearningDb() });
+        const originalPut = IDBObjectStore.prototype.put;
+        const originalSetInterval = window.setInterval;
+        const originalAbort = AbortController.prototype.abort;
+        let requestSucceeded = false;
+        let abortCount = 0;
+        window.setInterval = () => 0;
+        AbortController.prototype.abort = function (...args) {
+          abortCount += 1;
+          return originalAbort.apply(this, args);
         };
-      });
-      return { requestSucceeded, abortCount, persisted_row: persisted };
-    });
+        IDBObjectStore.prototype.put = function (...args) {
+          const request = originalPut.apply(this, args);
+          if (this.name === "snapshots") {
+            request.addEventListener("success", () => queueMicrotask(() => {
+              requestSucceeded = true;
+              controller.invalidateWriteOperations?.();
+            }), { once: true });
+          }
+          return request;
+        };
 
-    expect(result.requestSucceeded).toBe(true);
-    expect(result.abortCount).toBeGreaterThan(0);
-    expect(result.persisted_row).toBe(false);
+        try {
+          await controller.recordPoint({
+            item: { id: "stale-item", name: "不应落盘", default_points: 1 },
+            occurred_on: "2026-08-20",
+            request_id: "stale-real-idb-row",
+          });
+        } finally {
+          IDBObjectStore.prototype.put = originalPut;
+          window.setInterval = originalSetInterval;
+          AbortController.prototype.abort = originalAbort;
+        }
+
+        const persisted = await new Promise((resolve, reject) => {
+          const request = indexedDB.open("shadow-mate-learning-v1", 1);
+          request.onerror = () => reject(request.error || new Error("open_failed"));
+          request.onsuccess = () => {
+            const database = request.result;
+            const transaction = database.transaction(["snapshots"], "readonly");
+            const read = transaction.objectStore("snapshots").get("pending:pending");
+            read.onerror = () => reject(read.error || new Error("read_failed"));
+            read.onsuccess = () => {
+              resolve(read.result?.snapshot?.ledger?.some((entry) => entry.request_id === "stale-real-idb-row") || false);
+              database.close();
+            };
+          };
+        });
+        return { requestSucceeded, abortCount, persisted_row: persisted };
+      });
+
+      expect(result.requestSucceeded).toBe(true);
+      expect(result.abortCount).toBeGreaterThan(0);
+      expect(result.persisted_row).toBe(false);
+    } finally {
+      await context.close();
+    }
   });
 
   test("fails closed when Learning rollback fails after Growth rollback succeeds", async ({ page }) => {

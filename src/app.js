@@ -17,7 +17,7 @@ import {
   hasCheckin,
   transitionLearningState,
 } from "./learning-state.js";
-import { getLearningStateStorageKey } from "./learning-state-envelope.js";
+import { getLearningStateStorageKey, migrateLegacyLearningState } from "./learning-state-envelope.js";
 import {
   FOUNDATION_PACKAGE,
   getContentModuleDefinition,
@@ -26,7 +26,11 @@ import {
   setContentModuleEnabled,
   setContentPackageEnabled,
 } from "./learning-content-package.js";
-import { loadLearningStateEnvelope, adoptPendingLearningState } from "./learning-state-storage.js";
+import {
+  clearLearningDeskStorage,
+  loadLearningStateEnvelope,
+  adoptPendingLearningState,
+} from "./learning-state-storage.js";
 import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
@@ -141,12 +145,18 @@ const PEANUT_BOOKS = [
 const STORE_KEY = "shadow_mate_workbench_v1";
 const PROFILE_SCOPE_BLOCKED_KEY = "shadow_mate_profile_scope_blocked";
 
-const growthLoopDb = createIndexedDbLearningDb();
+function isProfileScopeBlocked() {
+  return localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
+    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+}
+
+const profileScopeBlockedAtStartup = isProfileScopeBlocked();
+const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
-  canWrite: () => localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+  canWrite: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteLocalState?.() !== false,
-  canTransition: () => localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+  canTransition: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteScopeTransition?.() !== false,
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
@@ -183,7 +193,7 @@ function learningStateFromEnvelope(envelope) {
 }
 
 function learningStateReadStorage() {
-  if (localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") return localStorage;
+  if (!isProfileScopeBlocked()) return localStorage;
   // Storage migration helpers are intentionally read-only while a prior
   // profile operation is fail-closed, including during a same-tab reload.
   return {
@@ -210,7 +220,7 @@ function canWriteLearningState({ allowScopeTransition = false } = {}) {
   const cloudWriteCheck = allowScopeTransition
     ? window.cloudSync?.canWriteScopeTransition?.()
     : window.cloudSync?.canWriteLocalState?.();
-  return localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1"
+  return !isProfileScopeBlocked()
     && cloudWriteCheck !== false;
 }
 
@@ -1843,14 +1853,12 @@ window.learningDesk = {
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
-    localStorage.removeItem(STORE_KEY);
-    localStorage.removeItem(getLearningStateStorageKey({}));
-    localStorage.removeItem(getLearningStateStorageKey(learningEnvelope.scope || {}));
+    clearLearningDeskStorage(localStorage);
     if (reload) {
       window.location.reload();
       return;
     }
-    learningEnvelope = loadLearningStateEnvelope(localStorage, {});
+    learningEnvelope = migrateLegacyLearningState({}, {});
     store = createLearningState();
     switchMod(CURRENT_MOD);
   }

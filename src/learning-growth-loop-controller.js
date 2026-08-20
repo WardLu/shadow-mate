@@ -98,6 +98,10 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     for (const operation of activeWriteOperations) operation.controller?.abort?.();
   }
 
+  function invalidateWriteOperations() {
+    abortWriteOperations();
+  }
+
   function isWriteAllowed() {
     return canWrite() !== false && (!scopeWriteGuard || scopeWriteGuard() !== false);
   }
@@ -486,7 +490,7 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
   }
 
   async function clearAllLocalData() {
-    abortWriteOperations();
+    invalidateWriteOperations();
     await db.clearAll();
     scope = { household_id: null, profile_id: null };
     scopeKey = scopeKeyForGrowthLoop(scope);
@@ -535,6 +539,7 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     pendingOutbox,
     clearScope,
     clearAllLocalData,
+    invalidateWriteOperations,
     hasPendingData,
     subscribe,
   };
