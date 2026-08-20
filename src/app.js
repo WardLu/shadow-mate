@@ -1,5 +1,5 @@
 import { inject } from "@vercel/analytics";
-import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { buildMissingSequence, escapeHtml, selectDailyWritingGroups } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import {
@@ -836,7 +836,7 @@ function renderChinese(){
 
   // 写字打卡
   const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
-  const wordsHtml = WRITE_WORDS.slice(0,4).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
+  const wordsHtml = selectDailyWritingGroups(WRITE_WORDS).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
   const card3 = $(`
     <div class="card">
       <h3>${icon("pen")} 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>

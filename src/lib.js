@@ -163,3 +163,22 @@ export function buildMissingSequence({ start = 1, length = 20, missingIndex = 9 
   });
   return { answer, values };
 }
+
+export function selectDailyWritingGroups(groups, date = new Date()) {
+  const groupsPerSheet = 4;
+  const sheetSize = Math.min(groupsPerSheet, groups.length);
+  if (sheetSize === 0) return [];
+
+  // Use the local calendar date, but calculate with UTC to avoid DST-length days.
+  const calendarDay = Math.floor(Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ) / 86_400_000);
+  const start = ((calendarDay * sheetSize) % groups.length + groups.length) % groups.length;
+
+  return Array.from(
+    { length: sheetSize },
+    (_, index) => groups[(start + index) % groups.length],
+  );
+}

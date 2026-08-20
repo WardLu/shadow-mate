@@ -4,6 +4,8 @@ const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
+const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
 
 const emptyState = {
   checkins: {},
@@ -13,6 +15,28 @@ const emptyState = {
   peanutLog: [],
   peanutRead: {},
 };
+
+async function freezeWritingDate(page) {
+  await page.addInitScript((fixedTime) => {
+    const NativeDate = Date;
+    class FixedDate extends NativeDate {
+      constructor(...args) {
+        if (args.length === 0) super(fixedTime);
+        else super(...args);
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+    window.Date = FixedDate;
+  }, FIXED_WRITING_TIME);
+}
+
+async function openModule(page, mod) {
+  await page.click('[data-mod="learning"]');
+  await page.click(`[data-go="${mod}"]`);
+}
 
 async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
@@ -400,6 +424,32 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(1);
     await expect(page.locator("#syncToast")).toBeVisible();
+  });
+
+  test("shows the same daily writing workbook after a logged-in state update", async ({ page }) => {
+    await freezeWritingDate(page);
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await openModule(page, "chinese");
+
+    const writingGroups = page.locator(".write-grid");
+    await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
+    const beforeCheckin = await writingGroups.allTextContents();
+
+    await page.locator('[data-cmod="chinese-writing"]').click();
+    await expect(writingGroups).toHaveText(beforeCheckin);
+
+    await page.evaluate(() => {
+      window.print = () => {
+        window.__printedWritingGroups = [...document.querySelectorAll(".write-grid")]
+          .map((element) => element.textContent);
+      };
+    });
+    await page.locator("[data-print]").click();
+    await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
   });
 
   test("creates only one learner after rapid repeated clicks", async ({ page }) => {
