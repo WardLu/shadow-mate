@@ -184,6 +184,67 @@ describe("local Growth Loop database", () => {
     await expect(db.getOutbox("activity-1")).resolves.toBeNull();
   });
 
+  it("aborts an IndexedDB write that becomes stale after request success before transaction complete", async () => {
+    const snapshots = new Map();
+    let current = true;
+    let requestSucceeded = false;
+    let transactionCompleted = false;
+    const database = {
+      transaction(storeNames, mode) {
+        expect(storeNames).toEqual(["snapshots"]);
+        const transaction = {
+          error: null,
+          objectStore(storeName) {
+            expect(storeName).toBe("snapshots");
+            return {
+              put(row) {
+                const previous = snapshots.get(row.scope_key);
+                snapshots.set(row.scope_key, row);
+                const request = {};
+                queueMicrotask(() => {
+                  request.result = row;
+                  requestSucceeded = true;
+                  request.onsuccess?.();
+                  current = false;
+                  setTimeout(() => {
+                    if (transaction.aborted) return;
+                    transactionCompleted = true;
+                    transaction.oncomplete?.();
+                  }, 15);
+                });
+                transaction.abort = () => {
+                  if (transaction.aborted) return;
+                  transaction.aborted = true;
+                  if (previous === undefined) snapshots.delete(row.scope_key);
+                  else snapshots.set(row.scope_key, previous);
+                  transaction.error = new Error("indexeddb_transaction_aborted");
+                  transaction.onabort?.();
+                };
+                return request;
+              },
+              get(scopeKey) {
+                return requestThatResolves(snapshots.get(scopeKey));
+              },
+            };
+          },
+        };
+        if (mode === "readonly") transaction.oncomplete = () => {};
+        return transaction;
+      },
+    };
+    const indexedDB = { open: () => requestThatResolves(database) };
+    const db = createIndexedDbLearningDb({ indexedDB });
+
+    await expect(db.putSnapshot(
+      "household-1:profile-1",
+      { scope: { household_id: "household-1", profile_id: "profile-1" } },
+      { canCommit: () => current },
+    )).rejects.toMatchObject({ code: "profile_scope_write_stale" });
+    expect(requestSucceeded).toBe(true);
+    expect(transactionCompleted).toBe(false);
+    await expect(db.getSnapshot("household-1:profile-1")).resolves.toBeNull();
+  });
+
   it("keeps the requested learner scope when recovering a closing IndexedDB connection", async () => {
     let openCount = 0;
     const scopeKey = "household-1:profile-2";

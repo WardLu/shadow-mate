@@ -143,4 +143,30 @@ describe("Growth Loop outbox sync", () => {
     expect(first.confirmed + second.confirmed).toBe(1);
     await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
   });
+
+  it("does not send after the immutable operation becomes stale immediately after claim", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    let current = true;
+    const claimOutbox = db.claimOutbox.bind(db);
+    db.claimOutbox = async (...args) => {
+      const claimed = await claimOutbox(...args);
+      current = false;
+      return claimed;
+    };
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "tab-a",
+      now: () => 1000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p", { canCommit: () => current })).resolves.toEqual(
+      expect.objectContaining({ skipped: true, reason: "stale_profile_scope" }),
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
 });

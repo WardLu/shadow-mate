@@ -904,7 +904,7 @@ test.describe("Authenticated cloud workspace", () => {
           product_id: "shadow-mate",
           scope: { household_id: householdId, profile_id: profileId },
           learning: {
-            checkins: {},
+            checkins: { "2026-08-20": { math: true } },
             extra: { queuedFromProfileB: true },
             bookShelf: {},
             peanutLog: [],
@@ -918,6 +918,13 @@ test.describe("Authenticated cloud workspace", () => {
 
     await secondChoice.click();
     await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toMatchObject({
+      p_profile_id: SECOND_PROFILE_ID,
+      p_state: {
+        scope: { profile_id: SECOND_PROFILE_ID },
+        learning: { checkins: { "2026-08-20": { math: true } } },
+      },
+    });
     await expect.poll(() => api.getRpcSettledCount()).toBe(0);
     await thirdChoice.click();
     await expect.poll(() => api.getRpcSettledCount()).toBe(1);
@@ -1092,6 +1099,20 @@ test.describe("Authenticated cloud workspace", () => {
       growthUnchanged: true,
       outboxUnchanged: true,
     });
+
+    // A closed tab clears sessionStorage, but must not clear the fail-closed
+    // marker. Only the explicit local-data cleanup flow may remove it.
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.click("#accountButton");
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
   });
 
   test("fails closed when Learning rollback fails after Growth rollback succeeds", async ({ page }) => {
