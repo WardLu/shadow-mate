@@ -89,6 +89,18 @@ npm.cmd run test:ui
 需要本地数据库测试时，先启动 Docker Desktop：
 
 ```powershell
+npm run local-dev
+npm run local-dev -- plan --projects shadow-mate --json
+```
+
+日常开发优先使用中央多项目入口：它会预选 Shadow Mate，并只补齐当前缺少的
+shared_test、Schema、Edge generation 和 5173 产品进程；已运行且身份匹配的资源会复用。
+`supabase:local:start` 与 `supabase:local:functions:serve` 仍保留为一版兼容排查入口，
+不应与中央 Edge generation 同时启动。
+
+仅需兼容分步入口时：
+
+```powershell
 npm run supabase:local:start
 npm run test:db
 ```
@@ -144,7 +156,7 @@ src/learning-state.js      学习状态机与四个模块的打卡分组
 src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
 src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
 src/icons.js               Lucide 图标渲染与图标 hydration
-supabase/migrations/       Shadow Mate 的 schema 提案与隔离 CI 测试副本
+supabase/migrations/       已按控制面登记来源恢复的本地 schema / 隔离 CI 测试副本
 supabase/functions/        账号级服务端删除
 tests/unit/                纯函数与学习状态机测试
 tests/e2e/                 离线、云端和数据生命周期测试
@@ -156,9 +168,16 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ### 共享 Supabase 与迁移边界
 
-影伴接入共享 Supabase 后，日常本地验收必须通过 `npm run supabase:local:start`，由同级 `shadow-size/merchant-admin` 启动共享本地实例，并加载经 Shadow Portal 控制面校验的 Shadow Mate `learning_*` schema。需要验收 Auth 或 Edge Functions 时，再在第二个终端运行 `npm run supabase:local:functions:serve`。
+影伴接入共享 Supabase 后，日常本地验收通过中央 `npm run local-dev`，由同级
+`shadow-size/merchant-admin` 启动共享本地实例，并加载经 Shadow Portal 控制面校验的
+Shadow Mate `learning_*` schema。需要仅排查数据库或兼容 Edge 时，才使用上面的两个旧 npm
+wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper，但保留
+`supabase/functions/_shared/README.md` 作为受控空 shared bundle，供中央 Edge generation
+做来源校验和增量重建。
 
 仓库中的 `supabase/migrations/` 仍用于保存与代码同步的迁移提案和隔离 CI 测试副本，不是共享生产库的唯一发布目录。共享生产迁移的 canonical 文件、审批、发布和台账由 `shadow-portal/supabase/control-plane` 管理；不要在本仓库直接执行生产 `db push`、`migration repair` 或 linked SQL。
+
+当前本地 Growth Loop 9 条迁移已按控制面登记来源恢复并逐条核验 SHA-256：8 条来自 `origin/feat/growth-loop-integration`，期初积分迁移来自 `origin/main`。这只恢复本地 Schema 来源，不代表产品仓库获得生产迁移发布权限。
 
 `supabase/config.toml` 的独立端口和迁移配置仅供 CI/隔离测试使用。不要在影伴仓库根目录直接运行裸 `supabase start` 来代替共享本地启动。
 
