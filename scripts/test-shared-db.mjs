@@ -64,7 +64,7 @@ function getDatabaseUrl() {
   }
 
   if (fs.existsSync(path.join(merchantAdminRoot, 'package.json'))) {
-    return readDatabaseUrlFromSupabase(merchantAdminRoot, 'merchant-admin 本地 Supabase')
+    return readDatabaseUrlFromSupabase(merchantAdminRoot, 'shared_test 本地 Supabase')
   }
 
   throw new Error(
