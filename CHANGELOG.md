@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- 修复孩子切换并发期间的完整 active tuple 回滚：active profile、profile key、cloud version、Growth Loop 和 Learning Desk 必须一起回到原作用域，否则 fail-closed。
+- fail-closed 标记改为跨 browsing session 持久化，并将本机清理作为应用内唯一解除入口；旧 outbox claim 通过 immutable operation context/lease 绑定到发送前复核。
+- IndexedDB 写入覆盖 request-success 到 transaction-complete 的 stale 窗口，发现作用域失效时主动 abort，避免旧学习者数据落盘。
+
+### Tests
+- 新增真实 `checkins` 驱动的 B save in-flight → C 失败回归，以及 fail-closed 重开、outbox lease 和 IndexedDB transaction abort 回归。
+
 ## [1.3.9] - 2026-08-19
 
 ### Added
