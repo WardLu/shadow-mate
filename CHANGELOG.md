@@ -12,6 +12,18 @@
 ### Tests
 - 新增真实 `checkins` 驱动的 B save in-flight → C 失败回归，以及 fail-closed 重开零 IndexedDB 写、清理失败保留 marker、same-worker lease、send 前重读和 transaction-completion microtask AbortSignal 回归。
 
+## [1.3.10] - 2026-08-23
+
+### Fixed
+- 修复每日写作积分在跨月、跨年和月份切换时沿用错误 workbook 的问题，按目标年月稳定选择并保留同一 workbook 的本地/云端状态。
+- 修复家庭档案切换期间的并发竞态：完整 active tuple、profile-scoped IndexedDB 写入、fail-closed 恢复和 outbox lease 均在作用域变化时安全失效，避免旧孩子的数据写入或发送到新作用域。
+
+### Included migration prerequisite
+- 本版本依赖 Shadow Portal 控制面迁移 `20260819120000_growth_loop_legacy_points_import.sql`，用于一次性导入历史每日积分并与期初积分恢复互斥；必须先完成生产迁移并通过 schema/RLS/ACL 验收，再发布前端。
+
+### Tests
+- 代码合并后的 `npm run verify`、云端 E2E `48/48` 和定向 sign-out 回归通过；正式发布仍需完成生产迁移、生产部署和真实账号验收。
+
 ## [1.3.9] - 2026-08-19
 
 ### Added

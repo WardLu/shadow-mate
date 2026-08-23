@@ -1,5 +1,32 @@
 # Release Notes
 
+## v1.3.10 - 2026-08-23
+
+- 修复每日写作积分在跨月、跨年和月份切换时选择错误 workbook 的问题。
+- 修复家庭档案切换期间的并发竞态，覆盖 active tuple、profile-scoped IndexedDB、fail-closed 和 outbox lease。
+- 包含 Shadow Portal 控制面迁移 `20260819120000_growth_loop_legacy_points_import.sql` 的发布前置依赖；该迁移必须先于前端上线完成并登记验收。
+
+### 验证结果
+
+- 代码合并提交：`f65e3e8f98bd996ba7ff570252eb9fc4488e3d85`。
+- `npm run verify`、云端 E2E `48/48`、定向 sign-out 回归和 GitHub PR checks 已通过。
+- 生产迁移、生产部署、生产响应头和真实账号验收：待本次正式发布流程完成后回填；当前不宣称已上线。
+
+### 发布包
+
+文件：`shadow-mate-v1.3.10.zip`
+
+SHA-256：发布时以 GitHub Release 产物为准回填。
+
+### 部署清单（待完成）
+
+- [ ] 生产迁移 `20260819120000` dry-run 仅列出目标迁移，并完成受控 apply。
+- [ ] `schema_migrations`、目标函数、约束、索引、ACL/RLS 验收通过，Shadow Portal ledger 更新为 `applied/verified`。
+- [ ] Git tag `v1.3.10` 与最终 `main` 合并提交一致，并发布 GitHub Release 及压缩包。
+- [ ] `release-to-production` 完成 `production` 快进和 Vercel 部署。
+- [ ] `https://sm.shadow.wang/` 验证版本、CSP、HSTS、X-Frame-Options、HTTPS 和核心回归。
+- [ ] 使用脱敏真实账号完成两个 bug 的生产验收，并记录结果。
+
 ## v1.3.9 - 2026-08-19
 
 - Growth Loop 积分模块上线：积分账本、自定义积分项/自定义成长项目、奖励与兑换；后端表与 RPC 已部署共享 Supabase（控制面执行并登记）。
