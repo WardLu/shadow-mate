@@ -5,6 +5,35 @@ import {
 
 export const LEGACY_LEARNING_STATE_KEY = "shadow_mate_workbench_v1";
 export const PENDING_LEARNING_STATE_KEY = getLearningStateStorageKey();
+export const LEARNING_STATE_STORAGE_PREFIX = "shadow_mate_learning_v2:";
+
+function isAppOwnedLearningDeskKey(key) {
+  return key === LEGACY_LEARNING_STATE_KEY || key.startsWith(LEARNING_STATE_STORAGE_PREFIX);
+}
+
+export function listLearningDeskStorageKeys(storage) {
+  const keys = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key && isAppOwnedLearningDeskKey(key)) keys.push(key);
+  }
+  return keys;
+}
+
+export function clearLearningDeskStorage(storage) {
+  const keys = listLearningDeskStorageKeys(storage);
+  for (const key of keys) {
+    storage.removeItem(key);
+    if (storage.getItem(key) !== null) {
+      throw new Error(`learning_desk_key_cleanup_failed:${key}`);
+    }
+  }
+  const remaining = listLearningDeskStorageKeys(storage);
+  if (remaining.length > 0) {
+    throw new Error(`learning_desk_keys_remaining:${remaining.join(",")}`);
+  }
+  return keys;
+}
 
 function hashString(value) {
   let hash = 2166136261;

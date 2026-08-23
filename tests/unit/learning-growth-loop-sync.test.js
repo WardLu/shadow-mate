@@ -50,6 +50,52 @@ describe("Growth Loop outbox sync", () => {
     );
   });
 
+  it("stops at the queue head when another worker owns its lease", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", sequence: 1, type: "point_item_upsert" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", sequence: 2, type: "point_record" });
+    const claimOutbox = db.claimOutbox.bind(db);
+    db.claimOutbox = async (eventId, options) => (
+      eventId === "event-1" ? false : claimOutbox(eventId, options)
+    );
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 2,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+  });
+
+  it("does not send an event while one of its dependencies is unconfirmed", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", sequence: 1, type: "point_item_upsert", status: "conflict" });
+    await db.appendOutbox({
+      event_id: "event-2",
+      scope_key: "h:p",
+      sequence: 2,
+      type: "point_record",
+      depends_on: ["event-1"],
+    });
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 1,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      depends_on: ["event-1"],
+    }));
+  });
+
   it("waits for next_attempt_at and retries the same batch, request, and payload", async () => {
     const db = createMemoryLearningDb();
     const payload = {
@@ -142,5 +188,161 @@ describe("Growth Loop outbox sync", () => {
     expect(sends).toBe(1);
     expect(first.confirmed + second.confirmed).toBe(1);
     await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+  });
+
+  it("does not send the same event twice when concurrent operations share one worker", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    let sends = 0;
+    const transport = {
+      send: vi.fn(async () => {
+        sends += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return { status: "confirmed", data: { id: "remote-1" } };
+      }),
+    };
+    const createSync = () => createOutboxSync({
+      db,
+      transport,
+      workerId: "same-worker",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    const [first, second] = await Promise.all([
+      createSync().syncScope("h:p"),
+      createSync().syncScope("h:p"),
+    ]);
+
+    expect(sends).toBe(1);
+    expect(first.confirmed + second.confirmed).toBe(1);
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+  });
+
+  it("re-reads the current lease immediately before sending", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", type: "point_record" });
+    const originalGetOutbox = db.getOutbox.bind(db);
+    let replaced = false;
+    db.getOutbox = async (eventId) => {
+      const current = await originalGetOutbox(eventId);
+      if (!replaced && current?.processing_by === "worker-a") {
+        replaced = true;
+        await db.updateOutbox(eventId, {
+          processing_by: "worker-b",
+          operation_id: "operation-b",
+          lease_id: "lease-b",
+          lease_until: 6000,
+        });
+      }
+      return originalGetOutbox(eventId);
+    };
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "worker-a",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(
+      expect.objectContaining({ confirmed: 0, pending: 2, blocked: true }),
+    );
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      processing_by: "worker-b",
+      operation_id: "operation-b",
+      lease_id: "lease-b",
+    }));
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+  });
+
+  it("blocks malformed dependency metadata instead of treating it as no dependency", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({
+      event_id: "event-1",
+      scope_key: "h:p",
+      type: "point_record",
+      depends_on: [""],
+    });
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 1,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      depends_on: [""],
+    }));
+  });
+
+  it("blocks when a claimed event disappears before lease verification", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", type: "point_record" });
+    const originalGetOutbox = db.getOutbox.bind(db);
+    db.getOutbox = async (eventId) => (
+      eventId === "event-1" ? null : originalGetOutbox(eventId)
+    );
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "worker-a",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 2,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("does not send after the immutable operation becomes stale immediately after claim", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    let current = true;
+    const claimOutbox = db.claimOutbox.bind(db);
+    db.claimOutbox = async (...args) => {
+      const claimed = await claimOutbox(...args);
+      current = false;
+      return claimed;
+    };
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "tab-a",
+      now: () => 1000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p", { canCommit: () => current })).resolves.toEqual(
+      expect.objectContaining({ skipped: true, reason: "stale_profile_scope" }),
+    );
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      processing_by: null,
+      lease_until: 0,
+      lease_id: null,
+      operation_id: null,
+    }));
   });
 });

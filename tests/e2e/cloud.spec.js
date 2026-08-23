@@ -3,6 +3,8 @@ import { test, expect } from "@playwright/test";
 const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
+const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const THIRD_PROFILE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
 const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
@@ -42,8 +44,11 @@ async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
   const projectRef = new URL(configuredUrl).hostname.split(".")[0];
   await page.addInitScript(({ projectRef, userId }) => {
-    localStorage.clear();
-    sessionStorage.clear();
+    if (window.name !== "shadow-mate-e2e-seeded") {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.name = "shadow-mate-e2e-seeded";
+    }
     const now = Math.floor(Date.now() / 1000);
     sessionStorage.setItem(
       `sb-${projectRef}-auth-token`,
@@ -70,15 +75,23 @@ async function mockCloudApi(page, {
   legacyImportResponses = ["success"],
   growthPointItemsFailures = 0,
   growthPointItemsResponses = null,
+  growthPointItemsDelayMs = 0,
+  rpcDelayMs = 0,
   hasPassword = true,
   createDelayMs = 0,
   householdCreateDelayMs = 0,
   noMembership = false,
+  createdProfileIds = [SECOND_PROFILE_ID],
+  profileStateResponses = {},
+  profileStateData = {},
+  profileStateVersions = {},
+  initialProfiles = [],
 } = {}) {
   let state = structuredClone(remoteState);
   let version = 3;
   let rpcIndex = 0;
   let legacyImportIndex = 0;
+  let rpcSettledCount = 0;
   let growthPointItemsRequests = 0;
   let growthPointItemsResponseIndex = 0;
   const rpcPayloads = [];
@@ -89,6 +102,13 @@ async function mockCloudApi(page, {
   const createdProfiles = [];
   const createdHouseholds = [];
   const createdConsents = [];
+  const profileRows = [{
+    id: PROFILE_ID,
+    household_id: HOUSEHOLD_ID,
+    display_name: "E2E Learner",
+    grade_level: 3,
+  }, ...initialProfiles];
+  let householdCreated = !noMembership;
   let profileExists = true;
 
   await page.route("**/auth/v1/logout**", async (route) => {
@@ -107,13 +127,19 @@ async function mockCloudApi(page, {
     if (path.endsWith("/rpc/learning_save_state")) {
       const payload = JSON.parse(request.postData() || "{}");
       rpcPayloads.push(payload);
-      const response = rpcResponses[Math.min(rpcIndex++, rpcResponses.length - 1)];
+      const responseIndex = rpcIndex++;
+      const response = rpcResponses[Math.min(responseIndex, rpcResponses.length - 1)];
+      const responseDelayMs = Array.isArray(rpcDelayMs)
+        ? rpcDelayMs[Math.min(responseIndex, rpcDelayMs.length - 1)]
+        : rpcDelayMs;
+      if (responseDelayMs) await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
       if (response === "conflict") {
         await route.fulfill({
           status: 409,
           contentType: "application/json",
           body: JSON.stringify({ code: "P0001", message: "learning_state_conflict" }),
         });
+        rpcSettledCount += 1;
         return;
       }
       state = payload.p_state;
@@ -123,6 +149,7 @@ async function mockCloudApi(page, {
         contentType: "application/json",
         body: JSON.stringify({ version, updated_at: "2026-08-01T09:00:00.000Z" }),
       });
+      rpcSettledCount += 1;
       return;
     }
 
@@ -170,6 +197,7 @@ async function mockCloudApi(page, {
         });
         return;
       }
+      if (growthPointItemsDelayMs) await new Promise((resolve) => setTimeout(resolve, growthPointItemsDelayMs));
       await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       return;
     }
@@ -193,13 +221,14 @@ async function mockCloudApi(page, {
 
     if (path.endsWith("/learning_household_members")) {
       if (request.method() === "POST") {
+        householdCreated = true;
         await route.fulfill({ status: 201, body: "" });
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID, role: "owner" }]),
+        body: JSON.stringify(householdCreated ? [{ household_id: HOUSEHOLD_ID, role: "owner" }] : []),
       });
       return;
     }
@@ -213,7 +242,7 @@ async function mockCloudApi(page, {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID }]),
+        body: JSON.stringify(householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []),
       });
       return;
     }
@@ -222,16 +251,18 @@ async function mockCloudApi(page, {
       if (request.method() === "POST") {
         const payload = JSON.parse(request.postData() || "{}");
         createdProfiles.push(payload);
+        const profileId = createdProfileIds[Math.min(createdProfiles.length - 1, createdProfileIds.length - 1)];
+        const createdProfile = {
+          id: profileId,
+          household_id: HOUSEHOLD_ID,
+          display_name: payload.display_name,
+          grade_level: payload.grade_level,
+        };
         if (createDelayMs) await new Promise((resolve) => setTimeout(resolve, createDelayMs));
         await route.fulfill({
           status: 201,
           contentType: "application/json",
-          body: JSON.stringify({
-            id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            household_id: HOUSEHOLD_ID,
-            display_name: payload.display_name,
-            grade_level: payload.grade_level,
-          }),
+          body: JSON.stringify(createdProfile),
         });
         return;
       }
@@ -244,21 +275,29 @@ async function mockCloudApi(page, {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(profileExists ? [{
-          id: PROFILE_ID,
-          household_id: HOUSEHOLD_ID,
-          display_name: "E2E Learner",
-          grade_level: 3,
-        }] : []),
+        body: JSON.stringify(profileExists ? profileRows : []),
       });
       return;
     }
 
     if (path.endsWith("/learning_profile_states")) {
+      const profileFilter = url.searchParams.get("profile_id") || "";
+      const requestedProfileId = profileFilter.replace(/^eq\./, "");
+      const response = profileStateResponses[requestedProfileId];
+      if (response === "error") {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST000", message: "profile state unavailable" }),
+        });
+        return;
+      }
       const select = url.searchParams.get("select") || "";
+      const profileState = profileStateData[requestedProfileId] ?? state;
+      const profileVersion = profileStateVersions[requestedProfileId] ?? version;
       const body = select.includes("state")
-        ? [{ profile_id: PROFILE_ID, state, version, updated_at: "2026-08-01T08:00:00.000Z" }]
-        : [{ profile_id: PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
+        ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState, version: profileVersion, updated_at: "2026-08-01T08:00:00.000Z" }]
+        : [{ profile_id: requestedProfileId || PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       return;
     }
@@ -266,6 +305,7 @@ async function mockCloudApi(page, {
     if (path.endsWith("/learning_households")) {
       if (request.method() === "POST") {
         createdHouseholds.push(JSON.parse(request.postData() || "{}"));
+        householdCreated = true;
         if (householdCreateDelayMs) await new Promise((resolve) => setTimeout(resolve, householdCreateDelayMs));
         await route.fulfill({ status: 201, body: "" });
         return;
@@ -291,6 +331,7 @@ async function mockCloudApi(page, {
     createdHouseholds,
     createdConsents,
     getGrowthPointItemsRequests: () => growthPointItemsRequests,
+    getRpcSettledCount: () => rpcSettledCount,
     getState: () => state,
   };
 }
@@ -320,8 +361,9 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
-    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
-    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    const clockStart = new Date(Date.now() + 60_000);
+    await page.clock.install({ time: clockStart });
+    await page.clock.pauseAt(clockStart);
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
 
@@ -411,6 +453,31 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.createdConsents.length).toBe(1);
   });
 
+  test("does not reopen password setup over a just-closed account dialog", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      noMembership: true,
+      hasPassword: false,
+      growthPointItemsDelayMs: 300,
+    });
+
+    await page.goto("/");
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+    await page.locator('#householdSetupForm input[name="household"]').fill("延迟同步测试家庭");
+    await page.locator('#householdSetupForm input[name="learner"]').fill("延迟同步学习者");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
+    await page.locator("#householdSetupForm").getByRole("button", { name: "创建并同步" }).click();
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /E2E Learner/);
+
+    const cloudDialog = page.locator("#cloudDialog");
+    await cloudDialog.evaluate((element) => {
+      if (element.open) element.close();
+    });
+    await page.waitForTimeout(500);
+    await page.click("#accountButton");
+    await expect(page.locator("#cloudPanel .learner-choice")).toContainText("E2E Learner");
+  });
+
   test("loads a learner profile and completes a manual cloud sync", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page);
@@ -450,6 +517,915 @@ test.describe("Authenticated cloud workspace", () => {
     });
     await page.locator("[data-print]").click();
     await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
+  });
+
+  test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      const open = indexedDB.open.bind(indexedDB);
+      indexedDB.open = (...args) => {
+        const request = open(...args);
+        if (args[0] === "shadow-mate-learning-v1") {
+          request.addEventListener("success", () => {
+            window.__learningDbConnection = request.result;
+          });
+        }
+        return request;
+      };
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.__learningDbConnection))).toBe(true);
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const secondProfileId = SECOND_PROFILE_ID;
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${secondProfileId}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.__learningDbConnection.close());
+    await firstChoice.click();
+
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(PROFILE_ID);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("keeps the current learner active and shows a retryable error when IndexedDB reopen fails", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      const open = indexedDB.open.bind(indexedDB);
+      window.__rejectLearningDbReopen = false;
+      indexedDB.open = (...args) => {
+        if (args[0] === "shadow-mate-learning-v1" && window.__rejectLearningDbReopen) {
+          const request = {};
+          queueMicrotask(() => {
+            request.error = new DOMException("Local Growth Loop database could not reopen.", "UnknownError");
+            request.onerror?.();
+          });
+          return request;
+        }
+        const request = open(...args);
+        if (args[0] === "shadow-mate-learning-v1") {
+          request.addEventListener("success", () => {
+            window.__learningDbConnection = request.result;
+          });
+        }
+        return request;
+      };
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.__learningDbConnection))).toBe(true);
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const secondProfileId = SECOND_PROFILE_ID;
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${secondProfileId}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => {
+      window.__growthWriteScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthWriteScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+      let failNextProfileLoad = true;
+      const hasPendingData = window.growthLoop.hasPendingData.bind(window.growthLoop);
+      window.growthLoop.hasPendingData = async (...args) => {
+        const result = await hasPendingData(...args);
+        if (failNextProfileLoad) {
+          failNextProfileLoad = false;
+          window.__learningDbConnection.close();
+          window.__rejectLearningDbReopen = true;
+        }
+        return result;
+      };
+    });
+
+    await firstChoice.click();
+
+    await expect(secondChoice).toHaveClass(/active/);
+    await expect(firstChoice).not.toHaveClass(/active/);
+    await expect(page.locator("#syncToast")).toContainText("当前孩子未变，请重试");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(secondProfileId);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(secondProfileId);
+    await expect.poll(() => page.evaluate(() => window.__growthWriteScopes)).toEqual([]);
+
+    await page.evaluate(() => {
+      window.__rejectLearningDbReopen = false;
+    });
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(PROFILE_ID);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("serializes rapid profile switches and keeps every scope on the last learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.activityPayloads.length = 0;
+    await page.evaluate(({ firstProfileId, secondProfileId }) => {
+      window.__growthActivityScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthActivityScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+
+      let release;
+      window.__delayedGrowthLoadStarted = false;
+      window.__releaseDelayedGrowthLoad = () => release?.();
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextFirstLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (delayNextFirstLoad && scope.profile_id === firstProfileId) {
+          delayNextFirstLoad = false;
+          window.__delayedGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        return loadScope(scope, options);
+      };
+
+      document.querySelector(`[data-profile="${firstProfileId}"]`).click();
+    }, { firstProfileId: PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await secondChoice.click();
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__releaseDelayedGrowthLoad());
+
+    await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({
+      active: document.querySelector(`[data-profile="${secondProfileId}"]`)?.classList.contains("active"),
+      inactive: document.querySelector(`[data-profile="${firstProfileId}"]`)?.classList.contains("active"),
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      activity: window.__growthActivityScopes,
+    }), { firstProfileId: PROFILE_ID, secondProfileId: SECOND_PROFILE_ID })).toEqual({
+      active: true,
+      inactive: false,
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+      activity: expect.not.arrayContaining([PROFILE_ID]),
+    });
+    await expect.poll(() => api.activityPayloads.map((payload) => payload.p_event?.profile_id)).toContain(SECOND_PROFILE_ID);
+    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(PROFILE_ID);
+  });
+
+  test("restores the last successful scope when a stale switch is followed by a failed switch", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(thirdChoice).toBeVisible();
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ secondProfileId }) => {
+      let release;
+      window.__scopeLoads = [];
+      window.__staleGrowthLoadStarted = false;
+      window.__staleGenerationObserved = false;
+      window.__staleLocalWrites = [];
+      window.__releaseStaleGrowthLoad = () => release?.();
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextSecondLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__scopeLoads.push({ profileId: scope.profile_id, phase: "start" });
+        if (delayNextSecondLoad && scope.profile_id === secondProfileId) {
+          delayNextSecondLoad = false;
+          window.__staleGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        const result = await loadScope(scope, options);
+        window.__scopeLoads.push({ profileId: scope.profile_id, phase: "end" });
+        return result;
+      };
+      document.querySelector(`[data-profile="${secondProfileId}"]`).click();
+    }, { secondProfileId: SECOND_PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__staleGrowthLoadStarted)).toBe(true);
+    await thirdChoice.click();
+    await page.evaluate(() => { window.__staleGenerationObserved = true; });
+    await page.evaluate(() => window.__releaseStaleGrowthLoad());
+
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).not.toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(({ secondProfileId }) => window.__scopeLoads.some(
+      (entry) => entry.profileId === secondProfileId && entry.phase === "end",
+    ), { secondProfileId: SECOND_PROFILE_ID })).toBe(true);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+    }))).toEqual({
+      active: PROFILE_ID,
+      learning: PROFILE_ID,
+      growth: PROFILE_ID,
+    });
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).not.toContain(SECOND_PROFILE_ID);
+    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(SECOND_PROFILE_ID);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+  });
+
+  test("drains a manual save queued for the new profile after the old save settles", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcDelayMs: 1800 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.cloudSync.schedule());
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await page.click("[data-sync]");
+
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
+    await expect.poll(() => api.getRpcSettledCount(), { timeout: 6000 }).toBe(2);
+    await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
+  });
+
+  test("drains an automatic save queued for the new profile after the old save settles", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcDelayMs: 1800 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.cloudSync.schedule());
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await page.evaluate(() => window.cloudSync.schedule());
+
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
+  });
+
+  test("binds an automatic debounce save to the learner that scheduled it", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+
+    await page.evaluate(() => window.cloudSync.schedule());
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toHaveProperty("p_profile_id", SECOND_PROFILE_ID);
+    expect(api.rpcPayloads[0].p_state).toMatchObject({ scope: { profile_id: SECOND_PROFILE_ID } });
+  });
+
+  test("binds a manual debounce save to the learner that scheduled it", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+
+    await page.evaluate(() => window.cloudSync.schedule(true));
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toHaveProperty("p_profile_id", SECOND_PROFILE_ID);
+    expect(api.rpcPayloads[0].p_state).toMatchObject({ scope: { profile_id: SECOND_PROFILE_ID } });
+    await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
+  });
+
+  test("rolls back the complete active tuple when a save becomes stale before the next profile fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      rpcDelayMs: 1200,
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+      profileStateData: { [SECOND_PROFILE_ID]: emptyState },
+      profileStateVersions: { [PROFILE_ID]: 3, [SECOND_PROFILE_ID]: 90 },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(thirdChoice).toBeVisible();
+
+    await page.evaluate(({ householdId, profileId }) => {
+      localStorage.setItem(
+        `shadow_mate_learning_v2:${encodeURIComponent(householdId)}:${encodeURIComponent(profileId)}`,
+        JSON.stringify({
+          schema_version: 2,
+          product_id: "shadow-mate",
+          scope: { household_id: householdId, profile_id: profileId },
+          learning: {
+            checkins: { "2026-08-20": { math: true } },
+            extra: { queuedFromProfileB: true },
+            bookShelf: {},
+            peanutLog: [],
+            peanutRead: [],
+          },
+          legacy: { points_readonly: {} },
+          extensions: { legacy_unknown: {} },
+        }),
+      );
+    }, { householdId: HOUSEHOLD_ID, profileId: SECOND_PROFILE_ID });
+
+    await secondChoice.click();
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toMatchObject({
+      p_profile_id: SECOND_PROFILE_ID,
+      p_state: {
+        scope: { profile_id: SECOND_PROFILE_ID },
+        learning: { checkins: { "2026-08-20": { math: true } } },
+      },
+    });
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await thirdChoice.click();
+    await expect.poll(() => api.getRpcSettledCount()).toBe(1);
+
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).not.toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      tuple: window.cloudSync.getProfileCommitState?.(),
+    }))).toEqual({
+      active: PROFILE_ID,
+      learning: PROFILE_ID,
+      growth: PROFILE_ID,
+      tuple: {
+        active_profile_id: PROFILE_ID,
+        active_profile_key: PROFILE_ID,
+        cloud_version: 3,
+      },
+    });
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID]);
+  });
+
+  test("isolates rollback failures and fails closed before stale profile writes", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(thirdChoice).toBeVisible();
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ firstProfileId, secondProfileId, thirdProfileId }) => {
+      window.__rollbackTrace = [];
+      window.__staleGenerationObserved = false;
+      window.__failGrowthRollback = false;
+      window.__staleLocalWrites = [];
+      window.__staleLearningLoadStarted = false;
+      let release;
+      window.__releaseStaleLearningLoad = () => release?.();
+      window.__triggerStaleSwitch = () => {
+        window.__staleGenerationObserved = true;
+        document.querySelector(`[data-profile="${thirdProfileId}"]`).click();
+      };
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+
+      const originalGrowthLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__rollbackTrace.push({
+          domain: "growth",
+          profileId: scope.profile_id,
+          stale: window.__staleGenerationObserved,
+        });
+        if (scope.profile_id === firstProfileId && window.__failGrowthRollback) {
+          throw new Error("injected_growth_rollback_failure");
+        }
+        return originalGrowthLoadScope(scope, options);
+      };
+
+      const originalLearningSetScope = window.learningDesk.setScope.bind(window.learningDesk);
+      let delaySecondScope = true;
+      window.learningDesk.setScope = async (scope, options) => {
+        if (delaySecondScope && scope.profile_id === secondProfileId) {
+          delaySecondScope = false;
+          window.__staleLearningLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        window.__rollbackTrace.push({
+          domain: "learning",
+          profileId: scope.profile_id,
+          stale: window.__staleGenerationObserved,
+        });
+        const result = await originalLearningSetScope(scope, options);
+        if (scope.profile_id === secondProfileId) window.__triggerStaleSwitch();
+        return result;
+      };
+    }, {
+      firstProfileId: PROFILE_ID,
+      secondProfileId: SECOND_PROFILE_ID,
+      thirdProfileId: THIRD_PROFILE_ID,
+    });
+
+    await secondChoice.click();
+    await expect.poll(() => page.evaluate(() => window.__staleLearningLoadStarted)).toBe(true);
+    await page.evaluate(() => {
+      window.__failGrowthRollback = true;
+      window.__releaseStaleLearningLoad();
+    });
+
+    await expect.poll(() => page.evaluate((firstProfileId) => window.__rollbackTrace.some(
+      (entry) => entry.domain === "learning" && entry.profileId === firstProfileId && entry.stale,
+    ), PROFILE_ID)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cloudSync.isProfileScopeWriteBlocked?.())).toBe(true);
+
+    const traceAfterStale = await page.evaluate(() => window.__rollbackTrace.filter((entry) => entry.stale));
+    expect(traceAfterStale).toEqual(expect.arrayContaining([
+      { domain: "growth", profileId: PROFILE_ID, stale: true },
+      { domain: "learning", profileId: PROFILE_ID, stale: true },
+    ]));
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+
+    await page.evaluate(() => {
+      window.cloudSync.schedule(true);
+      window.cloudSync.scheduleGrowthLoop();
+    });
+    await page.waitForTimeout(800);
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBeNull();
+
+    const blockedUiWrites = await page.evaluate(async () => {
+      const writes = [];
+      const originalSetItem = localStorage.setItem.bind(localStorage);
+      const originalRemoveItem = localStorage.removeItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        writes.push({ method: "setItem", key, value });
+        return originalSetItem(key, value);
+      };
+      localStorage.removeItem = (key) => {
+        writes.push({ method: "removeItem", key });
+        return originalRemoveItem(key);
+      };
+      const beforeLearning = window.learningDesk.getState();
+      const beforeGrowth = window.growthLoop.getSnapshot();
+      const beforeOutbox = await window.growthLoop.pendingOutbox();
+      await window.learningDesk.replaceState({
+        ...beforeLearning,
+        extra: { ...beforeLearning.extra, blockedUiMutation: true },
+      }, { persist: true });
+      await window.growthLoop.recordPoint({
+        item: { id: "blocked-item", name: "不应写入", default_points: 1 },
+        occurred_on: "2026-08-20",
+        request_id: "blocked-point",
+      });
+      await window.growthLoop.queueActivity({
+        event_type: "growth_activity_recorded",
+        event_id: "blocked-activity",
+      });
+      return {
+        writes,
+        learningUnchanged: JSON.stringify(window.learningDesk.getState()) === JSON.stringify(beforeLearning),
+        growthUnchanged: JSON.stringify(window.growthLoop.getSnapshot()) === JSON.stringify(beforeGrowth),
+        outboxUnchanged: JSON.stringify(await window.growthLoop.pendingOutbox()) === JSON.stringify(beforeOutbox),
+      };
+    });
+    expect(blockedUiWrites).toEqual({
+      writes: [],
+      learningUnchanged: true,
+      growthUnchanged: true,
+      outboxUnchanged: true,
+    });
+
+    // A closed tab clears sessionStorage, but must not clear the fail-closed
+    // marker. Only the explicit local-data cleanup flow may remove it.
+    await page.addInitScript(() => {
+      window.__readwriteLearningTransactions = 0;
+      window.__localStorageWrites = [];
+      const originalTransaction = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (...args) {
+        if (args[1] === "readwrite") window.__readwriteLearningTransactions += 1;
+        return originalTransaction.apply(this, args);
+      };
+      const originalSetItem = Storage.prototype.setItem;
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "setItem", key, value });
+        return originalSetItem.call(this, key, value);
+      };
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "removeItem", key });
+        return originalRemoveItem.call(this, key);
+      };
+    });
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+    expect(await page.evaluate(() => window.__readwriteLearningTransactions)).toBe(0);
+    expect(await page.evaluate(() => window.__localStorageWrites.filter(({ key }) => (
+      key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")
+    )))).toEqual([]);
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.click("#accountButton");
+    await page.evaluate(() => {
+      window.__originalClearAllLocalData = window.growthLoop.clearAllLocalData.bind(window.growthLoop);
+      window.growthLoop.clearAllLocalData = async () => {
+        throw new Error("injected_clear_failure");
+      };
+    });
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    await page.evaluate(() => {
+      window.growthLoop.clearAllLocalData = window.__originalClearAllLocalData;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
+  });
+
+  test("aborts the controller operation before a real IndexedDB transaction can commit a stale row", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto("/");
+      await page.waitForTimeout(500);
+
+      const result = await page.evaluate(async () => {
+        await window.growthLoop.clearAllLocalData();
+        const { createIndexedDbLearningDb } = await import("/src/learning-local-db.js");
+        const { createGrowthLoopController } = await import("/src/learning-growth-loop-controller.js");
+        const controller = createGrowthLoopController({ db: createIndexedDbLearningDb() });
+        const originalPut = IDBObjectStore.prototype.put;
+        const originalSetInterval = window.setInterval;
+        const originalAbort = AbortController.prototype.abort;
+        let requestSucceeded = false;
+        let abortCount = 0;
+        window.setInterval = () => 0;
+        AbortController.prototype.abort = function (...args) {
+          abortCount += 1;
+          return originalAbort.apply(this, args);
+        };
+        IDBObjectStore.prototype.put = function (...args) {
+          const request = originalPut.apply(this, args);
+          if (this.name === "snapshots") {
+            request.addEventListener("success", () => queueMicrotask(() => {
+              requestSucceeded = true;
+              controller.invalidateWriteOperations?.();
+            }), { once: true });
+          }
+          return request;
+        };
+
+        try {
+          await controller.recordPoint({
+            item: { id: "stale-item", name: "不应落盘", default_points: 1 },
+            occurred_on: "2026-08-20",
+            request_id: "stale-real-idb-row",
+          });
+        } finally {
+          IDBObjectStore.prototype.put = originalPut;
+          window.setInterval = originalSetInterval;
+          AbortController.prototype.abort = originalAbort;
+        }
+
+        const persisted = await new Promise((resolve, reject) => {
+          const request = indexedDB.open("shadow-mate-learning-v1", 1);
+          request.onerror = () => reject(request.error || new Error("open_failed"));
+          request.onsuccess = () => {
+            const database = request.result;
+            const transaction = database.transaction(["snapshots"], "readonly");
+            const read = transaction.objectStore("snapshots").get("pending:pending");
+            read.onerror = () => reject(read.error || new Error("read_failed"));
+            read.onsuccess = () => {
+              resolve(read.result?.snapshot?.ledger?.some((entry) => entry.request_id === "stale-real-idb-row") || false);
+              database.close();
+            };
+          };
+        });
+        return { requestSucceeded, abortCount, persisted_row: persisted };
+      });
+
+      expect(result.requestSucceeded).toBe(true);
+      expect(result.abortCount).toBeGreaterThan(0);
+      expect(result.persisted_row).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("fails closed when Learning rollback fails after Growth rollback succeeds", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`)).toBeVisible();
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ firstProfileId, secondProfileId, thirdProfileId }) => {
+      window.__rollbackTrace = [];
+      window.__failLearningRollback = false;
+      window.__staleGenerationObserved = false;
+      window.__staleLocalWrites = [];
+      window.__staleLearningLoadStarted = false;
+      let release;
+      window.__releaseStaleLearningLoad = () => release?.();
+      window.__triggerStaleSwitch = () => {
+        window.__staleGenerationObserved = true;
+        document.querySelector(`[data-profile="${thirdProfileId}"]`).click();
+      };
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+
+      const originalGrowthLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__rollbackTrace.push({ domain: "growth", profileId: scope.profile_id, stale: window.__staleGenerationObserved });
+        return originalGrowthLoadScope(scope, options);
+      };
+
+      const originalLearningSetScope = window.learningDesk.setScope.bind(window.learningDesk);
+      let delaySecondScope = true;
+      window.learningDesk.setScope = async (scope, options) => {
+        if (delaySecondScope && scope.profile_id === secondProfileId) {
+          delaySecondScope = false;
+          window.__staleLearningLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        window.__rollbackTrace.push({ domain: "learning", profileId: scope.profile_id, stale: window.__staleGenerationObserved });
+        if (scope.profile_id === firstProfileId && window.__failLearningRollback) {
+          throw new Error("injected_learning_rollback_failure");
+        }
+        const result = await originalLearningSetScope(scope, options);
+        if (scope.profile_id === secondProfileId) window.__triggerStaleSwitch();
+        return result;
+      };
+    }, {
+      firstProfileId: PROFILE_ID,
+      secondProfileId: SECOND_PROFILE_ID,
+      thirdProfileId: THIRD_PROFILE_ID,
+    });
+
+    await secondChoice.click();
+    await expect.poll(() => page.evaluate(() => window.__staleLearningLoadStarted)).toBe(true);
+    await page.evaluate(() => {
+      window.__failLearningRollback = true;
+      window.__releaseStaleLearningLoad();
+    });
+
+    await expect.poll(() => page.evaluate((firstProfileId) => window.__rollbackTrace.some(
+      (entry) => entry.domain === "growth" && entry.profileId === firstProfileId && entry.stale,
+    ), PROFILE_ID)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cloudSync.isProfileScopeWriteBlocked?.())).toBe(true);
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBeNull();
+  });
+
+  test("cleans every Learning Desk key and retains the marker when one deletion fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const envelope = JSON.stringify({ schema_version: 2, learning: {} });
+      localStorage.setItem("shadow_mate_workbench_v1", "legacy");
+      localStorage.setItem("shadow_mate_learning_v2:household-a:profile-a", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:household-b:profile-b", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:legacy_backup:test", "legacy-backup");
+    });
+
+    await page.click("#accountButton");
+    await expect(page.locator("[data-clear-local]")).toBeVisible();
+    await page.evaluate(() => {
+      window.__originalLearningRemoveItem = Storage.prototype.removeItem;
+      const blockedKey = "shadow_mate_learning_v2:household-b:profile-b";
+      Storage.prototype.removeItem = function (key) {
+        if (key === blockedKey) throw new Error("injected_learning_key_delete_failure");
+        return window.__originalLearningRemoveItem.call(this, key);
+      };
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    const failedCleanupKeys = await page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null));
+    expect(failedCleanupKeys).toContain("shadow_mate_learning_v2:household-b:profile-b");
+
+    await page.evaluate(() => {
+      Storage.prototype.removeItem = window.__originalLearningRemoveItem;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
+    await expect.poll(() => page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null))).toEqual([]);
+  });
+
+  test("does not let a delayed background refresh overwrite a newer learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ firstProfileId }) => {
+      window.__growthActivityScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthActivityScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+
+      let release;
+      window.__delayedGrowthLoadStarted = false;
+      window.__releaseDelayedGrowthLoad = () => release?.();
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextFirstLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (delayNextFirstLoad && scope.profile_id === firstProfileId) {
+          delayNextFirstLoad = false;
+          window.__delayedGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        return loadScope(scope, options);
+      };
+      window.dispatchEvent(new Event("online"));
+    }, { firstProfileId: PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await secondChoice.click();
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__releaseDelayedGrowthLoad());
+
+    await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({
+      active: document.querySelector(`[data-profile="${secondProfileId}"]`)?.classList.contains("active"),
+      inactive: document.querySelector(`[data-profile="${firstProfileId}"]`)?.classList.contains("active"),
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      activity: window.__growthActivityScopes,
+    }), { firstProfileId: PROFILE_ID, secondProfileId: SECOND_PROFILE_ID })).toEqual({
+      active: true,
+      inactive: false,
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+      activity: expect.not.arrayContaining([PROFILE_ID]),
+    });
+    await expect.poll(() => api.activityPayloads.map((payload) => payload.p_event?.profile_id)).toContain(SECOND_PROFILE_ID);
+    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(PROFILE_ID);
   });
 
   test("creates only one learner after rapid repeated clicks", async ({ page }) => {
@@ -600,11 +1576,155 @@ test.describe("Authenticated cloud workspace", () => {
     await mockCloudApi(page);
 
     await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+    }))).toEqual({
+      growth: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      learning: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      activeProfile: PROFILE_ID,
+      activeProfileKey: PROFILE_ID,
+    });
     await page.click("#accountButton");
     await page.click("[data-signout]");
 
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      canWriteLocalState: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      canWriteLocalState: true,
+    });
+
+    const signedOutWrite = await page.evaluate(({ householdId, profileId }) => {
+      const nextState = window.learningDesk.getState();
+      nextState.extra = { ...nextState.extra, signed_out_local_write: true };
+      const changed = window.learningDesk.replaceState(nextState, { persist: true });
+      return {
+        changed,
+        pending: localStorage.getItem("shadow_mate_learning_v2:pending"),
+        previousProfile: localStorage.getItem(`shadow_mate_learning_v2:${householdId}:${profileId}`),
+      };
+    }, { householdId: HOUSEHOLD_ID, profileId: PROFILE_ID });
+    expect(signedOutWrite.changed).toBe(true);
+    expect(JSON.parse(signedOutWrite.pending)).toEqual(expect.objectContaining({
+      scope: { household_id: null, profile_id: null },
+      learning: expect.objectContaining({ extra: expect.objectContaining({ signed_out_local_write: true }) }),
+    }));
+    expect(JSON.parse(signedOutWrite.previousProfile || "{}")?.learning?.extra?.signed_out_local_write).not.toBe(true);
   });
+
+  test("fails closed when the sign-out profile scope reset fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      window.growthLoop.loadScope = async () => {
+        throw new Error("injected_signed_out_scope_reset_failure");
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+  });
+
+  test("fails closed when the active profile key cannot be removed after sign-out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage && key === "shadow_mate_active_profile") {
+          throw new Error("injected_active_profile_key_remove_failure");
+        }
+        return originalRemoveItem.call(this, key);
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+    }))).toEqual({ blocked: true, marker: "1", activeProfile: null });
+  });
+});
+
+test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
+    window.__blockedStorageTrace = {
+      opens: 0,
+      versionchanges: 0,
+      readwrites: 0,
+      localWrites: [],
+    };
+    const originalOpen = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (...args) => {
+      window.__blockedStorageTrace.opens += 1;
+      const request = originalOpen(...args);
+      request.addEventListener("upgradeneeded", () => {
+        window.__blockedStorageTrace.versionchanges += 1;
+      });
+      return request;
+    };
+    const originalTransaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      if (args[1] === "readwrite") window.__blockedStorageTrace.readwrites += 1;
+      return originalTransaction.apply(this, args);
+    };
+    const originalSetItem = Storage.prototype.setItem;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "setItem", key, value });
+      }
+      return originalSetItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "removeItem", key });
+      }
+      return originalRemoveItem.call(this, key);
+    };
+  });
+  await page.goto("/");
+  await page.waitForTimeout(300);
+
+  await expect.poll(() => page.evaluate(() => window.__blockedStorageTrace)).toEqual({
+    opens: 0,
+    versionchanges: 0,
+    readwrites: 0,
+    localWrites: [],
+  });
+  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).filter(
+    ({ name }) => name === "shadow-mate-learning-v1",
+  ))).toEqual([]);
+  await context.close();
 });
 
 test.describe("Email OTP sign-in", () => {
