@@ -425,10 +425,7 @@ export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB, de
 
   function ensureDatabasePromise() {
     if (!databasePromise) {
-      databasePromise = openDatabase(indexedDB).then(
-        rememberDatabase,
-        () => rememberDatabase(makeMemoryStore()),
-      );
+      databasePromise = openDatabase(indexedDB).then(rememberDatabase);
     }
     return databasePromise;
   }

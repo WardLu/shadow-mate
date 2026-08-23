@@ -68,6 +68,7 @@ let lastSyncAt = null;
 let workspaceLoading = null;
 let authChangeVersion = 0;
 let localResetInProgress = false;
+let profileScopeResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
@@ -500,6 +501,29 @@ async function completeLocalAccountReset(successMessage) {
     5000,
   );
   return true;
+}
+
+async function resetSignedOutProfileScope(changeVersion) {
+  const pendingScope = { household_id: null, profile_id: null };
+  const canCommit = () => !session
+    && changeVersion === authChangeVersion;
+  try {
+    if (!canCommit()) return false;
+    await window.growthLoop?.loadScope?.(pendingScope, { adoptPending: false, canCommit });
+    if (!canCommit()) return false;
+    await window.learningDesk?.setScope?.(pendingScope, { adoptPending: false, canCommit });
+    if (!canCommit()) return false;
+    const growthScope = window.growthLoop?.getScope?.() || pendingScope;
+    const learningScope = window.learningDesk?.getEnvelope?.()?.scope || pendingScope;
+    if (!sameProfileScope(growthScope, pendingScope) || !sameProfileScope(learningScope, pendingScope)) {
+      throw new Error("signed_out_profile_scope_not_reset");
+    }
+    return true;
+  } catch (error) {
+    console.warn("Unable to reset profile scope after sign-out:", error);
+    failClosedProfileScope();
+    return false;
+  }
 }
 
 function formatSyncTime(value) {
@@ -1813,8 +1837,10 @@ window.cloudSync = {
   schedule: scheduleSave,
   scheduleGrowthLoop: scheduleGrowthLoopSync,
   isProfileScopeWriteBlocked: () => profileScopeWriteBlocked,
-  canWriteLocalState: () => !profileScopeWriteBlocked && (!session || Boolean(activeProfile)),
-  canWriteScopeTransition: () => !profileScopeWriteBlocked && Boolean(session),
+  canWriteLocalState: () => !profileScopeWriteBlocked
+    && !profileScopeResetInProgress
+    && (!session || Boolean(activeProfile)),
+  canWriteScopeTransition: () => !profileScopeWriteBlocked,
   getProfileCommitState: () => ({
     active_profile_id: activeProfile?.id || null,
     active_profile_key: localStorage.getItem(ACTIVE_PROFILE_KEY),
@@ -1859,8 +1885,17 @@ async function onAuthChange(nextSession, event = "") {
   profileScopeWriteBlocked = existingScopeBlock;
   if (profileScopeWriteBlocked) localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   if (!session) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    saveQueued = null;
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
+    if (!existingScopeBlock) {
+      profileScopeResetInProgress = true;
+      await resetSignedOutProfileScope(changeVersion);
+      profileScopeResetInProgress = false;
+    }
   }
   setAccountState();
   let passwordUiOpened = false;

@@ -50,6 +50,52 @@ describe("Growth Loop outbox sync", () => {
     );
   });
 
+  it("stops at the queue head when another worker owns its lease", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", sequence: 1, type: "point_item_upsert" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", sequence: 2, type: "point_record" });
+    const claimOutbox = db.claimOutbox.bind(db);
+    db.claimOutbox = async (eventId, options) => (
+      eventId === "event-1" ? false : claimOutbox(eventId, options)
+    );
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 2,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+  });
+
+  it("does not send an event while one of its dependencies is unconfirmed", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", sequence: 1, type: "point_item_upsert", status: "conflict" });
+    await db.appendOutbox({
+      event_id: "event-2",
+      scope_key: "h:p",
+      sequence: 2,
+      type: "point_record",
+      depends_on: ["event-1"],
+    });
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 1,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      depends_on: ["event-1"],
+    }));
+  });
+
   it("waits for next_attempt_at and retries the same batch, request, and payload", async () => {
     const db = createMemoryLearningDb();
     const payload = {

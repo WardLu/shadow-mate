@@ -36,6 +36,14 @@ function claimMatches(claim, { eventId, scopeKey, workerId, operationContext, no
   );
 }
 
+async function dependenciesAreConfirmed(db, event) {
+  const dependencies = Array.isArray(event?.depends_on) ? event.depends_on.filter(Boolean) : [];
+  if (dependencies.length === 0) return true;
+  if (typeof db.getOutbox !== "function") return false;
+  const dependencyRows = await Promise.all(dependencies.map((eventId) => db.getOutbox(eventId)));
+  return dependencyRows.every((dependency) => dependency?.status === "confirmed");
+}
+
 function retryDelay(attempts, base, jitter, random = Math.random) {
   const exponential = Math.min(MAX_RETRY_DELAY_MS, base * (2 ** Math.max(0, attempts - 1)));
   const spread = Math.max(0, Math.min(1, jitter));
@@ -100,6 +108,9 @@ export function createOutboxSync({
     };
     for (const event of events) {
       if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+      if (!await dependenciesAreConfirmed(db, event)) {
+        return { ...report, blocked: true };
+      }
       const claimed = await db.claimOutbox?.(event.event_id, {
         worker_id: workerId,
         operation_id: operationContext.operation_id,
@@ -108,7 +119,7 @@ export function createOutboxSync({
         canCommit,
         signal: operationContext.signal,
       });
-      if (db.claimOutbox && !claimed) continue;
+      if (db.claimOutbox && !claimed) return { ...report, blocked: true };
 
       let lease = claimed;
       if (db.claimOutbox) {

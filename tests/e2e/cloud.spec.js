@@ -1576,10 +1576,52 @@ test.describe("Authenticated cloud workspace", () => {
     await mockCloudApi(page);
 
     await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+    }))).toEqual({
+      growth: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      learning: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      activeProfile: PROFILE_ID,
+      activeProfileKey: PROFILE_ID,
+    });
     await page.click("#accountButton");
     await page.click("[data-signout]");
 
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      canWriteLocalState: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      canWriteLocalState: true,
+    });
+
+    const signedOutWrite = await page.evaluate(({ householdId, profileId }) => {
+      const nextState = window.learningDesk.getState();
+      nextState.extra = { ...nextState.extra, signed_out_local_write: true };
+      const changed = window.learningDesk.replaceState(nextState, { persist: true });
+      return {
+        changed,
+        pending: localStorage.getItem("shadow_mate_learning_v2:pending"),
+        previousProfile: localStorage.getItem(`shadow_mate_learning_v2:${householdId}:${profileId}`),
+      };
+    }, { householdId: HOUSEHOLD_ID, profileId: PROFILE_ID });
+    expect(signedOutWrite.changed).toBe(true);
+    expect(JSON.parse(signedOutWrite.pending)).toEqual(expect.objectContaining({
+      scope: { household_id: null, profile_id: null },
+      learning: expect.objectContaining({ extra: expect.objectContaining({ signed_out_local_write: true }) }),
+    }));
+    expect(JSON.parse(signedOutWrite.previousProfile || "{}")?.learning?.extra?.signed_out_local_write).not.toBe(true);
   });
 });
 
