@@ -10,7 +10,9 @@
 
 - 代码合并提交：`f65e3e8f98bd996ba7ff570252eb9fc4488e3d85`。
 - `npm run verify`、云端 E2E `48/48`、定向 sign-out 回归和 GitHub PR checks 已通过。
-- 生产迁移、生产部署、生产响应头和真实账号验收：待本次正式发布流程完成后回填；当前不宣称已上线。
+- 生产迁移已由 Shadow Portal 控制面按单条受控 linked migration 完成；`schema_migrations` 已登记版本/name，`statement_count=17`，本地 SQL SHA-256 为 `587fd9646733b6b9320bd2c8173f76906b89470b9a6a761983ea3fdf102b5a55`。
+- 生产 schema 验收已通过：目标约束、索引、函数 `SECURITY DEFINER`/`search_path=''`、函数 ACL 和 `learning_point_ledger` RLS 均符合预期。
+- Vercel Preview HTTP 200 及 CSP、HSTS、X-Frame-Options 已验证；正式域名部署和真实账号验收仍未完成，当前不宣称已正式上线。
 
 ### 发布包
 
@@ -20,8 +22,9 @@ SHA-256：发布时以 GitHub Release 产物为准回填。
 
 ### 部署清单（待完成）
 
-- [ ] 生产迁移 `20260819120000` dry-run 仅列出目标迁移，并完成受控 apply。
-- [ ] `schema_migrations`、目标函数、约束、索引、ACL/RLS 验收通过，Shadow Portal ledger 更新为 `applied/verified`。
+- [x] 生产迁移 `20260819120000` dry-run 仅列出目标迁移，并完成受控 apply。
+- [x] `schema_migrations`、目标函数、约束、索引、ACL/RLS 验收通过。
+- [ ] Shadow Portal ledger 更新为 `applied/verified`（等待真实账号 smoke 完成后回填）。
 - [ ] Git tag `v1.3.10` 与最终 `main` 合并提交一致，并发布 GitHub Release 及压缩包。
 - [ ] `release-to-production` 完成 `production` 快进和 Vercel 部署。
 - [ ] `https://sm.shadow.wang/` 验证版本、CSP、HSTS、X-Frame-Options、HTTPS 和核心回归。
