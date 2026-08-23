@@ -1884,6 +1884,7 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
+  profileScopeResetInProgress = false;
   advanceProfileOperationGeneration();
   resetGrowthLoopRemoteRetry();
   const existingScopeBlock = profileScopeWriteBlocked || readProfileScopeBlock();
@@ -1912,9 +1913,10 @@ async function onAuthChange(nextSession, event = "") {
     if (!existingScopeBlock) {
       profileScopeResetInProgress = true;
       await resetSignedOutProfileScope(changeVersion);
-      profileScopeResetInProgress = false;
+      if (changeVersion === authChangeVersion) profileScopeResetInProgress = false;
     }
   }
+  if (changeVersion !== authChangeVersion) return;
   setAccountState();
   let passwordUiOpened = false;
   if (session) {

@@ -286,6 +286,33 @@ describe("Growth Loop outbox sync", () => {
     }));
   });
 
+  it("blocks when a claimed event disappears before lease verification", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", type: "point_record" });
+    const originalGetOutbox = db.getOutbox.bind(db);
+    db.getOutbox = async (eventId) => (
+      eventId === "event-1" ? null : originalGetOutbox(eventId)
+    );
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({
+      db,
+      transport: { send },
+      workerId: "worker-a",
+      now: () => 1000,
+      leaseMs: 5000,
+      jitter: 0,
+      random: () => 0,
+    });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 2,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("does not send after the immutable operation becomes stale immediately after claim", async () => {
     const db = createMemoryLearningDb();
     await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });

@@ -129,7 +129,7 @@ export function createOutboxSync({
       let lease = claimed;
       if (db.claimOutbox) {
         const rereadLease = await db.getOutbox?.(event.event_id);
-        if (rereadLease) lease = rereadLease;
+        lease = rereadLease;
       }
       if (db.claimOutbox && !claimMatches(lease, {
         eventId: event.event_id,
