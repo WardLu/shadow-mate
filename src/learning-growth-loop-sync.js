@@ -37,7 +37,12 @@ function claimMatches(claim, { eventId, scopeKey, workerId, operationContext, no
 }
 
 async function dependenciesAreConfirmed(db, event) {
-  const dependencies = Array.isArray(event?.depends_on) ? event.depends_on.filter(Boolean) : [];
+  const hasDependencies = Object.prototype.hasOwnProperty.call(event || {}, "depends_on");
+  if (!hasDependencies) return true;
+  const dependencies = event.depends_on;
+  if (!Array.isArray(dependencies) || dependencies.some((eventId) => typeof eventId !== "string" || eventId.trim() === "")) {
+    return false;
+  }
   if (dependencies.length === 0) return true;
   if (typeof db.getOutbox !== "function") return false;
   const dependencyRows = await Promise.all(dependencies.map((eventId) => db.getOutbox(eventId)));
@@ -134,7 +139,7 @@ export function createOutboxSync({
         now: now(),
       })) {
         if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
-        continue;
+        return { ...report, blocked: true };
       }
       if (!canCommit()) {
         await db.releaseOutboxClaim?.(event.event_id, {

@@ -411,8 +411,32 @@ export function createMemoryLearningDb() {
   return makeMemoryStore();
 }
 
+function makeUnavailableStore() {
+  const error = new Error("indexeddb_unavailable");
+  error.code = "indexeddb_unavailable";
+  const reject = async () => { throw error; };
+  return {
+    kind: "unavailable",
+    getSnapshot: reject,
+    putSnapshot: reject,
+    appendOutbox: reject,
+    getOutbox: reject,
+    listOutbox: reject,
+    updateOutbox: reject,
+    claimOutbox: reject,
+    releaseOutboxClaim: reject,
+    putActivityEvent: reject,
+    listActivityEvents: reject,
+    clearScope: reject,
+    clearAll: reject,
+    moveScope: reject,
+    persistScope: reject,
+    persistActivity: reject,
+  };
+}
+
 export function createIndexedDbLearningDb({ indexedDB = globalThis.indexedDB, deferOpen = false } = {}) {
-  if (!indexedDB) return makeMemoryStore();
+  if (!indexedDB) return makeUnavailableStore();
   let activeDatabase;
   let databasePromise = null;
   let reopeningPromise = null;

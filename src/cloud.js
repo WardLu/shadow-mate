@@ -153,7 +153,11 @@ function failClosedProfileScope() {
   activeProfile = null;
   cloudVersion = null;
   cloudSyncBlocked = true;
-  localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  try {
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  } catch (error) {
+    console.warn("Unable to remove the active profile key while failing closed:", error);
+  }
   setAccountState();
   showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请在账号面板点击“清除本机数据”后重试。", 7000);
 }
@@ -509,12 +513,20 @@ async function resetSignedOutProfileScope(changeVersion) {
     && changeVersion === authChangeVersion;
   try {
     if (!canCommit()) return false;
-    await window.growthLoop?.loadScope?.(pendingScope, { adoptPending: false, canCommit });
+    if (
+      typeof window.growthLoop?.loadScope !== "function"
+      || typeof window.growthLoop?.getScope !== "function"
+      || typeof window.learningDesk?.setScope !== "function"
+      || typeof window.learningDesk?.getEnvelope !== "function"
+    ) {
+      throw new Error("signed_out_profile_scope_reset_dependencies_missing");
+    }
+    await window.growthLoop.loadScope(pendingScope, { adoptPending: false, canCommit });
     if (!canCommit()) return false;
-    await window.learningDesk?.setScope?.(pendingScope, { adoptPending: false, canCommit });
+    await window.learningDesk.setScope(pendingScope, { adoptPending: false, canCommit });
     if (!canCommit()) return false;
-    const growthScope = window.growthLoop?.getScope?.() || pendingScope;
-    const learningScope = window.learningDesk?.getEnvelope?.()?.scope || pendingScope;
+    const growthScope = window.growthLoop.getScope();
+    const learningScope = window.learningDesk.getEnvelope()?.scope;
     if (!sameProfileScope(growthScope, pendingScope) || !sameProfileScope(learningScope, pendingScope)) {
       throw new Error("signed_out_profile_scope_not_reset");
     }
@@ -1888,7 +1900,13 @@ async function onAuthChange(nextSession, event = "") {
     clearTimeout(saveTimer);
     saveTimer = null;
     saveQueued = null;
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    try {
+      localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    } catch (error) {
+      console.warn("Unable to remove the active profile key after sign-out:", error);
+      failClosedProfileScope();
+      return;
+    }
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
     if (!existingScopeBlock) {

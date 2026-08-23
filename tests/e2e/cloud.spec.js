@@ -1623,6 +1623,53 @@ test.describe("Authenticated cloud workspace", () => {
     }));
     expect(JSON.parse(signedOutWrite.previousProfile || "{}")?.learning?.extra?.signed_out_local_write).not.toBe(true);
   });
+
+  test("fails closed when the sign-out profile scope reset fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      window.growthLoop.loadScope = async () => {
+        throw new Error("injected_signed_out_scope_reset_failure");
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+  });
+
+  test("fails closed when the active profile key cannot be removed after sign-out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage && key === "shadow_mate_active_profile") {
+          throw new Error("injected_active_profile_key_remove_failure");
+        }
+        return originalRemoveItem.call(this, key);
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+    }))).toEqual({ blocked: true, marker: "1", activeProfile: null });
+  });
 });
 
 test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {

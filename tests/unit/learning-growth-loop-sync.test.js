@@ -224,6 +224,7 @@ describe("Growth Loop outbox sync", () => {
   it("re-reads the current lease immediately before sending", async () => {
     const db = createMemoryLearningDb();
     await db.appendOutbox({ event_id: "event-1", scope_key: "h:p", type: "point_record" });
+    await db.appendOutbox({ event_id: "event-2", scope_key: "h:p", type: "point_record" });
     const originalGetOutbox = db.getOutbox.bind(db);
     let replaced = false;
     db.getOutbox = async (eventId) => {
@@ -251,13 +252,37 @@ describe("Growth Loop outbox sync", () => {
     });
 
     await expect(sync.syncScope("h:p")).resolves.toEqual(
-      expect.objectContaining({ confirmed: 0, pending: 1 }),
+      expect.objectContaining({ confirmed: 0, pending: 2, blocked: true }),
     );
     expect(send).not.toHaveBeenCalled();
     await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
       processing_by: "worker-b",
       operation_id: "operation-b",
       lease_id: "lease-b",
+    }));
+    await expect(db.getOutbox("event-2")).resolves.toEqual(expect.objectContaining({ status: "pending" }));
+  });
+
+  it("blocks malformed dependency metadata instead of treating it as no dependency", async () => {
+    const db = createMemoryLearningDb();
+    await db.appendOutbox({
+      event_id: "event-1",
+      scope_key: "h:p",
+      type: "point_record",
+      depends_on: [""],
+    });
+    const send = vi.fn(async () => ({ status: "confirmed" }));
+    const sync = createOutboxSync({ db, transport: { send }, now: () => 1000, jitter: 0, random: () => 0 });
+
+    await expect(sync.syncScope("h:p")).resolves.toEqual(expect.objectContaining({
+      confirmed: 0,
+      pending: 1,
+      blocked: true,
+    }));
+    expect(send).not.toHaveBeenCalled();
+    await expect(db.getOutbox("event-1")).resolves.toEqual(expect.objectContaining({
+      status: "pending",
+      depends_on: [""],
     }));
   });
 

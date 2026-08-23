@@ -86,6 +86,15 @@ describe("local Growth Loop database", () => {
     await expect(db.putSnapshot("household-1:profile-1", { value: 1 })).rejects.toBe(openError);
   });
 
+  it("rejects storage operations when the IndexedDB API is unavailable", async () => {
+    const db = createIndexedDbLearningDb({ indexedDB: null });
+
+    expect(db.kind).toBe("unavailable");
+    await expect(db.getSnapshot("household-1:profile-1")).rejects.toMatchObject({
+      code: "indexeddb_unavailable",
+    });
+  });
+
   it("isolates snapshots by household and profile scope", async () => {
     const db = createMemoryLearningDb();
     await db.putSnapshot("household-1:profile-1", { scope: { profile_id: "profile-1" }, value: 1 });
