@@ -21,8 +21,12 @@
 ### Included migration prerequisite
 - 本版本依赖 Shadow Portal 控制面迁移 `20260819120000_growth_loop_legacy_points_import.sql`，用于一次性导入历史每日积分并与期初积分恢复互斥；必须先完成生产迁移并通过 schema/RLS/ACL 验收，再发布前端。
 
+### Production migration evidence
+- 已由 Shadow Portal 控制面按单条 `supabase db push --linked` 执行；生产 `schema_migrations` 已登记版本/name，`statement_count=17`。
+- 生产 schema 验收通过：`legacy_import_batch_id`、两条账本约束、两个索引、两个 `SECURITY DEFINER` RPC、`search_path=''`、`anon` EXECUTE 已撤销、`authenticated` EXECUTE 保留；`learning_point_ledger` RLS 仍启用且策略基线存在。
+
 ### Tests
-- 代码合并后的 `npm run verify`、云端 E2E `48/48` 和定向 sign-out 回归通过；正式发布仍需完成生产迁移、生产部署和真实账号验收。
+- 代码合并后的 `npm run verify`、云端 E2E `48/48` 和定向 sign-out 回归通过；生产迁移与 schema 验收已完成，正式域名部署和真实账号验收仍待完成。
 
 ## [1.3.9] - 2026-08-19
 
