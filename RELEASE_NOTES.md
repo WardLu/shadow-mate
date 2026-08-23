@@ -10,7 +10,7 @@
 
 - 代码合并提交：`f65e3e8f98bd996ba7ff570252eb9fc4488e3d85`。
 - `npm run verify`、云端 E2E `48/48`、定向 sign-out 回归和 GitHub PR checks 已通过。
-- 生产迁移已由 Shadow Portal 控制面按单条 `supabase db push --linked` 完成；`schema_migrations` 已登记版本/name，`statement_count=17`，本地 SQL SHA-256 为 `587fd9646733b6b9320bd2c8173f76906b89470b9a6a761983ea3fdf102b5a55`。
+- 生产迁移已由 Shadow Portal 控制面按单条受控 linked migration 完成；`schema_migrations` 已登记版本/name，`statement_count=17`，本地 SQL SHA-256 为 `587fd9646733b6b9320bd2c8173f76906b89470b9a6a761983ea3fdf102b5a55`。
 - 生产 schema 验收已通过：目标约束、索引、函数 `SECURITY DEFINER`/`search_path=''`、函数 ACL 和 `learning_point_ledger` RLS 均符合预期。
 - Vercel Preview HTTP 200 及 CSP、HSTS、X-Frame-Options 已验证；正式域名部署和真实账号验收仍未完成，当前不宣称已正式上线。
 
