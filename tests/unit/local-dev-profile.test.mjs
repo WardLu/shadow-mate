@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
@@ -14,17 +15,22 @@ test('Shadow Mate profile uses canonical identity and the real Vite process cont
     runner: 'npm-script',
     working_directory: '.',
     port: 5173,
-    args: ['run', 'dev'],
+    args: ['run', 'dev', '--', '--host', '127.0.0.1'],
   }])
   assert.equal(profile.ingress_claims[0].route_id, 'shadow-mate-app')
   assert.equal(profile.health_checks[0].target, 'http://127.0.0.1:5173/')
 })
 
-test('Shadow Mate profile pins control-plane Growth Loop snapshots without fabricating missing files', () => {
+test('Shadow Mate profile pins local Growth Loop sources by content hash', () => {
   const foundation = profile.schema_overlays.find((entry) => entry.capability_id === 'shadow-mate-growth-loop-foundation')
   assert.equal(foundation.sha256, 'sha256:60b34d18ebedff6d74fab676c07fca379b0497df59a0c57b0572dd91a72468e5')
-  assert.equal(fs.existsSync(path.join(root, foundation.path)), false)
   assert.equal(profile.schema_overlays.length, 9)
+  for (const entry of profile.schema_overlays) {
+    const sourcePath = path.join(root, entry.path)
+    assert.equal(fs.existsSync(sourcePath), true, `${entry.path} missing`)
+    const digest = createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex')
+    assert.equal(entry.sha256, `sha256:${digest}`, `${entry.path} hash drift`)
+  }
 })
 
 test('Shadow Mate function sources are local and credential-free', () => {
