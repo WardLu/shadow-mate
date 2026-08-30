@@ -1,0 +1,134 @@
+{
+  "profile_schema_version": 1,
+  "project_id": "shadow-mate",
+  "display_name": "Shadow Mate",
+  "requires": [
+    "shared-runtime",
+    "shadow-mate-local-schema"
+  ],
+  "schema_overlays": [
+    {
+      "path": "supabase/migrations/20260814084607_growth_loop_foundation.sql",
+      "sha256": "sha256:60b34d18ebedff6d74fab676c07fca379b0497df59a0c57b0572dd91a72468e5",
+      "capability_id": "shadow-mate-growth-loop-foundation",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814085701_growth_loop_points_indexes.sql",
+      "sha256": "sha256:333639bc5fe0b2cf8c197f0dd2da07ab77976c766663d78611092a6a12a84c13",
+      "capability_id": "shadow-mate-growth-loop-points-indexes",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814090121_growth_loop_rewards.sql",
+      "sha256": "sha256:ee4fb12e708f8010965f5d4db233b3891bc0ff4b55cdeabf3dc93820779e4394",
+      "capability_id": "shadow-mate-growth-loop-rewards",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814090652_growth_loop_rewards_indexes.sql",
+      "sha256": "sha256:f721e497fe55a761faafeade1c36274ad58202b769b1119bc0e863dc2e95edb1",
+      "capability_id": "shadow-mate-growth-loop-rewards-indexes",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814094058_growth_loop_activity_events.sql",
+      "sha256": "sha256:a86baf6998c0aca948de53a7cca1df1ed96c2d144f5401e6900cae97015f3de8",
+      "capability_id": "shadow-mate-growth-loop-activity-events",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814101037_growth_loop_point_dates.sql",
+      "sha256": "sha256:49011bd5fc03dfa1adf602f149229fe4b85f9ee7aa31804488a602c727775fa8",
+      "capability_id": "shadow-mate-growth-loop-point-dates",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814101235_growth_loop_activity_event_indexes.sql",
+      "sha256": "sha256:353b1ad77d2cfece50962cfa83c2a06dc8ecf6238a7ae54efda0d8a4df3bf1c3",
+      "capability_id": "shadow-mate-growth-loop-activity-event-indexes",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260814101420_growth_loop_point_rpc_compatibility.sql",
+      "sha256": "sha256:2c19846feda9fe6b335763102cd7da9a786508d67b2ad87e5387bfc8056c1894",
+      "capability_id": "shadow-mate-growth-loop-point-rpc-compatibility",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    },
+    {
+      "path": "supabase/migrations/20260816120000_growth_loop_opening_balance.sql",
+      "sha256": "sha256:6eeb08485aa6cdcc97f7497f3e7509cf0b5c1b57b8c18a3ab1c36c8530aa9fa0",
+      "capability_id": "shadow-mate-growth-loop-opening-balance",
+      "runner": "local-transactional-sql",
+      "source_repository": "shadow-mate",
+      "version": "shadow-mate-growth-loop-v1"
+    }
+  ],
+  "edge_functions": [
+    {
+      "name": "check-auth-email",
+      "path": "supabase/functions/check-auth-email/index.ts",
+      "sha256": "sha256:0d9c996735846c31283fe3207bba1987a33f9ebd62ce73e749c62b20c4beb191",
+      "source_repository": "shadow-mate",
+      "shared_bundle": "shadow-mate-functions-v1",
+      "verify_jwt": false
+    },
+    {
+      "name": "delete-account",
+      "path": "supabase/functions/delete-account/index.ts",
+      "sha256": "sha256:2d3d284341f477f672815a35edad3e7b987d08c5b3959936f8fe293a903ffbeb",
+      "source_repository": "shadow-mate",
+      "shared_bundle": "shadow-mate-functions-v1",
+      "verify_jwt": true
+    }
+  ],
+  "processes": [
+    {
+      "process_id": "shadow-mate-vite",
+      "runner": "npm-script",
+      "working_directory": ".",
+      "port": 5173,
+      "args": ["run", "dev", "--", "--host", "127.0.0.1"]
+    }
+  ],
+  "optional_features": [
+    "shadow-mate-web"
+  ],
+  "ingress_claims": [
+    {
+      "claim_id": "shadow-mate-app",
+      "route_id": "shadow-mate-app",
+      "required": false,
+      "supported_modes": ["none"]
+    }
+  ],
+  "health_checks": [
+    {
+      "check_id": "shadow-mate-web",
+      "kind": "http",
+      "target": "http://127.0.0.1:5173/",
+      "method": "GET"
+    },
+    {
+      "check_id": "shadow-mate-web-tcp",
+      "kind": "tcp",
+      "target": "127.0.0.1:5173"
+    }
+  ]
+}
