@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- 统一共享 Supabase 的 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板，均按 `RedirectTo` 或 `product_id` 动态显示产品名称与页脚标语：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo；未知来源回退为 Shadow Nexus。共享 SMTP 发件人名称仍为 `Shadow Nexus`。
+- Auth 邮件页脚的产品详情链接与品牌信息保持同一环境和产品来源，避免已登录某个产品却收到通用 Shadow Nexus 的产品信息。
+
 ### Fixed
 - 修复孩子切换并发期间的完整 active tuple 回滚：active profile、profile key、cloud version、Growth Loop 和 Learning Desk 必须一起回到原作用域，否则 fail-closed。
 - fail-closed 标记改为跨 browsing session 持久化，并将本机清理作为应用内唯一解除入口；旧 outbox claim 通过 immutable operation context/lease 绑定到发送前复核。
@@ -11,6 +15,7 @@
 
 ### Tests
 - 新增真实 `checkins` 驱动的 B save in-flight → C 失败回归，以及 fail-closed 重开零 IndexedDB 写、清理失败保留 marker、same-worker lease、send 前重读和 transaction-completion microtask AbortSignal 回归。
+- `tests/unit/email-templates.test.js` 覆盖 6 个 Auth 邮件模板的产品身份、页脚标语、链接环境和认证变量。
 
 ## [1.3.10] - 2026-08-23
 
