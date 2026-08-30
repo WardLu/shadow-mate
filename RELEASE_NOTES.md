@@ -1,5 +1,15 @@
 # Release Notes
 
+## Unreleased
+
+- 统一 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板的产品识别：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo 按认证请求动态显示名称、页脚标语和产品详情链接；未知来源回退为 Shadow Nexus。
+- 共享 SMTP 发件人名称仍保持为 `Shadow Nexus`，但邮件内容按当前产品显示，避免把 Shadow Mate 的邮件误显示为通用 Shadow Nexus 产品。
+
+### 验证结果
+
+- `tests/unit/email-templates.test.js` 已覆盖 6 个 Supabase Auth 邮件模板及其产品身份、页脚、链接和认证变量。
+- 本节记录代码与模板的一致性；不代表生产 Supabase 模板已经由本次本地提交自动部署。
+
 ## v1.3.10 - 2026-08-23
 
 - 修复每日写作积分在跨月、跨年和月份切换时选择错误 workbook 的问题。

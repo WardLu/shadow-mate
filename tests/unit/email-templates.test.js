@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 const recovery = readFileSync(resolve(process.cwd(), "supabase/templates/recovery.html"), "utf8");
 const confirmation = readFileSync(resolve(process.cwd(), "supabase/templates/confirmation.html"), "utf8");
 const magicLink = readFileSync(resolve(process.cwd(), "supabase/templates/magic_link.html"), "utf8");
+const emailChange = readFileSync(resolve(process.cwd(), "supabase/templates/email_change.html"), "utf8");
+const invite = readFileSync(resolve(process.cwd(), "supabase/templates/invite.html"), "utf8");
+const reauthentication = readFileSync(resolve(process.cwd(), "supabase/templates/reauthentication.html"), "utf8");
 const config = readFileSync(resolve(process.cwd(), "supabase/config.toml"), "utf8");
 
-const templates = [confirmation, magicLink, recovery];
+const templates = [confirmation, magicLink, recovery, emailChange, invite, reauthentication];
 
 describe("multi-product password recovery email", () => {
   it("maps every supported production product from RedirectTo", () => {
@@ -90,6 +93,20 @@ describe("multi-product password recovery email", () => {
       expect(template).toContain('href="https://shadow-portal.vercel.app/zh"');
       expect(template).toContain('href="https://shadow.wang/zh/products/shadow-mate"');
       expect(template).toContain('href="https://shadow.wang/zh"');
+    }
+  });
+
+  it("maps every Auth footer identity and slogan per product", () => {
+    for (const template of templates) {
+      expect(template).toContain("影伴 Shadow Mate");
+      expect(template).toContain("把每天的学习，变成看得见的成长。");
+      expect(template).toContain("影匣 Shadow Card");
+      expect(template).toContain("不是一张图，是一个不会过期的介绍页。");
+      expect(template).toContain("影裁 Shadow Size");
+      expect(template).toContain("少猜一次尺码，少一次退换货。");
+      expect(template).toContain("影笺 Quick flomo");
+      expect(template).toContain("读网页时，把重点带回 flomo。");
+      expect(template).toContain("一组让日常更有秩序的产品。");
     }
   });
 });
