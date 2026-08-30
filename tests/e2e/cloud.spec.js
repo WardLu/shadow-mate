@@ -241,6 +241,25 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toBeVisible();
   });
 
+  test("keeps the writing worksheet isolated in print media for logged-in users", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click('[data-mod="chinese"]');
+
+    const screenCharacters = await page.locator("[data-writing-practice] .tian").allTextContents();
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expect(page.locator("[data-writing-print-sheet] .tian")).toHaveText(screenCharacters);
+    await expect(page.locator(".module-title")).toBeHidden();
+    await expect(page.locator("[data-writing-practice]")).toBeHidden();
+
+    await page.emulateMedia({ media: "screen" });
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
+  });
+
   test("creates only one learner after rapid repeated clicks", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { createDelayMs: 500 });

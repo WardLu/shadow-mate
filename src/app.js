@@ -4,7 +4,7 @@ import {
   hasConsecutiveCheckinDays,
   recordAnalyticsEvent,
 } from "./analytics.js";
-import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { buildMissingSequence, escapeHtml, selectDailyWritingGroups } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import {
@@ -261,6 +261,12 @@ function dayTotal(day){
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
+function writingGroupsHtml(groups){
+  return groups.map((word) => `<div class="write-grid">${[...word].map((character) => `<div class="tian">${character}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
+}
+function writingDateLabel(date){
+  return `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日`;
+}
 async function speak(t, button){
   const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
@@ -499,6 +505,8 @@ function renderHome(){
    ========================================================= */
 function renderChinese(){
   const di = dayIndex();
+  const writingDate = new Date();
+  const writingGroups = selectDailyWritingGroups(WRITE_WORDS, writingDate);
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("book","语文学习"));
 
@@ -539,9 +547,9 @@ function renderChinese(){
 
   // 写字打卡
   const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
-  const wordsHtml = WRITE_WORDS.slice(0,4).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
+  const wordsHtml = writingGroupsHtml(writingGroups);
   const card3 = $(`
-    <div class="card">
+    <div class="card" data-writing-practice>
       <h3>${icon("pen")} 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
       <div class="desc">8 个基础笔画：${strokesHtml}</div>
       <div class="desc">今日练习汉字（从简到难，控笔临摹）：</div>
@@ -553,6 +561,14 @@ function renderChinese(){
     </div>
   `);
   main.appendChild(card3);
+  document.body.appendChild($(`
+    <section class="writing-print-sheet" data-writing-print-sheet>
+      <h1>今日写字字帖</h1>
+      <p class="writing-print-date">${writingDateLabel(writingDate)}</p>
+      <p class="writing-print-note">基础笔画：${STROKES.join("、")}</p>
+      <div class="writing-print-groups">${wordsHtml}</div>
+    </section>
+  `));
   card3.querySelector("[data-print]").onclick = () => window.print();
 }
 
@@ -1096,6 +1112,7 @@ function checkinBtn(mod,label){
 let CURRENT_MOD = "home";
 function switchMod(mod){
   CURRENT_MOD = mod;
+  document.querySelector("[data-writing-print-sheet]")?.remove();
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
     b.classList.toggle("active", active);
