@@ -1,5 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
+import { validateHanziWritingPack } from "../src/content/hanzi-writing/validate-pack.js";
 
 const requiredFiles = [
   "index.html",
@@ -12,6 +14,9 @@ const requiredFiles = [
   "src/cloud.js",
   "src/app.js",
   "src/app.css",
+  "src/content/hanzi-writing/v2-pilot-1.json",
+  "src/content/hanzi-writing/manifest.js",
+  "src/content/hanzi-writing/validate-pack.js",
   "SECURITY.md",
   "PRIVACY.md",
   "CONTRIBUTING.md",
@@ -28,6 +33,12 @@ for (const file of requiredFiles) {
   await readFile(file).catch(() => {
     throw new Error(`Missing required artifact: ${file}`);
   });
+}
+
+const activeHanziWritingPack = getActiveHanziWritingPack();
+const hanziWritingPackValidation = validateHanziWritingPack(activeHanziWritingPack);
+if (!hanziWritingPackValidation.valid) {
+  throw new Error(`Hanzi writing pack validation failed:\n- ${hanziWritingPackValidation.errors.join("\n- ")}`);
 }
 
 const manifest = JSON.parse(await readFile("public/manifest.json", "utf8"));
