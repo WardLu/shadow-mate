@@ -357,12 +357,18 @@
   .log-del{border:0;background:transparent;color:var(--ink-soft);cursor:pointer;padding:7px;display:inline-flex;align-items:center;justify-content:center;}
 
   /* 打印区 */
+  .writing-print-sheet{display:none;}
   @media print{
-    .app{max-width:none;}
-    .nav,.topbar,.checkin,.video-link,.speak-btn,.footer,.site-footer,.social-qr-dialog,.no-print{display:none !important;}
-    body{background:#fff;}
-    .card{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
-    .tian{break-inside:avoid;}
+    @page{size:A4 portrait;margin:12mm;}
+    body{background:#fff !important;color:#000 !important;}
+    body > :not(.writing-print-sheet){display:none !important;}
+    .writing-print-sheet{display:block !important;color:#000;font-family:"Kaiti SC","STKaiti","KaiTi","Noto Serif SC",serif;}
+    .writing-print-sheet h1{margin:0;text-align:center;font-size:22pt;letter-spacing:3pt;}
+    .writing-print-date{margin:3mm 0 1mm;text-align:center;font-size:11pt;}
+    .writing-print-note{margin:0 0 6mm;font-size:11pt;}
+    .writing-print-groups{display:grid;gap:5mm;}
+    .writing-print-sheet .write-grid{display:grid;grid-template-columns:repeat(3,28mm);gap:4mm;break-inside:avoid;}
+    .writing-print-sheet .tian{width:28mm;height:28mm;box-sizing:border-box;border:0.5mm solid #000;border-radius:0;color:#c86a6a;background:linear-gradient(#999,#999) center/100% 0.25mm no-repeat,linear-gradient(#999,#999) center/0.25mm 100% no-repeat,linear-gradient(to top right,transparent 49.5%,#bbb 49.5%,#bbb 50.5%,transparent 50.5%),linear-gradient(to top left,transparent 49.5%,#bbb 49.5%,#bbb 50.5%,transparent 50.5%);font-size:16mm;font-weight:400;line-height:1;break-inside:avoid;}
   }
   .hidden{display:none !important;}
 

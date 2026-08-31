@@ -699,7 +699,7 @@ test.describe("Authenticated cloud workspace", () => {
     });
   });
 
-  test("shows the same daily writing workbook after a logged-in state update", async ({ page }) => {
+  test("keeps the same daily writing workbook and isolates its print sheet for a logged-in user", async ({ page }) => {
     await freezeWritingDate(page);
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
@@ -708,7 +708,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await openModule(page, "chinese");
 
-    const writingGroups = page.locator(".write-grid");
+    const writingGroups = page.locator("[data-writing-practice] .write-grid");
     await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
     const beforeCheckin = await writingGroups.allTextContents();
 
@@ -717,12 +717,21 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.evaluate(() => {
       window.print = () => {
-        window.__printedWritingGroups = [...document.querySelectorAll(".write-grid")]
+        window.__printedWritingGroups = [...document.querySelectorAll("[data-writing-print-sheet] .write-grid")]
           .map((element) => element.textContent);
       };
     });
     await page.locator("[data-print]").click();
     await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
+
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expect(page.locator("[data-writing-print-sheet] .tian")).toHaveText(beforeCheckin.flatMap((group) => [...group]));
+    await expect(page.locator(".module-title")).toBeHidden();
+    await expect(page.locator("[data-writing-practice]")).toBeHidden();
+
+    await page.emulateMedia({ media: "screen" });
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
   });
 
   test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {
@@ -900,7 +909,7 @@ test.describe("Authenticated cloud workspace", () => {
     });
   });
 
-  test("restores the last successful scope when a stale switch is followed by a failed switch", async ({ page }) => {
+  test("keeps the locally selected scope when a stale switch is followed by a failed remote hydrate", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       initialProfiles: [
@@ -958,9 +967,9 @@ test.describe("Authenticated cloud workspace", () => {
     await page.evaluate(() => { window.__staleGenerationObserved = true; });
     await page.evaluate(() => window.__releaseStaleGrowthLoad());
 
-    await expect(firstChoice).toHaveClass(/active/);
+    await expect(firstChoice).not.toHaveClass(/active/);
     await expect(secondChoice).not.toHaveClass(/active/);
-    await expect(thirdChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).toHaveClass(/active/);
     await expect.poll(() => page.evaluate(({ secondProfileId }) => window.__scopeLoads.some(
       (entry) => entry.profileId === secondProfileId && entry.phase === "end",
     ), { secondProfileId: SECOND_PROFILE_ID })).toBe(true);
@@ -969,9 +978,9 @@ test.describe("Authenticated cloud workspace", () => {
       learning: window.learningDesk.getEnvelope().scope?.profile_id,
       growth: window.growthLoop.getScope().profile_id,
     }))).toEqual({
-      active: PROFILE_ID,
-      learning: PROFILE_ID,
-      growth: PROFILE_ID,
+      active: THIRD_PROFILE_ID,
+      learning: THIRD_PROFILE_ID,
+      growth: THIRD_PROFILE_ID,
     });
     expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).not.toContain(SECOND_PROFILE_ID);
     expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(SECOND_PROFILE_ID);
