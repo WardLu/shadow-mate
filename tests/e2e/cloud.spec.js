@@ -6,6 +6,7 @@ const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const THIRD_PROFILE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+const SENSITIVE_MARK_PAYLOAD = "synthetic-mark-payload-not-for-telemetry";
 const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
 const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
 
@@ -88,6 +89,8 @@ async function mockCloudApi(page, {
   profileStateVersions = {},
   initialProfiles = [],
   workspaceAncillaryDelayMs = 0,
+  consentMetadataResponses = null,
+  consentMetadataDelayMs = workspaceAncillaryDelayMs,
 } = {}) {
   let state = structuredClone(remoteState);
   let version = 3;
@@ -96,6 +99,7 @@ async function mockCloudApi(page, {
   let rpcSettledCount = 0;
   let growthPointItemsRequests = 0;
   let growthPointItemsResponseIndex = 0;
+  let consentMetadataResponseIndex = 0;
   const rpcPayloads = [];
   const legacyImportPayloads = [];
   const activityPayloads = [];
@@ -241,11 +245,18 @@ async function mockCloudApi(page, {
         await route.fulfill({ status: 201, body: "" });
         return;
       }
-      if (workspaceAncillaryDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceAncillaryDelayMs));
+      const responseIndex = consentMetadataResponseIndex++;
+      const consentRows = consentMetadataResponses?.[
+        Math.min(responseIndex, consentMetadataResponses.length - 1)
+      ] ?? (householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []);
+      const consentDelay = Array.isArray(consentMetadataDelayMs)
+        ? consentMetadataDelayMs[Math.min(responseIndex, consentMetadataDelayMs.length - 1)]
+        : consentMetadataDelayMs;
+      if (consentDelay) await new Promise((resolve) => setTimeout(resolve, consentDelay));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []),
+        body: JSON.stringify(consentRows),
       });
       return;
     }
@@ -301,7 +312,10 @@ async function mockCloudApi(page, {
       const body = select.includes("state")
         ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState, version: profileVersion, updated_at: "2026-08-01T08:00:00.000Z" }]
         : [{ profile_id: requestedProfileId || PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
-      if (profileStateDelayMs) await new Promise((resolve) => setTimeout(resolve, profileStateDelayMs));
+      const profileStateDelay = typeof profileStateDelayMs === "object"
+        ? profileStateDelayMs[requestedProfileId] || 0
+        : profileStateDelayMs;
+      if (profileStateDelay) await new Promise((resolve) => setTimeout(resolve, profileStateDelay));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       return;
     }
@@ -503,6 +517,7 @@ test.describe("Authenticated cloud workspace", () => {
     await mockCloudApi(page, {
       workspaceAncillaryDelayMs: 900,
       profileStateDelayMs: 900,
+      remoteState: { ...emptyState, extra: { synthetic_payload: SENSITIVE_MARK_PAYLOAD } },
     });
 
     await page.goto("/");
@@ -531,6 +546,9 @@ test.describe("Authenticated cloud workspace", () => {
       .filter((name) => name.startsWith("shadow-mate:")));
     expect(marks.join("|")).not.toContain(PROFILE_ID);
     expect(marks.join("|")).not.toContain(HOUSEHOLD_ID);
+    expect(marks.join("|")).not.toContain("parent@example.test");
+    expect(marks.join("|")).not.toContain("e2e-access-token");
+    expect(marks.join("|")).not.toContain(SENSITIVE_MARK_PAYLOAD);
   });
 
   test("waits for delayed consent metadata before adding a learner", async ({ page }) => {
@@ -583,6 +601,46 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.waitForTimeout(800);
     expect(api.rpcPayloads).toEqual([]);
+  });
+
+  test("ignores a delayed profile A hydrate after profile B becomes active", async ({ page }) => {
+    const remoteEnvelope = (profileId, marker) => ({
+      schema_version: 2,
+      scope: { household_id: HOUSEHOLD_ID, profile_id: profileId },
+      learning: { ...emptyState, extra: { hydrate_marker: marker } },
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+      ],
+      profileStateData: {
+        [PROFILE_ID]: remoteEnvelope(PROFILE_ID, "profile-a"),
+        [SECOND_PROFILE_ID]: remoteEnvelope(SECOND_PROFILE_ID, "profile-b"),
+      },
+      profileStateVersions: { [PROFILE_ID]: 11, [SECOND_PROFILE_ID]: 22 },
+      profileStateDelayMs: { [PROFILE_ID]: 1200 },
+    });
+
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(PROFILE_ID);
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(SECOND_PROFILE_ID);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.hydrate_marker)).toBe("profile-b");
+
+    await page.waitForTimeout(1300);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      scope: window.learningDesk.getEnvelope().scope?.profile_id,
+      marker: window.learningDesk.getState().extra?.hydrate_marker,
+      version: window.cloudSync.getProfileCommitState().cloud_version,
+    }))).toEqual({
+      active: SECOND_PROFILE_ID,
+      scope: SECOND_PROFILE_ID,
+      marker: "profile-b",
+      version: 22,
+    });
   });
 
   test("shows the same daily writing workbook after a logged-in state update", async ({ page }) => {

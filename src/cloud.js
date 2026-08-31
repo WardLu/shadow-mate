@@ -9,6 +9,7 @@ import { buildHouseholdExport } from "./learning-export.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { mergeGrowthLoopSnapshot } from "./learning-growth-loop.js";
 import { createGrowthLoopRetryScheduler } from "./learning-growth-loop-retry.js";
+import { isCurrentWorkspaceMetadata } from "./workspace-metadata-guard.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
@@ -1433,7 +1434,7 @@ function refreshWorkspaceMetadata({ householdIds, workspaceProfiles, requestSess
     { data: stateRows, error: stateMetaError },
     { data: householdRows },
   ]) => {
-    if (session !== requestSession) return false;
+    if (!isCurrentWorkspaceMetadata(requestSession, session)) return false;
     if (!consentError) {
       guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
       guardianConsentMetadataReady = true;
@@ -1444,7 +1445,7 @@ function refreshWorkspaceMetadata({ householdIds, workspaceProfiles, requestSess
     if (dialog?.open && !passwordRecoveryActive) renderPanel();
     return !consentError;
   }).catch((error) => {
-    if (session === requestSession) console.warn("Workspace metadata refresh deferred:", error);
+    if (isCurrentWorkspaceMetadata(requestSession, session)) console.warn("Workspace metadata refresh deferred:", error);
     return false;
   });
 }
