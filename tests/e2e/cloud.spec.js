@@ -1781,6 +1781,60 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.deletedHouseholds[0]).toEqual({ p_household_id: HOUSEHOLD_ID });
     await expect(page.locator("#syncToast")).toHaveText("家庭数据已删除，已退出登录");
   });
+
+  test("can sign in again after deleting the household and shows setup", async ({ page }) => {
+    let householdDeleted = false;
+    let passwordRequests = 0;
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "password-after-delete-access-token",
+      refresh_token: "password-after-delete-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: { id: USER_ID, aud: "authenticated", role: "authenticated", email: "parent@example.test" },
+    };
+
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("**/rest/v1/rpc/learning_delete_household", async (route) => {
+      householdDeleted = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/rest/v1/learning_household_members**", async (route) => {
+      if (householdDeleted) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/auth/v1/token?grant_type=password", async (route) => {
+      passwordRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-delete-household]");
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+
+    // The app-wide rapid-action guard keeps the account button on a 500ms cooldown.
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#emailLoginForm")).toBeVisible();
+    await page.click('[data-auth-mode="password"]');
+    await page.locator('#emailLoginForm input[name="email"]').fill("parent@example.test");
+    await page.locator('#emailLoginForm input[name="password"]').fill("SharedPassword123!");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect.poll(() => passwordRequests).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+  });
+
   test("returns to local mode after signing out of the cloud workspace", async ({ page }) => {
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
