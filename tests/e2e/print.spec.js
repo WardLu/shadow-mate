@@ -43,6 +43,7 @@ test.describe("Writing worksheet printing", () => {
     const printSheet = page.locator("[data-writing-print-sheet]");
     await expect(printSheet).toBeVisible();
     await expect(printSheet).toContainText("今日写字字帖");
+    await expect(printSheet).not.toContainText("第一单元");
     await expect(printSheet.locator(".tian")).toHaveText(screenCharacters);
     await expect(page.locator(".module-title")).toBeHidden();
     await expect(screenPractice).toBeHidden();

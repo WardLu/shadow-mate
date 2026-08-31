@@ -251,8 +251,10 @@ test.describe("Authenticated cloud workspace", () => {
 
     const screenCharacters = await page.locator("[data-writing-practice] .tian").allTextContents();
     await page.emulateMedia({ media: "print" });
-    await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
-    await expect(page.locator("[data-writing-print-sheet] .tian")).toHaveText(screenCharacters);
+    const printSheet = page.locator("[data-writing-print-sheet]");
+    await expect(printSheet).toBeVisible();
+    await expect(printSheet).not.toContainText("第一单元");
+    await expect(printSheet.locator(".tian")).toHaveText(screenCharacters);
     await expect(page.locator(".module-title")).toBeHidden();
     await expect(page.locator("[data-writing-practice]")).toBeHidden();
 
