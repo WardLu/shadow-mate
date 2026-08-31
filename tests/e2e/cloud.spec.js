@@ -8,6 +8,8 @@ const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const SCOPED_KEY = "shadow_mate_workbench_scoped_v1";
+const AUTH_SEED_MARKER = "shadow_mate_e2e_auth_seeded_v1";
+const SCOPED_SEED_MARKER = "shadow_mate_e2e_scoped_seeded_v1";
 
 const emptyState = {
   checkins: {},
@@ -53,7 +55,8 @@ function profileFixture(id, displayName) {
 async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
   const projectRef = new URL(configuredUrl).hostname.split(".")[0];
-  await page.addInitScript(({ projectRef, userId }) => {
+  await page.addInitScript(({ authSeedMarker, projectRef, userId }) => {
+    if (sessionStorage.getItem(authSeedMarker) === "1") return;
     localStorage.clear();
     sessionStorage.clear();
     const now = Math.floor(Date.now() / 1000);
@@ -73,13 +76,16 @@ async function seedAuthenticatedSession(page) {
         },
       }),
     );
-  }, { projectRef, userId: USER_ID });
+    sessionStorage.setItem(authSeedMarker, "1");
+  }, { authSeedMarker: AUTH_SEED_MARKER, projectRef, userId: USER_ID });
 }
 
 async function seedScopedStates(page, scopes) {
-  await page.addInitScript(({ scopedKey, scopes: seededScopes }) => {
+  await page.addInitScript(({ seedMarker, scopedKey, scopes: seededScopes }) => {
+    if (sessionStorage.getItem(seedMarker) === "1") return;
     localStorage.setItem(scopedKey, JSON.stringify({ schemaVersion: 1, scopes: seededScopes }));
-  }, { scopedKey: SCOPED_KEY, scopes });
+    sessionStorage.setItem(seedMarker, "1");
+  }, { seedMarker: SCOPED_SEED_MARKER, scopedKey: SCOPED_KEY, scopes });
 }
 
 async function mockCloudApi(page, {
