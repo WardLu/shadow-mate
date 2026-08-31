@@ -142,6 +142,31 @@
   .stroke-list{display:flex;flex-wrap:wrap;gap:8px;}
   .stroke-chip{background:var(--green-soft);border-radius:14px;padding:8px 12px;font-size:14px;font-weight:700;color:var(--green-deep);}
 
+  /* 今日字帖：屏幕与打印共用 worksheet snapshot 的行结构 */
+  .writing-worksheet{margin-top:10px;padding:10px 0 2px;border-top:1px solid var(--line);}
+  .writing-worksheet-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;}
+  .writing-worksheet-label{font-size:13px;font-weight:800;color:var(--green-deep);}
+  .writing-worksheet-day{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .writing-row{padding:10px 0;border-top:1px solid var(--line);break-inside:avoid;page-break-inside:avoid;}
+  .writing-row:first-child{border-top:0;}
+  .writing-row-copy{display:flex;align-items:baseline;gap:8px;min-width:0;}
+  .writing-row-pinyin{font-size:13px;font-weight:800;color:var(--green-deep);}
+  .writing-row-example{font-size:12px;color:var(--ink-soft);}
+  .writing-row-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:8px;}
+  .writing-cell{aspect-ratio:1;min-width:0;border:2px solid var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;background:
+    linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+    linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+    linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
+    linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
+  .writing-cell-trace{color:rgba(31,122,57,.45);}
+  .writing-cell-trace [data-writing-glyph]{font-size:34px;font-weight:800;line-height:1;}
+  .writing-cell-empty{background:
+    linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+    linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+    linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
+    linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
+  .writing-print-root{display:none;}
+
   /* 数学口算 */
   .quiz-box{text-align:center;padding:10px 0;}
   .quiz-q{font-size:40px;font-weight:800;margin:6px 0 14px;letter-spacing:2px;}
@@ -309,13 +334,29 @@
   .log-meta{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;}
   .log-del{border:0;background:transparent;color:var(--ink-soft);cursor:pointer;padding:7px;display:inline-flex;align-items:center;justify-content:center;}
 
-  /* 打印区 */
+  /* 打印区：body 只保留独立的 snapshot print root */
   @media print{
+    @page{size:A4 portrait;margin:12mm;}
+    html,body{width:210mm;min-height:297mm;background:#fff;color:#111;}
+    body > *:not(#writingPrintRoot){display:none !important;}
+    #writingPrintRoot{display:block !important;width:100%;}
+    #writingPrintRoot [data-writing-print-sheet]{display:block !important;width:100%;}
     .app{max-width:none;}
     .nav,.topbar,.checkin,.video-link,.speak-btn,.footer,.site-footer,.social-qr-dialog,.no-print{display:none !important;}
     body{background:#fff;}
     .card{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
     .tian{break-inside:avoid;}
+    .writing-print-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12mm;border-bottom:1px solid #222;padding-bottom:5mm;margin-bottom:3mm;}
+    .writing-print-heading h1{margin:0;font-size:22pt;line-height:1.2;}
+    .writing-print-meta{font-size:10pt;color:#444;}
+    #writingPrintRoot .writing-row{padding:5mm 0;}
+    #writingPrintRoot .writing-row-copy{gap:4mm;}
+    #writingPrintRoot .writing-row-pinyin{font-size:12pt;color:#111;}
+    #writingPrintRoot .writing-row-example{font-size:11pt;color:#444;}
+    #writingPrintRoot .writing-row-grid{gap:3mm;margin-top:3mm;}
+    #writingPrintRoot .writing-cell{border:0.5mm solid #333;border-radius:1mm;}
+    #writingPrintRoot .writing-cell-trace{color:rgba(31,122,57,.45);}
+    #writingPrintRoot .writing-cell-trace [data-writing-glyph]{font-size:30pt;}
   }
   .hidden{display:none !important;}
 

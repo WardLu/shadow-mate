@@ -1,4 +1,13 @@
 import { inject } from "@vercel/analytics";
+import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
+import {
+  renderWritingPrintSheetHtml,
+  renderWritingWorksheetHtml,
+} from "./hanzi-writing-view.js";
+import {
+  recordWorksheetCompletion,
+  resolveDailyWorksheet,
+} from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { createScopedStateStorage } from "./local-state.js";
 import { startVersionGuard } from "./version-guard.js";
@@ -15,6 +24,7 @@ import {
 import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
+  getHanziRotationState,
   hasCheckin,
   isPointMarked,
   normalizeLearningState,
@@ -73,7 +83,6 @@ const POEMS = [
 ];
 
 const STROKES = ["点","横","竖","撇","捺","提","折","钩"];
-const WRITE_WORDS = ["一二三人","上下大","口手日","月水火","木山中","田土石","天王马","牛羊鸟"];
 
 const ENGLISH = [
   ["apple","/ˈæp.əl/","苹果","水果"],["banana","/bəˈnɑː.nə/","香蕉","水果"],["orange","/ˈɒr.ɪndʒ/","橙子","水果"],
@@ -149,6 +158,75 @@ if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
 if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
 
+const WRITING_PRINT_ROOT_ID = "writingPrintRoot";
+let activeWorksheetSnapshot = null;
+
+function getLearningTimeZone() {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof timeZone === "string" && timeZone.length > 0 ? timeZone : "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function removeWritingPrintRoot() {
+  document.getElementById(WRITING_PRINT_ROOT_ID)?.remove();
+  activeWorksheetSnapshot = null;
+}
+
+function createWritingPrintRoot(worksheet) {
+  removeWritingPrintRoot();
+  activeWorksheetSnapshot = worksheet;
+  const root = document.createElement("div");
+  root.id = WRITING_PRINT_ROOT_ID;
+  root.className = "writing-print-root";
+  root.innerHTML = renderWritingPrintSheetHtml(activeWorksheetSnapshot);
+  document.body.appendChild(root);
+}
+
+function resolveWritingWorksheet() {
+  const resolved = resolveDailyWorksheet({
+    rotationState: getHanziRotationState(store),
+    pack: getActiveHanziWritingPack(),
+    learnerScope: persistenceScope,
+    now: new Date(),
+    timeZone: getLearningTimeZone(),
+  });
+  const nextStore = transitionLearningState(store, {
+    type: "HANZI_ROTATION_REPLACED",
+    rotationState: resolved.rotationState,
+  });
+  if (JSON.stringify(nextStore) !== JSON.stringify(store)) {
+    store = nextStore;
+    save();
+  }
+  return structuredClone(resolved.worksheet);
+}
+
+function hasActiveWorksheetCompletion() {
+  if (!activeWorksheetSnapshot) return false;
+  const rotationState = getHanziRotationState(store);
+  return Boolean(
+    rotationState?.assignments?.[activeWorksheetSnapshot.dayKey]
+      ?.completions?.[activeWorksheetSnapshot.assignmentId]
+  );
+}
+
+function recordActiveWorksheetCompletion() {
+  if (!activeWorksheetSnapshot) return;
+  const rotationState = getHanziRotationState(store);
+  if (!rotationState) return;
+  store = transitionLearningState(store, {
+    type: "HANZI_ROTATION_REPLACED",
+    rotationState: recordWorksheetCompletion({
+      rotationState,
+      worksheet: activeWorksheetSnapshot,
+      completedAt: new Date().toISOString(),
+    }),
+  });
+}
+
 function save(){
   const saved = scopedStateStorage.save(persistenceScope, store);
   if (saved) window.cloudSync?.schedule();
@@ -175,11 +253,16 @@ function isChecked(mod){
 }
 
 function toggleCheckin(mod){
+  const wasChecked = isChecked(mod);
+  const shouldRecordWorksheet = mod === "chinese-writing" &&
+    !wasChecked &&
+    !hasActiveWorksheetCompletion();
   store = transitionLearningState(store, {
     type: "CHECKIN_TOGGLED",
     date: todayKey(),
     key: mod,
   });
+  if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   save();
 }
 function streak(mod){
@@ -527,14 +610,16 @@ function renderChinese(){
   main.appendChild(card2);
 
   // 写字打卡
+  const worksheet = resolveWritingWorksheet();
+  const worksheetHtml = renderWritingWorksheetHtml(worksheet);
+  createWritingPrintRoot(worksheet);
   const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
-  const wordsHtml = WRITE_WORDS.slice(0,4).map(w=>`<div class="write-grid">${[...w].map(ch=>`<div class="tian">${ch}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
   const card3 = $(`
     <div class="card">
-      <h3>${icon("pen")} 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
+      <h3>${icon("pen")} 写字打卡 <span class="pill">今日字帖 · 4 行</span></h3>
       <div class="desc">8 个基础笔画：${strokesHtml}</div>
-      <div class="desc">今日练习汉字（从简到难，控笔临摹）：</div>
-      ${wordsHtml}
+      <div class="desc">今天练习下面 4 行字帖，先描一格，再试着独立书写。</div>
+      ${worksheetHtml}
       <div class="spacer-12"></div>
       <button class="checkin" type="button" data-print>${icon("download")} 打印 A4 字帖</button>
       <div class="spacer-10"></div>
@@ -1084,6 +1169,7 @@ function checkinBtn(mod,label){
    ========================================================= */
 let CURRENT_MOD = "home";
 function switchMod(mod){
+  removeWritingPrintRoot();
   CURRENT_MOD = mod;
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
@@ -1190,6 +1276,7 @@ window.learningDesk = {
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
     if (!scopedStateStorage.clear()) return false;
+    removeWritingPrintRoot();
     if (reload) {
       window.location.reload();
       return true;
