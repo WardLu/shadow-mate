@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mergeState,
+  stateHasData,
 } from "../../src/lib.js";
 import {
   recordWorksheetCompletion,
@@ -128,5 +129,26 @@ describe("learning state rotation integration", () => {
     expect(storedWorksheet.rows[0].exampleWord.length).toBeLessThan(200 * 1024);
     expect(payloadBytes).toBeLessThan(200 * 1024);
     expect(oversized).not.toEqual(merged.extra.hanziWorksheetRotationV1);
+  });
+
+  it("rejects missing or invalid active packs at the generic state boundary", () => {
+    const valid = makeRotationState();
+    const missingActivePack = structuredClone(valid);
+    delete missingActivePack.activePack;
+    const nullActivePack = structuredClone(valid);
+    nullActivePack.activePack = null;
+    const partialActivePack = structuredClone(valid);
+    partialActivePack.activePack = { setId: "hanzi-writing-v2" };
+
+    for (const rotationState of [missingActivePack, nullActivePack, partialActivePack]) {
+      expect(stateHasData({ extra: { hanziWorksheetRotationV1: rotationState } })).toBe(false);
+
+      const merged = mergeState(
+        { extra: { hanziWorksheetRotationV1: rotationState } },
+        { extra: { hanziWorksheetRotationV1: valid } },
+      );
+
+      expect(merged.extra.hanziWorksheetRotationV1).toEqual(valid);
+    }
   });
 });

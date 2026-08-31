@@ -15,6 +15,7 @@ function isRecord(value) {
 function normalizeRotationWithData(rotationState) {
   if (!isRecord(rotationState)) return null;
   const normalized = normalizeRotationState(rotationState);
+  if (!isRecord(normalized.activePack)) return null;
   return Object.keys(normalized.assignments).length > 0 ? normalized : null;
 }
 
