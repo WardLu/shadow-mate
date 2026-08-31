@@ -1023,6 +1023,40 @@ test.describe("Authenticated cloud workspace", () => {
       marker: window.learningDesk.getState().extra?.marker,
     }))).resolves.toEqual({ scope: "anonymous", marker: "anonymous" });
   });
+
+  test("fails closed when logout cannot save the profile scope", async ({ page }) => {
+    const profileScope = `profile:${PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      anonymous: stateWithMarker("anonymous", "anonymous"),
+      [profileScope]: stateWithMarker("cached-profile", profileScope),
+    });
+    const api = await mockCloudApi(page, {
+      remoteState: stateWithMarker("remote-profile", profileScope),
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileScope);
+    await page.evaluate((scopedKey) => {
+      const originalSetItem = Storage.prototype.setItem;
+      Object.defineProperty(Storage.prototype, "setItem", {
+        configurable: true,
+        value(key, value) {
+          if (key === scopedKey) {
+            throw new Error("simulated logout storage failure");
+          }
+          return originalSetItem.call(this, key, value);
+        },
+      });
+    }, SCOPED_KEY);
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe("anonymous");
+    expect(api.rpcPayloads).toHaveLength(0);
+  });
 });
 
 test.describe("Email OTP sign-in", () => {

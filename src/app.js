@@ -1292,6 +1292,13 @@ window.learningDesk = {
     if (options.render !== false) switchMod(CURRENT_MOD);
     return true;
   },
+  activateSafeAnonymousScope(){
+    removeWritingPrintRoot();
+    persistenceScope = "anonymous";
+    store = normalizeLearningStateForScope({}, persistenceScope);
+    switchMod(CURRENT_MOD);
+    return true;
+  },
   flushLocalState(){
     return scopedStateStorage.save(persistenceScope, store);
   },

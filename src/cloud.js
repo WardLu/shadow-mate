@@ -1541,7 +1541,14 @@ async function onAuthChange(nextSession, event = "") {
   lastSyncAt = null;
   cloudSyncBlocked = false;
   if (!session) {
-    window.learningDesk.activateScope(ANONYMOUS_SCOPE, { persist: !localResetInProgress });
+    const anonymousActivated = window.learningDesk.activateScope(
+      ANONYMOUS_SCOPE,
+      { persist: !localResetInProgress },
+    );
+    if (!anonymousActivated) {
+      window.learningDesk.activateSafeAnonymousScope();
+      showToast("退出登录完成，但本机记录保存失败，已进入安全本地模式；修复存储后可恢复。", 6000);
+    }
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
   }
