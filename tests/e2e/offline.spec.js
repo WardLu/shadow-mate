@@ -224,7 +224,7 @@ test.describe("Offline mode (no login)", () => {
     await page.goto("/");
     await openModule(page, "chinese");
 
-    const writingGroups = page.locator(".write-grid");
+    const writingGroups = page.locator("[data-writing-practice] .write-grid");
     await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
     const beforeCheckin = await writingGroups.allTextContents();
 
@@ -233,7 +233,7 @@ test.describe("Offline mode (no login)", () => {
 
     await page.evaluate(() => {
       window.print = () => {
-        window.__printedWritingGroups = [...document.querySelectorAll(".write-grid")]
+        window.__printedWritingGroups = [...document.querySelectorAll("[data-writing-print-sheet] .write-grid")]
           .map((element) => element.textContent);
       };
     });

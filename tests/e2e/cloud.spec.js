@@ -909,7 +909,7 @@ test.describe("Authenticated cloud workspace", () => {
     });
   });
 
-  test("restores the last successful scope when a stale switch is followed by a failed switch", async ({ page }) => {
+  test("keeps the locally selected scope when a stale switch is followed by a failed remote hydrate", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       initialProfiles: [
@@ -967,9 +967,9 @@ test.describe("Authenticated cloud workspace", () => {
     await page.evaluate(() => { window.__staleGenerationObserved = true; });
     await page.evaluate(() => window.__releaseStaleGrowthLoad());
 
-    await expect(firstChoice).toHaveClass(/active/);
+    await expect(firstChoice).not.toHaveClass(/active/);
     await expect(secondChoice).not.toHaveClass(/active/);
-    await expect(thirdChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).toHaveClass(/active/);
     await expect.poll(() => page.evaluate(({ secondProfileId }) => window.__scopeLoads.some(
       (entry) => entry.profileId === secondProfileId && entry.phase === "end",
     ), { secondProfileId: SECOND_PROFILE_ID })).toBe(true);
@@ -978,9 +978,9 @@ test.describe("Authenticated cloud workspace", () => {
       learning: window.learningDesk.getEnvelope().scope?.profile_id,
       growth: window.growthLoop.getScope().profile_id,
     }))).toEqual({
-      active: PROFILE_ID,
-      learning: PROFILE_ID,
-      growth: PROFILE_ID,
+      active: THIRD_PROFILE_ID,
+      learning: THIRD_PROFILE_ID,
+      growth: THIRD_PROFILE_ID,
     });
     expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).not.toContain(SECOND_PROFILE_ID);
     expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(SECOND_PROFILE_ID);
