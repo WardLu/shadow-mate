@@ -150,8 +150,9 @@ if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生�
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
 
 function save(){
-  scopedStateStorage.save(persistenceScope, store);
-  window.cloudSync?.schedule();
+  const saved = scopedStateStorage.save(persistenceScope, store);
+  if (saved) window.cloudSync?.schedule();
+  return saved;
 }
 
 function todayKey(){
@@ -1153,13 +1154,16 @@ window.learningDesk = {
   },
   activateScope(scope, options = {}){
     if (typeof scope !== "string" || scope.trim().length === 0) return false;
-    if (scope !== persistenceScope) scopedStateStorage.save(persistenceScope, store);
-    persistenceScope = scope;
+    const previousScope = persistenceScope;
+    const previousStore = store;
+    if (scope !== previousScope && !scopedStateStorage.save(previousScope, previousStore)) return false;
     const nextState = Object.hasOwn(options, "state") && options.state !== undefined
       ? options.state
       : scopedStateStorage.load(scope);
-    store = normalizeLearningState(nextState);
-    if (options.persist !== false) scopedStateStorage.save(scope, store);
+    const nextStore = normalizeLearningState(nextState);
+    if (options.persist !== false && !scopedStateStorage.save(scope, nextStore)) return false;
+    persistenceScope = scope;
+    store = nextStore;
     switchMod(CURRENT_MOD);
     return true;
   },
@@ -1167,12 +1171,15 @@ window.learningDesk = {
     return scopedStateStorage.save(persistenceScope, store);
   },
   replaceState(next, options = {}){
-    store = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
-    if(options.persist) scopedStateStorage.save(persistenceScope, store);
+    const nextStore = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
+    if(options.persist && !scopedStateStorage.save(persistenceScope, nextStore)) return false;
+    store = nextStore;
     switchMod(CURRENT_MOD);
+    return true;
   },
   removePersistenceScope(scope){
     const removed = scopedStateStorage.remove(scope);
+    if (!removed) return false;
     if (scope === persistenceScope) {
       persistenceScope = "anonymous";
       store = normalizeLearningState(scopedStateStorage.load(persistenceScope));
@@ -1182,13 +1189,14 @@ window.learningDesk = {
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
-    scopedStateStorage.clear();
+    if (!scopedStateStorage.clear()) return false;
     if (reload) {
       window.location.reload();
-      return;
+      return true;
     }
     persistenceScope = "anonymous";
     store = normalizeLearningState({});
     switchMod(CURRENT_MOD);
+    return true;
   }
 };

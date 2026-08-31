@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createScopedStateStorage } from "../../src/local-state.js";
+import {
+  createScopedStateStorage,
+  rebindStateScope,
+} from "../../src/local-state.js";
+import {
+  mergeState,
+} from "../../src/lib.js";
+import {
+  recordWorksheetCompletion,
+  resolveDailyWorksheet,
+} from "../../src/hanzi-worksheet-rotation.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const LEGACY_KEY = "shadow_mate_workbench_v1";
 const SCOPED_KEY = "shadow_mate_workbench_scoped_v1";
@@ -9,6 +20,7 @@ class MemoryStorage {
     this.entries = new Map(Object.entries(entries));
     this.setCalls = 0;
     this.failWrites = false;
+    this.failRemoves = new Set();
   }
 
   getItem(key) {
@@ -22,6 +34,7 @@ class MemoryStorage {
   }
 
   removeItem(key) {
+    if (this.failRemoves.has(key)) throw new Error("storage remove failed");
     this.entries.delete(key);
   }
 }
@@ -147,5 +160,91 @@ describe("scoped local state storage", () => {
     expect(storage.getItem(LEGACY_KEY)).toBeNull();
     expect(storage.getItem(SCOPED_KEY)).toBeNull();
     expect(scoped.listScopes()).toEqual([]);
+  });
+
+  it("returns failure for remove and clear without hiding storage errors", () => {
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", stateWith("profile-a"));
+
+    storage.failRemoves.add(SCOPED_KEY);
+    expect(scoped.remove("profile:a")).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(stateWith("profile-a"));
+
+    storage.failRemoves.add(LEGACY_KEY);
+    expect(scoped.clear()).toBe(false);
+    expect(storage.getItem(LEGACY_KEY)).not.toBeNull();
+  });
+
+  it("does not repeat or overwrite migration when legacy cleanup fails", () => {
+    const legacyState = stateWith("legacy");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    storage.failRemoves.add(LEGACY_KEY);
+    const scoped = createAdapter(storage);
+
+    expect(scoped.migrateLegacyToAnonymous()).toBe(true);
+    const writesAfterFirstMigration = storage.setCalls;
+    storage.entries.set(LEGACY_KEY, JSON.stringify(stateWith("should-not-win")));
+
+    expect(scoped.migrateLegacyToAnonymous()).toBe(false);
+    expect(storage.setCalls).toBe(writesAfterFirstMigration);
+    expect(scoped.load("anonymous")).toEqual(legacyState);
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("should-not-win")));
+  });
+
+  it("rebinds rotation assignments and completions only for explicit migration", () => {
+    const pack = getActiveHanziWritingPack();
+    const anonymousScope = "anonymous";
+    const profileScope = "profile:learner-b";
+    const first = resolveDailyWorksheet({
+      rotationState: {},
+      pack,
+      learnerScope: anonymousScope,
+      now: new Date("2026-09-01T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+    const completed = recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: "2026-09-01T01:00:00.000Z",
+    });
+    const second = resolveDailyWorksheet({
+      rotationState: completed,
+      pack,
+      learnerScope: anonymousScope,
+      now: new Date("2026-09-02T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+    const sourceState = {
+      checkins: {},
+      extra: { hanziWorksheetRotationV1: second.rotationState },
+      points: {},
+      bookShelf: {},
+      peanutLog: [],
+      peanutRead: {},
+    };
+
+    const reboundState = rebindStateScope(sourceState, profileScope);
+    const reboundRotation = reboundState.extra.hanziWorksheetRotationV1;
+    expect(reboundRotation.learnerScope).toBe(profileScope);
+    expect(Object.keys(reboundRotation.assignments)).toEqual(["2026-09-01", "2026-09-02"]);
+
+    for (const assignment of Object.values(reboundRotation.assignments)) {
+      for (const [assignmentId, worksheet] of Object.entries(assignment.candidates)) {
+        expect(assignmentId).toBe(worksheet.assignmentId);
+        expect(assignmentId).not.toBe(first.worksheet.assignmentId);
+      }
+    }
+    const completionIds = Object.keys(reboundRotation.assignments["2026-09-01"].completions);
+    expect(completionIds).toHaveLength(1);
+    expect(reboundRotation.assignments["2026-09-01"].candidates[completionIds[0]]).toBeDefined();
+    expect(reboundRotation.assignments["2026-09-01"].completions[completionIds[0]]).toEqual({
+      completedAt: "2026-09-01T01:00:00.000Z",
+    });
+
+    expect(() => mergeState(
+      sourceState,
+      reboundState,
+    )).toThrow(/learnerScope/);
   });
 });

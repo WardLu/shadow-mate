@@ -425,6 +425,49 @@ test.describe("Authenticated cloud workspace", () => {
     }, { scopedKey: SCOPED_KEY, profileAScope })).toBe("current-a");
   });
 
+  test("preserves target-scope offline edits during remote hydration", async ({ page }) => {
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    const cachedBState = stateWithMarker("cached-b", profileBScope);
+    const remoteBState = stateWithMarker("remote-b", profileBScope);
+    remoteBState.extra.remoteDuringHydrate = true;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, { [profileBScope]: cachedBState });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
+      stateDelays: { [SECOND_PROFILE_ID]: 600 },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
+    await page.evaluate(() => {
+      const state = window.learningDesk.getState();
+      state.extra.localDuringHydrate = true;
+      window.learningDesk.replaceState(state, { persist: true });
+    });
+
+    await expect.poll(() => page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      local: window.learningDesk.getState().extra?.localDuringHydrate,
+      remote: window.learningDesk.getState().extra?.remoteDuringHydrate,
+    }))).toEqual({ scope: profileBScope, local: true, remote: true });
+    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).toMatchObject({
+      p_state: {
+        extra: { localDuringHydrate: true, remoteDuringHydrate: true },
+      },
+    });
+    expect(await page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("cached-b");
+    expect(await page.evaluate(({ scopedKey, profileBScope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return envelope.scopes?.[profileBScope]?.extra;
+    }, { scopedKey: SCOPED_KEY, profileBScope })).toMatchObject({
+      localDuringHydrate: true,
+      remoteDuringHydrate: true,
+    });
+  });
+
   test("migrates only anonymous local state into an empty newly selected profile", async ({ page }) => {
     const anonymousScope = "anonymous";
     const profileAScope = `profile:${PROFILE_ID}`;
@@ -450,6 +493,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).not.toBeUndefined();
     const migratedPayload = api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID);
     expect(migratedPayload.p_state.extra.marker).toBe("anonymous");
+    expect(migratedPayload.p_state.extra.hanziWorksheetRotationV1.learnerScope).toBe(profileBScope);
     expect(migratedPayload.p_state.checkins).toHaveProperty("2026-09-01.anonymous");
     expect(migratedPayload.p_state.checkins).not.toHaveProperty("2026-09-01.profile-a");
   });
@@ -479,6 +523,55 @@ test.describe("Authenticated cloud workspace", () => {
       scope: window.learningDesk.getPersistenceScope(),
       state: window.learningDesk.getState(),
     }))).resolves.toEqual({ scope: "anonymous", state: emptyState });
+  });
+
+  test("does not report success or reset context when local clear fails", async ({ page }) => {
+    const profileScope = `profile:${PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, { [profileScope]: stateWithMarker("recoverable", profileScope) });
+    await mockCloudApi(page, { remoteStates: { [PROFILE_ID]: null } });
+    await page.addInitScript(({ scopedKey }) => {
+      const removeItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key) {
+        if (key === scopedKey) throw new Error("scoped storage remove failed");
+        return removeItem.call(this, key);
+      };
+      window.confirm = () => true;
+    }, { scopedKey: SCOPED_KEY });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator("[data-clear-local]").click();
+
+    await expect(page.locator("#syncToast")).toHaveText("本机数据清除失败，本机状态未重置，请稍后重试。");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      marker: window.learningDesk.getState().extra?.marker,
+    }))).resolves.toEqual({ scope: profileScope, marker: "recoverable" });
+  });
+
+  test("invalidates an in-flight profile save when local data is cleared", async ({ page }) => {
+    const profileScope = `profile:${PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, { [profileScope]: stateWithMarker("clear-in-flight", profileScope) });
+    const api = await mockCloudApi(page, {
+      remoteStates: { [PROFILE_ID]: stateWithMarker("remote", profileScope) },
+      rpcDelayMs: 800,
+    });
+    await page.addInitScript(() => { window.confirm = () => true; });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator("[data-sync]").click();
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await page.locator("[data-clear-local]").click();
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect(page.evaluate(() => window.learningDesk.getPersistenceScope())).resolves.toBe("anonymous");
+    await page.waitForTimeout(1000);
+    expect(api.rpcPayloads).toHaveLength(1);
+    expect(api.rpcPayloads[0].p_profile_id).toBe(PROFILE_ID);
   });
 
   test("deleting one learner removes only that learner's local scope", async ({ page }) => {
@@ -512,6 +605,42 @@ test.describe("Authenticated cloud workspace", () => {
       deleted: undefined,
       retained: "profile-b",
     });
+  });
+
+  test("does not report learner deletion success when local scope removal fails", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("profile-b", profileBScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
+    });
+    await page.addInitScript(() => { window.confirm = () => true; });
+
+    await page.goto("/");
+    await page.evaluate(({ scopedKey }) => {
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === scopedKey) throw new Error("scoped storage write failed");
+        return setItem.call(this, key, value);
+      };
+    }, { scopedKey: SCOPED_KEY });
+    await page.click("#accountButton");
+    await page.locator(`[data-delete-profile="${PROFILE_ID}"]`).click();
+
+    await expect.poll(() => api.deletedProfiles.length).toBe(1);
+    await expect(page.locator("#syncToast")).toHaveText("云端学习者已删除，但本机缓存清除失败，请稍后重试。");
+    await expect(page.evaluate(({ scopedKey, profileAScope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return envelope.scopes?.[profileAScope]?.extra?.marker;
+    }, { scopedKey: SCOPED_KEY, profileAScope })).resolves.toBe("profile-a");
+    expect(await page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
+    expect(await page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-a");
+    expect(api.deletedProfiles).toEqual([PROFILE_ID]);
   });
 
   test("ignores a delayed old-profile response after switching to a newer learner", async ({ page }) => {
