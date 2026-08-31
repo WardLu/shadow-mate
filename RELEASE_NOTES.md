@@ -2,13 +2,24 @@
 
 ## Unreleased
 
+## v1.3.11 - 2026-09-01
+
 - 统一 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板的产品识别：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo 按认证请求动态显示名称、页脚标语和产品详情链接；未知来源回退为 Shadow Nexus。
 - 共享 SMTP 发件人名称仍保持为 `Shadow Nexus`，但邮件内容按当前产品显示，避免把 Shadow Mate 的邮件误显示为通用 Shadow Nexus 产品。
+- 修复删除家庭数据后使用同一认证账号重新登录时登录回调被本地清理保护状态静默忽略的问题；重新登录后会进入登录态并打开建立家庭学习空间的入口。
 
 ### 验证结果
 
 - `tests/unit/email-templates.test.js` 已覆盖 6 个 Supabase Auth 邮件模板及其产品身份、页脚、链接和认证变量。
 - 本节记录代码与模板的一致性；不代表生产 Supabase 模板已经由本次本地提交自动部署。
+- 删除家庭后密码重新登录回归、完整 cloud E2E、全量 E2E、单元覆盖率、公开仓库、安全、静态检查、构建产物、数据库 pgTAP 和本地 Functions 守卫均已通过。
+
+### 部署清单（待完成）
+
+- [ ] Git tag `v1.3.11` 与最终 `main` 合并提交一致，并发布 GitHub Release 及压缩包。
+- [ ] `release-to-production` 完成 `production` 快进和 Vercel 部署。
+- [ ] `https://sm.shadow.wang/` 验证版本、HTTPS、CSP、HSTS、X-Frame-Options 和登录入口。
+- [ ] 使用脱敏真实账号确认删除家庭后可重新登录，并能建立新的家庭空间。
 
 ## v1.3.10 - 2026-08-23
 

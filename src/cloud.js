@@ -514,10 +514,11 @@ async function completeLocalAccountReset(successMessage) {
   try {
     signOutError = await clearLocalAccountState();
   } catch (error) {
-    localResetInProgress = false;
     console.warn("Local account cleanup failed; fail-closed protection remains:", error);
     showToast("本机数据清理未完成，保护模式仍保持；请重试。", 7000);
     return false;
+  } finally {
+    localResetInProgress = false;
   }
   closeDialog();
   showToast(

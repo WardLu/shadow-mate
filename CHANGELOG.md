@@ -2,11 +2,14 @@
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-09-01
+
 ### Changed
 - 统一共享 Supabase 的 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板，均按 `RedirectTo` 或 `product_id` 动态显示产品名称与页脚标语：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo；未知来源回退为 Shadow Nexus。共享 SMTP 发件人名称仍为 `Shadow Nexus`。
 - Auth 邮件页脚的产品详情链接与品牌信息保持同一环境和产品来源，避免已登录某个产品却收到通用 Shadow Nexus 的产品信息。
 
 ### Fixed
+- 修复删除家庭数据后使用同一认证账号重新登录时，客户端误把成功的登录回调当作本地清理状态而忽略，导致页面停留在本地模式且没有任何提示；现在会正常进入登录态并显示建立家庭学习空间的入口。
 - 修复孩子切换并发期间的完整 active tuple 回滚：active profile、profile key、cloud version、Growth Loop 和 Learning Desk 必须一起回到原作用域，否则 fail-closed。
 - fail-closed 标记改为跨 browsing session 持久化，并将本机清理作为应用内唯一解除入口；旧 outbox claim 通过 immutable operation context/lease 绑定到发送前复核。
 - profile-scoped business IndexedDB 写入覆盖 request-success 到 transaction-complete 的 stale 窗口，发现作用域失效时主动 abort，避免旧学习者数据落盘；tuple-safe claim release 与显式 cleanup 保持各自的保护边界。
@@ -14,6 +17,7 @@
 - 本机清理成功前始终保持 fail-closed；清理失败可重试且不会因重开页面恢复本机写入。
 
 ### Tests
+- 增加删除家庭后同一账号重新登录并显示家庭创建界面的端到端回归。
 - 新增真实 `checkins` 驱动的 B save in-flight → C 失败回归，以及 fail-closed 重开零 IndexedDB 写、清理失败保留 marker、same-worker lease、send 前重读和 transaction-completion microtask AbortSignal 回归。
 - `tests/unit/email-templates.test.js` 覆盖 6 个 Auth 邮件模板的产品身份、页脚标语、链接环境和认证变量。
 
