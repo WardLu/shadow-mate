@@ -87,6 +87,8 @@ async function mockCloudApi(page, {
   remoteStates = {},
   profiles = null,
   stateDelays = {},
+  stateErrors = {},
+  workspaceDelayMs = 0,
   rpcDelayMs = 0,
   rpcResponses = ["success"],
   hasPassword = true,
@@ -175,6 +177,7 @@ async function mockCloudApi(page, {
         await route.fulfill({ status: 201, body: "" });
         return;
       }
+      if (workspaceDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceDelayMs));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -249,6 +252,14 @@ async function mockCloudApi(page, {
         await new Promise((resolve) => setTimeout(resolve, stateDelays[profileId]));
       } else if (profileId) {
         stateRequests.push(profileId);
+      }
+      if (profileId && select.includes("state") && stateErrors[profileId]) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST503", message: stateErrors[profileId] }),
+        });
+        return;
       }
       const body = select.includes("state")
         ? (stateByProfile.get(profileId || PROFILE_ID) === null
@@ -356,6 +367,8 @@ test.describe("Authenticated cloud workspace", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
     await page.click("#accountButton");
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(2);
@@ -468,6 +481,105 @@ test.describe("Authenticated cloud workspace", () => {
     });
   });
 
+  test("preserves pending target check-in and rotation completion before remote hydration", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    const remoteBState = stateWithMarker("remote-b", profileBScope);
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("cached-b", profileBScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
+      stateDelays: { [SECOND_PROFILE_ID]: 600 },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.evaluate(({ scope }) => {
+      window.learningDesk.activateScope(scope, {
+        state: window.learningDesk.getState(scope),
+        persist: true,
+        render: false,
+      });
+      const state = window.learningDesk.getState();
+      state.checkins["2026-09-01"] ??= {};
+      state.checkins["2026-09-01"]["chinese-writing"] = true;
+      const rotation = state.extra.hanziWorksheetRotationV1;
+      const assignment = rotation.assignments["2026-09-01"];
+      assignment.completions[assignment.canonicalAssignmentId] = {
+        completedAt: "2026-09-01T02:00:00.000Z",
+      };
+      window.learningDesk.replaceState(state, { persist: true, render: false });
+    }, { scope: profileBScope });
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      checked: window.learningDesk.getState().checkins["2026-09-01"]?.["chinese-writing"],
+      completed: Object.keys(window.learningDesk.getState().extra.hanziWorksheetRotationV1.assignments["2026-09-01"].completions).length,
+      remoteMarker: window.learningDesk.getState().extra.remoteOnly,
+    }))).toEqual({
+      scope: profileBScope,
+      checked: true,
+      completed: 1,
+      remoteMarker: undefined,
+    });
+    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).toMatchObject({
+      p_state: {
+        checkins: { "2026-09-01": { "chinese-writing": true } },
+      },
+    });
+    expect(await page.evaluate(() => window.learningDesk.getState().extra.marker)).toBe("cached-b");
+  });
+
+  test("retains pending target edits through a failed hydration and reload", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("cached-b", profileBScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope) },
+      stateErrors: { [SECOND_PROFILE_ID]: "network timeout" },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await expect(page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`)).toBeVisible();
+    await page.evaluate(({ scopedKey, scope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey));
+      const state = envelope.scopes[scope];
+      state.extra.offlineBeforeReload = true;
+      envelope.scopes[scope] = state;
+      localStorage.setItem(scopedKey, JSON.stringify(envelope));
+      localStorage.setItem(`${scopedKey}_sync_v1`, JSON.stringify({
+        schemaVersion: 1,
+        scopes: { [scope]: { pending: true, lastConfirmed: null } },
+      }));
+    }, { scopedKey: SCOPED_KEY, scope: profileBScope });
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      offline: window.learningDesk.getState().extra.offlineBeforeReload,
+      pending: window.learningDesk.getPersistenceStatus().pending,
+    }))).toEqual({ scope: profileBScope, offline: true, pending: true });
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      offline: window.learningDesk.getState().extra.offlineBeforeReload,
+      pending: window.learningDesk.getPersistenceStatus().pending,
+    }))).toEqual({ scope: profileBScope, offline: true, pending: true });
+    expect(api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
+  });
+
   test("migrates only anonymous local state into an empty newly selected profile", async ({ page }) => {
     const anonymousScope = "anonymous";
     const profileAScope = `profile:${PROFILE_ID}`;
@@ -484,6 +596,10 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.goto("/");
     await expect(page.locator("#householdSetupForm")).toBeVisible();
+    await page.evaluate(() => {
+      document.querySelector('[data-mod="chinese"]')?.click();
+      document.querySelector('#main [data-cmod="chinese-writing"]')?.click();
+    });
     await page.locator('#householdSetupForm input[name="household"]').fill("迁移测试家庭");
     await page.locator('#householdSetupForm input[name="learner"]').fill("学习者 B");
     await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
@@ -496,6 +612,9 @@ test.describe("Authenticated cloud workspace", () => {
     expect(migratedPayload.p_state.extra.hanziWorksheetRotationV1.learnerScope).toBe(profileBScope);
     expect(migratedPayload.p_state.checkins).toHaveProperty("2026-09-01.anonymous");
     expect(migratedPayload.p_state.checkins).not.toHaveProperty("2026-09-01.profile-a");
+    expect(Object.values(migratedPayload.p_state.checkins).some((day) => day["chinese-writing"])).toBe(true);
+    expect(Object.values(migratedPayload.p_state.extra.hanziWorksheetRotationV1.assignments)
+      .some((assignment) => Object.keys(assignment.completions).length > 0)).toBe(true);
   });
 
   test("clearing local data removes anonymous and every learner scope", async ({ page }) => {
@@ -676,6 +795,59 @@ test.describe("Authenticated cloud workspace", () => {
       scope: window.learningDesk.getPersistenceScope(),
       marker: window.learningDesk.getState().extra?.marker,
     }))).resolves.toEqual({ scope: profileBScope, marker: "remote-b" });
+  });
+
+  test("does not let a delayed profile response write after logout", async ({ page }) => {
+    const profileScope = `profile:${PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      anonymous: stateWithMarker("anonymous", "anonymous"),
+      [profileScope]: stateWithMarker("cached-profile", profileScope),
+    });
+    const api = await mockCloudApi(page, {
+      remoteStates: { [PROFILE_ID]: stateWithMarker("remote-profile", profileScope) },
+      stateDelays: { [PROFILE_ID]: 800 },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await expect(page.locator(`[data-profile="${PROFILE_ID}"]`)).toBeVisible();
+    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
+    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === PROFILE_ID).length).toBeGreaterThan(1);
+    await page.locator("[data-signout]").click();
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await page.waitForTimeout(1000);
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      marker: window.learningDesk.getState().extra?.marker,
+    }))).resolves.toEqual({ scope: "anonymous", marker: "anonymous" });
+    expect(api.rpcPayloads).toHaveLength(0);
+  });
+
+  test("fails closed before hydrating a profile with a mismatched local rotation scope", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("wrong-scope", profileAScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope) },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect(page.locator("#syncToast")).toHaveText("本机记录与当前学习者不匹配，暂未加载。");
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      marker: window.learningDesk.getState().extra?.marker,
+    }))).resolves.toEqual({ scope: profileAScope, marker: "profile-a" });
+    expect(api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID)).toHaveLength(0);
   });
 
   test("binds cloud saves to the starting profile, scope, and state snapshot", async ({ page }) => {

@@ -1,4 +1,9 @@
 import { inject } from "@vercel/analytics";
+import {
+  ANALYTICS_EVENTS,
+  hasConsecutiveCheckinDays,
+  recordAnalyticsEvent,
+} from "./analytics.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
   renderWritingPrintSheetHtml,
@@ -25,8 +30,10 @@ import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
   getHanziRotationState,
+  hasCompatibleHanziRotationScope,
   hasCheckin,
   isPointMarked,
+  normalizeLearningStateForScope,
   normalizeLearningState,
   transitionLearningState,
 } from "./learning-state.js";
@@ -34,6 +41,7 @@ import {
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
 inject();
+recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 
@@ -146,11 +154,12 @@ const scopedStateStorage = createScopedStateStorage({
   legacyKey: STORE_KEY,
   scopedKey: SCOPED_STORE_KEY,
   normalize: normalizeLearningState,
+  normalizeForScope: normalizeLearningStateForScope,
 });
 scopedStateStorage.migrateLegacyToAnonymous();
 
 let persistenceScope = "anonymous";
-let store = normalizeLearningState(scopedStateStorage.load(persistenceScope));
+let store = normalizeLearningStateForScope(scopedStateStorage.load(persistenceScope), persistenceScope);
 if(!store.checkins) store.checkins = {};   // {date: {module:true}}
 if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
 if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
@@ -186,6 +195,12 @@ function createWritingPrintRoot(worksheet) {
 }
 
 function resolveWritingWorksheet() {
+  const scopedStore = normalizeLearningStateForScope(store, persistenceScope);
+  if (JSON.stringify(scopedStore) !== JSON.stringify(store)) {
+    store = scopedStore;
+    if (!save()) return null;
+  }
+  if (!hasCompatibleHanziRotationScope(store, persistenceScope)) return null;
   const resolved = resolveDailyWorksheet({
     rotationState: getHanziRotationState(store),
     pack: getActiveHanziWritingPack(),
@@ -228,7 +243,8 @@ function recordActiveWorksheetCompletion() {
 }
 
 function save(){
-  const saved = scopedStateStorage.save(persistenceScope, store);
+  store = normalizeLearningStateForScope(store, persistenceScope);
+  const saved = scopedStateStorage.save(persistenceScope, store, { pending: true });
   if (saved) window.cloudSync?.schedule();
   return saved;
 }
@@ -271,6 +287,10 @@ function toggleCheckin(mod){
   });
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   save();
+  recordAnalyticsEvent(ANALYTICS_EVENTS.firstCheckin, { once: true });
+  if (hasConsecutiveCheckinDays(store.checkins, 3)) {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
+  }
 }
 function streak(mod){
   let s = 0;
@@ -366,6 +386,7 @@ async function speak(t, button){
     button.removeAttribute("data-speech-failure");
   };
   const fail = (message) => {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
@@ -618,6 +639,7 @@ function renderChinese(){
 
   // 写字打卡
   const worksheet = resolveWritingWorksheet();
+  if (!worksheet) return;
   const worksheetHtml = renderWritingWorksheetHtml(worksheet);
   createWritingPrintRoot(worksheet);
   const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
@@ -1245,29 +1267,48 @@ window.learningDesk = {
   getPersistenceScope(){
     return persistenceScope;
   },
+  getPersistenceStatus(scope = persistenceScope){
+    return scopedStateStorage.getStatus(scope);
+  },
   activateScope(scope, options = {}){
     if (typeof scope !== "string" || scope.trim().length === 0) return false;
     const previousScope = persistenceScope;
     const previousStore = store;
-    if (scope !== previousScope && !scopedStateStorage.save(previousScope, previousStore)) return false;
     const nextState = Object.hasOwn(options, "state") && options.state !== undefined
       ? options.state
       : scopedStateStorage.load(scope);
-    const nextStore = normalizeLearningState(nextState);
-    if (options.persist !== false && !scopedStateStorage.save(scope, nextStore)) return false;
+    const nextStore = normalizeLearningStateForScope(nextState, scope);
+    const previousStatus = scopedStateStorage.getStatus(previousScope, previousStore);
+    if (options.persist !== false && scope !== previousScope && !scopedStateStorage.save(previousScope, previousStore, {
+      pending: previousStatus.pending,
+    })) return false;
+    const targetStatus = scopedStateStorage.getStatus(scope, nextStore);
+    if (options.persist !== false && !scopedStateStorage.save(scope, nextStore, {
+      pending: Object.hasOwn(options, "pending") ? options.pending : targetStatus.pending,
+    })) return false;
+    if (scope !== previousScope) removeWritingPrintRoot();
     persistenceScope = scope;
     store = nextStore;
-    switchMod(CURRENT_MOD);
+    if (options.render !== false) switchMod(CURRENT_MOD);
     return true;
   },
   flushLocalState(){
     return scopedStateStorage.save(persistenceScope, store);
   },
+  markCloudConfirmed(scope, state){
+    return scopedStateStorage.markCloudConfirmed(scope, state);
+  },
+  renderCurrent(){
+    switchMod(CURRENT_MOD);
+  },
   replaceState(next, options = {}){
     const nextStore = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
-    if(options.persist && !scopedStateStorage.save(persistenceScope, nextStore)) return false;
-    store = nextStore;
-    switchMod(CURRENT_MOD);
+    const scopedNextStore = normalizeLearningStateForScope(nextStore, persistenceScope);
+    if(options.persist && !scopedStateStorage.save(persistenceScope, scopedNextStore, {
+      pending: Object.hasOwn(options, "pending") ? options.pending : true,
+    })) return false;
+    store = scopedNextStore;
+    if (options.render !== false) switchMod(CURRENT_MOD);
     return true;
   },
   removePersistenceScope(scope){
