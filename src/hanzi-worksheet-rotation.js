@@ -1,6 +1,10 @@
 const ROTATION_SEED = "stable-local-seed";
 const WORKSHEET_LAYOUT_VERSION = "focus-rows-v1";
 const MAX_RETAINED_DAYS = 90;
+const MAX_PAYLOAD_BYTES = 200 * 1024;
+const MAX_ID_LENGTH = 256;
+const MAX_SNAPSHOT_TEXT_LENGTH = 1024;
+const MAX_COMPLETION_LENGTH = 256;
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const ROTATION_ALGORITHM_VERSION = "rotation-v1";
@@ -26,6 +30,14 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isBoundedString(value, maxLength = MAX_ID_LENGTH) {
+  return isNonEmptyString(value) && value.length <= maxLength;
+}
+
 function cloneValue(value) {
   if (Array.isArray(value)) return value.map((entry) => cloneValue(entry));
   if (!isRecord(value)) return value;
@@ -34,8 +46,8 @@ function cloneValue(value) {
 
 function isValidPackRef(packRef) {
   return isRecord(packRef) &&
-    typeof packRef.setId === "string" && packRef.setId.length > 0 &&
-    typeof packRef.contentVersion === "string" && packRef.contentVersion.length > 0;
+    isBoundedString(packRef.setId) &&
+    isBoundedString(packRef.contentVersion);
 }
 
 function clonePackRef(packRef) {
@@ -100,9 +112,13 @@ function compareFallbackItems(left, right, lastAppearanceDays) {
     compareStrings(left.id, right.id);
 }
 
-function normalizeWorksheet(worksheet, expectedDayKey) {
+function truncateSnapshotText(value) {
+  return Array.from(value).slice(0, MAX_SNAPSHOT_TEXT_LENGTH).join("");
+}
+
+function normalizeWorksheet(worksheet, expectedDayKey, learnerScope, expectedPackRef, allowHistoricalPack) {
   if (!isRecord(worksheet) ||
-    typeof worksheet.assignmentId !== "string" ||
+    !isBoundedString(worksheet.assignmentId) ||
     !isValidDayKey(worksheet.dayKey) ||
     (expectedDayKey !== undefined && worksheet.dayKey !== expectedDayKey) ||
     worksheet.layoutVersion !== WORKSHEET_LAYOUT_VERSION ||
@@ -110,26 +126,43 @@ function normalizeWorksheet(worksheet, expectedDayKey) {
     !Array.isArray(worksheet.rows)) {
     return undefined;
   }
+  if (expectedPackRef && !samePackRef(worksheet.packRef, expectedPackRef) && !allowHistoricalPack) {
+    return undefined;
+  }
+
+  if (worksheet.rows.length === 0 || worksheet.rows.length > 4) return undefined;
 
   const rows = worksheet.rows.map((row) => {
     if (!isRecord(row) ||
-      typeof row.rowId !== "string" ||
-      typeof row.itemId !== "string" ||
-      typeof row.glyph !== "string" ||
-      typeof row.pinyin !== "string" ||
-      typeof row.exampleWord !== "string") {
+      !isBoundedString(row.rowId) ||
+      !isBoundedString(row.itemId) ||
+      !isNonEmptyString(row.glyph) ||
+      !isNonEmptyString(row.pinyin) ||
+      !isNonEmptyString(row.exampleWord)) {
       return undefined;
     }
     return {
       rowId: row.rowId,
       itemId: row.itemId,
-      glyph: row.glyph,
-      pinyin: row.pinyin,
-      exampleWord: row.exampleWord,
+      glyph: truncateSnapshotText(row.glyph),
+      pinyin: truncateSnapshotText(row.pinyin),
+      exampleWord: truncateSnapshotText(row.exampleWord),
     };
   });
 
   if (rows.some((row) => row === undefined)) return undefined;
+  if (new Set(rows.map((row) => row.rowId)).size !== rows.length ||
+    new Set(rows.map((row) => row.itemId)).size !== rows.length) {
+    return undefined;
+  }
+
+  const expectedAssignmentId = getAssignmentId({
+    packRef: worksheet.packRef,
+    learnerScope,
+    dayKey: worksheet.dayKey,
+    rows,
+  });
+  if (worksheet.assignmentId !== expectedAssignmentId) return undefined;
 
   return {
     assignmentId: worksheet.assignmentId,
@@ -140,12 +173,18 @@ function normalizeWorksheet(worksheet, expectedDayKey) {
   };
 }
 
-function normalizeAssignment(assignment, expectedDayKey) {
+function normalizeAssignment(assignment, expectedDayKey, learnerScope, expectedPackRef, allowHistoricalPack) {
   if (!isRecord(assignment) || !isRecord(assignment.candidates)) return undefined;
 
   const candidates = {};
   Object.keys(assignment.candidates).sort(compareStrings).forEach((candidateId) => {
-    const worksheet = normalizeWorksheet(assignment.candidates[candidateId], expectedDayKey);
+    const worksheet = normalizeWorksheet(
+      assignment.candidates[candidateId],
+      expectedDayKey,
+      learnerScope,
+      expectedPackRef,
+      allowHistoricalPack
+    );
     if (worksheet && worksheet.assignmentId === candidateId) candidates[candidateId] = worksheet;
   });
   const candidateIds = Object.keys(candidates).sort(compareStrings);
@@ -155,7 +194,7 @@ function normalizeAssignment(assignment, expectedDayKey) {
   if (isRecord(assignment.completions)) {
     Object.keys(assignment.completions).sort(compareStrings).forEach((assignmentId) => {
       const completion = assignment.completions[assignmentId];
-      if (isRecord(completion) && typeof completion.completedAt === "string") {
+      if (isRecord(completion) && isBoundedString(completion.completedAt, MAX_COMPLETION_LENGTH)) {
         completions[assignmentId] = { completedAt: completion.completedAt };
       }
     });
@@ -195,6 +234,85 @@ function createEmptyState(learnerScope, packRef) {
     activePack: clonePackRef(packRef),
     assignments: {},
     lastIssuedDayKey: null,
+  };
+}
+
+function payloadByteLength(value) {
+  const serialized = JSON.stringify(value);
+  return typeof TextEncoder === "function"
+    ? new TextEncoder().encode(serialized).length
+    : serialized.length;
+}
+
+function getLatestRetainedDayKey(assignments) {
+  const dayKeys = Object.keys(assignments).sort(compareStrings);
+  return dayKeys.length > 0 ? dayKeys[dayKeys.length - 1] : null;
+}
+
+function removeCandidate(assignments, dayKey, candidateId) {
+  const assignment = assignments[dayKey];
+  const candidates = { ...assignment.candidates };
+  const completions = { ...assignment.completions };
+  delete candidates[candidateId];
+  delete completions[candidateId];
+
+  return {
+    ...assignments,
+    [dayKey]: { ...assignment, candidates, completions },
+  };
+}
+
+function enforcePayloadBudget(state) {
+  let assignments = state.assignments;
+  const candidateRemovalOrder = [];
+
+  Object.keys(assignments).sort(compareStrings).forEach((dayKey) => {
+    const assignment = assignments[dayKey];
+    Object.keys(assignment.candidates)
+      .filter((candidateId) => candidateId !== assignment.canonicalAssignmentId)
+      .sort((left, right) => compareStrings(right, left))
+      .forEach((candidateId) => candidateRemovalOrder.push({ dayKey, candidateId }));
+  });
+
+  for (const { dayKey, candidateId } of candidateRemovalOrder) {
+    if (payloadByteLength({ ...state, assignments }) < MAX_PAYLOAD_BYTES) break;
+    assignments = removeCandidate(assignments, dayKey, candidateId);
+  }
+
+  const completionRemovalOrder = [];
+  Object.keys(assignments).sort(compareStrings).forEach((dayKey) => {
+    const assignment = assignments[dayKey];
+    Object.keys(assignment.completions)
+      .filter((assignmentId) => assignmentId !== assignment.canonicalAssignmentId)
+      .sort((left, right) => compareStrings(right, left))
+      .forEach((assignmentId) => completionRemovalOrder.push({ dayKey, assignmentId }));
+  });
+
+  for (const { dayKey, assignmentId } of completionRemovalOrder) {
+    if (payloadByteLength({ ...state, assignments }) < MAX_PAYLOAD_BYTES) break;
+    const assignment = assignments[dayKey];
+    const completions = { ...assignment.completions };
+    delete completions[assignmentId];
+    assignments = {
+      ...assignments,
+      [dayKey]: { ...assignment, completions },
+    };
+  }
+
+  for (const dayKey of Object.keys(assignments).sort(compareStrings)) {
+    if (payloadByteLength({ ...state, assignments }) < MAX_PAYLOAD_BYTES) break;
+    if (Object.keys(assignments).length === 1) break;
+    const retained = { ...assignments };
+    delete retained[dayKey];
+    assignments = retained;
+  }
+
+  return {
+    ...state,
+    assignments,
+    lastIssuedDayKey: assignments[state.lastIssuedDayKey]
+      ? state.lastIssuedDayKey
+      : getLatestRetainedDayKey(assignments),
   };
 }
 
@@ -258,7 +376,7 @@ function assertMergeCompatibility(localState, remoteState) {
     remoteState.algorithmVersion !== ROTATION_ALGORITHM_VERSION) {
     throw new Error("rotation states have incompatible algorithmVersion");
   }
-  if (typeof localState.learnerScope !== "string" ||
+  if (!isBoundedString(localState.learnerScope) ||
     localState.learnerScope !== remoteState.learnerScope) {
     throw new Error("rotation states have incompatible learnerScope");
   }
@@ -294,12 +412,23 @@ function toDate(now) {
 }
 
 export function getDayKey(now, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(toDate(now));
+  if (typeof timeZone !== "string" || timeZone.trim().length === 0) {
+    throw new TypeError("timeZone must be a valid IANA timezone");
+  }
+
+  let formatter;
+  try {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    throw new RangeError(`Invalid IANA timezone: ${timeZone}`);
+  }
+
+  const parts = formatter.formatToParts(toDate(now));
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 
   return `${values.year}-${values.month}-${values.day}`;
@@ -307,19 +436,32 @@ export function getDayKey(now, timeZone) {
 
 export function normalizeRotationState(input, options = {}) {
   const source = isRecord(input) ? input : {};
-  const learnerScope = options.learnerScope || source.learnerScope || "anonymous";
+  const hasSourceLearnerScope = Object.hasOwn(source, "learnerScope");
+  const requestedLearnerScope = options.learnerScope || source.learnerScope || "anonymous";
+  const learnerScope = isBoundedString(requestedLearnerScope) ? requestedLearnerScope : "anonymous";
   const packRef = options.packRef !== undefined ? options.packRef : source.activePack;
   const state = createEmptyState(learnerScope, packRef);
+  const referenceDayKey = isValidDayKey(options.referenceDayKey)
+    ? options.referenceDayKey
+    : (isValidDayKey(source.lastIssuedDayKey) ? source.lastIssuedDayKey : undefined);
 
   if ((source.schemaVersion !== undefined && source.schemaVersion !== 1) ||
-    (source.algorithmVersion !== undefined && source.algorithmVersion !== ROTATION_ALGORITHM_VERSION)) {
+    (source.algorithmVersion !== undefined && source.algorithmVersion !== ROTATION_ALGORITHM_VERSION) ||
+    (hasSourceLearnerScope && !isBoundedString(source.learnerScope)) ||
+    (options.learnerScope && hasSourceLearnerScope && source.learnerScope !== options.learnerScope)) {
     return state;
   }
 
   if (isRecord(source.assignments)) {
     Object.keys(source.assignments).sort(compareStrings).forEach((dayKey) => {
       if (!isValidDayKey(dayKey)) return;
-      const assignment = normalizeAssignment(source.assignments[dayKey], dayKey);
+      const assignment = normalizeAssignment(
+        source.assignments[dayKey],
+        dayKey,
+        learnerScope,
+        packRef,
+        referenceDayKey !== undefined && dayKey < referenceDayKey
+      );
       if (assignment) state.assignments[dayKey] = assignment;
     });
   }
@@ -331,7 +473,7 @@ export function normalizeRotationState(input, options = {}) {
       : issuedDayKeys[issuedDayKeys.length - 1])
     : null;
 
-  return state;
+  return enforcePayloadBudget(state);
 }
 
 export function resolveDailyWorksheet({
@@ -420,14 +562,16 @@ export function resolveDailyWorksheet({
     },
   }, dayKey);
 
+  const nextState = {
+    ...state,
+    activePack: clonePackRef(packRef),
+    assignments,
+    lastIssuedDayKey: dayKey,
+  };
+
   return {
     worksheet: cloneValue(snapshot),
-    rotationState: {
-      ...state,
-      activePack: clonePackRef(packRef),
-      assignments,
-      lastIssuedDayKey: dayKey,
-    },
+    rotationState: enforcePayloadBudget(nextState),
   };
 }
 
@@ -446,7 +590,7 @@ export function recordWorksheetCompletion({ rotationState, worksheet, completedA
   }
   if (assignment.completions[assignmentId]) return state;
 
-  return {
+  return enforcePayloadBudget({
     ...state,
     assignments: {
       ...state.assignments,
@@ -458,7 +602,7 @@ export function recordWorksheetCompletion({ rotationState, worksheet, completedA
         },
       },
     },
-  };
+  });
 }
 
 export function mergeRotationState(localState, remoteState) {
@@ -485,12 +629,12 @@ export function mergeRotationState(localState, remoteState) {
   const retainedAssignments = pruneAssignments(assignments);
   const issuedDayKeys = Object.keys(retainedAssignments).sort(compareStrings);
 
-  return {
+  return enforcePayloadBudget({
     schemaVersion: 1,
     learnerScope: local.learnerScope,
     algorithmVersion: ROTATION_ALGORITHM_VERSION,
     activePack: clonePackRef(local.activePack),
     assignments: retainedAssignments,
     lastIssuedDayKey: issuedDayKeys.length > 0 ? issuedDayKeys[issuedDayKeys.length - 1] : null,
-  };
+  });
 }
