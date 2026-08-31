@@ -46,6 +46,36 @@ export function getHanziRotationState(state) {
   return state?.extra?.[HANZI_ROTATION_STATE_KEY] || null;
 }
 
+export function hasCompatibleHanziRotationScope(state, learnerScope) {
+  const rotationState = getHanziRotationState(state);
+  if (!rotationState) return true;
+  return typeof learnerScope === "string" && learnerScope.trim().length > 0 &&
+    rotationState.learnerScope === learnerScope;
+}
+
+/**
+ * Normalizes a state without hiding a rotation scope mismatch. Callers that
+ * explicitly choose to discard an incompatible rotation may opt into that
+ * lossy operation; ordinary hydration and activation must retain the
+ * mismatch so hasCompatibleHanziRotationScope() can fail closed.
+ */
+export function normalizeLearningStateForScope(
+  state,
+  _learnerScope,
+) {
+  // The expected scope is intentionally not used to rewrite or discard data.
+  // Callers must inspect hasCompatibleHanziRotationScope() and choose an
+  // explicit drop API when losing an incompatible rotation is acceptable.
+  return normalizeLearningState(state);
+}
+
+export function dropIncompatibleHanziRotation(state, learnerScope) {
+  const normalized = normalizeLearningStateForScope(state, learnerScope);
+  return hasCompatibleHanziRotationScope(normalized, learnerScope)
+    ? normalized
+    : replaceHanziRotationState(normalized, null);
+}
+
 export function replaceHanziRotationState(state, rotationState) {
   const next = createLearningState(state);
   if (rotationState === null || rotationState === undefined) {
