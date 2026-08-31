@@ -11,7 +11,7 @@
 - 学习者显示名称和年级。建议使用昵称，不填写真实姓名。
 - 打卡、积分、书架和阅读日志等学习状态。
 
-当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。Vercel 文档说明页面访问数据可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
+当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据，以及以下不带自定义属性的最小事件：首次激活、首次打卡、达到连续 3 天打卡、用户可见的同步失败和用户可见的 TTS 失败。事件不会发送学习状态、邮箱、家庭/孩子 ID、儿童显示名称、错误文本或语音文本；首次和连续使用事件只在本机用标记去重。Vercel 文档说明页面访问和自定义事件可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
 
 当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。
 

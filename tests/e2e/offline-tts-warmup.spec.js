@@ -27,7 +27,7 @@ test.describe("Offline voice warmup", () => {
         `,
       });
     });
-    await page.route("**/piper/en_US-ljspeech-medium.onnx*", async (route) => {
+    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx*", async (route) => {
       const request = route.request();
       const isConfig = request.url().endsWith(".json");
       if (request.method() === "HEAD") {
@@ -108,8 +108,8 @@ test.describe("Offline voice warmup", () => {
         value: function SpeechSynthesisUtterance() {},
       });
       const cacheStore = new Map([
-        ["/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
-        ["/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["cached model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
       ]);
       Object.defineProperty(window, "caches", {
         configurable: true,

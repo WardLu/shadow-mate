@@ -35,10 +35,10 @@ afterEach(() => {
 
 describe("offline Piper voice download", () => {
   test("uses the commercially reviewed replacement voice path", () => {
-    expect(VOICE).toBe("/piper/en_US-ljspeech-medium");
+    expect(VOICE).toBe("https://voice.shadow.wang/piper/en_US-ljspeech-medium");
     expect(VOICE_FILES).toEqual([
-      "/piper/en_US-ljspeech-medium.onnx",
-      "/piper/en_US-ljspeech-medium.onnx.json",
+      "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx",
+      "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json",
     ]);
   });
 

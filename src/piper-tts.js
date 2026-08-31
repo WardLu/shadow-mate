@@ -1,8 +1,8 @@
 /* 本地 Piper 英语语音兜底（无 GMS 的国产 Android）
  *
  * 系统语音（speechSynthesis）在无 GMS 的国产 Android 上通常不可用，
- * 影伴提供浏览器本地 Piper 合成作为兜底：模型与运行时全部托管在本应用内，
- * 不上传录音，可离线使用。
+ * 影伴提供浏览器本地 Piper 合成作为兜底：运行时托管在本应用内，模型首次从 CDN 下载，
+ * 下载完成后缓存到浏览器，不上传录音，可离线使用。
  *
  * 致谢（开源项目详见 README 致谢一节）：
  *  - piper-tts-web（MIT）
@@ -10,7 +10,7 @@
  *  - ONNX Runtime Web（MIT）
  */
 
-export const VOICE = "/piper/en_US-ljspeech-medium";
+export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
 export const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];

@@ -11,6 +11,7 @@
     "public:check": "node scripts/public-check.mjs",
     "security:check": "node scripts/security-check.mjs",
     "release:check": "node scripts/release-check.mjs",
+    "release:manifest": "node scripts/release-manifest.mjs",
     "verify": "npm run public:check && npm run security:check && npm run check && npm run build && node scripts/check-build.mjs && npm run test:coverage",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",

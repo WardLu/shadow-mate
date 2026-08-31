@@ -1,0 +1,68 @@
+name: Release closure handoff
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-closure-${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-handoff:
+    name: Prepare non-production release handoff
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      release_id: ${{ steps.manifest.outputs.release_id }}
+      manifest_json: ${{ steps.manifest.outputs.manifest_json }}
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run fast post-merge verification
+        run: npm run test:fast
+
+      - name: Validate release metadata
+        run: npm run release:check
+
+      - name: Generate allowlisted release manifest
+        id: manifest
+        run: npm run release:manifest
+        env:
+          RELEASE_MANIFEST_OUTPUT: release-manifest.json
+
+      - name: Upload non-production release handoff
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: shadow-mate-release-handoff-${{ github.event.pull_request.merge_commit_sha }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+  control-plane-handoff:
+    name: Validate handoff in Shadow Portal
+    needs: prepare-handoff
+    permissions:
+      contents: read
+    uses: WardLu/shadow-portal/.github/workflows/release-handoff.yml@main
+    with:
+      release_id: ${{ needs.prepare-handoff.outputs.release_id }}
+      manifest_json: ${{ needs.prepare-handoff.outputs.manifest_json }}

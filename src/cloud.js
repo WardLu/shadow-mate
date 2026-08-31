@@ -1,5 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
+import { ANALYTICS_EVENTS, recordAnalyticsEvent } from "./analytics.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
@@ -1059,6 +1060,7 @@ async function selectProfile(profileId, { migrateLocal = false } = {}) {
     .eq("profile_id", profile.id)
     .maybeSingle();
   if (error) {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
     showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
     return;
   }
@@ -1099,10 +1101,12 @@ async function saveCloudState(manual = false) {
       });
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           showToast("操作过于频繁，请稍后再试。", 5000);
           break;
         }
         if (!error.message.includes("learning_state_conflict")) {
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
           break;
         }
@@ -1121,6 +1125,7 @@ async function saveCloudState(manual = false) {
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
+        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
         cloudSyncBlocked = true;
         showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
         break;
@@ -1137,8 +1142,10 @@ async function saveCloudState(manual = false) {
           activeProfile = null;
           cloudSyncBlocked = true;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           showToast("云端记录已不存在，已停止自动同步。", 6000);
         } else {
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
         }
         break;

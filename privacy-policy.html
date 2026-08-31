@@ -63,7 +63,7 @@
           <p>当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。</p>
 
           <h2>分析服务和朗读功能</h2>
-          <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。页面访问数据可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
+          <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据，以及以下不带自定义属性的最小事件：首次激活、首次打卡、达到连续 3 天打卡、用户可见的同步失败和用户可见的 TTS 失败。事件不会发送学习状态、邮箱、家庭/孩子 ID、儿童显示名称、错误文本或语音文本；首次和连续使用事件只在本机用标记去重。页面访问和自定义事件可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
           <p>当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。</p>
 
           <h2>家长同意和学习者档案</h2>
@@ -107,7 +107,7 @@
           <p>The current version does not require a child to provide an email address, phone number, birthday, school, address, precise location, or photo. It does not contain advertising.</p>
 
           <h2>Analytics and Reading Aloud</h2>
-          <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data. It currently sends no custom events and does not send learning status, email addresses, or learner display names as custom Analytics fields. Page-visit data may include the time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
+          <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data and a minimal set of custom events without custom properties: first activation, first check-in, reaching a three-day check-in streak, user-visible sync failures, and user-visible TTS failures. Events do not send learning state, email addresses, household/learner IDs, learner display names, error text, or speech text. First-use and streak events are deduplicated with local browser flags. Page views and custom events may include the time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
           <p>The local Piper text-to-speech feature does not send text to Shadow Mate servers in the current version. Shadow Mate does not record microphone audio.</p>
 
           <h2>Parental Consent and Learner Profiles</h2>

@@ -21,6 +21,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
     await expect(page.locator('a[href="https://v.douyin.com/1y06PMohfoE/"]')).toBeVisible();
     await expect(page.locator('a[href="https://x.com/Gollumgulu"]')).toHaveAccessibleName("打开 X");
+    await expect(page.locator('a[href^="mailto:support@shadow.wang"]')).toHaveAccessibleName("发送问题反馈邮件至 support@shadow.wang");
 
     await page.locator("#wechatButton").click();
     await expect(page.locator("#wechatDialog")).toBeVisible();

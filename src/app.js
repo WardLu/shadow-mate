@@ -1,4 +1,9 @@
 import { inject } from "@vercel/analytics";
+import {
+  ANALYTICS_EVENTS,
+  hasConsecutiveCheckinDays,
+  recordAnalyticsEvent,
+} from "./analytics.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
@@ -23,6 +28,7 @@ import {
 const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
 
 inject();
+recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 
@@ -181,6 +187,10 @@ function toggleCheckin(mod){
     key: mod,
   });
   save();
+  recordAnalyticsEvent(ANALYTICS_EVENTS.firstCheckin, { once: true });
+  if (hasConsecutiveCheckinDays(store.checkins, 3)) {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
+  }
 }
 function streak(mod){
   let s = 0;
@@ -276,6 +286,7 @@ async function speak(t, button){
     button.removeAttribute("data-speech-failure");
   };
   const fail = (message) => {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
