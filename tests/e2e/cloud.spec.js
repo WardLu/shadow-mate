@@ -366,6 +366,7 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("retries after a version conflict and keeps the remote state", async ({ page }) => {
+    const profileAScope = "profile:" + PROFILE_ID;
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       remoteState: { ...emptyState, extra: { conflictMarker: "remote" } },
