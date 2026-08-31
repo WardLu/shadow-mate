@@ -350,6 +350,7 @@ async function mockCloudApi(page, {
     createdHouseholds,
     createdConsents,
     getGrowthPointItemsRequests: () => growthPointItemsRequests,
+    getConsentMetadataRequests: () => consentMetadataResponseIndex,
     getRpcSettledCount: () => rpcSettledCount,
     getState: () => state,
   };
@@ -567,6 +568,61 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.createdProfiles).toEqual([]);
     await expect.poll(() => api.createdProfiles.length).toBe(1);
     expect(api.createdConsents).toEqual([]);
+  });
+
+  test("ignores delayed workspace metadata after signing out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 1600 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.getConsentMetadataRequests()).toBe(1);
+    await expect.poll(() => page.evaluate(() => ({
+      profilesReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:profiles-ready"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      profilesReady: true,
+      metadataReady: false,
+    });
+
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
+
+    await page.waitForTimeout(1900);
+    await expect.poll(() => page.evaluate(() => ({
+      accountState: document.querySelector("#accountButton")?.dataset.state || null,
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      accountState: "local",
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
   });
 
   test("fails closed when a background hydrate returns a mismatched profile scope", async ({ page }) => {
