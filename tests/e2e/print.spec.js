@@ -51,6 +51,7 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
       window.print = () => { window.__printCalls += 1; };
     });
 
+    await page.clock.setFixedTime(new Date("2026-09-02T02:00:00.000Z"));
     await page.locator("[data-print]").click();
     await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
 
@@ -76,6 +77,44 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
       .filter((element) => getComputedStyle(element).display !== "none")
       .map((element) => element.id || element.className));
     expect(visibleBodyChildren).toEqual(["writingPrintRoot"]);
+
+    const printModel = await page.evaluate(() => {
+      const pageRules = [];
+      const visitRules = (rules) => {
+        for (const rule of rules || []) {
+          if (rule.constructor?.name === "CSSPageRule" || /^@page\b/i.test(rule.cssText || "")) {
+            pageRules.push(rule.cssText);
+          }
+          if (rule.cssRules) visitRules(rule.cssRules);
+        }
+      };
+      for (const styleSheet of document.styleSheets) {
+        try {
+          visitRules(styleSheet.cssRules);
+        } catch {
+          // Cross-origin stylesheets are outside this local app's print contract.
+        }
+      }
+      const sheet = document.querySelector("[data-writing-print-sheet]");
+      const style = getComputedStyle(sheet);
+      return {
+        pageRules,
+        cssSource: [...document.querySelectorAll('link[rel="stylesheet"]')]
+          .find((link) => link.href.endsWith("/src/app.css"))?.href || "",
+        boxSizing: style.boxSizing,
+        paddingTop: parseFloat(style.paddingTop),
+        minHeight: parseFloat(style.minHeight),
+      };
+    });
+    const printCssSource = printModel.cssSource
+      ? await page.evaluate((href) => fetch(href).then((response) => response.text()), printModel.cssSource)
+      : "";
+    expect(printCssSource).toMatch(/@page\s*\{\s*size:\s*A4\s+portrait;\s*margin:\s*0;/i);
+    expect(printModel.pageRules.join("\n")).toMatch(/size:\s*a4\b/i);
+    expect(printModel.pageRules.join("\n")).toMatch(/margin:\s*0/i);
+    expect(printModel.boxSizing).toBe("border-box");
+    expect(printModel.paddingTop).toBeCloseTo((12 * 96) / 25.4, 0);
+    expect(printModel.minHeight).toBeCloseTo((297 * 96) / 25.4, 0);
 
     const snapshot = await readPrintSnapshot(page);
     expect(snapshot.print).toEqual(snapshot.screen);

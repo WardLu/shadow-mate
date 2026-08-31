@@ -33,6 +33,12 @@ async function readWorksheetSnapshot(page) {
         packVersion: screen?.dataset.writingPackVersion,
         rows: readRows(screen),
       },
+      print: {
+        assignmentId: document.querySelector("[data-writing-print-sheet]")?.dataset.writingAssignmentId,
+        dayKey: document.querySelector("[data-writing-print-sheet]")?.dataset.writingDayKey,
+        packVersion: document.querySelector("[data-writing-print-sheet]")?.dataset.writingPackVersion,
+        rows: readRows(document.querySelector("[data-writing-print-sheet]")),
+      },
       state: window.learningDesk.getState(),
       assignment,
     };
@@ -55,6 +61,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(snapshot.screen.assignmentId).toMatch(/^rotation-v1-/);
     expect(snapshot.screen.rows).toHaveLength(4);
     expect(new Set(snapshot.screen.rows.map((row) => row.itemId)).size).toBe(4);
+    expect(snapshot.print).toEqual(snapshot.screen);
     expect(snapshot.assignment.canonicalAssignmentId).toBe(snapshot.screen.assignmentId);
     expect(snapshot.assignment.candidates[snapshot.screen.assignmentId]).toMatchObject({
       assignmentId: snapshot.screen.assignmentId,
@@ -102,6 +109,29 @@ test.describe("Hanzi writing worksheet", () => {
     ]);
   });
 
+  test("refreshes the worksheet before writing completion when the page crosses midnight", async ({ page }) => {
+    await openChineseAtFixedTime(page);
+    const previous = await readWorksheetSnapshot(page);
+    const staleCheckin = page.locator('[data-cmod="chinese-writing"]');
+
+    await page.clock.setFixedTime(new Date("2026-09-02T02:00:00.000Z"));
+    await staleCheckin.click();
+
+    const current = await readWorksheetSnapshot(page);
+    const previousAssignment = current.state.extra.hanziWorksheetRotationV1.assignments[previous.screen.dayKey];
+    const currentAssignment = current.state.extra.hanziWorksheetRotationV1.assignments[current.screen.dayKey];
+
+    expect(current.screen.dayKey).toBe("2026-09-02");
+    expect(current.screen.assignmentId).not.toBe(previous.screen.assignmentId);
+    expect(current.print).toEqual(current.screen);
+    expect(previousAssignment.completions).toEqual({});
+    expect(currentAssignment.completions).toEqual({
+      [current.screen.assignmentId]: expect.objectContaining({ completedAt: expect.any(String) }),
+    });
+    expect(current.state.checkins["2026-09-02"]?.["chinese-writing"]).toBe(true);
+    expect(current.state.checkins["2026-09-01"]?.["chinese-writing"]).toBeUndefined();
+  });
+
   test("records writing completion once while daily check-in remains reversible", async ({ page }) => {
     await openChineseAtFixedTime(page);
     const before = await readWorksheetSnapshot(page);
@@ -140,12 +170,14 @@ test.describe("Hanzi writing worksheet", () => {
     }));
     const profile = await readWorksheetSnapshot(page);
     expect(profile.screen.assignmentId).not.toBe(anonymous.screen.assignmentId);
+    expect(profile.print).toEqual(profile.screen);
     expect(await page.locator("[data-writing-print-sheet]").count()).toBe(1);
 
     await page.evaluate(() => window.learningDesk.clearLocalData({ reload: false }));
     const cleared = await readWorksheetSnapshot(page);
     expect(cleared.state.extra.hanziWorksheetRotationV1.learnerScope).toBe("anonymous");
     expect(cleared.screen.assignmentId).not.toBe(profile.screen.assignmentId);
+    expect(cleared.print).toEqual(cleared.screen);
 
     await page.locator('.navbtn[data-mod="english"]').click();
     await expect(page.locator("[data-writing-print-sheet]")).toHaveCount(0);

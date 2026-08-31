@@ -253,13 +253,20 @@ function isChecked(mod){
 }
 
 function toggleCheckin(mod){
-  const wasChecked = isChecked(mod);
+  let checkinDate = todayKey();
+  if (mod === "chinese-writing" && activeWorksheetSnapshot?.dayKey !== checkinDate) {
+    switchMod("chinese");
+    checkinDate = todayKey();
+  }
+  if (mod === "chinese-writing" && activeWorksheetSnapshot?.dayKey !== checkinDate) return;
+
+  const wasChecked = hasCheckin(store.checkins[checkinDate], mod);
   const shouldRecordWorksheet = mod === "chinese-writing" &&
     !wasChecked &&
     !hasActiveWorksheetCompletion();
   store = transitionLearningState(store, {
     type: "CHECKIN_TOGGLED",
-    date: todayKey(),
+    date: checkinDate,
     key: mod,
   });
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();

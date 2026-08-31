@@ -336,11 +336,12 @@
 
   /* 打印区：body 只保留独立的 snapshot print root */
   @media print{
-    @page{size:A4 portrait;margin:12mm;}
-    html,body{width:210mm;min-height:297mm;background:#fff;color:#111;}
+    @page{size:A4 portrait;margin:0;}
+    html,body{background:#fff;color:#111;}
     body > *:not(#writingPrintRoot){display:none !important;}
     #writingPrintRoot{display:block !important;width:100%;}
     #writingPrintRoot [data-writing-print-sheet]{display:block !important;width:100%;}
+    #writingPrintRoot .writing-print-sheet{min-height:297mm;padding:12mm;box-sizing:border-box;}
     .app{max-width:none;}
     .nav,.topbar,.checkin,.video-link,.speak-btn,.footer,.site-footer,.social-qr-dialog,.no-print{display:none !important;}
     body{background:#fff;}
