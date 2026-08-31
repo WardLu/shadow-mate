@@ -699,7 +699,7 @@ test.describe("Authenticated cloud workspace", () => {
     });
   });
 
-  test("shows the same daily writing workbook after a logged-in state update", async ({ page }) => {
+  test("keeps the same daily writing workbook and isolates its print sheet for a logged-in user", async ({ page }) => {
     await freezeWritingDate(page);
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
@@ -708,7 +708,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await openModule(page, "chinese");
 
-    const writingGroups = page.locator(".write-grid");
+    const writingGroups = page.locator("[data-writing-practice] .write-grid");
     await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
     const beforeCheckin = await writingGroups.allTextContents();
 
@@ -717,12 +717,21 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.evaluate(() => {
       window.print = () => {
-        window.__printedWritingGroups = [...document.querySelectorAll(".write-grid")]
+        window.__printedWritingGroups = [...document.querySelectorAll("[data-writing-print-sheet] .write-grid")]
           .map((element) => element.textContent);
       };
     });
     await page.locator("[data-print]").click();
     await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
+
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expect(page.locator("[data-writing-print-sheet] .tian")).toHaveText(beforeCheckin.flatMap((group) => [...group]));
+    await expect(page.locator(".module-title")).toBeHidden();
+    await expect(page.locator("[data-writing-practice]")).toBeHidden();
+
+    await page.emulateMedia({ media: "screen" });
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
   });
 
   test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {
