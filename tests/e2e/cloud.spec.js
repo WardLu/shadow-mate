@@ -1821,6 +1821,7 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-delete-household]");
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
 
+    // The app-wide rapid-action guard keeps the account button on a 500ms cooldown.
     await page.waitForTimeout(600);
     await page.click("#accountButton");
     await expect(page.locator("#emailLoginForm")).toBeVisible();

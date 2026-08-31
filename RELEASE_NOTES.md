@@ -12,7 +12,8 @@
 
 - `tests/unit/email-templates.test.js` 已覆盖 6 个 Supabase Auth 邮件模板及其产品身份、页脚、链接和认证变量。
 - 本节记录代码与模板的一致性；不代表生产 Supabase 模板已经由本次本地提交自动部署。
-- 删除家庭后密码重新登录回归、完整 cloud E2E、全量 E2E、单元覆盖率、公开仓库、安全、静态检查、构建产物、数据库 pgTAP 和本地 Functions 守卫均已通过。
+- 删除家庭后密码重新登录回归通过；`npm run test:e2e` 为 94 passed、1 skipped（真实本地 Supabase E2E 未启用）；`npm run verify` 的 187 个单元测试、公开仓库、安全、静态检查、构建产物检查，数据库 pgTAP 9 个文件/215 个测试，本地 Functions 守卫和高危级别依赖审计均通过。
+- `npm run release:check` 已通过版本与本地产物检查；正式 Tag、生产响应头和真实账号验收仍按下方部署清单待完成。
 
 ### 部署清单（待完成）
 
