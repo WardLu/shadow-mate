@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getDayKey,
+  isRotationStateScopeCompatible,
   mergeRotationState,
   normalizeRotationState,
   recordWorksheetCompletion,
@@ -135,6 +136,77 @@ describe("rotation-v1 daily worksheet selection", () => {
     });
   });
 
+  it("fails closed for partial rows and snapshot content forged against the active pack", () => {
+    const validState = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const assignment = validState.assignments["2026-09-01"];
+    const candidateId = assignment.canonicalAssignmentId;
+    const corruptions = [
+      (worksheet) => worksheet.rows.pop(),
+      (worksheet) => {
+        worksheet.rows[0].glyph = "伪";
+      },
+      (worksheet) => {
+        worksheet.rows[0].exampleWord = "伪造例词";
+      },
+    ];
+
+    for (const corrupt of corruptions) {
+      const corrupted = structuredClone(validState);
+      corrupt(corrupted.assignments["2026-09-01"].candidates[candidateId]);
+
+      const normalized = normalizeRotationState(corrupted, {
+        learnerScope: LEARNER_SCOPE,
+        packRef: PACK_REF,
+        pack: PACK,
+        referenceDayKey: "2026-09-01",
+      });
+
+      expect(normalized.assignments["2026-09-01"]).toBeUndefined();
+    }
+  });
+
+  it("keeps completions only for legal candidates and strict ISO calendar timestamps", () => {
+    const validState = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const candidateId = validState.assignments["2026-09-01"].canonicalAssignmentId;
+    const corrupted = structuredClone(validState);
+    corrupted.assignments["2026-09-01"].completions = {
+      [candidateId]: { completedAt: "2026-09-01T03:00:00.000Z" },
+      unknown: { completedAt: "2026-09-01T03:00:00.000Z" },
+    };
+
+    const normalized = normalizeRotationState(corrupted, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: PACK_REF,
+      pack: PACK,
+      referenceDayKey: "2026-09-01",
+    });
+
+    expect(normalized.assignments["2026-09-01"].completions).toEqual({
+      [candidateId]: { completedAt: "2026-09-01T03:00:00.000Z" },
+    });
+
+    for (const completedAt of [
+      "not-a-date",
+      "2026-02-30T03:00:00.000Z",
+      "2026-09-01",
+      "2026-09-01T25:00:00.000Z",
+    ]) {
+      const invalidTimestamp = structuredClone(validState);
+      invalidTimestamp.assignments["2026-09-01"].completions = {
+        [candidateId]: { completedAt },
+      };
+
+      const result = normalizeRotationState(invalidTimestamp, {
+        learnerScope: LEARNER_SCOPE,
+        packRef: PACK_REF,
+        pack: PACK,
+        referenceDayKey: "2026-09-01",
+      });
+
+      expect(result.assignments["2026-09-01"].completions).toEqual({});
+    }
+  });
+
   it("does not relabel another learner's state when normalization receives a conflicting scope", () => {
     const learnerAState = makeState({
       learnerScope: "profile:learner-a",
@@ -263,6 +335,7 @@ describe("rotation-v1 daily worksheet selection", () => {
       timeZone: TIME_ZONE,
     });
     const changedPack = structuredClone(PACK);
+    changedPack.contentVersion = "hanzi-v2-pilot-2";
     const changedItem = changedPack.items.find((item) => item.id === first.worksheet.rows[0].itemId);
     changedItem.glyph = "新";
     changedItem.exampleWord = "新词";
@@ -415,6 +488,63 @@ describe("rotation-v1 daily worksheet selection", () => {
     expect(screenAndPrintSnapshot).toEqual(first.worksheet);
   });
 
+  it("retains future assignments and completions through clock rollback and timezone changes", () => {
+    const first = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-01T00:30:00.000Z"),
+      timeZone: TIME_ZONE,
+    });
+    const future = resolveDailyWorksheet({
+      rotationState: first.rotationState,
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-03T00:30:00.000Z"),
+      timeZone: TIME_ZONE,
+    });
+    const futureWorksheet = getWorksheet(future.rotationState, "2026-09-03");
+    const completedFuture = recordWorksheetCompletion({
+      rotationState: future.rotationState,
+      worksheet: futureWorksheet,
+      completedAt: "2026-09-03T03:00:00.000Z",
+    });
+
+    const rolledBack = resolveDailyWorksheet({
+      rotationState: completedFuture,
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-02T00:30:00.000Z"),
+      timeZone: TIME_ZONE,
+    });
+    const timezoneSwitched = resolveDailyWorksheet({
+      rotationState: completedFuture,
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-02T00:30:00.000Z"),
+      timeZone: "America/Los_Angeles",
+    });
+
+    expect(rolledBack.worksheet.dayKey).toBe("2026-09-02");
+    expect(timezoneSwitched.worksheet.dayKey).toBe("2026-09-01");
+    for (const state of [rolledBack.rotationState, timezoneSwitched.rotationState]) {
+      expect(state.assignments["2026-09-03"].candidates[futureWorksheet.assignmentId])
+        .toEqual(futureWorksheet);
+      expect(state.assignments["2026-09-03"].completions).toEqual({
+        [futureWorksheet.assignmentId]: { completedAt: "2026-09-03T03:00:00.000Z" },
+      });
+    }
+    expect(rolledBack.rotationState).toEqual(
+      resolveDailyWorksheet({
+        rotationState: rolledBack.rotationState,
+        pack: PACK,
+        learnerScope: LEARNER_SCOPE,
+        now: new Date("2026-09-02T00:30:00.000Z"),
+        timeZone: TIME_ZONE,
+      }).rotationState
+    );
+  });
+
   it("retains only the most recent 90 dayKeys and no mastery or review fields", () => {
     let state = normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF });
 
@@ -530,6 +660,37 @@ describe("rotation-v1 daily worksheet selection", () => {
     expect(completed).not.toHaveProperty("sm2");
   });
 
+  it("rejects completion writes for unknown candidates, forged snapshots, and invalid timestamps", () => {
+    const first = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    const assignment = first.rotationState.assignments[first.worksheet.dayKey];
+    const unknownWorksheet = { ...first.worksheet, assignmentId: "rotation-v1-unknown" };
+    const forgedWorksheet = structuredClone(first.worksheet);
+    forgedWorksheet.rows[0].glyph = "伪";
+
+    for (const worksheet of [unknownWorksheet, forgedWorksheet]) {
+      expect(recordWorksheetCompletion({
+        rotationState: first.rotationState,
+        worksheet,
+        completedAt: "2026-09-01T03:00:00.000Z",
+        pack: PACK,
+      })).toEqual(first.rotationState);
+    }
+
+    expect(recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: "2026-02-30T03:00:00.000Z",
+      pack: PACK,
+    })).toEqual(first.rotationState);
+    expect(assignment.completions).toEqual({});
+  });
+
   it("rejects an oversized completion timestamp before it can bypass the payload cap", () => {
     const first = resolveDailyWorksheet({
       rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
@@ -618,6 +779,32 @@ describe("rotation-v1 daily worksheet selection", () => {
     const incompatibleAlgorithm = makeState({ itemIds: ["hz-006"] });
     incompatibleAlgorithm.algorithmVersion = "rotation-v0";
     expect(() => mergeRotationState(local, incompatibleAlgorithm)).toThrow(/algorithm/);
+  });
+
+  it("provides an expected-scope guard and fails closed on ordinary profile mismatch", () => {
+    const profileState = makeState({
+      learnerScope: "profile:learner-a",
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    });
+
+    expect(isRotationStateScopeCompatible({}, "profile:learner-a")).toBe(true);
+    expect(isRotationStateScopeCompatible(profileState, "profile:learner-a")).toBe(true);
+    expect(isRotationStateScopeCompatible(profileState, "profile:learner-b")).toBe(false);
+
+    const rejected = normalizeRotationState(profileState, {
+      expectedLearnerScope: "profile:learner-b",
+      packRef: PACK_REF,
+      pack: PACK,
+    });
+
+    expect(rejected).toEqual({
+      schemaVersion: 1,
+      learnerScope: "profile:learner-b",
+      algorithmVersion: "rotation-v1",
+      activePack: PACK_REF,
+      assignments: {},
+      lastIssuedDayKey: null,
+    });
   });
 
   it("returns the golden worksheet and the same snapshot for 100 same-day resolves", () => {

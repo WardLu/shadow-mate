@@ -1,11 +1,13 @@
 const ROTATION_SEED = "stable-local-seed";
 const WORKSHEET_LAYOUT_VERSION = "focus-rows-v1";
+const WORKSHEET_ROWS_PER_DAY = 4;
 const MAX_RETAINED_DAYS = 90;
 const MAX_PAYLOAD_BYTES = 200 * 1024;
 const MAX_ID_LENGTH = 256;
 const MAX_SNAPSHOT_TEXT_LENGTH = 1024;
 const MAX_COMPLETION_LENGTH = 256;
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-](?:0\d|1[0-3]):[0-5]\d|[+-]14:00)$/;
 
 export const ROTATION_ALGORITHM_VERSION = "rotation-v1";
 
@@ -38,6 +40,34 @@ function isBoundedString(value, maxLength = MAX_ID_LENGTH) {
   return isNonEmptyString(value) && value.length <= maxLength;
 }
 
+function daysInMonth(year, month) {
+  if (month === 2) {
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leapYear ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+function isValidCompletionTimestamp(value) {
+  if (!isBoundedString(value, MAX_COMPLETION_LENGTH)) return false;
+
+  const match = value.match(ISO_TIMESTAMP_PATTERN);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (year < 1 || year > 9999 || month < 1 || month > 12 ||
+    hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+
+  return day >= 1 && day <= daysInMonth(year, month) && Number.isFinite(Date.parse(value));
+}
+
 function cloneValue(value) {
   if (Array.isArray(value)) return value.map((entry) => cloneValue(entry));
   if (!isRecord(value)) return value;
@@ -63,11 +93,10 @@ function compareStrings(left, right) {
 function isValidDayKey(dayKey) {
   if (typeof dayKey !== "string" || !DAY_KEY_PATTERN.test(dayKey)) return false;
   const [year, month, day] = dayKey.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
 
-  return date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+  return year >= 1 && year <= 9999 &&
+    month >= 1 && month <= 12 &&
+    day >= 1 && day <= daysInMonth(year, month);
 }
 
 function getRecentDayKeys(assignments, dayKey, limit) {
@@ -90,14 +119,17 @@ function getItemIdsForDays(assignments, dayKeys) {
   return itemIds;
 }
 
-function getLastAppearanceDays(assignments) {
+function getLastAppearanceDays(assignments, beforeDayKey) {
   const lastAppearanceDays = new Map();
 
-  Object.keys(assignments).sort(compareStrings).forEach((dayKey) => {
-    Object.values(assignments[dayKey]?.candidates || {}).forEach((worksheet) => {
-      worksheet.rows.forEach((row) => lastAppearanceDays.set(row.itemId, dayKey));
+  Object.keys(assignments)
+    .filter((dayKey) => isValidDayKey(dayKey) && (!beforeDayKey || dayKey < beforeDayKey))
+    .sort(compareStrings)
+    .forEach((dayKey) => {
+      Object.values(assignments[dayKey]?.candidates || {}).forEach((worksheet) => {
+        worksheet.rows.forEach((row) => lastAppearanceDays.set(row.itemId, dayKey));
+      });
     });
-  });
 
   return lastAppearanceDays;
 }
@@ -116,7 +148,26 @@ function truncateSnapshotText(value) {
   return Array.from(value).slice(0, MAX_SNAPSHOT_TEXT_LENGTH).join("");
 }
 
-function normalizeWorksheet(worksheet, expectedDayKey, learnerScope, expectedPackRef, allowHistoricalPack) {
+function getPackItems(pack, worksheetPackRef) {
+  if (pack === undefined) return undefined;
+  if (!isRecord(pack) || !samePackRef(getPackRef(pack), worksheetPackRef)) return null;
+  if (!Array.isArray(pack.items)) return new Map();
+
+  return new Map(
+    pack.items
+      .filter((item) => isRecord(item) && isBoundedString(item.id))
+      .map((item) => [item.id, item])
+  );
+}
+
+function normalizeWorksheet(
+  worksheet,
+  expectedDayKey,
+  learnerScope,
+  expectedPackRef,
+  allowHistoricalPack,
+  pack,
+) {
   if (!isRecord(worksheet) ||
     !isBoundedString(worksheet.assignmentId) ||
     !isValidDayKey(worksheet.dayKey) ||
@@ -130,9 +181,11 @@ function normalizeWorksheet(worksheet, expectedDayKey, learnerScope, expectedPac
     return undefined;
   }
 
-  if (worksheet.rows.length === 0 || worksheet.rows.length > 4) return undefined;
+  if (worksheet.rows.length !== WORKSHEET_ROWS_PER_DAY) return undefined;
 
-  const rows = worksheet.rows.map((row) => {
+  const packItems = getPackItems(pack, worksheet.packRef);
+
+  const rows = worksheet.rows.map((row, index) => {
     if (!isRecord(row) ||
       !isBoundedString(row.rowId) ||
       !isBoundedString(row.itemId) ||
@@ -140,6 +193,15 @@ function normalizeWorksheet(worksheet, expectedDayKey, learnerScope, expectedPac
       !isNonEmptyString(row.pinyin) ||
       !isNonEmptyString(row.exampleWord)) {
       return undefined;
+    }
+    if (row.rowId !== `row-${index + 1}`) return undefined;
+
+    if (packItems) {
+      const item = packItems.get(row.itemId);
+      if (!item || row.glyph !== item.glyph || row.pinyin !== item.pinyin ||
+        row.exampleWord !== item.exampleWord) {
+        return undefined;
+      }
     }
     return {
       rowId: row.rowId,
@@ -173,7 +235,14 @@ function normalizeWorksheet(worksheet, expectedDayKey, learnerScope, expectedPac
   };
 }
 
-function normalizeAssignment(assignment, expectedDayKey, learnerScope, expectedPackRef, allowHistoricalPack) {
+function normalizeAssignment(
+  assignment,
+  expectedDayKey,
+  learnerScope,
+  expectedPackRef,
+  allowHistoricalPack,
+  pack,
+) {
   if (!isRecord(assignment) || !isRecord(assignment.candidates)) return undefined;
 
   const candidates = {};
@@ -183,7 +252,8 @@ function normalizeAssignment(assignment, expectedDayKey, learnerScope, expectedP
       expectedDayKey,
       learnerScope,
       expectedPackRef,
-      allowHistoricalPack
+      allowHistoricalPack,
+      pack,
     );
     if (worksheet && worksheet.assignmentId === candidateId) candidates[candidateId] = worksheet;
   });
@@ -194,7 +264,8 @@ function normalizeAssignment(assignment, expectedDayKey, learnerScope, expectedP
   if (isRecord(assignment.completions)) {
     Object.keys(assignment.completions).sort(compareStrings).forEach((assignmentId) => {
       const completion = assignment.completions[assignmentId];
-      if (isRecord(completion) && isBoundedString(completion.completedAt, MAX_COMPLETION_LENGTH)) {
+      if (candidates[assignmentId] && isRecord(completion) &&
+        isValidCompletionTimestamp(completion.completedAt)) {
         completions[assignmentId] = { completedAt: completion.completedAt };
       }
     });
@@ -215,7 +286,10 @@ function pruneAssignments(assignments, referenceDayKey) {
     .filter((dayKey) => isValidDayKey(dayKey))
     .sort((left, right) => compareStrings(right, left));
   const retainedDayKeys = referenceDayKey
-    ? dayKeys.filter((dayKey) => dayKey <= referenceDayKey).slice(0, MAX_RETAINED_DAYS)
+    ? [
+      ...dayKeys.filter((dayKey) => dayKey <= referenceDayKey).slice(0, MAX_RETAINED_DAYS),
+      ...dayKeys.filter((dayKey) => dayKey > referenceDayKey),
+    ]
     : dayKeys.slice(0, MAX_RETAINED_DAYS);
   const retained = {};
 
@@ -335,9 +409,15 @@ function mergeAssignments(localAssignment, remoteAssignment) {
   const candidates = {};
 
   [...candidateIds].sort(compareStrings).forEach((candidateId) => {
+    const localCandidate = localAssignment?.candidates?.[candidateId];
+    const remoteCandidate = remoteAssignment?.candidates?.[candidateId];
+    if (localCandidate && remoteCandidate &&
+      JSON.stringify(localCandidate) !== JSON.stringify(remoteCandidate)) {
+      return;
+    }
     const candidate = chooseStableValue(
-      localAssignment?.candidates?.[candidateId],
-      remoteAssignment?.candidates?.[candidateId]
+      localCandidate,
+      remoteCandidate
     );
     if (candidate) candidates[candidateId] = candidate;
   });
@@ -348,6 +428,7 @@ function mergeAssignments(localAssignment, remoteAssignment) {
   ]);
   const completions = {};
   [...completionIds].sort(compareStrings).forEach((assignmentId) => {
+    if (!candidates[assignmentId]) return;
     const completion = chooseStableValue(
       localAssignment?.completions?.[assignmentId],
       remoteAssignment?.completions?.[assignmentId]
@@ -411,6 +492,20 @@ function toDate(now) {
   return date;
 }
 
+/**
+ * Returns whether a rotation payload can be used in the expected learner
+ * scope. An absent payload is compatible so callers can initialize a new
+ * scope; a non-empty payload without an explicit scope is not.
+ */
+export function isRotationStateScopeCompatible(input, expectedLearnerScope) {
+  if (!isBoundedString(expectedLearnerScope)) return false;
+  if (input === undefined || input === null) return true;
+  if (!isRecord(input)) return false;
+  if (!Object.hasOwn(input, "learnerScope")) return Object.keys(input).length === 0;
+
+  return isBoundedString(input.learnerScope) && input.learnerScope === expectedLearnerScope;
+}
+
 export function getDayKey(now, timeZone) {
   if (typeof timeZone !== "string" || timeZone.trim().length === 0) {
     throw new TypeError("timeZone must be a valid IANA timezone");
@@ -437,7 +532,13 @@ export function getDayKey(now, timeZone) {
 export function normalizeRotationState(input, options = {}) {
   const source = isRecord(input) ? input : {};
   const hasSourceLearnerScope = Object.hasOwn(source, "learnerScope");
-  const requestedLearnerScope = options.learnerScope || source.learnerScope || "anonymous";
+  const hasExpectedLearnerScope = options.expectedLearnerScope !== undefined ||
+    options.learnerScope !== undefined;
+  const expectedLearnerScope = options.expectedLearnerScope ?? options.learnerScope;
+  const requestedLearnerScope = options.learnerScope ??
+    options.expectedLearnerScope ??
+    source.learnerScope ??
+    "anonymous";
   const learnerScope = isBoundedString(requestedLearnerScope) ? requestedLearnerScope : "anonymous";
   const packRef = options.packRef !== undefined ? options.packRef : source.activePack;
   const state = createEmptyState(learnerScope, packRef);
@@ -448,7 +549,8 @@ export function normalizeRotationState(input, options = {}) {
   if ((source.schemaVersion !== undefined && source.schemaVersion !== 1) ||
     (source.algorithmVersion !== undefined && source.algorithmVersion !== ROTATION_ALGORITHM_VERSION) ||
     (hasSourceLearnerScope && !isBoundedString(source.learnerScope)) ||
-    (options.learnerScope && hasSourceLearnerScope && source.learnerScope !== options.learnerScope)) {
+    (hasExpectedLearnerScope && !isRotationStateScopeCompatible(source, expectedLearnerScope)) ||
+    (!hasSourceLearnerScope && Object.keys(source).length > 0)) {
     return state;
   }
 
@@ -460,7 +562,8 @@ export function normalizeRotationState(input, options = {}) {
         dayKey,
         learnerScope,
         packRef,
-        referenceDayKey !== undefined && dayKey < referenceDayKey
+        referenceDayKey !== undefined && dayKey !== referenceDayKey,
+        options.pack,
       );
       if (assignment) state.assignments[dayKey] = assignment;
     });
@@ -484,8 +587,19 @@ export function resolveDailyWorksheet({
   timeZone,
 }) {
   const dayKey = getDayKey(now, timeZone);
+  if (!isRecord(pack) || !isValidPackRef({ setId: pack.setId, contentVersion: pack.contentVersion }) ||
+    !isRecord(pack.worksheetPolicy) ||
+    pack.worksheetPolicy.rowsPerDay !== WORKSHEET_ROWS_PER_DAY ||
+    !Number.isInteger(pack.worksheetPolicy.recentDayWindow) ||
+    pack.worksheetPolicy.recentDayWindow < 1 ||
+    !Array.isArray(pack.items)) {
+    throw new TypeError("pack must provide a valid four-row worksheet policy");
+  }
+  if (!isBoundedString(learnerScope)) {
+    throw new TypeError("learnerScope must be a non-empty string");
+  }
   const packRef = getPackRef(pack);
-  if (isRecord(rotationState) && rotationState.learnerScope && rotationState.learnerScope !== learnerScope) {
+  if (!isRotationStateScopeCompatible(rotationState, learnerScope)) {
     throw new Error("rotation state learnerScope does not match the requested learnerScope");
   }
   if (isRecord(rotationState) && rotationState.algorithmVersion &&
@@ -498,6 +612,7 @@ export function resolveDailyWorksheet({
     learnerScope,
     packRef: statePackRef,
     referenceDayKey: dayKey,
+    pack,
   });
   const existingAssignment = state.assignments[dayKey];
   if (existingAssignment) {
@@ -537,6 +652,12 @@ export function resolveDailyWorksheet({
         return selectedItems.length === pack.worksheetPolicy.rowsPerDay;
       });
   }
+  if (selectedItems.length !== WORKSHEET_ROWS_PER_DAY) {
+    return {
+      worksheet: undefined,
+      rotationState: state,
+    };
+  }
   const rows = selectedItems.map((item, index) => ({
     rowId: `row-${index + 1}`,
     itemId: item.id,
@@ -575,17 +696,19 @@ export function resolveDailyWorksheet({
   };
 }
 
-export function recordWorksheetCompletion({ rotationState, worksheet, completedAt }) {
+export function recordWorksheetCompletion({ rotationState, worksheet, completedAt, pack }) {
   const state = normalizeRotationState(rotationState, {
     learnerScope: rotationState?.learnerScope,
     packRef: rotationState?.activePack,
+    pack,
   });
   const dayKey = worksheet?.dayKey;
   const assignmentId = worksheet?.assignmentId;
   const assignment = state.assignments[dayKey];
 
-  if (!isBoundedString(completedAt, MAX_COMPLETION_LENGTH) ||
-    !assignment || !assignment.candidates[assignmentId]) {
+  if (!isValidCompletionTimestamp(completedAt) ||
+    !assignment || !assignment.candidates[assignmentId] ||
+    JSON.stringify(assignment.candidates[assignmentId]) !== JSON.stringify(worksheet)) {
     return state;
   }
   if (assignment.completions[assignmentId]) return state;
