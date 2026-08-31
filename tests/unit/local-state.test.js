@@ -21,10 +21,15 @@ class MemoryStorage {
     this.setCalls = 0;
     this.failWrites = false;
     this.failRemoves = new Set();
+    this.onGet = null;
   }
 
   getItem(key) {
-    return this.entries.has(key) ? this.entries.get(key) : null;
+    const value = this.entries.has(key) ? this.entries.get(key) : null;
+    const hook = this.onGet;
+    this.onGet = null;
+    if (hook && hook(key, value) === false) this.onGet = hook;
+    return value;
   }
 
   setItem(key, value) {
@@ -127,6 +132,27 @@ describe("scoped local state storage", () => {
     expect(scoped.listScopes()).toEqual(["profile:b"]);
   });
 
+  it("retries a stale envelope read so concurrent scope saves do not overwrite each other", () => {
+    const storage = new MemoryStorage();
+    const firstTab = createAdapter(storage);
+    const secondTab = createAdapter(storage);
+    const stateA = stateWith("profile-a");
+    const stateB = stateWith("profile-b");
+
+    let scopedReads = 0;
+    storage.onGet = (key) => {
+      if (key !== SCOPED_KEY) return false;
+      scopedReads += 1;
+      if (scopedReads !== 4) return false;
+      secondTab.save("profile:b", stateB);
+    };
+
+    expect(firstTab.save("profile:a", stateA)).toBe(true);
+    expect(scopedReads).toBeGreaterThanOrEqual(4);
+    expect(firstTab.load("profile:a")).toEqual(stateA);
+    expect(firstTab.load("profile:b")).toEqual(stateB);
+  });
+
   it("normalizes every state read and write without mutating the envelope", () => {
     const storage = new MemoryStorage();
     let normalizeCalls = 0;
@@ -174,6 +200,55 @@ describe("scoped local state storage", () => {
     storage.failRemoves.add(LEGACY_KEY);
     expect(scoped.clear()).toBe(false);
     expect(storage.getItem(LEGACY_KEY)).not.toBeNull();
+  });
+
+  it("restores scoped data when legacy cleanup fails after scoped cleanup", () => {
+    const legacyState = stateWith("legacy");
+    const profileState = stateWith("profile-a");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", profileState);
+    storage.failRemoves.add(LEGACY_KEY);
+
+    expect(scoped.clear()).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(profileState);
+    expect(storage.getItem(SCOPED_KEY)).not.toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(legacyState));
+
+    storage.failRemoves.delete(LEGACY_KEY);
+    expect(scoped.clear()).toBe(true);
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+  });
+
+  it("keeps legacy and scoped data recoverable when scoped cleanup fails", () => {
+    const profileState = stateWith("profile-a");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", profileState);
+    storage.failRemoves.add(SCOPED_KEY);
+
+    expect(scoped.clear()).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(profileState);
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("legacy")));
+
+    storage.failRemoves.delete(SCOPED_KEY);
+    expect(scoped.clear()).toBe(true);
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+  });
+
+  it("does not report anonymous removal when legacy cleanup fails", () => {
+    const anonymousState = stateWith("anonymous");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("anonymous", anonymousState);
+    storage.failRemoves.add(LEGACY_KEY);
+
+    expect(scoped.remove("anonymous")).toBe(false);
+    expect(scoped.load("anonymous")).toEqual(anonymousState);
+    expect(storage.getItem(SCOPED_KEY)).not.toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("legacy")));
   });
 
   it("does not repeat or overwrite migration when legacy cleanup fails", () => {

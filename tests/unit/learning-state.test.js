@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   createLearningState,
   getHanziRotationState,
+  hasCompatibleHanziRotationScope,
   hasCheckin,
   isPointMarked,
+  dropIncompatibleHanziRotation,
+  normalizeLearningStateForScope,
   normalizeLearningState,
   replaceHanziRotationState,
   transitionLearningState,
@@ -134,6 +137,39 @@ describe("learning state machine", () => {
       assignments: {},
       lastIssuedDayKey: null,
     });
+  });
+
+  it("fails closed when a rotation state belongs to another learner scope", () => {
+    const profileAState = makeRotationState("profile:learner-a");
+    const state = createLearningState({ extra: { hanziWorksheetRotationV1: profileAState } });
+
+    expect(hasCompatibleHanziRotationScope(state, "profile:learner-a")).toBe(true);
+    expect(hasCompatibleHanziRotationScope(state, "profile:learner-b")).toBe(false);
+    expect(hasCompatibleHanziRotationScope(createLearningState(), "profile:learner-b")).toBe(true);
+  });
+
+  it("preserves mismatched rotation by default and drops it only through an explicit API", () => {
+    const profileAState = createLearningState({
+      checkins: { "2026-09-01": { "chinese-writing": true } },
+      extra: {
+        marker: "keep",
+        hanziWorksheetRotationV1: makeRotationState("profile:learner-a"),
+      },
+    });
+
+    const normalized = normalizeLearningStateForScope(profileAState, "profile:learner-b");
+
+    expect(normalized.checkins).toEqual(profileAState.checkins);
+    expect(normalized.extra.marker).toBe("keep");
+    expect(getHanziRotationState(normalized)).toEqual(profileAState.extra.hanziWorksheetRotationV1);
+    expect(hasCompatibleHanziRotationScope(normalized, "profile:learner-b")).toBe(false);
+
+    const dropped = dropIncompatibleHanziRotation(profileAState, "profile:learner-b");
+    expect(dropped.checkins).toEqual(profileAState.checkins);
+    expect(dropped.extra.marker).toBe("keep");
+    expect(getHanziRotationState(dropped)).toBeNull();
+    expect(normalizeLearningStateForScope(profileAState, "profile:learner-a"))
+      .toEqual(profileAState);
   });
 
   it("toggles a task check-in and removes an empty day", () => {
