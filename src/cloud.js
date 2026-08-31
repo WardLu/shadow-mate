@@ -3,6 +3,7 @@ import { CLOUD_CONFIG } from "./config.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
+import { normalizeLearningState } from "./learning-state.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
@@ -13,6 +14,7 @@ export const PRIVACY_POLICY_VERSION = "privacy-v1";
 const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
+const ANONYMOUS_SCOPE = "anonymous";
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -47,6 +49,7 @@ let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
 let authChangeVersion = 0;
+let profileSwitchGeneration = 0;
 let localResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
@@ -348,6 +351,17 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
 // escapeHtml imported from lib.js
 function readRememberedProfileId() {
   return localStorage.getItem(ACTIVE_PROFILE_KEY);
+}
+
+function profilePersistenceScope(profileId) {
+  return `profile:${profileId}`;
+}
+
+function isCurrentProfileContext({ generation, profileId, scope, requestSession = session } = {}) {
+  return generation === profileSwitchGeneration
+    && session === requestSession
+    && activeProfile?.id === profileId
+    && window.learningDesk?.getPersistenceScope?.() === scope;
 }
 
 // stateHasData, mergeObjects, mergeState imported from lib.js
@@ -772,12 +786,12 @@ function renderAccount() {
           return;
         }
         const deletingActive = activeProfile?.id === profile.id;
+        window.learningDesk.removePersistenceScope(profilePersistenceScope(profile.id));
         profiles = profiles.filter((item) => item.id !== profile.id);
         if (deletingActive) {
           activeProfile = null;
           cloudVersion = null;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
-          window.learningDesk.replaceState({}, { persist: true });
         }
         await loadWorkspace();
         renderAccount();
@@ -1049,71 +1063,118 @@ async function loadWorkspace(preferredProfileId = null, options = {}) {
 async function selectProfile(profileId, { migrateLocal = false } = {}) {
   const profile = profiles.find((item) => item.id === profileId);
   if (!profile) return;
+  const requestSession = session;
+  const generation = ++profileSwitchGeneration;
+  const scope = profilePersistenceScope(profile.id);
+  const previousScope = window.learningDesk.getPersistenceScope();
+  const previousState = window.learningDesk.getState();
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  window.learningDesk.flushLocalState();
+  const anonymousState = migrateLocal
+    ? (previousScope === ANONYMOUS_SCOPE ? previousState : window.learningDesk.getState(ANONYMOUS_SCOPE))
+    : null;
+
   activeProfile = profile;
   cloudSyncBlocked = false;
+  cloudVersion = null;
   localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
-  const localState = window.learningDesk.getState();
+  const activationOptions = { persist: true };
+  if (previousScope === scope) activationOptions.state = previousState;
+  window.learningDesk.activateScope(scope, activationOptions);
+  setAccountState();
+
   const { data, error } = await supabase
     .from("learning_profile_states")
     .select("state, version, updated_at")
     .eq("profile_id", profile.id)
     .maybeSingle();
+  if (!isCurrentProfileContext({ generation, profileId: profile.id, scope, requestSession })) return;
   if (error) {
     showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
     return;
   }
   if (!data) {
     cloudVersion = null;
-    if (migrateLocal || stateHasData(localState)) {
-      await saveCloudState(true);
+    let localState = window.learningDesk.getState();
+    if (migrateLocal && !stateHasData(localState) && stateHasData(anonymousState)) {
+      localState = mergeState(anonymousState, localState);
+      window.learningDesk.replaceState(localState, { persist: true });
+    }
+    if (stateHasData(localState)) {
+      await saveCloudState(true, {
+        generation,
+        profileId: profile.id,
+        scope,
+        state: localState,
+      });
     }
   } else {
     lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
     cloudVersion = data.version;
-    const merged = stateHasData(localState) ? mergeState(localState, data.state) : data.state;
-    window.learningDesk.replaceState(merged, { persist: true });
-    if (JSON.stringify(merged) !== JSON.stringify(data.state)) {
-      await saveCloudState(true);
-    }
+    const remoteState = normalizeLearningState(data.state);
+    window.learningDesk.replaceState(remoteState, { persist: true });
   }
-  setAccountState();
+  if (isCurrentProfileContext({ generation, profileId: profile.id, scope, requestSession })) {
+    setAccountState();
+  }
 }
 
-async function saveCloudState(manual = false) {
+async function saveCloudState(manual = false, {
+  generation = profileSwitchGeneration,
+  profileId = null,
+  scope = null,
+  state = null,
+  expectedVersion = undefined,
+} = {}) {
   if (!session || !activeProfile || saveInFlight) {
     if (saveInFlight) saveQueued = true;
     return;
   }
+  const requestSession = session;
+  const requestProfileId = profileId || activeProfile.id;
+  const requestScope = scope || window.learningDesk.getPersistenceScope();
+  const isCurrent = () => isCurrentProfileContext({
+    generation,
+    profileId: requestProfileId,
+    scope: requestScope,
+    requestSession,
+  });
+  if (!isCurrent()) return;
   if (cloudSyncBlocked && !manual) return;
   if (manual) cloudSyncBlocked = false;
+  let requestState = normalizeLearningState(state || window.learningDesk.getState());
+  let requestVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
   saveInFlight = true;
   let saved = false;
   let conflictRetries = 0;
   try {
     while (true) {
-      const currentState = window.learningDesk.getState();
+      const requestSnapshot = structuredClone(requestState);
       const { data, error } = await supabase.rpc("learning_save_state", {
-        p_profile_id: activeProfile.id,
-        p_state: currentState,
-        p_expected_version: cloudVersion,
+        p_profile_id: requestProfileId,
+        p_state: requestSnapshot,
+        p_expected_version: requestVersion,
       });
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
-          showToast("操作过于频繁，请稍后再试。", 5000);
+          if (isCurrent()) showToast("操作过于频繁，请稍后再试。", 5000);
           break;
         }
         if (!error.message.includes("learning_state_conflict")) {
-          showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+          if (isCurrent()) showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
           break;
         }
         // 旧服务端兼容：learning_state_conflict 错误 → 走下方统一冲突处理。
       } else {
         const row = Array.isArray(data) ? data[0] : data;
         if (row) {
-          cloudVersion = row?.version ?? cloudVersion;
-          lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-          updateSyncStatus();
-          if (manual) showToast("云端记录已更新");
+          if (isCurrent()) {
+            cloudVersion = row?.version ?? cloudVersion;
+            lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
+            updateSyncStatus();
+            if (manual) showToast("云端记录已更新");
+          }
           saved = true;
           break;
         }
@@ -1121,31 +1182,44 @@ async function saveCloudState(manual = false) {
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
-        cloudSyncBlocked = true;
-        showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
+        if (isCurrent()) {
+          cloudSyncBlocked = true;
+          showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
+        }
         break;
       }
 
       const { data: remote, error: remoteError } = await supabase
         .from("learning_profile_states")
         .select("state, version")
-        .eq("profile_id", activeProfile.id)
+        .eq("profile_id", requestProfileId)
         .single();
       if (remoteError || !remote) {
         if (remoteError?.code === "PGRST116" || (!remoteError && !remote)) {
           // 目标 profile 在云端已不存在 → 熔断自动同步，避免每次编辑都触发一次无效冲突往返
-          activeProfile = null;
-          cloudSyncBlocked = true;
-          localStorage.removeItem(ACTIVE_PROFILE_KEY);
-          showToast("云端记录已不存在，已停止自动同步。", 6000);
+          if (isCurrent()) {
+            activeProfile = null;
+            cloudSyncBlocked = true;
+            localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          }
+          if (isCurrent()) showToast("云端记录已不存在，已停止自动同步。", 6000);
         } else {
-          showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+          if (isCurrent()) showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
         }
         break;
       }
 
-      cloudVersion = remote.version;
-      window.learningDesk.replaceState(mergeState(currentState, remote.state), { persist: true });
+      requestVersion = remote.version;
+      try {
+        const localState = isCurrent() ? window.learningDesk.getState() : requestState;
+        requestState = mergeState(localState, normalizeLearningState(remote.state));
+      } catch (mergeError) {
+        if (isCurrent()) {
+          showToast(formatCloudError(mergeError, "云端记录冲突，暂未覆盖本机记录。"), 5000);
+        }
+        break;
+      }
+      if (isCurrent()) window.learningDesk.replaceState(requestState, { persist: true });
       conflictRetries += 1;
       await new Promise((resolve) => window.setTimeout(resolve, CONFLICT_RETRY_DELAY_MS * conflictRetries));
     }
@@ -1155,7 +1229,7 @@ async function saveCloudState(manual = false) {
 
   const queuedAfterSave = saveQueued;
   saveQueued = false;
-  if (saved && queuedAfterSave) {
+  if (saved && queuedAfterSave && session && activeProfile) {
     await saveCloudState(false);
   }
 }
@@ -1192,6 +1266,7 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
+  profileSwitchGeneration += 1;
   session = nextSession;
   memberships = [];
   profiles = [];
@@ -1200,6 +1275,7 @@ async function onAuthChange(nextSession, event = "") {
   lastSyncAt = null;
   cloudSyncBlocked = false;
   if (!session) {
+    window.learningDesk.activateScope(ANONYMOUS_SCOPE, { persist: !localResetInProgress });
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
   }

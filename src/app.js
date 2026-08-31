@@ -1,5 +1,6 @@
 import { inject } from "@vercel/analytics";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { createScopedStateStorage } from "./local-state.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import {
@@ -14,9 +15,9 @@ import {
 import { icon, hydrateIcons } from "./icons.js";
 import {
   CHECKIN_GROUPS,
-  createLearningState,
   hasCheckin,
   isPointMarked,
+  normalizeLearningState,
   transitionLearningState,
 } from "./learning-state.js";
 
@@ -129,20 +130,18 @@ const PEANUT_BOOKS = [
    状态 / 存档层（localStorage 永久存档）
    ========================================================= */
 const STORE_KEY = "shadow_mate_workbench_v1";
+const SCOPED_STORE_KEY = "shadow_mate_workbench_scoped_v1";
 
-function readStoredState(){
-  const raw = localStorage.getItem(STORE_KEY);
-  if(raw === null) return {};
-  try{
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  }catch(error){
-    console.warn("忽略无法解析的本地存档", error);
-  }
-  return {};
-}
+const scopedStateStorage = createScopedStateStorage({
+  storage: localStorage,
+  legacyKey: STORE_KEY,
+  scopedKey: SCOPED_STORE_KEY,
+  normalize: normalizeLearningState,
+});
+scopedStateStorage.migrateLegacyToAnonymous();
 
-let store = createLearningState(readStoredState());
+let persistenceScope = "anonymous";
+let store = normalizeLearningState(scopedStateStorage.load(persistenceScope));
 if(!store.checkins) store.checkins = {};   // {date: {module:true}}
 if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
 if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
@@ -151,7 +150,7 @@ if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生�
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
 
 function save(){
-  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  scopedStateStorage.save(persistenceScope, store);
   window.cloudSync?.schedule();
 }
 
@@ -1145,22 +1144,51 @@ wechatDialog?.addEventListener("close", () => {
 switchMod("home");
 
 window.learningDesk = {
-  getState(){
-    return JSON.parse(JSON.stringify(store));
+  getState(scope){
+    if (scope !== undefined) return scopedStateStorage.load(scope);
+    return structuredClone(store);
+  },
+  getPersistenceScope(){
+    return persistenceScope;
+  },
+  activateScope(scope, options = {}){
+    if (typeof scope !== "string" || scope.trim().length === 0) return false;
+    if (scope !== persistenceScope) scopedStateStorage.save(persistenceScope, store);
+    persistenceScope = scope;
+    const nextState = Object.hasOwn(options, "state") && options.state !== undefined
+      ? options.state
+      : scopedStateStorage.load(scope);
+    store = normalizeLearningState(nextState);
+    if (options.persist !== false) scopedStateStorage.save(scope, store);
+    switchMod(CURRENT_MOD);
+    return true;
+  },
+  flushLocalState(){
+    return scopedStateStorage.save(persistenceScope, store);
   },
   replaceState(next, options = {}){
     store = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
-    if(options.persist) localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    if(options.persist) scopedStateStorage.save(persistenceScope, store);
     switchMod(CURRENT_MOD);
+  },
+  removePersistenceScope(scope){
+    const removed = scopedStateStorage.remove(scope);
+    if (scope === persistenceScope) {
+      persistenceScope = "anonymous";
+      store = normalizeLearningState(scopedStateStorage.load(persistenceScope));
+      switchMod(CURRENT_MOD);
+    }
+    return removed;
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
-    localStorage.removeItem(STORE_KEY);
+    scopedStateStorage.clear();
     if (reload) {
       window.location.reload();
       return;
     }
-    store = createLearningState();
+    persistenceScope = "anonymous";
+    store = normalizeLearningState({});
     switchMod(CURRENT_MOD);
   }
 };

@@ -1,9 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
+const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+const SCOPED_KEY = "shadow_mate_workbench_scoped_v1";
 
 const emptyState = {
   checkins: {},
@@ -13,6 +17,38 @@ const emptyState = {
   peanutLog: [],
   peanutRead: {},
 };
+
+const HANZI_PACK = getActiveHanziWritingPack();
+
+function makeRotationState(learnerScope) {
+  return resolveDailyWorksheet({
+    rotationState: {},
+    pack: HANZI_PACK,
+    learnerScope,
+    now: new Date("2026-09-01T00:30:00.000Z"),
+    timeZone: "Asia/Singapore",
+  }).rotationState;
+}
+
+function stateWithMarker(marker, learnerScope) {
+  return {
+    ...structuredClone(emptyState),
+    checkins: { "2026-09-01": { [marker]: true } },
+    extra: {
+      marker,
+      hanziWorksheetRotationV1: makeRotationState(learnerScope),
+    },
+  };
+}
+
+function profileFixture(id, displayName) {
+  return {
+    id,
+    household_id: HOUSEHOLD_ID,
+    display_name: displayName,
+    grade_level: 3,
+  };
+}
 
 async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
@@ -40,24 +76,50 @@ async function seedAuthenticatedSession(page) {
   }, { projectRef, userId: USER_ID });
 }
 
+async function seedScopedStates(page, scopes) {
+  await page.addInitScript(({ scopedKey, scopes: seededScopes }) => {
+    localStorage.setItem(scopedKey, JSON.stringify({ schemaVersion: 1, scopes: seededScopes }));
+  }, { scopedKey: SCOPED_KEY, scopes });
+}
+
 async function mockCloudApi(page, {
   remoteState = emptyState,
+  remoteStates = {},
+  profiles = null,
+  stateDelays = {},
+  rpcDelayMs = 0,
   rpcResponses = ["success"],
   hasPassword = true,
   createDelayMs = 0,
   householdCreateDelayMs = 0,
   noMembership = false,
 } = {}) {
-  let state = structuredClone(remoteState);
-  let version = 3;
+  let workspaceProfiles = structuredClone(profiles || [{
+    id: PROFILE_ID,
+    household_id: HOUSEHOLD_ID,
+    display_name: "E2E Learner",
+    grade_level: 3,
+  }]);
+  const stateByProfile = new Map(workspaceProfiles.map((profile) => [
+    profile.id,
+    structuredClone(Object.hasOwn(remoteStates, profile.id) ? remoteStates[profile.id] : remoteState),
+  ]));
+  const versionByProfile = new Map(workspaceProfiles.map((profile) => [profile.id, 3]));
+  const existingProfileIds = new Set(workspaceProfiles.map((profile) => profile.id));
   let rpcIndex = 0;
   const rpcPayloads = [];
+  const stateRequests = [];
   const deletedProfiles = [];
   const deletedHouseholds = [];
   const createdProfiles = [];
   const createdHouseholds = [];
   const createdConsents = [];
-  let profileExists = true;
+  let membershipReady = !noMembership;
+
+  const filterValue = (url, name) => {
+    const value = url.searchParams.get(name);
+    return value?.startsWith("eq.") ? value.slice(3) : value;
+  };
 
   await page.route("**/auth/v1/logout**", async (route) => {
     await route.fulfill({
@@ -84,8 +146,10 @@ async function mockCloudApi(page, {
         });
         return;
       }
-      state = payload.p_state;
-      version += 1;
+      stateByProfile.set(payload.p_profile_id, structuredClone(payload.p_state));
+      const version = (versionByProfile.get(payload.p_profile_id) || 3) + 1;
+      versionByProfile.set(payload.p_profile_id, version);
+      if (rpcDelayMs) await new Promise((resolve) => setTimeout(resolve, rpcDelayMs));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -107,13 +171,14 @@ async function mockCloudApi(page, {
 
     if (path.endsWith("/learning_household_members")) {
       if (request.method() === "POST") {
+        membershipReady = true;
         await route.fulfill({ status: 201, body: "" });
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID, role: "owner" }]),
+        body: JSON.stringify(membershipReady ? [{ household_id: HOUSEHOLD_ID, role: "owner" }] : []),
       });
       return;
     }
@@ -127,7 +192,7 @@ async function mockCloudApi(page, {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(noMembership ? [] : [{ household_id: HOUSEHOLD_ID }]),
+        body: JSON.stringify(membershipReady ? [{ household_id: HOUSEHOLD_ID }] : []),
       });
       return;
     }
@@ -141,38 +206,62 @@ async function mockCloudApi(page, {
           status: 201,
           contentType: "application/json",
           body: JSON.stringify({
-            id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            id: SECOND_PROFILE_ID,
             household_id: HOUSEHOLD_ID,
             display_name: payload.display_name,
             grade_level: payload.grade_level,
           }),
         });
+        if (!existingProfileIds.has(SECOND_PROFILE_ID)) {
+          workspaceProfiles.push({
+            id: SECOND_PROFILE_ID,
+            household_id: HOUSEHOLD_ID,
+            display_name: payload.display_name,
+            grade_level: payload.grade_level,
+          });
+          existingProfileIds.add(SECOND_PROFILE_ID);
+          stateByProfile.set(SECOND_PROFILE_ID, null);
+          versionByProfile.set(SECOND_PROFILE_ID, 3);
+        }
         return;
       }
       if (request.method() === "DELETE") {
-        deletedProfiles.push(url.searchParams.get("id"));
-        profileExists = false;
+        const profileId = filterValue(url, "id");
+        deletedProfiles.push(profileId);
+        existingProfileIds.delete(profileId);
+        workspaceProfiles = workspaceProfiles.filter((profile) => profile.id !== profileId);
         await route.fulfill({ status: 204, body: "" });
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(profileExists ? [{
-          id: PROFILE_ID,
-          household_id: HOUSEHOLD_ID,
-          display_name: "E2E Learner",
-          grade_level: 3,
-        }] : []),
+        body: JSON.stringify(workspaceProfiles.filter((profile) => existingProfileIds.has(profile.id))),
       });
       return;
     }
 
     if (path.endsWith("/learning_profile_states")) {
       const select = url.searchParams.get("select") || "";
+      const profileId = filterValue(url, "profile_id");
+      if (profileId && stateDelays[profileId]) {
+        stateRequests.push(profileId);
+        await new Promise((resolve) => setTimeout(resolve, stateDelays[profileId]));
+      } else if (profileId) {
+        stateRequests.push(profileId);
+      }
       const body = select.includes("state")
-        ? [{ profile_id: PROFILE_ID, state, version, updated_at: "2026-08-01T08:00:00.000Z" }]
-        : [{ profile_id: PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
+        ? (stateByProfile.get(profileId || PROFILE_ID) === null
+          ? []
+          : [{
+            profile_id: profileId || PROFILE_ID,
+            state: stateByProfile.get(profileId || PROFILE_ID) || emptyState,
+            version: versionByProfile.get(profileId || PROFILE_ID) || 3,
+            updated_at: "2026-08-01T08:00:00.000Z",
+          }])
+        : workspaceProfiles
+          .filter((profile) => existingProfileIds.has(profile.id))
+          .map((profile) => ({ profile_id: profile.id, updated_at: "2026-08-01T08:00:00.000Z" }));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       return;
     }
@@ -180,6 +269,7 @@ async function mockCloudApi(page, {
     if (path.endsWith("/learning_households")) {
       if (request.method() === "POST") {
         createdHouseholds.push(JSON.parse(request.postData() || "{}"));
+        membershipReady = true;
         if (householdCreateDelayMs) await new Promise((resolve) => setTimeout(resolve, householdCreateDelayMs));
         await route.fulfill({ status: 201, body: "" });
         return;
@@ -197,12 +287,13 @@ async function mockCloudApi(page, {
 
   return {
     rpcPayloads,
+    stateRequests,
     deletedProfiles,
     deletedHouseholds,
     createdProfiles,
     createdHouseholds,
     createdConsents,
-    getState: () => state,
+    getState: (profileId = PROFILE_ID) => stateByProfile.get(profileId),
   };
 }
 
@@ -268,8 +359,224 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("#accountButton");
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(2);
-    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").extra?.conflictMarker)).toBe("remote");
+    await expect.poll(async () => page.evaluate(({ scopedKey, profileId }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return envelope.scopes?.[`profile:${profileId}`]?.extra?.conflictMarker;
+    }, { scopedKey: SCOPED_KEY, profileId: PROFILE_ID })).toBe("remote");
     expect(api.rpcPayloads[1]).toHaveProperty("p_profile_id", PROFILE_ID);
+  });
+
+  test("keeps learner A and learner B local scopes isolated across switches", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("profile-b", profileBScope),
+    });
+    await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-b");
+    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-a");
+    await expect.poll(() => page.evaluate(({ scopedKey, profileAScope, profileBScope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return [envelope.scopes?.[profileAScope]?.extra?.marker, envelope.scopes?.[profileBScope]?.extra?.marker];
+    }, { scopedKey: SCOPED_KEY, profileAScope, profileBScope })).toEqual(["profile-a", "profile-b"]);
+  });
+
+  test("hydrates an existing remote profile without merging the current learner", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    const currentState = stateWithMarker("current-a", profileAScope);
+    const cachedBState = stateWithMarker("cached-b", profileBScope);
+    const remoteBState = stateWithMarker("remote-b", profileBScope);
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: currentState,
+      [profileBScope]: cachedBState,
+    });
+    await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("remote-b");
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.hanziWorksheetRotationV1?.learnerScope)).toBe(profileBScope);
+    await expect.poll(() => page.evaluate(({ scopedKey, profileAScope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return envelope.scopes?.[profileAScope]?.extra?.marker;
+    }, { scopedKey: SCOPED_KEY, profileAScope })).toBe("current-a");
+  });
+
+  test("migrates only anonymous local state into an empty newly selected profile", async ({ page }) => {
+    const anonymousScope = "anonymous";
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [anonymousScope]: stateWithMarker("anonymous", anonymousScope),
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [],
+      noMembership: true,
+    });
+
+    await page.goto("/");
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+    await page.locator('#householdSetupForm input[name="household"]').fill("迁移测试家庭");
+    await page.locator('#householdSetupForm input[name="learner"]').fill("学习者 B");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
+    await page.locator('#householdSetupForm button[type="submit"]').click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
+    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).not.toBeUndefined();
+    const migratedPayload = api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID);
+    expect(migratedPayload.p_state.extra.marker).toBe("anonymous");
+    expect(migratedPayload.p_state.checkins).toHaveProperty("2026-09-01.anonymous");
+    expect(migratedPayload.p_state.checkins).not.toHaveProperty("2026-09-01.profile-a");
+  });
+
+  test("clearing local data removes anonymous and every learner scope", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      anonymous: stateWithMarker("anonymous", "anonymous"),
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("profile-b", profileBScope),
+    });
+    await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
+    });
+    await page.addInitScript(() => { window.confirm = () => true; });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator("[data-clear-local]").click();
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect(page.evaluate(({ scopedKey }) => localStorage.getItem(scopedKey), { scopedKey: SCOPED_KEY })).resolves.toBeNull();
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      state: window.learningDesk.getState(),
+    }))).resolves.toEqual({ scope: "anonymous", state: emptyState });
+  });
+
+  test("deleting one learner removes only that learner's local scope", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("profile-a", profileAScope),
+      [profileBScope]: stateWithMarker("profile-b", profileBScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
+    });
+    await page.addInitScript(() => { window.confirm = () => true; });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-delete-profile="${PROFILE_ID}"]`).click();
+
+    await expect.poll(() => api.deletedProfiles.length).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-b");
+    await expect(page.evaluate(({ scopedKey, profileAScope, profileBScope }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return {
+        deleted: envelope.scopes?.[profileAScope],
+        retained: envelope.scopes?.[profileBScope]?.extra?.marker,
+      };
+    }, { scopedKey: SCOPED_KEY, profileAScope, profileBScope })).resolves.toEqual({
+      deleted: undefined,
+      retained: "profile-b",
+    });
+  });
+
+  test("ignores a delayed old-profile response after switching to a newer learner", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    await seedAuthenticatedSession(page);
+    await page.addInitScript(({ profileId }) => {
+      localStorage.setItem("shadow_mate_active_profile", profileId);
+    }, { profileId: SECOND_PROFILE_ID });
+    await seedScopedStates(page, {
+      [profileAScope]: stateWithMarker("cached-a", profileAScope),
+      [profileBScope]: stateWithMarker("cached-b", profileBScope),
+    });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: {
+        [PROFILE_ID]: stateWithMarker("remote-a", profileAScope),
+        [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope),
+      },
+      stateDelays: { [PROFILE_ID]: 1000 },
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
+    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === PROFILE_ID).length).toBeGreaterThan(0);
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("remote-b");
+    await page.waitForTimeout(1200);
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      marker: window.learningDesk.getState().extra?.marker,
+    }))).resolves.toEqual({ scope: profileBScope, marker: "remote-b" });
+  });
+
+  test("binds cloud saves to the starting profile, scope, and state snapshot", async ({ page }) => {
+    const profileAScope = `profile:${PROFILE_ID}`;
+    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
+    const stateBeforeSave = stateWithMarker("before-save", profileAScope);
+    await seedAuthenticatedSession(page);
+    await seedScopedStates(page, { [profileAScope]: stateBeforeSave });
+    const api = await mockCloudApi(page, {
+      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
+      remoteStates: { [PROFILE_ID]: stateBeforeSave, [SECOND_PROFILE_ID]: null },
+      rpcDelayMs: 800,
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.locator("[data-sync]").click();
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await page.evaluate(() => {
+      const state = window.learningDesk.getState();
+      state.extra.marker = "after-save-start";
+      window.learningDesk.replaceState(state, { persist: true });
+    });
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
+    expect(api.rpcPayloads[0]).toMatchObject({
+      p_profile_id: PROFILE_ID,
+      p_state: { extra: { marker: "before-save" } },
+    });
   });
 
   test("stops after repeated version conflicts instead of retrying forever", async ({ page }) => {
@@ -362,7 +669,10 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-delete-profile]");
     await expect.poll(() => api.deletedProfiles.length).toBe(1);
     await expect(page.locator("#cloudPanel .learner-choice")).toHaveCount(0);
-    await expect(page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").checkins)).resolves.toEqual({});
+    await expect(page.evaluate(({ scopedKey, profileId }) => {
+      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
+      return envelope.scopes?.[`profile:${profileId}`];
+    }, { scopedKey: SCOPED_KEY, profileId: PROFILE_ID })).resolves.toBeUndefined();
   });
 
   test("exports family data and lets the owner delete the family workspace", async ({ page }) => {
@@ -385,14 +695,25 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toHaveText("家庭数据已删除，已退出登录");
   });
   test("returns to local mode after signing out of the cloud workspace", async ({ page }) => {
+    const profileScope = `profile:${PROFILE_ID}`;
     await seedAuthenticatedSession(page);
-    await mockCloudApi(page);
+    await seedScopedStates(page, {
+      anonymous: stateWithMarker("anonymous", "anonymous"),
+      [profileScope]: stateWithMarker("cached-profile", profileScope),
+    });
+    await mockCloudApi(page, {
+      remoteState: stateWithMarker("remote-profile", profileScope),
+    });
 
     await page.goto("/");
     await page.click("#accountButton");
     await page.click("[data-signout]");
 
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect(page.evaluate(() => ({
+      scope: window.learningDesk.getPersistenceScope(),
+      marker: window.learningDesk.getState().extra?.marker,
+    }))).resolves.toEqual({ scope: "anonymous", marker: "anonymous" });
   });
 });
 
