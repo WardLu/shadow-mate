@@ -9,6 +9,7 @@ import { buildHouseholdExport } from "./learning-export.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { mergeGrowthLoopSnapshot } from "./learning-growth-loop.js";
 import { createGrowthLoopRetryScheduler } from "./learning-growth-loop-retry.js";
+import { isCurrentWorkspaceMetadata } from "./workspace-metadata-guard.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
@@ -22,6 +23,16 @@ const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
 const GROWTH_LOOP_SYNC_DEBOUNCE_MS = 500;
 const GROWTH_LOOP_RETRY_FALLBACK_MS = 1000;
+const PERFORMANCE_MARKS = new Set([
+  "shadow-mate:workspace:start",
+  "shadow-mate:workspace:memberships-ready",
+  "shadow-mate:workspace:profiles-ready",
+  "shadow-mate:workspace:metadata-ready",
+  "shadow-mate:profile:local-ready",
+  "shadow-mate:profile:remote-hydrate-start",
+  "shadow-mate:profile:remote-hydrate-ready",
+  "shadow-mate:profile:remote-hydrate-failed",
+]);
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
@@ -53,6 +64,8 @@ let session = null;
 let memberships = [];
 let profiles = [];
 let guardianConsentHouseholds = new Set();
+let guardianConsentMetadataReady = false;
+let workspaceMetadataLoading = Promise.resolve();
 let activeProfile = null;
 let editingProfileId = null;
 let editingHousehold = false;
@@ -74,16 +87,15 @@ let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
 let profileOperationQueue = Promise.resolve();
 let profileOperationGeneration = 0;
+let remoteHydratePending = null;
 
 const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
   onTimer() {
     if (profileScopeWriteBlocked) return;
     const profile = activeProfile;
     if (!profile) return;
-    void enqueueProfileOperation(
-      (generation) => loadGrowthLoopProfile(profile, { generation }),
-      { advanceGeneration: false },
-    ).catch((error) => {
+    const generation = profileOperationGeneration;
+    void loadGrowthLoopProfile(profile, { generation }).catch((error) => {
       console.warn("Growth Loop cloud sync deferred:", error);
     });
   },
@@ -93,6 +105,11 @@ const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
 const panel = document.querySelector("#cloudPanel");
 const toast = document.querySelector("#syncToast");
+
+function markPerformance(name) {
+  if (!PERFORMANCE_MARKS.has(name) || typeof globalThis.performance?.mark !== "function") return;
+  globalThis.performance.mark(name);
+}
 
 function restoreToastLocation() {
   if (!toast?.classList.contains("show")) return;
@@ -131,6 +148,11 @@ function isActiveGrowthLoopProfile(profile) {
     && activeProfile?.household_id === profile?.household_id
     && scope.profile_id === profile?.id
     && scope.household_id === profile?.household_id;
+}
+
+function isActiveProfile(profile) {
+  return activeProfile?.id === profile?.id
+    && activeProfile?.household_id === profile?.household_id;
 }
 
 function sameProfileScope(left = {}, right = {}) {
@@ -1333,6 +1355,10 @@ function renderAccount() {
       const form = new FormData(formElement);
       const householdId = memberships[0]?.household_id;
       if (!householdId) return;
+      if (!await waitForGuardianConsentMetadata()) {
+        showToast("正在确认家长同意状态，请稍后重试。", 5000);
+        return;
+      }
       if (!guardianConsentHouseholds.has(householdId)) {
         if (form.get("guardianConsent") !== "on") {
           showToast("请先确认你是家长或监护人并阅读隐私说明。", 5000);
@@ -1387,49 +1413,84 @@ function renderPanel() {
   else renderAccount();
 }
 
+function refreshWorkspaceMetadata({ householdIds, workspaceProfiles, requestSession }) {
+  const stateMetadata = workspaceProfiles.length
+    ? supabase
+      .from("learning_profile_states")
+      .select("profile_id, updated_at")
+      .in("profile_id", workspaceProfiles.map((profile) => profile.id))
+    : Promise.resolve({ data: [], error: null });
+  const consentMetadata = supabase
+    .from("learning_guardian_consents")
+    .select("household_id")
+    .in("household_id", householdIds)
+    .eq("user_id", requestSession.user.id)
+    .eq("consent_type", GUARDIAN_CONSENT_TYPE)
+    .eq("policy_version", PRIVACY_POLICY_VERSION);
+  const householdMetadata = supabase.from("learning_households").select("name").in("id", householdIds);
+
+  return Promise.all([consentMetadata, stateMetadata, householdMetadata]).then(([
+    { data: consentRows, error: consentError },
+    { data: stateRows, error: stateMetaError },
+    { data: householdRows },
+  ]) => {
+    if (!isCurrentWorkspaceMetadata(requestSession, session)) return false;
+    if (!consentError) {
+      guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
+      guardianConsentMetadataReady = true;
+    }
+    if (!stateMetaError) lastSyncAt = latestUpdatedAt(stateRows || []);
+    householdName = householdRows?.[0]?.name || "";
+    markPerformance("shadow-mate:workspace:metadata-ready");
+    if (dialog?.open && !passwordRecoveryActive) renderPanel();
+    return !consentError;
+  }).catch((error) => {
+    if (isCurrentWorkspaceMetadata(requestSession, session)) console.warn("Workspace metadata refresh deferred:", error);
+    return false;
+  });
+}
+
+async function waitForGuardianConsentMetadata() {
+  if (guardianConsentMetadataReady) return true;
+  await workspaceMetadataLoading;
+  return guardianConsentMetadataReady;
+}
+
 async function fetchWorkspace() {
+  const requestSession = session;
+  if (!requestSession) return;
+  markPerformance("shadow-mate:workspace:start");
   lastSyncAt = null;
   const { data: memberRows, error: memberError } = await supabase
     .from("learning_household_members")
     .select("household_id, role")
-    .eq("user_id", session.user.id);
+    .eq("user_id", requestSession.user.id);
   if (memberError) throw memberError;
+  if (session !== requestSession) return;
   memberships = memberRows || [];
+  markPerformance("shadow-mate:workspace:memberships-ready");
   if (!memberships.length) {
     profiles = [];
     guardianConsentHouseholds = new Set();
+    guardianConsentMetadataReady = true;
+    workspaceMetadataLoading = Promise.resolve(true);
     resetGrowthLoopRemoteRetry();
     activeProfile = null;
     return;
   }
   const householdIds = memberships.map((item) => item.household_id);
-  const { data: consentRows, error: consentError } = await supabase
-    .from("learning_guardian_consents")
-    .select("household_id")
-    .in("household_id", householdIds)
-    .eq("user_id", session.user.id)
-    .eq("consent_type", GUARDIAN_CONSENT_TYPE)
-    .eq("policy_version", PRIVACY_POLICY_VERSION);
-  if (consentError) throw consentError;
-  guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
+  guardianConsentHouseholds = new Set();
+  guardianConsentMetadataReady = false;
   const { data: profileRows, error: profileError } = await supabase
     .from("learning_profiles")
     .select("id, household_id, display_name, grade_level")
     .in("household_id", householdIds)
     .order("created_at");
   if (profileError) throw profileError;
+  if (session !== requestSession) return;
   profiles = profileRows || [];
-  if (profiles.length) {
-    const { data: stateRows, error: stateMetaError } = await supabase
-      .from("learning_profile_states")
-      .select("profile_id, updated_at")
-      .in("profile_id", profiles.map((profile) => profile.id));
-    if (!stateMetaError) lastSyncAt = latestUpdatedAt(stateRows || []);
-  }
-  if (householdIds.length) {
-    const { data: hhRows } = await supabase.from("learning_households").select("name").in("id", householdIds);
-    householdName = hhRows?.[0]?.name || "";
-  }
+  markPerformance("shadow-mate:workspace:profiles-ready");
+  workspaceMetadataLoading = refreshWorkspaceMetadata({ householdIds, workspaceProfiles: profiles, requestSession });
 }
 
 async function exportWorkspace() {
@@ -1545,7 +1606,7 @@ function selectProfile(profileId, options = {}) {
   return enqueueProfileOperation((generation) => selectProfileNow(profileId, options, generation));
 }
 
-async function selectProfileNow(profileId, { migrateLocal = false, deferGrowthLoopSync = false } = {}, generation) {
+async function selectProfileNow(profileId, { migrateLocal = false } = {}, generation) {
   const isCurrent = () => isCurrentProfileOperation(generation);
   if (profileScopeWriteBlocked) return false;
   const profile = profiles.find((item) => item.id === profileId);
@@ -1554,23 +1615,6 @@ async function selectProfileNow(profileId, { migrateLocal = false, deferGrowthLo
   const profileChanged = activeProfile?.id !== profile.id
     || activeProfile?.household_id !== profile.household_id;
   const previousProfileState = captureProfileCommitState();
-  const { data, error } = await supabase
-    .from("learning_profile_states")
-    .select("state, version, updated_at")
-    .eq("profile_id", profile.id)
-    .maybeSingle();
-  if (!isCurrent()) return false;
-  if (error) {
-    showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
-    return false;
-  }
-  const normalizedRemote = data
-    ? normalizeCloudLearningState(data, scope)
-    : null;
-  if (normalizedRemote?.scope_mismatch) {
-    showToast("云端记录作用域不一致，已停止加载以保护孩子数据。", 6000);
-    return false;
-  }
 
   // The Growth Loop controller commits its scope only after the local database
   // load succeeds. Make it the profile-switch commit barrier so a failed
@@ -1610,66 +1654,84 @@ async function selectProfileNow(profileId, { migrateLocal = false, deferGrowthLo
     return false;
   }
 
-  const localState = window.learningDesk.getState();
   if (!isCurrent()) {
     await restoreProfileCommit(previousProfileState, profile);
     return false;
   }
   if (profileChanged) resetGrowthLoopRemoteRetry();
   activeProfile = profile;
+  cloudVersion = null;
   cloudSyncBlocked = false;
   localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
-  if (!data) {
-    cloudVersion = null;
-    if (migrateLocal || stateHasData(localState)) {
-      await saveCloudState(true, { generation, profileId: profile.id });
-      if (!isCurrent()) {
-        await restoreProfileCommit(previousProfileState, profile);
-        return false;
-      }
-      if (activeProfile?.id !== profile.id) return false;
-    }
-  } else {
-    lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
-    cloudVersion = normalizedRemote.version;
-    const remoteLearningState = normalizedRemote.state.learning;
-    const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
-    window.learningDesk.replaceState(merged, { persist: true });
-    if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
-      await saveCloudState(true, { generation, profileId: profile.id });
-      if (!isCurrent()) {
-        await restoreProfileCommit(previousProfileState, profile);
-        return false;
-      }
-      if (activeProfile?.id !== profile.id) return false;
-    }
-  }
-  if (!isCurrent() || activeProfile?.id !== profile.id) {
-    if (!isCurrent()) {
-      await restoreProfileCommit(previousProfileState, profile);
-      return false;
-    }
-    return false;
-  }
   setAccountState();
-  const finishGrowthLoopLoad = async (loadGeneration) => {
-    try {
-      await loadGrowthLoopProfile(profile, { adoptPending: migrateLocal, generation: loadGeneration });
-    } catch (growthError) {
-      console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
-    }
-  };
-  if (deferGrowthLoopSync) {
-    void enqueueProfileOperation(
-      (backgroundGeneration) => finishGrowthLoopLoad(backgroundGeneration),
-      { advanceGeneration: false },
-    ).catch((error) => {
-      console.warn("Growth Loop cloud refresh deferred:", error);
-    });
-  } else {
-    await finishGrowthLoopLoad(generation);
-  }
+  markPerformance("shadow-mate:profile:local-ready");
+  void queueGrowthCloudActivity(
+    profile,
+    ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED,
+    {},
+    "once",
+    { generation },
+  );
+  void loadGrowthLoopProfile(profile, { adoptPending: migrateLocal, generation }).catch((growthError) => {
+    console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+  });
+  const hydrateOperation = { profileId: profile.id, generation };
+  remoteHydratePending = hydrateOperation;
+  void hydrateProfileRemote(profile, { migrateLocal, generation }).finally(() => {
+    if (remoteHydratePending === hydrateOperation) remoteHydratePending = null;
+  });
   return isCurrent() && activeProfile?.id === profile.id;
+}
+
+async function hydrateProfileRemote(profile, { migrateLocal = false, generation = null } = {}) {
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  const isCurrent = () => isCurrentProfileOperation(generation)
+    && isActiveProfile(profile)
+    && sameProfileScope(window.learningDesk?.getEnvelope?.()?.scope || {}, scope);
+  if (!isCurrent()) return;
+  markPerformance("shadow-mate:profile:remote-hydrate-start");
+  try {
+    const { data, error } = await supabase
+      .from("learning_profile_states")
+      .select("state, version, updated_at")
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+    if (!isCurrent()) return;
+    if (error) {
+      markPerformance("shadow-mate:profile:remote-hydrate-failed");
+      showToast(formatCloudError(error, "读取云端记录失败，本机学习记录可继续使用。"), 5000);
+      return;
+    }
+    const normalizedRemote = data ? normalizeCloudLearningState(data, scope) : null;
+    if (normalizedRemote?.scope_mismatch) {
+      markPerformance("shadow-mate:profile:remote-hydrate-failed");
+      failClosedProfileScope();
+      return;
+    }
+    const localState = window.learningDesk.getState();
+    if (!data) {
+      cloudVersion = null;
+      if (migrateLocal || stateHasData(localState)) {
+        await saveCloudState(true, { generation, profileId: profile.id, allowPendingRemoteHydrate: true });
+        if (!isCurrent()) return;
+      }
+    } else {
+      lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
+      cloudVersion = normalizedRemote.version;
+      const remoteLearningState = normalizedRemote.state.learning;
+      const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
+      window.learningDesk.replaceState(merged, { persist: true });
+      if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
+        await saveCloudState(true, { generation, profileId: profile.id, allowPendingRemoteHydrate: true });
+        if (!isCurrent()) return;
+      }
+    }
+    markPerformance("shadow-mate:profile:remote-hydrate-ready");
+  } catch (error) {
+    if (!isCurrent()) return;
+    markPerformance("shadow-mate:profile:remote-hydrate-failed");
+    console.warn("Profile remote hydrate unavailable:", error);
+  }
 }
 
 function captureSaveRequest(manual = false) {
@@ -1692,6 +1754,7 @@ async function saveCloudState(manual = false, {
   state = null,
   expectedVersion = undefined,
   fromDebounce = false,
+  allowPendingRemoteHydrate = false,
 } = {}) {
   if (profileScopeWriteBlocked) return;
   const requestedProfileId = profileId ?? activeProfile?.id ?? null;
@@ -1700,6 +1763,12 @@ async function saveCloudState(manual = false, {
   const requestedState = state ? structuredClone(state) : null;
   const requestedVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
   if (requestSession && session !== requestSession) return;
+  if (!allowPendingRemoteHydrate
+    && remoteHydratePending?.generation === requestedGeneration
+    && remoteHydratePending?.profileId === requestedProfileId) {
+    if (manual) showToast("正在读取云端记录，请稍后再试。", 3000);
+    return;
+  }
   if (saveInFlight) {
     if (session && saveSession === session && requestedProfileId) {
       const queuedRequest = {
@@ -1891,6 +1960,10 @@ async function onAuthChange(nextSession, event = "") {
   session = nextSession;
   memberships = [];
   profiles = [];
+  guardianConsentHouseholds = new Set();
+  guardianConsentMetadataReady = false;
+  workspaceMetadataLoading = Promise.resolve(false);
+  remoteHydratePending = null;
   activeProfile = null;
   cloudVersion = null;
   lastSyncAt = null;

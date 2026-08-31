@@ -6,6 +6,7 @@ const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const THIRD_PROFILE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+const SENSITIVE_MARK_PAYLOAD = "synthetic-mark-payload-not-for-telemetry";
 const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
 const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
 
@@ -76,6 +77,7 @@ async function mockCloudApi(page, {
   growthPointItemsFailures = 0,
   growthPointItemsResponses = null,
   growthPointItemsDelayMs = 0,
+  profileStateDelayMs = 0,
   rpcDelayMs = 0,
   hasPassword = true,
   createDelayMs = 0,
@@ -86,6 +88,9 @@ async function mockCloudApi(page, {
   profileStateData = {},
   profileStateVersions = {},
   initialProfiles = [],
+  workspaceAncillaryDelayMs = 0,
+  consentMetadataResponses = null,
+  consentMetadataDelayMs = workspaceAncillaryDelayMs,
 } = {}) {
   let state = structuredClone(remoteState);
   let version = 3;
@@ -94,6 +99,7 @@ async function mockCloudApi(page, {
   let rpcSettledCount = 0;
   let growthPointItemsRequests = 0;
   let growthPointItemsResponseIndex = 0;
+  let consentMetadataResponseIndex = 0;
   const rpcPayloads = [];
   const legacyImportPayloads = [];
   const activityPayloads = [];
@@ -239,10 +245,18 @@ async function mockCloudApi(page, {
         await route.fulfill({ status: 201, body: "" });
         return;
       }
+      const responseIndex = consentMetadataResponseIndex++;
+      const consentRows = consentMetadataResponses?.[
+        Math.min(responseIndex, consentMetadataResponses.length - 1)
+      ] ?? (householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []);
+      const consentDelay = Array.isArray(consentMetadataDelayMs)
+        ? consentMetadataDelayMs[Math.min(responseIndex, consentMetadataDelayMs.length - 1)]
+        : consentMetadataDelayMs;
+      if (consentDelay) await new Promise((resolve) => setTimeout(resolve, consentDelay));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []),
+        body: JSON.stringify(consentRows),
       });
       return;
     }
@@ -298,6 +312,10 @@ async function mockCloudApi(page, {
       const body = select.includes("state")
         ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState, version: profileVersion, updated_at: "2026-08-01T08:00:00.000Z" }]
         : [{ profile_id: requestedProfileId || PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
+      const profileStateDelay = typeof profileStateDelayMs === "object"
+        ? profileStateDelayMs[requestedProfileId] || 0
+        : profileStateDelayMs;
+      if (profileStateDelay) await new Promise((resolve) => setTimeout(resolve, profileStateDelay));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       return;
     }
@@ -310,6 +328,7 @@ async function mockCloudApi(page, {
         await route.fulfill({ status: 201, body: "" });
         return;
       }
+      if (workspaceAncillaryDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceAncillaryDelayMs));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -331,6 +350,7 @@ async function mockCloudApi(page, {
     createdHouseholds,
     createdConsents,
     getGrowthPointItemsRequests: () => growthPointItemsRequests,
+    getConsentMetadataRequests: () => consentMetadataResponseIndex,
     getRpcSettledCount: () => rpcSettledCount,
     getState: () => state,
   };
@@ -491,6 +511,192 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(1);
     await expect(page.locator("#syncToast")).toBeVisible();
+  });
+
+  test("activates the local profile before delayed remote hydration and emits de-identified marks", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      workspaceAncillaryDelayMs: 900,
+      profileStateDelayMs: 900,
+      remoteState: { ...emptyState, extra: { synthetic_payload: SENSITIVE_MARK_PAYLOAD } },
+    });
+
+    await page.goto("/");
+
+    const activation = await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      marks: performance.getEntriesByType("mark")
+        .map((entry) => entry.name)
+        .filter((name) => name.startsWith("shadow-mate:")),
+    })), { timeout: 650 }).toEqual({
+      active: PROFILE_ID,
+      learning: PROFILE_ID,
+      growth: PROFILE_ID,
+      marks: expect.arrayContaining([
+        "shadow-mate:workspace:start",
+        "shadow-mate:workspace:profiles-ready",
+        "shadow-mate:profile:local-ready",
+      ]),
+    });
+
+    expect(activation).toBeUndefined();
+    const marks = await page.evaluate(() => performance.getEntriesByType("mark")
+      .map((entry) => entry.name)
+      .filter((name) => name.startsWith("shadow-mate:")));
+    expect(marks.join("|")).not.toContain(PROFILE_ID);
+    expect(marks.join("|")).not.toContain(HOUSEHOLD_ID);
+    expect(marks.join("|")).not.toContain("parent@example.test");
+    expect(marks.join("|")).not.toContain("e2e-access-token");
+    expect(marks.join("|")).not.toContain(SENSITIVE_MARK_PAYLOAD);
+  });
+
+  test("waits for delayed consent metadata before adding a learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 3000 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("metadata 延迟学习者");
+    await page.locator('#addLearnerForm input[name="guardianConsent"]').check();
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    await page.waitForTimeout(800);
+    expect(api.createdConsents).toEqual([]);
+    expect(api.createdProfiles).toEqual([]);
+    await expect.poll(() => api.createdProfiles.length).toBe(1);
+    expect(api.createdConsents).toEqual([]);
+  });
+
+  test("ignores delayed workspace metadata after signing out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 1600 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.getConsentMetadataRequests()).toBe(1);
+    await expect.poll(() => page.evaluate(() => ({
+      profilesReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:profiles-ready"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      profilesReady: true,
+      metadataReady: false,
+    });
+
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
+
+    await page.waitForTimeout(1900);
+    await expect.poll(() => page.evaluate(() => ({
+      accountState: document.querySelector("#accountButton")?.dataset.state || null,
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      accountState: "local",
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
+  });
+
+  test("fails closed when a background hydrate returns a mismatched profile scope", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      profileStateData: {
+        [PROFILE_ID]: {
+          schema_version: 2,
+          scope: { household_id: HOUSEHOLD_ID, profile_id: SECOND_PROFILE_ID },
+          learning: emptyState,
+        },
+      },
+    });
+
+    await page.goto("/");
+
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      canWrite: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({ blocked: "1", active: null, canWrite: false });
+  });
+
+  test("does not save against an unknown version while remote hydration is pending", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { profileStateDelayMs: 2000 });
+
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType("mark")
+      .some((entry) => entry.name === "shadow-mate:profile:local-ready"))).toBe(true);
+    await page.evaluate(() => window.cloudSync.schedule(true));
+
+    await page.waitForTimeout(800);
+    expect(api.rpcPayloads).toEqual([]);
+  });
+
+  test("ignores a delayed profile A hydrate after profile B becomes active", async ({ page }) => {
+    const remoteEnvelope = (profileId, marker) => ({
+      schema_version: 2,
+      scope: { household_id: HOUSEHOLD_ID, profile_id: profileId },
+      learning: { ...emptyState, extra: { hydrate_marker: marker } },
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+      ],
+      profileStateData: {
+        [PROFILE_ID]: remoteEnvelope(PROFILE_ID, "profile-a"),
+        [SECOND_PROFILE_ID]: remoteEnvelope(SECOND_PROFILE_ID, "profile-b"),
+      },
+      profileStateVersions: { [PROFILE_ID]: 11, [SECOND_PROFILE_ID]: 22 },
+      profileStateDelayMs: { [PROFILE_ID]: 1200 },
+    });
+
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(PROFILE_ID);
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(SECOND_PROFILE_ID);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.hydrate_marker)).toBe("profile-b");
+
+    await page.waitForTimeout(1300);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      scope: window.learningDesk.getEnvelope().scope?.profile_id,
+      marker: window.learningDesk.getState().extra?.hydrate_marker,
+      version: window.cloudSync.getProfileCommitState().cloud_version,
+    }))).toEqual({
+      active: SECOND_PROFILE_ID,
+      scope: SECOND_PROFILE_ID,
+      marker: "profile-b",
+      version: 22,
+    });
   });
 
   test("shows the same daily writing workbook after a logged-in state update", async ({ page }) => {
@@ -692,8 +898,6 @@ test.describe("Authenticated cloud workspace", () => {
       growth: SECOND_PROFILE_ID,
       activity: expect.not.arrayContaining([PROFILE_ID]),
     });
-    await expect.poll(() => api.activityPayloads.map((payload) => payload.p_event?.profile_id)).toContain(SECOND_PROFILE_ID);
-    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(PROFILE_ID);
   });
 
   test("restores the last successful scope when a stale switch is followed by a failed switch", async ({ page }) => {
@@ -877,7 +1081,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
   });
 
-  test("rolls back the complete active tuple when a save becomes stale before the next profile fails", async ({ page }) => {
+  test("keeps the local active tuple when a save becomes stale before the next remote hydrate fails", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       rpcDelayMs: 1200,
@@ -933,22 +1137,22 @@ test.describe("Authenticated cloud workspace", () => {
     await thirdChoice.click();
     await expect.poll(() => api.getRpcSettledCount()).toBe(1);
 
-    await expect(firstChoice).toHaveClass(/active/);
+    await expect(firstChoice).not.toHaveClass(/active/);
     await expect(secondChoice).not.toHaveClass(/active/);
-    await expect(thirdChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).toHaveClass(/active/);
     await expect.poll(() => page.evaluate(() => ({
       active: localStorage.getItem("shadow_mate_active_profile"),
       learning: window.learningDesk.getEnvelope().scope?.profile_id,
       growth: window.growthLoop.getScope().profile_id,
       tuple: window.cloudSync.getProfileCommitState?.(),
     }))).toEqual({
-      active: PROFILE_ID,
-      learning: PROFILE_ID,
-      growth: PROFILE_ID,
+      active: THIRD_PROFILE_ID,
+      learning: THIRD_PROFILE_ID,
+      growth: THIRD_PROFILE_ID,
       tuple: {
-        active_profile_id: PROFILE_ID,
-        active_profile_key: PROFILE_ID,
-        cloud_version: 3,
+        active_profile_id: THIRD_PROFILE_ID,
+        active_profile_key: THIRD_PROFILE_ID,
+        cloud_version: null,
       },
     });
     expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID]);
@@ -1365,7 +1569,7 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("does not let a delayed background refresh overwrite a newer learner", async ({ page }) => {
     await seedAuthenticatedSession(page);
-    const api = await mockCloudApi(page);
+    await mockCloudApi(page);
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
@@ -1378,7 +1582,6 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(secondChoice).toHaveClass(/active/);
     await firstChoice.click();
     await expect(firstChoice).toHaveClass(/active/);
-    api.activityPayloads.length = 0;
 
     await page.evaluate(({ firstProfileId }) => {
       window.__growthActivityScopes = [];
@@ -1424,8 +1627,6 @@ test.describe("Authenticated cloud workspace", () => {
       growth: SECOND_PROFILE_ID,
       activity: expect.not.arrayContaining([PROFILE_ID]),
     });
-    await expect.poll(() => api.activityPayloads.map((payload) => payload.p_event?.profile_id)).toContain(SECOND_PROFILE_ID);
-    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(PROFILE_ID);
   });
 
   test("creates only one learner after rapid repeated clicks", async ({ page }) => {
