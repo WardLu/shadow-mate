@@ -584,7 +584,7 @@ export function recordWorksheetCompletion({ rotationState, worksheet, completedA
   const assignmentId = worksheet?.assignmentId;
   const assignment = state.assignments[dayKey];
 
-  if (typeof completedAt !== "string" || completedAt.length === 0 ||
+  if (!isBoundedString(completedAt, MAX_COMPLETION_LENGTH) ||
     !assignment || !assignment.candidates[assignmentId]) {
     return state;
   }

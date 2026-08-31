@@ -530,6 +530,28 @@ describe("rotation-v1 daily worksheet selection", () => {
     expect(completed).not.toHaveProperty("sm2");
   });
 
+  it("rejects an oversized completion timestamp before it can bypass the payload cap", () => {
+    const first = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    const oversizedCompletedAt = `oversized-completion-${"x".repeat(200 * 1024)}`;
+    const returned = recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: oversizedCompletedAt,
+    });
+    const payloadBytes = new TextEncoder().encode(JSON.stringify(returned)).length;
+
+    expect(returned).toEqual(first.rotationState);
+    expect(returned.assignments["2026-09-01"].completions).toEqual({});
+    expect(payloadBytes).toBeLessThan(200 * 1024);
+    expect(JSON.stringify(returned)).not.toContain(oversizedCompletedAt);
+  });
+
   it("unions same-day candidates and completions with a stable minimum canonical", () => {
     const local = makeState({
       itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
