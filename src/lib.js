@@ -1,6 +1,23 @@
 // Pure functions extracted from cloud.js for unit testing.
 // These do not depend on DOM, Supabase, or any external state.
 
+import {
+  mergeRotationState,
+  normalizeRotationState,
+} from "./hanzi-worksheet-rotation.js";
+
+const HANZI_ROTATION_STATE_KEY = "hanziWorksheetRotationV1";
+
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function normalizeRotationWithData(rotationState) {
+  if (!isRecord(rotationState)) return null;
+  const normalized = normalizeRotationState(rotationState);
+  return Object.keys(normalized.assignments).length > 0 ? normalized : null;
+}
+
 export function escapeHtml(value = "") {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -74,12 +91,16 @@ export function formatCloudError(error, fallback = "云端操作失败，请稍�
 }
 
 export function stateHasData(state) {
+  const rotationState = state?.extra?.hanziWorksheetRotationV1;
+  const normalizedRotation = normalizeRotationWithData(rotationState);
+
   return Boolean(
     Object.keys(state?.checkins || {}).length ||
       Object.keys(state?.points || {}).length ||
       Object.keys(state?.bookShelf || {}).length ||
       Object.keys(state?.peanutRead || {}).length ||
-      (state?.peanutLog || []).length
+      (state?.peanutLog || []).length ||
+      normalizedRotation !== null
   );
 }
 
@@ -104,6 +125,25 @@ export function mergeObjects(local = {}, remote = {}) {
 
 export function mergeState(local, remote) {
   const merged = mergeObjects(local, remote);
+  const localRotation = local?.extra?.[HANZI_ROTATION_STATE_KEY];
+  const remoteRotation = remote?.extra?.[HANZI_ROTATION_STATE_KEY];
+  const normalizedLocalRotation = normalizeRotationWithData(localRotation);
+  const normalizedRemoteRotation = normalizeRotationWithData(remoteRotation);
+
+  if (localRotation !== undefined || remoteRotation !== undefined) {
+    const rotationState = normalizedLocalRotation && normalizedRemoteRotation
+      ? mergeRotationState(
+        normalizedLocalRotation,
+        normalizedRemoteRotation
+      )
+      : normalizedLocalRotation || normalizedRemoteRotation;
+    if (!merged.extra || typeof merged.extra !== "object" || Array.isArray(merged.extra)) {
+      merged.extra = {};
+    }
+    if (rotationState) merged.extra[HANZI_ROTATION_STATE_KEY] = rotationState;
+    else delete merged.extra[HANZI_ROTATION_STATE_KEY];
+  }
+
   const logMap = new Map();
   for (const item of [...(remote?.peanutLog || []), ...(local?.peanutLog || [])]) {
     const key = `${item.date || ""}|${item.title || ""}|${item.rating || ""}`;

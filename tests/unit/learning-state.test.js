@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   createLearningState,
+  getHanziRotationState,
   hasCheckin,
   isPointMarked,
   normalizeLearningState,
+  replaceHanziRotationState,
   transitionLearningState,
 } from "../../src/learning-state.js";
+import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const toggle = (state, action) => transitionLearningState(state, action);
+const HANZI_PACK = getActiveHanziWritingPack();
+
+function makeRotationState(learnerScope = "anonymous") {
+  return resolveDailyWorksheet({
+    rotationState: {},
+    pack: HANZI_PACK,
+    learnerScope,
+    now: new Date("2026-09-01T00:30:00.000Z"),
+    timeZone: "Asia/Singapore",
+  }).rotationState;
+}
 
 describe("learning state machine", () => {
   it("creates an empty state without sharing mutable defaults", () => {
@@ -46,6 +61,79 @@ describe("learning state machine", () => {
     expect(hasCheckin(null, "chinese")).toBe(false);
     expect(hasCheckin({}, "chinese")).toBe(false);
     expect(isPointMarked({}, "2026-8", 0, 3)).toBe(false);
+  });
+
+  it("replaces only the rotation state while preserving the learning container", () => {
+    const initial = createLearningState({
+      checkins: { "2026-08-01": { math: true } },
+      extra: { mathQuestionCount: 3 },
+    });
+    const rotationState = makeRotationState();
+    const next = replaceHanziRotationState(initial, rotationState);
+
+    expect(next).toEqual({
+      checkins: { "2026-08-01": { math: true } },
+      extra: { mathQuestionCount: 3, hanziWorksheetRotationV1: rotationState },
+      points: {},
+      bookShelf: {},
+      peanutLog: [],
+      peanutRead: {},
+    });
+    expect(getHanziRotationState(next)).toEqual(rotationState);
+    expect(next).not.toBe(initial);
+    expect(next.extra).not.toBe(initial.extra);
+    expect(next.extra.hanziWorksheetRotationV1).not.toBe(rotationState);
+    expect(initial.extra).toEqual({ mathQuestionCount: 3 });
+  });
+
+  it("replaces rotation through a controlled transition without adding a top-level key", () => {
+    const rotationState = makeRotationState();
+    const next = toggle(createLearningState({ points: { "2026-09": { "0": { "1": 1 } } } }), {
+      type: "HANZI_ROTATION_REPLACED",
+      rotationState,
+    });
+
+    expect(next.extra.hanziWorksheetRotationV1).toEqual(rotationState);
+    expect(Object.keys(next)).toEqual([
+      "checkins",
+      "extra",
+      "points",
+      "bookShelf",
+      "peanutLog",
+      "peanutRead",
+    ]);
+    expect(next.hanziWorksheetRotationV1).toBeUndefined();
+  });
+
+  it("keeps rotation in extra when replacing the whole state and drops unknown top-level fields", () => {
+    const rotationState = makeRotationState();
+    const next = toggle(createLearningState(), {
+      type: "STATE_REPLACED",
+      state: {
+        extra: { hanziWorksheetRotationV1: rotationState, customMetric: 2 },
+        unknownTopLevel: "discard me",
+      },
+    });
+
+    expect(getHanziRotationState(next)).toEqual(rotationState);
+    expect(next.extra.customMetric).toBe(2);
+    expect(next).not.toHaveProperty("unknownTopLevel");
+    expect(next).not.toHaveProperty("hanziWorksheetRotationV1");
+  });
+
+  it("normalizes malformed rotation before exposing it through the state container", () => {
+    const crossScope = makeRotationState("profile:learner-a");
+    crossScope.learnerScope = "profile:learner-b";
+
+    const normalized = normalizeLearningState({
+      extra: { hanziWorksheetRotationV1: crossScope },
+    });
+
+    expect(getHanziRotationState(normalized)).toMatchObject({
+      learnerScope: "profile:learner-b",
+      assignments: {},
+      lastIssuedDayKey: null,
+    });
   });
 
   it("toggles a task check-in and removes an empty day", () => {
