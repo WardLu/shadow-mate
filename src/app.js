@@ -609,7 +609,11 @@ function findSystemVoice(locale) {
 }
 
 async function speak(t, button, locale = "en-US"){
-  const originalLabel = button?.dataset.label || button?.textContent?.trim() || "听发音";
+  const initialVisibleLabel = button?.textContent?.trim() || button?.dataset.label || "听发音";
+  if (button && button.dataset.speechOriginalLabel === undefined) {
+    button.dataset.speechOriginalLabel = initialVisibleLabel;
+  }
+  const originalLabel = button?.dataset.speechOriginalLabel || initialVisibleLabel;
   if (button && button.dataset.speechOriginalAriaLabel === undefined) {
     button.dataset.speechOriginalAriaLabel = button.getAttribute("aria-label") || originalLabel;
   }
@@ -1099,6 +1103,7 @@ function renderChinese(){
   main.appendChild(card3);
   card3.querySelector("[data-print]").onclick = () => window.print();
   card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak]").forEach((button) => {
+    button.dataset.speechOriginalLabel = button.textContent?.trim() || "听发音";
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
     button.onclick = () => speak(

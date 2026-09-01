@@ -35,6 +35,11 @@ async function installSpeechMock(page, {
       writable: true,
       value: configuredMode,
     });
+    Object.defineProperty(window, "__speechVoices", {
+      configurable: true,
+      writable: true,
+      value: configuredVoices,
+    });
     Object.defineProperty(window, "__speechVoiceLangs", {
       configurable: true,
       value: [],
@@ -51,7 +56,7 @@ async function installSpeechMock(page, {
       value: {
         cancel() {},
         getVoices() {
-          return configuredVoices;
+          return window.__speechVoices;
         },
         speak(utterance) {
           utterances.push({ text: utterance.text, lang: utterance.lang });
@@ -191,7 +196,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(after.state.checkins).toEqual(before.state.checkins);
   });
 
-  test("shows retryable Chinese speech feedback without entering the English Piper path", async ({ page }) => {
+  test("recovers when a Mandarin voice becomes available without entering the English Piper path", async ({ page }) => {
     let piperEngineRequests = 0;
     await page.route("**/piper-tts-web.js*", async (route) => {
       piperEngineRequests += 1;
@@ -216,12 +221,36 @@ test.describe("Hanzi writing worksheet", () => {
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
     expect(piperEngineRequests).toBe(0);
 
-    const after = await readWorksheetSnapshot(page);
-    expect(after.screen).toEqual(before.screen);
-    expect(after.print).toEqual(before.print);
-    expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(after.assignment.completions).toEqual(before.assignment.completions);
-    expect(after.state.checkins).toEqual(before.state.checkins);
+    const afterFailure = await readWorksheetSnapshot(page);
+    expect(afterFailure.screen).toEqual(before.screen);
+    expect(afterFailure.print).toEqual(before.print);
+    expect(afterFailure.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(afterFailure.assignment.completions).toEqual(before.assignment.completions);
+    expect(afterFailure.state.checkins).toEqual(before.state.checkins);
+
+    await page.evaluate(() => {
+      window.__speechVoices = [{ lang: "zh-CN" }, { lang: "en-US" }];
+    });
+    await page.clock.fastForward(600);
+    await button.click();
+
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: "火", lang: "zh-CN" },
+    ]);
+    expect(await page.evaluate(() => window.__speechVoiceLangs)).toEqual(["zh-CN"]);
+    await expect(button).toContainText("中文发音");
+    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
+    await expect(button).toBeFocused();
+    expect(await button.getAttribute("data-speech-failure")).toBeNull();
+    expect(await button.getAttribute("aria-busy")).toBeNull();
+    expect(piperEngineRequests).toBe(0);
+
+    const afterRetry = await readWorksheetSnapshot(page);
+    expect(afterRetry.screen).toEqual(before.screen);
+    expect(afterRetry.print).toEqual(before.print);
+    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
+    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
   });
 
   for (const mandarinVoiceLocale of ["cmn-Hans-CN", "cmn-CN", "zh-SG", "zh-Hans-CN"]) {
