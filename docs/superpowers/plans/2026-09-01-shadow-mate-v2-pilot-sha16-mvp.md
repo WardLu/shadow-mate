@@ -4,7 +4,7 @@
 
 **Goal:** 在不重做现有学习系统的前提下，把当前固定的 `WRITE_WORDS.slice(0, 4)` 替换为可版本化、稳定去重、同日固定、次日轮换的 V2 Pilot 字帖闭环，并保持现有打卡、离线、云同步、打印和 learner 隔离边界。
 
-**Architecture:** 使用仓库内静态导入的 V2 Pilot 内容包、无 DOM/网络依赖的 `rotation-v1` 纯函数和现有 `extra` JSONB 状态容器。语文页先解析一个 assignment snapshot，屏幕和打印都只消费这个 snapshot；当前 MVP 不实现 SM-2、阶段选择、完整 200 字课程或普通话语音。
+**Architecture:** 使用仓库内静态导入的 V2 Pilot 内容包、无 DOM/网络依赖的 `rotation-v1` 纯函数和现有 `extra` JSONB 状态容器。语文页先解析一个 assignment snapshot，屏幕和打印都只消费这个 snapshot；当前 MVP 支持浏览器系统普通话语音，但不实现普通话离线 Piper/模型，同时不实现 SM-2、阶段选择或完整 200 字课程。
 
 **Tech Stack:** Vite + Vanilla JavaScript、localStorage、Supabase JSONB/RLS、Vitest、Playwright。
 

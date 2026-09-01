@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 
 const FIXED_NOW = new Date("2026-09-01T02:00:00.000Z");
 const TIME_ZONE = "Asia/Singapore";
+const CSS_PX_PER_MM = 96 / 25.4;
+const A4_PORTRAIT_HEIGHT_PX = 297 * CSS_PX_PER_MM;
 
 test.use({ timezoneId: TIME_ZONE });
 
@@ -119,6 +121,10 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
   test("shows only the print sheet in print media", async ({ page }) => {
     await openChineseAtFixedTime(page);
     await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await page.setViewportSize({
+      width: Math.round(210 * CSS_PX_PER_MM),
+      height: Math.round(A4_PORTRAIT_HEIGHT_PX),
+    });
     await page.emulateMedia({ media: "print" });
 
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
@@ -153,13 +159,28 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
       }
       const sheet = document.querySelector("[data-writing-print-sheet]");
       const style = getComputedStyle(sheet);
+      const sheetRect = sheet.getBoundingClientRect();
+      const cards = [...sheet.querySelectorAll("[data-hanzi-learning-card]")].map((card) => {
+        const rect = card.getBoundingClientRect();
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          height: rect.height,
+        };
+      });
       return {
         pageRules,
         cssSource: [...document.querySelectorAll('link[rel="stylesheet"]')]
           .find((link) => link.href.endsWith("/src/app.css"))?.href || "",
         boxSizing: style.boxSizing,
         paddingTop: parseFloat(style.paddingTop),
+        paddingBottom: parseFloat(style.paddingBottom),
         minHeight: parseFloat(style.minHeight),
+        sheetTop: sheetRect.top,
+        sheetBottom: sheetRect.bottom,
+        sheetHeight: sheetRect.height,
+        sheetScrollHeight: sheet.scrollHeight,
+        cards,
       };
     });
     const printCssSource = printModel.cssSource
@@ -171,6 +192,15 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
     expect(printModel.boxSizing).toBe("border-box");
     expect(printModel.paddingTop).toBeCloseTo((12 * 96) / 25.4, 0);
     expect(printModel.minHeight).toBeCloseTo((297 * 96) / 25.4, 0);
+    expect(printModel.cards).toHaveLength(4);
+    expect(printModel.sheetHeight).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
+    expect(printModel.sheetScrollHeight).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
+    expect(printModel.sheetBottom - printModel.sheetTop).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
+    expect(printModel.cards.every((card) => (
+      card.top >= printModel.sheetTop + printModel.paddingTop - 1
+      && card.bottom <= printModel.sheetTop + A4_PORTRAIT_HEIGHT_PX - printModel.paddingBottom + 1
+    ))).toBe(true);
+    expect(printModel.cards.every((card) => card.height > 0)).toBe(true);
 
     const snapshot = await readPrintSnapshot(page);
     expect(snapshot.print).toEqual(snapshot.screen);

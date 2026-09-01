@@ -58,9 +58,11 @@ function renderExampleWords(row) {
 }
 
 function renderSpeechButtons(row) {
+  const glyph = row?.glyph ?? "";
+  const englishLabel = row?.concept?.englishLabel ?? "";
   return `<div class="hanzi-speech-actions">
-    <button type="button" data-hanzi-speak data-speech-text="${text(row?.glyph)}" data-speech-locale="zh-CN">中文发音</button>
-    <button type="button" data-hanzi-speak data-speech-text="${text(row?.concept?.englishLabel)}" data-speech-locale="en-US">English pronunciation</button>
+    <button type="button" data-hanzi-speak data-speech-text="${text(glyph)}" data-speech-locale="zh-CN" aria-label="${text(`播放“${glyph}”的中文发音`)}">中文发音</button>
+    <button type="button" data-hanzi-speak data-speech-text="${text(englishLabel)}" data-speech-locale="en-US" aria-label="${text(`播放“${englishLabel}”的英文发音`)}">English pronunciation</button>
   </div>`;
 }
 

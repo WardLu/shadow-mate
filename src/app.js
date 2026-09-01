@@ -583,10 +583,14 @@ function stopActivePlayback() {
 }
 
 function isMandarinChineseVoiceLocale(locale) {
-  return locale === "zh"
-    || locale === "cmn"
-    || /^zh-(?:cn|hans(?:-cn)?)(?:-|$)/.test(locale)
-    || /^cmn-cn(?:-|$)/.test(locale);
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
+  if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
+  if (normalizedLocale === "zh") return true;
+  if (!/^zh-/.test(normalizedLocale)) return false;
+
+  const subtags = normalizedLocale.split("-").slice(1);
+  return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg");
 }
 
 function findSystemVoice(locale) {
