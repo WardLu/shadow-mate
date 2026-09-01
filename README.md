@@ -1,239 +1,217 @@
-# 影伴 Shadow Mate
+# Shadow Mate
 
 <p align="center">
-  <img src="./public/icons/icon-192.png" width="88" alt="影伴应用图标">
+  <img src="./public/icons/icon-192.png" width="88" alt="Shadow Mate app icon">
 </p>
 
 <p align="center">
-  <strong>把每天的学习，变成看得见的成长。</strong><br>
-  面向家庭的儿童学习打卡 PWA：学习、记录、同步，一处完成。
+  <strong>Turn everyday learning into visible growth.</strong><br>
+  A family learning check-in PWA for learning, records, and sync in one place.
 </p>
 
 <p align="center">
-  <code>v1.3.6</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.3.12</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
-  <a href="https://sm.shadow.wang/"><strong>立即使用</strong></a>　·　<a href="./docs/user-guide.md">使用指南</a>
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="https://sm.shadow.wang/"><strong>Open Shadow Mate</strong></a> ·
+  <a href="./docs/user-guide.md">User guide</a> ·
+  <a href="./RELEASE_NOTES.md">Release notes</a>
 </p>
 
-## 先看产品
+## Product overview
 
-影伴围绕家长和孩子的真实日常设计：今天学了什么、哪些任务完成了、连续坚持了几天，都可以在同一个轻量界面里留下记录。
+Shadow Mate is designed around a family's daily learning routine: what was learned today, which tasks were completed, and how consistently the habit is growing.
 
 <p align="center">
-  <img src="./assets/readme/home.png" width="100%" alt="影伴首页：四个学习模块和今日成长数据">
+  <img src="./assets/readme/home.png" width="100%" alt="Shadow Mate home screen with four learning modules and daily growth data">
 </p>
 
-<p align="center"><sub>首页示例：四个学习模块统一显示当天完成状态；截图使用本地演示数据，不包含真实家庭信息。</sub></p>
+<p align="center"><sub>The screenshots use local demo data and contain no real family information.</sub></p>
 
-## 它能做什么
+## What it does
 
-- **四个学习模块**：语文、数学、英语、绘本；每个模块内部的任务可以独立打卡和取消。
-- **成长记录**：近 30 天按学习模块统计完成情况，用 `已完成/4` 直接说明当天进度。
-- **积分日历**：行为积分单独记录，与学习模块分开，支持按日期查看和补记。
-- **家庭空间**：一个家长管理多个学习者，切换孩子后加载对应的学习记录。
-- **共享账号登录**：支持邮箱验证码和邮箱密码；可设置、修改或找回适用于 Shadow 系列产品的共享密码。
-- **防重复操作**：提交、同步、删除和打卡等操作会拦截快速连点，避免重复创建或重复变更。
-- **离线优先**：未登录即可使用；登录后将本机记录同步到云端，并保留本机离线能力。
-- **跨设备恢复**：使用版本号进行乐观并发控制，尽量避免多设备同时操作时互相覆盖。
+- **Four learning modules**: Chinese, mathematics, English, and picture books; tasks can be checked in or cancelled independently.
+- **One learning entry**: open “学习” (Learning) in the left navigation first, then choose Chinese, mathematics, English, or picture books; Points, Growth, and Guide remain separate top-level pages.
+- **Growth records**: completion is summarized by learning module over the last 30 days, with daily progress shown as `completed/4`.
+- **Points calendar**: behavior points are recorded separately from learning modules and can be reviewed or backfilled by date.
+- **Family space**: one parent manages multiple learners, with records loaded for the active learner.
+- **Shared account sign-in**: email verification and shared email-password authentication for Shadow products.
+- **Duplicate-action protection**: rapid repeated submissions, syncs, deletions, and check-ins are guarded against duplicate changes.
+- **Offline-first**: learning, check-ins, points, and picture-book records work locally before sign-in; cloud sync is optional after sign-in.
+- **Cross-device recovery**: optimistic versioning and conflict protection reduce accidental overwrites across devices.
 
-## 真实界面展示
+## Screenshots
 
-### 成长日历：看见坚持，而不是堆积任务数
+### Growth calendar: see consistency, not just task counts
 
 <p align="center">
-  <img src="./assets/readme/growth-calendar.png" width="100%" alt="影伴成长日历：日期格显示已完成模块数和图例">
+  <img src="./assets/readme/growth-calendar.png" width="100%" alt="Shadow Mate growth calendar">
 </p>
 
-成长日历的口径很明确：语文的识字、古诗、写字是三个独立任务，但同一天只计作 1 个语文模块；绘本是第 4 个学习模块。因此日期格里的 `4/4` 表示四个学习模块全部完成，不是四条任务记录。
+The growth calendar counts each learning module once per day. For example, Chinese character practice, poetry, and writing are separate tasks but count as one Chinese module; picture books are the fourth module. A `4/4` day means all four learning modules were completed.
 
-### 积分日历：把行为反馈和学习进度分开
+### Points calendar: keep behavior feedback separate
 
 <p align="center">
-  <img src="./assets/readme/points-calendar.png" width="100%" alt="影伴积分日历：按日期显示无积分、加分、扣分和混合状态">
+  <img src="./assets/readme/points-calendar.png" width="100%" alt="Shadow Mate points calendar">
 </p>
 
-积分日历使用独立的颜色图例：无积分、有加分、有扣分、同一天同时有加分和扣分；黄色边框表示当前选中的日期。它不会改变成长日历的四模块统计。
+The points calendar distinguishes no points, positive points, negative points, and mixed activity on the same date. It does not change the four-module growth calendar.
 
-## 统计口径
+## Statistics
 
-| 页面 | 统计对象 | 日期状态 |
+| Page | Measures | Date states |
 | --- | --- | --- |
-| 首页 | 当天完成的学习模块 | `已完成/4` |
-| 成长 | 最近 30 天的学习模块完成数 | `0/4` 到 `4/4`，黄色边框表示今天 |
-| 积分 | 当月行为积分记录 | 无积分、加分、扣分、混合积分；黄色边框表示当前选中日期 |
+| Home | Learning modules completed today | `completed/4` |
+| Growth | Learning-module completion over the last 30 days | `0/4` to `4/4`; yellow border marks today |
+| Points | Behavior-point records for the current month | none, positive, negative, or mixed; yellow border marks the selected date |
 
-## 快速开始
+## Quick start
 
-### 使用应用
+### Use the application
 
-```powershell
-npm.cmd ci
-npm.cmd run dev
+```bash
+npm ci
+npm run dev
 ```
 
-打开终端输出的本地地址即可。不要直接双击 `index.html`，因为浏览器在 `file://` 协议下无法正常加载 ES Module。
+Open the local URL printed by Vite. Do not open `index.html` directly with `file://`; browser modules require the development server.
 
-隐私页本地入口为 `http://localhost:5173/privacy`；它与主应用共用 Vite 开发服务器，但会直接展示独立的双语隐私 HTML。
+The local privacy page is available at [http://localhost:5173/privacy](http://localhost:5173/privacy). It is served by the same Vite development server as the main application.
 
-### 验证项目
+### Validation
 
-```powershell
-npm.cmd run check
-npm.cmd run build
-npm.cmd run test:fast
-npm.cmd run test:ui
+```bash
+npm run check
+npm run build
+npm run test:fast
+npm run test:ui
 ```
 
-需要本地数据库测试时，先启动 Docker Desktop：
+For database-backed checks, start Docker Desktop first:
 
-```powershell
+```bash
 npm run local-dev
 npm run local-dev -- plan --projects shadow-mate --json
 ```
 
-日常开发优先使用中央多项目入口：它会预选 Shadow Mate，并只补齐当前缺少的
-shared_test、Schema、Edge generation 和 5173 产品进程；已运行且身份匹配的资源会复用。
-`supabase:local:start` 与 `supabase:local:functions:serve` 仍保留为一版兼容排查入口，
-不应与中央 Edge generation 同时启动。
+## Local development boundaries
 
-仅需兼容分步入口时：
+The canonical local entry coordinates shared Supabase, Mailpit, database tests, and Edge Functions. It reuses healthy resources with matching identity and only starts missing resources:
 
-```powershell
-npm run supabase:local:start
-npm run test:db
+```bash
+npm run local-dev
 ```
 
-`supabase:local:start` 会转到同级 `shadow-size/merchant-admin`，启动共享本地 Supabase，并按 Shadow Portal 控制面的 SHA-256 校验结果加载 Shadow Mate 的 `learning_*` 业务 schema。控制面历史快照只会应用到 `127.0.0.1:54322`，不会复制到生产迁移目录，也不会连接生产数据库。
+The shared local Supabase API is local-only and Mailpit is available at [http://127.0.0.1:54324](http://127.0.0.1:54324). A feature worktree that starts Vite directly does not automatically start Mailpit or switch to local Supabase; configure its loopback Supabase URL and publishable key explicitly.
 
-如果要验收登录、找回密码或其他 Edge Function，再开一个终端运行：
+Non-production and Preview sources must not connect to production Supabase. Remote production access is blocked unless an explicitly authorized temporary verification override is provided. Never put production credentials or service-role keys in this repository.
 
-```powershell
+Compatibility wrappers remain available when only the split entry points are needed:
+
+```bash
+npm run supabase:local:start
 npm run supabase:local:functions:serve
 ```
 
-该命令会准备共享函数覆盖层并以前台方式运行本地函数服务；关闭该终端就会停止函数服务。
+Do not run a bare `supabase start` in the repository root as a replacement for the shared local entry.
 
-如果要对共享本地数据库执行 lint，请在 merchant-admin 目录运行：
+For local database linting:
 
-```powershell
+```bash
 cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-`test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码、数据生命周期和云端冲突限次重试；真实 Supabase E2E 需要额外配置环境变量。
+Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` before merging or releasing.
 
-日常开发按改动范围选择最小充分的检查：页面改动运行目标 UI 测试，数据库/认证/同步改动补充对应集成测试；合并或发布前运行 `npm.cmd run test:full`。`test:fast` 是静态检查加全部 unit test，不是 changed-only 测试。
-
-## 工作方式
+## How it works
 
 ```text
-浏览器本机状态
+Browser-local state
       │
-      ├─ 未登录：离线学习、打卡、积分和绘本记录
+      ├─ Signed out: offline learning, check-ins, points, and picture books
       │
-      └─ 登录家庭空间
+      └─ Family sign-in
               │
-              ├─ 按学习者隔离记录
-              ├─ 按版本号合并多设备状态
-              └─ 通过 RLS 和项目边界保护云端数据
+              ├─ Learner-scoped records
+              ├─ Versioned multi-device sync
+              └─ RLS and product-boundary protection
 ```
 
-- 本机学习状态保存在浏览器 `localStorage`，当前学习者单独保存。
-- 云端状态以完整 JSONB 快照保存，使用版本号处理并发冲突，减少离线场景的迁移和回归风险。
-- 家庭、学习者和学习状态按家庭边界隔离；删除家庭时只作用于当前产品和当前家庭，不触碰其他项目身份。
-- 家庭空间支持导出家庭 JSON 数据、删除家庭数据；当前共享 Supabase 项目中的服务端流程只删除影伴自己的关联数据，不删除共享 Auth 身份。完整身份删除仅在专用、隔离的 Supabase 项目中启用。
+- Local learning state is stored in browser storage and scoped to the active learner.
+- Cloud state is stored as versioned JSON snapshots. Network failure must not destroy local state.
+- If a learner switch cannot confirm the complete active scope, the application fails closed and pauses local and cloud writes. The protection survives refreshes until a parent explicitly clears local data.
+- Clearing local data keeps fail-closed protection until both local storage and Growth Loop IndexedDB have been cleared successfully.
+- Deleting a family removes Shadow Mate's associated family data without deleting the shared Auth identity.
+- Full identity deletion is enabled only in an isolated Supabase project with an explicitly authorized server-side flow.
 
-## 项目结构
+## Repository structure
 
 ```text
-src/app.js                 页面渲染、交互和本机状态
-vite.config.js              Vite 开发环境兼容处理（当前仍包含 Piper 过渡资源）
-src/learning-state.js      学习状态机与四个模块的打卡分组
-src/cloud.js               验证码/密码登录、家庭空间、同步、导出与删除
-src/action-lock.js         全局快速连点拦截与异步操作单次执行锁
-src/icons.js               Lucide 图标渲染与图标 hydration
-supabase/migrations/       已按控制面登记来源恢复的本地 schema / 隔离 CI 测试副本
-supabase/functions/        账号级服务端删除
-tests/unit/                纯函数与学习状态机测试
-tests/e2e/                 离线、云端和数据生命周期测试
+src/app.js                 UI rendering, interaction, and local state
+src/learning-state.js      Learning state machine and module grouping
+src/cloud.js               Authentication, family space, sync, export, and deletion
+src/action-lock.js         Duplicate-action and async-operation guards
+src/icons.js               Lucide icon rendering and hydration
+supabase/migrations/       Migration proposals and isolated CI test copies
+supabase/functions/        Account-level server functions
+tests/unit/                Pure-function and state-machine tests
+tests/e2e/                 Offline, cloud, and data-lifecycle tests
 ```
 
-## Supabase 与安全边界
+## Supabase and security boundary
 
-当前部署配置位于 `src/config.js`，浏览器端只使用 publishable key。真正的数据隔离由 Supabase RLS、家庭成员关系和产品 ID 共同完成；绝不能把 secret key 或 `service_role` key 放进仓库。
+The browser uses only a publishable Supabase key. Data isolation is enforced by Supabase RLS, household membership, and product identity. Never expose a secret or service-role key in browser code.
 
-### 共享 Supabase 与迁移边界
+This repository contains migration proposals and isolated CI test copies. Production migrations are managed by the Shadow Portal control plane. Do not run production `db push`, `migration repair`, `--include-all`, linked SQL, or manual `schema_migrations` edits from this repository.
 
-影伴接入共享 Supabase 后，日常本地验收通过中央 `npm run local-dev`，由同级
-`shadow-size/merchant-admin` 启动共享本地实例，并加载经 Shadow Portal 控制面校验的
-Shadow Mate `learning_*` schema。需要仅排查数据库或兼容 Edge 时，才使用上面的两个旧 npm
-wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper，但保留
-`supabase/functions/_shared/README.md` 作为受控空 shared bundle，供中央 Edge generation
-做来源校验和增量重建。
+The local Supabase profile and migration sources are checked by the shared local-development contract. This local contract does not grant production migration permissions.
 
-仓库中的 `supabase/migrations/` 仍用于保存与代码同步的迁移提案和隔离 CI 测试副本，不是共享生产库的唯一发布目录。共享生产迁移的 canonical 文件、审批、发布和台账由 `shadow-portal/supabase/control-plane` 管理；不要在本仓库直接执行生产 `db push`、`migration repair` 或 linked SQL。
+## Current release boundary
 
-当前本地 Growth Loop 9 条迁移已按控制面登记来源恢复并逐条核验 SHA-256：8 条来自 `origin/feat/growth-loop-integration`，期初积分迁移来自 `origin/main`。这只恢复本地 Schema 来源，不代表产品仓库获得生产迁移发布权限。
+Shadow Mate is an open-source family learning PWA. It has no advertising and no independent child accounts. Anonymous, aggregated page-visit data may be collected through [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). See [Privacy](PRIVACY.md) for data scope and deletion behavior, and [Security](SECURITY.md) for private vulnerability reports.
 
-`supabase/config.toml` 的独立端口和迁移配置仅供 CI/隔离测试使用。不要在影伴仓库根目录直接运行裸 `supabase start` 来代替共享本地启动。
+## Speech fallback
 
-数据库迁移提案包括：
+“Listen” prefers an English system voice when one is available. Devices without a usable English system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the `en_US-ljspeech-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
 
-- 项目登记和共享多租户兼容性
-- 家庭、成员、学习者和学习状态表
-- 产品约束、年级兼容性和索引
-- 家庭删除生命周期、Auth 身份删除和服务端执行权限
+## Acknowledgements
 
-详细设计见 [架构文档](docs/architecture.md)，数据范围见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+The speech fallback uses these open-source projects:
 
-## 文档导航
+- [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
+- [rhasspy/piper](https://github.com/rhasspy/piper) (MIT): lightweight neural speech synthesis
+- [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT): browser inference runtime
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` voice model distributed through `voice.shadow.wang`
 
-| 文档 | 用途 |
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and license details.
+
+## Documentation
+
+| Document | Purpose |
 | --- | --- |
-| [使用指南](docs/user-guide.md) | 家长登录、家庭空间、打卡、日历、同步、语音和安装 |
-| [架构文档](docs/architecture.md) | 数据模型、同步策略、RLS、迁移和发布闸门 |
-| [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
-| [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
-| [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、Piper、模型和 vendored 资源的来源与许可状态 |
-| [Changelog](CHANGELOG.md) | 详细变更记录 |
-| [Release Notes](RELEASE_NOTES.md) | 版本发布说明 |
+| [Chinese README](README.zh-CN.md) | Complete Chinese product and development guide |
+| [User guide](docs/user-guide.md) | Sign-in, family space, check-ins, sync, speech, and installation |
+| [Logo usage](docs/logo-usage.md) | Adopted Shadow Mate Logo usage |
+| [Release notes](RELEASE_NOTES.md) | English user-facing changes |
+| [Chinese release notes](RELEASE_NOTES.zh-CN.md) | Chinese user-facing changes |
+| [Release Notes template](docs/release-notes-template.md) | Authoring rules and structure |
+| [Third-party notices](THIRD_PARTY_NOTICES.md) | Included libraries and assets |
+| [Privacy](PRIVACY.md) · [Security](SECURITY.md) | Data and responsible disclosure policies |
 
-## 当前边界
+## Contact
 
-影伴当前仓库版本为 v1.3.6，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+I share product and AI-building work across several channels:
 
-## 致谢
-
-影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
-
-- [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
-- [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
-- [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-ljspeech-medium`
-
-第三方资源的来源、版本指纹和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-## 联系我
-
-如果你对 B 端产品、AI 产品开发、供应链数字化或 Shadow 系列产品感兴趣，可以通过以下方式联系我：
-
-- **X（Twitter）**：[@Gollumgulu](https://x.com/Gollumgulu)
-- **微信公众号**：Ward 的 AI 产品实战
-
-  <p align="center">
-    <img src="./assets/readme/wechat-public-account.png" width="180" alt="微信公众号：Ward 的 AI 产品实战">
-  </p>
-
-- **小红书 / 微博 / 抖音**：全网同名「Ward 的 AI 产品实战」——[小红书](https://xhslink.cn/m/4W1NWyRrxv5) · [微博](https://weibo.com/u/8344390431) · [抖音](https://v.douyin.com/1y06PMohfoE/)
-- **产品主页**：[Shadow Nexus](https://www.shadow.wang/)
-- **Email**：[wardlu@126.com](mailto:wardlu@126.com)
-
-> **可接 1v1 咨询和项目陪跑，欢迎联系。**
->
-> 产品诊断 · AI 实施 · 工作流 / Skill / 系统定制
+- X: [@Gollumgulu](https://x.com/Gollumgulu)
+- WeChat Official Account: **Ward 的 AI 产品实战**
+- Xiaohongshu / Weibo / Douyin: **Ward 的 AI 产品实战** — [Xiaohongshu](https://xhslink.cn/m/4W1NWyRrxv5) · [Weibo](https://weibo.com/u/8344390431) · [Douyin](https://v.douyin.com/1y06PMohfoE/)
+- Product site: [Shadow Nexus](https://www.shadow.wang/)
+- Email: [wardlu@126.com](mailto:wardlu@126.com)
 
 ## License
 
-代码采用 MIT License。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容、模型或商标的使用权。Shadow Mate 品牌边界见 [TRADEMARKS.md](TRADEMARKS.md)。
+The code is released under the [MIT License](LICENSE). Third-party content, models, and trademarks remain the property of their respective owners.

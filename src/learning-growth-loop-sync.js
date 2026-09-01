@@ -1,0 +1,261 @@
+const DEFAULT_RETRY_BASE_MS = 1000;
+const MAX_RETRY_DELAY_MS = 15 * 60 * 1000;
+
+function createWorkerId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `growth-sync-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createOperationId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `growth-operation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createOperationContext(scopeKey, canCommit, suppliedContext = null) {
+  const guard = suppliedContext?.canCommit || canCommit;
+  const signal = suppliedContext?.signal || null;
+  const context = {
+    scope_key: suppliedContext?.scope_key || scopeKey,
+    operation_id: suppliedContext?.operation_id || createOperationId(),
+    canCommit: () => !signal?.aborted && guard() !== false,
+    signal,
+  };
+  return Object.freeze(context);
+}
+
+function claimMatches(claim, { eventId, scopeKey, workerId, operationContext, now }) {
+  return Boolean(
+    claim
+      && typeof claim === "object"
+      && claim.event_id === eventId
+      && claim.scope_key === scopeKey
+      && claim.processing_by === workerId
+      && claim.operation_id === operationContext.operation_id
+      && claim.lease_id
+      && Number(claim.lease_until || 0) > Number(now),
+  );
+}
+
+async function dependenciesAreConfirmed(db, event) {
+  const hasDependencies = Object.prototype.hasOwnProperty.call(event || {}, "depends_on");
+  if (!hasDependencies) return true;
+  const dependencies = event.depends_on;
+  if (!Array.isArray(dependencies) || dependencies.some((eventId) => typeof eventId !== "string" || eventId.trim() === "")) {
+    return false;
+  }
+  if (dependencies.length === 0) return true;
+  if (typeof db.getOutbox !== "function") return false;
+  const dependencyRows = await Promise.all(dependencies.map((eventId) => db.getOutbox(eventId)));
+  return dependencyRows.every((dependency) => dependency?.status === "confirmed");
+}
+
+function retryDelay(attempts, base, jitter, random = Math.random) {
+  const exponential = Math.min(MAX_RETRY_DELAY_MS, base * (2 ** Math.max(0, attempts - 1)));
+  const spread = Math.max(0, Math.min(1, jitter));
+  const multiplier = 1 - spread + (random() * spread * 2);
+  return Math.round(exponential * multiplier);
+}
+
+export function createOutboxSync({
+  db,
+  transport,
+  now = () => Date.now(),
+  retryBaseMs = DEFAULT_RETRY_BASE_MS,
+  jitter = 0.2,
+  random = Math.random,
+  workerId = createWorkerId(),
+  leaseMs = 30_000,
+  onConfirmed = async () => {},
+  onRetryable = async () => {},
+  onRejected = async () => {},
+} = {}) {
+  if (!db || !transport?.send) throw new Error("outbox_sync_dependencies_required");
+
+  async function syncScope(scopeKey, options = {}) {
+    const limit = options.limit || 100;
+    const operationContext = createOperationContext(
+      scopeKey,
+      options.canCommit || (() => true),
+      options.operationContext,
+    );
+    const canCommit = operationContext.canCommit;
+    if (operationContext.scope_key !== scopeKey) {
+      return { skipped: true, reason: "stale_profile_scope" };
+    }
+    if (!canCommit()) return { skipped: true, reason: "stale_profile_scope" };
+    const queuedEvents = await db.listOutbox(scopeKey, {
+      statuses: ["pending", "retryable"],
+      now: Number.MAX_SAFE_INTEGER,
+      limit,
+    });
+    const currentTime = now();
+    const events = [];
+    let nextAttemptAt = null;
+    for (const event of queuedEvents) {
+      const eventAttemptAt = Number(event.next_attempt_at || 0);
+      if (eventAttemptAt > currentTime) {
+        // Preserve FIFO: a later pending event must not bypass the retryable
+        // queue head while its backoff window is still active.
+        nextAttemptAt = eventAttemptAt;
+        break;
+      }
+      events.push(event);
+    }
+    const report = {
+      confirmed: 0,
+      duplicate: 0,
+      retryable: 0,
+      conflict: 0,
+      rejected: 0,
+      pending: queuedEvents.length,
+      blocked: queuedEvents.length > 0 && events.length === 0,
+      next_attempt_at: nextAttemptAt,
+    };
+    for (const event of events) {
+      if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+      if (!await dependenciesAreConfirmed(db, event)) {
+        return { ...report, blocked: true };
+      }
+      const claimed = await db.claimOutbox?.(event.event_id, {
+        worker_id: workerId,
+        operation_id: operationContext.operation_id,
+        now: now(),
+        lease_ms: leaseMs,
+        canCommit,
+        signal: operationContext.signal,
+      });
+      if (db.claimOutbox && !claimed) return { ...report, blocked: true };
+
+      let lease = claimed;
+      if (db.claimOutbox) {
+        const rereadLease = await db.getOutbox?.(event.event_id);
+        lease = rereadLease;
+      }
+      if (db.claimOutbox && !claimMatches(lease, {
+        eventId: event.event_id,
+        scopeKey,
+        workerId,
+        operationContext,
+        now: now(),
+      })) {
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+        return { ...report, blocked: true };
+      }
+      if (!canCommit()) {
+        await db.releaseOutboxClaim?.(event.event_id, {
+          worker_id: workerId,
+          lease_id: lease?.lease_id,
+          operation_id: operationContext.operation_id,
+        });
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
+      }
+
+      const claimedEvent = lease && typeof lease === "object"
+        ? { ...event, ...lease }
+        : event;
+      let result;
+      try {
+        result = await transport.send(claimedEvent, { operationContext, lease });
+      } catch (error) {
+        result = { status: "retryable", error_code: "network_error", error_message: error?.message || "network_error" };
+      }
+      if (!canCommit()) {
+        await db.releaseOutboxClaim?.(event.event_id, {
+          worker_id: workerId,
+          lease_id: lease?.lease_id,
+          operation_id: operationContext.operation_id,
+        });
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
+      }
+      const status = result?.status || "retryable";
+      const expectedClaim = db.claimOutbox
+        ? {
+            worker_id: workerId,
+            operation_id: operationContext.operation_id,
+            lease_id: lease.lease_id,
+            now: now(),
+          }
+        : undefined;
+      if (status === "confirmed" || status === "duplicate") {
+        const updated = await db.updateOutbox(event.event_id, {
+          status: "confirmed",
+          confirmed_at: new Date(now()).toISOString(),
+          error_code: null,
+          error_message: null,
+          response: result?.data || null,
+          processing_by: null,
+          lease_until: 0,
+          lease_id: null,
+          operation_id: null,
+        }, {
+          canCommit,
+          signal: operationContext.signal,
+          expectedClaim,
+        });
+        if (updated === null || updated === false) {
+          return { ...report, skipped: true, reason: "stale_profile_scope" };
+        }
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+        await onConfirmed(claimedEvent, result);
+        report[status] += 1;
+        report.pending -= 1;
+        continue;
+      }
+      if (status === "retryable") {
+        const attempts = Number(event.attempts || 0) + 1;
+        const retryAt = now() + retryDelay(attempts, retryBaseMs, jitter, random);
+        const updated = await db.updateOutbox(event.event_id, {
+          status: "retryable",
+          attempts,
+          next_attempt_at: retryAt,
+          error_code: result?.error_code || "retryable_error",
+          error_message: result?.error_message || null,
+          processing_by: null,
+          lease_until: 0,
+          lease_id: null,
+          operation_id: null,
+        }, {
+          canCommit,
+          signal: operationContext.signal,
+          expectedClaim,
+        });
+        if (updated === null || updated === false) {
+          return { ...report, skipped: true, reason: "stale_profile_scope" };
+        }
+        if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+        await onRetryable(claimedEvent, { ...result, status: "retryable" });
+        report.retryable += 1;
+        report.blocked = true;
+        report.next_attempt_at = retryAt;
+        break;
+      }
+      const terminalStatus = status === "conflict" ? "conflict" : "rejected";
+      const updated = await db.updateOutbox(event.event_id, {
+        status: terminalStatus,
+        error_code: result?.error_code || `${terminalStatus}_error`,
+        error_message: result?.error_message || null,
+        processing_by: null,
+        lease_until: 0,
+        lease_id: null,
+        operation_id: null,
+      }, {
+        canCommit,
+        signal: operationContext.signal,
+        expectedClaim,
+      });
+      if (updated === null || updated === false) {
+        return { ...report, skipped: true, reason: "stale_profile_scope" };
+      }
+      if (!canCommit()) return { ...report, skipped: true, reason: "stale_profile_scope" };
+      await onRejected(claimedEvent, { ...result, status: terminalStatus });
+      report[terminalStatus] += 1;
+      report.pending -= 1;
+      report.blocked = true;
+      break;
+    }
+    if (report.next_attempt_at !== null && report.pending > 0) report.blocked = true;
+    return report;
+  }
+
+  return { syncScope };
+}

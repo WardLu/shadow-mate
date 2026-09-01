@@ -1,9 +1,4 @@
 import { inject } from "@vercel/analytics";
-import {
-  ANALYTICS_EVENTS,
-  hasConsecutiveCheckinDays,
-  recordAnalyticsEvent,
-} from "./analytics.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
   renderWritingPrintSheetHtml,
@@ -14,7 +9,6 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
-import { createScopedStateStorage } from "./local-state.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import {
@@ -28,20 +22,33 @@ import {
 } from "./piper-tts.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
-  CHECKIN_GROUPS,
+  createLearningState,
   getHanziRotationState,
   hasCompatibleHanziRotationScope,
   hasCheckin,
-  isPointMarked,
-  normalizeLearningStateForScope,
-  normalizeLearningState,
+  replaceHanziRotationState,
   transitionLearningState,
 } from "./learning-state.js";
-
-const CHECKIN_MODULES = Object.keys(CHECKIN_GROUPS);
+import { getLearningStateStorageKey, migrateLegacyLearningState } from "./learning-state-envelope.js";
+import {
+  FOUNDATION_PACKAGE,
+  getContentModuleDefinition,
+  getEnabledModuleIds,
+  normalizeContentConfig,
+  setContentModuleEnabled,
+  setContentPackageEnabled,
+} from "./learning-content-package.js";
+import {
+  clearLearningDeskStorage,
+  loadLearningStateEnvelope,
+  adoptPendingLearningState,
+} from "./learning-state-storage.js";
+import { createIndexedDbLearningDb } from "./learning-local-db.js";
+import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
+import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
+import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 
 inject();
-recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 
@@ -147,25 +154,78 @@ const PEANUT_BOOKS = [
    状态 / 存档层（localStorage 永久存档）
    ========================================================= */
 const STORE_KEY = "shadow_mate_workbench_v1";
-const SCOPED_STORE_KEY = "shadow_mate_workbench_scoped_v1";
+const PROFILE_SCOPE_BLOCKED_KEY = "shadow_mate_profile_scope_blocked";
 
-const scopedStateStorage = createScopedStateStorage({
-  storage: localStorage,
-  legacyKey: STORE_KEY,
-  scopedKey: SCOPED_STORE_KEY,
-  normalize: normalizeLearningState,
-  normalizeForScope: normalizeLearningStateForScope,
+function isProfileScopeBlocked() {
+  return localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
+    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+}
+
+const profileScopeBlockedAtStartup = isProfileScopeBlocked();
+const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
+const growthLoopController = createGrowthLoopController({
+  db: growthLoopDb,
+  canWrite: () => !isProfileScopeBlocked()
+    && window.cloudSync?.canWriteLocalState?.() !== false,
+  canTransition: () => !isProfileScopeBlocked()
+    && window.cloudSync?.canWriteScopeTransition?.() !== false,
 });
-scopedStateStorage.migrateLegacyToAnonymous();
+let growthLoopSnapshot = growthLoopController.getSnapshot();
+let CURRENT_MOD = "home";
+window.growthLoop = growthLoopController;
 
-let persistenceScope = "anonymous";
-let store = normalizeLearningStateForScope(scopedStateStorage.load(persistenceScope), persistenceScope);
+function clientRequestId(prefix = "growth") {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function queueGrowthActivity(event_type, payload = {}, bucket = "once") {
+  const scope = growthLoopController.getScope();
+  if (!scope.household_id || !scope.profile_id) return Promise.resolve(null);
+  return growthLoopController.queueActivity({
+    event_type,
+    event_id: activityEventIdFor({ ...scope, event_type, bucket }),
+    payload,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    client_version: document.documentElement.dataset.version || null,
+  }).catch((error) => {
+    console.warn("Growth Loop activity event queued locally but could not be written:", error);
+    return null;
+  });
+}
+
+growthLoopController.subscribe((nextSnapshot) => {
+  growthLoopSnapshot = nextSnapshot;
+  if (CURRENT_MOD === "points" || CURRENT_MOD === "grow") switchMod(CURRENT_MOD);
+});
+
+function learningStateFromEnvelope(envelope) {
+  return envelope?.schema_version === 2 && envelope.learning ? envelope.learning : envelope;
+}
+
+function learningStateReadStorage() {
+  if (!isProfileScopeBlocked()) return localStorage;
+  // Storage migration helpers are intentionally read-only while a prior
+  // profile operation is fail-closed, including during a same-tab reload.
+  return {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: () => {},
+  };
+}
+
+function readStoredState(){
+  return learningStateFromEnvelope(loadLearningStateEnvelope(learningStateReadStorage(), {}));
+}
+
+let store = createLearningState(readStoredState());
 if(!store.checkins) store.checkins = {};   // {date: {module:true}}
 if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
-if(!store.points) store.points = {};       // {ym: {itemIdx: {day:1}}} 积分打卡记录
+if(!store.points) store.points = {};       // 仅保留旧积分历史；新 Growth Loop 不再写入此字段
 if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
 if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
 if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
+
+let learningEnvelope = loadLearningStateEnvelope(learningStateReadStorage(), {});
 
 const WRITING_PRINT_ROOT_ID = "writingPrintRoot";
 let activeWorksheetSnapshot = null;
@@ -179,6 +239,13 @@ function getLearningTimeZone() {
   }
 }
 
+function getHanziLearnerScope() {
+  const profileId = learningEnvelope?.scope?.profile_id;
+  return typeof profileId === "string" && profileId.length > 0
+    ? `profile:${profileId}`
+    : "anonymous";
+}
+
 function removeWritingPrintRoot() {
   document.getElementById(WRITING_PRINT_ROOT_ID)?.remove();
   activeWorksheetSnapshot = null;
@@ -186,7 +253,7 @@ function removeWritingPrintRoot() {
 
 function createWritingPrintRoot(worksheet) {
   removeWritingPrintRoot();
-  activeWorksheetSnapshot = worksheet;
+  activeWorksheetSnapshot = structuredClone(worksheet);
   const root = document.createElement("div");
   root.id = WRITING_PRINT_ROOT_ID;
   root.className = "writing-print-root";
@@ -195,22 +262,18 @@ function createWritingPrintRoot(worksheet) {
 }
 
 function resolveWritingWorksheet() {
-  const scopedStore = normalizeLearningStateForScope(store, persistenceScope);
-  if (JSON.stringify(scopedStore) !== JSON.stringify(store)) {
-    store = scopedStore;
-    if (!save()) return null;
-  }
-  if (!hasCompatibleHanziRotationScope(store, persistenceScope)) return null;
+  const learnerScope = getHanziLearnerScope();
+  if (!hasCompatibleHanziRotationScope(store, learnerScope)) return null;
   const resolved = resolveDailyWorksheet({
     rotationState: getHanziRotationState(store),
     pack: getActiveHanziWritingPack(),
-    learnerScope: persistenceScope,
+    learnerScope,
     now: new Date(),
     timeZone: getLearningTimeZone(),
   });
   const nextStore = transitionLearningState(store, {
-    type: "HANZI_ROTATION_REPLACED",
-    rotationState: resolved.rotationState,
+    type: "STATE_REPLACED",
+    state: replaceHanziRotationState(store, resolved.rotationState),
   });
   if (JSON.stringify(nextStore) !== JSON.stringify(store)) {
     store = nextStore;
@@ -233,20 +296,62 @@ function recordActiveWorksheetCompletion() {
   const rotationState = getHanziRotationState(store);
   if (!rotationState) return;
   store = transitionLearningState(store, {
-    type: "HANZI_ROTATION_REPLACED",
-    rotationState: recordWorksheetCompletion({
+    type: "STATE_REPLACED",
+    state: replaceHanziRotationState(store, recordWorksheetCompletion({
       rotationState,
       worksheet: activeWorksheetSnapshot,
       completedAt: new Date().toISOString(),
-    }),
+    })),
   });
 }
 
+function canWriteLearningState({ allowScopeTransition = false } = {}) {
+  const cloudWriteCheck = allowScopeTransition
+    ? window.cloudSync?.canWriteScopeTransition?.()
+    : window.cloudSync?.canWriteLocalState?.();
+  return !isProfileScopeBlocked()
+    && cloudWriteCheck !== false;
+}
+
+function persistLearningState({ canCommit = () => true, allowScopeTransition = false } = {}){
+  if (!canWriteLearningState({ allowScopeTransition }) || !canCommit()) return false;
+  learningEnvelope = {
+    ...learningEnvelope,
+    schema_version: 2,
+    product_id: "shadow-mate",
+    learning: structuredClone(store),
+  };
+  const scope = learningEnvelope.scope || {};
+  localStorage.setItem(getLearningStateStorageKey(scope), JSON.stringify(learningEnvelope));
+  // 兼容旧版本的低风险学习状态读取和既有冲突测试；新 Growth Loop
+  // 账本永远不写入旧 state.points。
+  localStorage.setItem(STORE_KEY, JSON.stringify({ ...store, points: {} }));
+  return true;
+}
+
 function save(){
-  store = normalizeLearningStateForScope(store, persistenceScope);
-  const saved = scopedStateStorage.save(persistenceScope, store, { pending: true });
-  if (saved) window.cloudSync?.schedule();
-  return saved;
+  if (!canWriteLearningState()) return false;
+  persistLearningState();
+  window.cloudSync?.schedule();
+  return true;
+}
+
+async function setLearningScope(scope, { adoptPending = false, canCommit = () => true } = {}) {
+  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
+  learningEnvelope = adoptPending
+    ? adoptPendingLearningState(localStorage, scope)
+    : loadLearningStateEnvelope(localStorage, scope);
+  store = createLearningState(learningStateFromEnvelope(learningEnvelope));
+  if(!store.checkins) store.checkins = {};
+  if(!store.extra) store.extra = {};
+  if(!store.points) store.points = {};
+  if(!store.bookShelf) store.bookShelf = {};
+  if(!store.peanutLog) store.peanutLog = [];
+  if(!store.peanutRead) store.peanutRead = {};
+  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
+  persistLearningState({ canCommit, allowScopeTransition: true });
+  switchMod(CURRENT_MOD);
+  return structuredClone(learningEnvelope);
 }
 
 function todayKey(){
@@ -268,7 +373,31 @@ function isChecked(mod){
   return hasCheckin(store.checkins[t], mod);
 }
 
+function enabledModuleIds(){
+  return getEnabledModuleIds(store.content_config);
+}
+
+function updateContentPackage(enabled){
+  if (!canWriteLearningState()) return;
+  store = { ...store, content_config: setContentPackageEnabled(store.content_config, enabled) };
+  save();
+  switchMod(CURRENT_MOD);
+}
+
+function updateContentModule(moduleId, enabled){
+  if (!canWriteLearningState()) return;
+  store = { ...store, content_config: setContentModuleEnabled(store.content_config, moduleId, enabled) };
+  save();
+  switchMod(CURRENT_MOD);
+}
+
+function contentModuleLabel(moduleId){
+  const labels = { chinese: "语文学习", math: "数学与数感", english: "英语学习", book: "绘本读物" };
+  return labels[moduleId] || moduleId;
+}
+
 function toggleCheckin(mod){
+  if (!canWriteLearningState()) return;
   let checkinDate = todayKey();
   if (mod === "chinese-writing" && activeWorksheetSnapshot?.dayKey !== checkinDate) {
     switchMod("chinese");
@@ -287,10 +416,12 @@ function toggleCheckin(mod){
   });
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   save();
-  recordAnalyticsEvent(ANALYTICS_EVENTS.firstCheckin, { once: true });
-  if (hasConsecutiveCheckinDays(store.checkins, 3)) {
-    recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
-  }
+  void queueGrowthActivity(
+    ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
+    { source: "checkin", entry_type: "manual" },
+    `${todayKey()}:${mod}`,
+  );
+  window.cloudSync?.scheduleGrowthLoop?.();
 }
 function streak(mod){
   let s = 0;
@@ -309,37 +440,71 @@ function totalChecked(mod){
 
 /* 积分打卡辅助 */
 function ymKey(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1); }
-function pointOn(itemIdx, day){
-  const ym = ymKey();
-  return isPointMarked(store, ym, itemIdx, day);
+function dateKeyForDay(day){
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(Number(day));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-function togglePoint(itemIdx, day){
-  store = transitionLearningState(store, {
-    type: "POINT_TOGGLED",
-    month: ymKey(),
-    itemIndex: itemIdx,
-    day,
+function visiblePointItems(){
+  const items = window.growthLoop?.getPointItems?.() || [];
+  if(items.length) return items;
+  return POINT_ITEMS.map((item, index) => ({
+    id: `recommended:${index}`,
+    name: item.name,
+    description: item.desc,
+    default_points: item.pts,
+    icon_key: PTS_ICON[item.name] || "star",
+    item_kind: "recommended",
+  }));
+}
+function pointItemAt(itemId){
+  return visiblePointItems().find((item) => item.id === itemId) || null;
+}
+function pointOn(itemId, day){
+  const item = pointItemAt(itemId);
+  if(!item?.id || item.id.startsWith("recommended:")) return false;
+  return getActivePointAction(growthLoopSnapshot, item.id, dateKeyForDay(day));
+}
+function togglePoint(itemId, day){
+  if (!canWriteLearningState()) return;
+  const item = pointItemAt(itemId);
+  if(!item) return;
+  const requestId = clientRequestId("point");
+  void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
+    void queueGrowthActivity(
+      ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
+      { source: "point_item", entry_type: Number(item.default_points ?? item.pts) < 0 ? "adjustment" : "manual" },
+      requestId,
+    );
+    void queueGrowthActivity(ACTIVITY_EVENT_TYPES.CORE_ACTIVATION, { source: "point_item" }, "once");
+    window.cloudSync?.scheduleGrowthLoop?.();
+    renderPoints();
+  }).catch((error) => {
+    console.error("Growth Loop local point write failed:", error);
+    alert("本机记录没有保存成功，请稍后重试。");
   });
-  save();
 }
-function itemMonthTotal(itemIdx){
-  const ym = ymKey();
-  const rec = store.points[ym] && store.points[ym][itemIdx];
-  if(!rec) return 0;
-  return POINT_ITEMS[itemIdx].pts * Object.keys(rec).length;
+function itemMonthTotal(itemId){
+  const item = pointItemAt(itemId);
+  if(!item?.id || item.id.startsWith("recommended:")) return 0;
+  return getPointPeriodTotal(growthLoopSnapshot, item.id, currentPeriodKey());
 }
 function monthTotal(){
-  let s = 0;
-  for(let i=0;i<POINT_ITEMS.length;i++) s += itemMonthTotal(i);
-  return s;
+  return visiblePointItems().reduce((total, item) => total + itemMonthTotal(item.id), 0)
+    + getLegacyPeriodTotal(growthLoopSnapshot, currentPeriodKey());
+}
+function currentPeriodKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function pointDayState(day){
   let total = 0;
   let positive = false;
   let negative = false;
-  for(let i=0;i<POINT_ITEMS.length;i++){
-    if(!pointOn(i,day)) continue;
-    const points = POINT_ITEMS[i].pts;
+  for(const item of visiblePointItems()){
+    if(!pointOn(item.id,day)) continue;
+    const points = Number(item?.default_points || 0);
     total += points;
     if(points > 0) positive = true;
     if(points < 0) negative = true;
@@ -361,6 +526,62 @@ function dayTotal(day){
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
+let activeAudio = null;
+let activeAudioSource = null;
+let activeAudioSourceUrl = null;
+let sharedAudioContext = null;
+
+function getAudioContext() {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (typeof AudioContextCtor !== "function") return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    try {
+      sharedAudioContext = new AudioContextCtor();
+    } catch (_) {
+      sharedAudioContext = null;
+    }
+  }
+  return sharedAudioContext;
+}
+
+function releaseObjectUrl(url) {
+  if (!url?.startsWith("blob:")) return;
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+function releaseAudio(audio, url) {
+  if (activeAudio === audio) activeAudio = null;
+  audio.remove();
+  releaseObjectUrl(url);
+}
+
+function stopActivePlayback() {
+  if (activeAudioSource) {
+    const source = activeAudioSource;
+    activeAudioSource = null;
+    try {
+      source.stop();
+    } catch (_) {
+      // The source may already have ended.
+    }
+    try {
+      source.disconnect();
+    } catch (_) {
+      // Some lightweight browser implementations do not expose disconnect().
+    }
+    releaseObjectUrl(activeAudioSourceUrl);
+    activeAudioSourceUrl = null;
+  }
+  if (activeAudio) {
+    const previousAudio = activeAudio;
+    activeAudio = null;
+    previousAudio.pause();
+    const previousUrl = previousAudio.src;
+    previousAudio.remove();
+    releaseObjectUrl(previousUrl);
+  }
+}
+
 async function speak(t, button){
   const originalLabel = button?.dataset.label || "听发音";
   const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
@@ -386,12 +607,17 @@ async function speak(t, button){
     button.removeAttribute("data-speech-failure");
   };
   const fail = (message) => {
-    recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
     button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
     button.dataset.speechFailure = "true";
+    const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
+    void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
+      source: "offline_tts",
+      error_code: errorCode,
+      retryable: true,
+    }, `${errorCode}:${Date.now()}`);
     showSpeechGuide();
     window.setTimeout(() => {
       if (button.dataset.speechFailure === "true") restore();
@@ -415,6 +641,10 @@ async function speak(t, button){
 
   const speakOffline = async () => {
     setBusy("准备中…");
+    const audioContext = getAudioContext();
+    const audioContextReady = audioContext
+      ? Promise.resolve().then(() => audioContext.resume()).catch(() => {})
+      : null;
     let playbackTimer = null;
     const clearPlaybackTimer = () => {
       if (playbackTimer !== null) {
@@ -458,14 +688,66 @@ async function speak(t, button){
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-      const audio = new Audio(url);
+      stopActivePlayback();
+
+      if (audioContext) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error("生成的音频读取失败");
+          const audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+          await audioContextReady;
+          if (audioContext.state === "suspended") await audioContext.resume();
+          const source = audioContext.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(audioContext.destination);
+          activeAudioSource = source;
+          activeAudioSourceUrl = url;
+          let playbackSettled = false;
+          const finishPlayback = () => {
+            if (playbackSettled) return;
+            playbackSettled = true;
+            clearPlaybackTimer();
+            if (activeAudioSource === source) activeAudioSource = null;
+            if (activeAudioSourceUrl === url) activeAudioSourceUrl = null;
+            try {
+              source.disconnect();
+            } catch (_) {
+              // Some lightweight browser implementations do not expose disconnect().
+            }
+            restore();
+            releaseObjectUrl(url);
+          };
+          source.onended = finishPlayback;
+          const reportedDurationMs = Number.isFinite(duration) && duration > 0 ? duration : 0;
+          const decodedDurationMs = Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
+            ? audioBuffer.duration * 1000
+            : 0;
+          const playbackFallbackMs = Math.max(reportedDurationMs, decodedDurationMs) + 750;
+          playbackTimer = window.setTimeout(finishPlayback, Math.max(1000, playbackFallbackMs));
+          source.start();
+          if (!playbackSettled) setBusy("播放中…");
+          return;
+        } catch (_) {
+          if (activeAudioSourceUrl === url) {
+            activeAudioSource = null;
+            activeAudioSourceUrl = null;
+          }
+        }
+      }
+
+      const audio = document.createElement("audio");
+      audio.preload = "auto";
+      audio.setAttribute("aria-hidden", "true");
+      audio.src = url;
+      document.body.appendChild(audio);
+      activeAudio = audio;
       let playbackSettled = false;
       const finishPlayback = () => {
         if (playbackSettled) return;
         playbackSettled = true;
         clearPlaybackTimer();
         restore();
-        URL.revokeObjectURL(url);
+        releaseAudio(audio, url);
       };
       audio.onended = () => {
         finishPlayback();
@@ -475,12 +757,13 @@ async function speak(t, button){
         playbackSettled = true;
         clearPlaybackTimer();
         fail("发音失败，请重试");
-        URL.revokeObjectURL(url);
+        releaseAudio(audio, url);
       };
       const playbackFallbackMs = Number.isFinite(duration) && duration > 0
-        ? Math.max(1000, Math.ceil(duration * 1000) + 750)
+        ? Math.max(1000, Math.ceil(duration) + 750)
         : 5000;
       playbackTimer = window.setTimeout(finishPlayback, playbackFallbackMs);
+      audio.load();
       await audio.play();
       if (!playbackSettled) setBusy("播放中…");
     } catch (error) {
@@ -551,47 +834,107 @@ function renderHome(){
   const hz = HANZI[(di*2)%HANZI.length];
   const poem = POEMS[di%POEMS.length];
   const en = ENGLISH[di%ENGLISH.length];
-  const checkedToday = CHECKIN_MODULES.filter(isChecked).length;
-  const m = new Date().getMonth()+1;
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
+  const checkedToday = enabled.filter(isChecked).length;
   const main = el("main");
   main.innerHTML = "";
   main.appendChild($(`
     <div class="banner">
       <div class="t">${icon("construction")} 挖掘机小队长，今天也要加油哦！</div>
-      <div class="d">今日已打卡 ${checkedToday}/${CHECKIN_MODULES.length} 个学习模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」</div>
+      <div class="d">${learningOn
+        ? `今日已打卡 ${checkedToday}/${enabled.length} 个学习模块 · 语文今日新字「${hz[0]}」· 古诗《${poem.t}》· 英语单词「${en[0]}」`
+        : `学习包还没有启用，去「学习」页为这个孩子开启学习模块吧`}</div>
     </div>
   `));
 
-  const stat = $(`
-    <div class="card">
-      <h3>${icon("chart")} 今日成长数据</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${checkedToday}/${CHECKIN_MODULES.length}</div><div class="t">今日打卡</div></div>
-        <div class="stat"><div class="n">${streak("chinese")}</div><div class="t">语文连续(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计打卡</div></div>
-        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计打卡</div></div>
+  if (learningOn) {
+    const moduleStats = enabled.map((module) => ({
+      value: module === "chinese" ? streak("chinese") : totalChecked(module),
+      caption: module === "chinese" ? "语文连续(天)" : `${contentModuleLabel(module)}累计打卡`,
+    }));
+    const stat = $(`
+      <div class="card">
+        <h3>${icon("chart")} 今日成长数据</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${checkedToday}/${enabled.length}</div><div class="t">今日打卡</div></div>
+          ${moduleStats.map((s) => `<div class="stat"><div class="n">${s.value}</div><div class="t">${s.caption}</div></div>`).join("")}
+        </div>
+        <div class="progressbar"><i></i></div>
       </div>
-      <div class="progressbar"><i></i></div>
-    </div>
-  `);
-  main.appendChild(stat);
-  stat.querySelector(".progressbar i").style.width = (checkedToday/CHECKIN_MODULES.length*100)+"%";
+    `);
+    main.appendChild(stat);
+    stat.querySelector(".progressbar i").style.width = (checkedToday/enabled.length*100)+"%";
+  }
 
-  // 三大模块快捷入口
-  const mk = (mod,iconName,t,d)=>$(`
+  // 统一学习入口 + 积分
+  const mk = (mod,iconName,t,d,pillText)=>$(`
     <button class="card card-action" type="button" data-go="${mod}">
       <h3>${icon(iconName)} ${t}</h3>
       <div class="desc">${d}</div>
-      <span class="pill">${isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡"}</span>
+      <span class="pill">${pillText || (isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡")}</span>
     </button>
   `);
-  main.appendChild(mk("chinese","book","语文学习","识字·古诗词·写字 每日打卡"));
-  main.appendChild(mk("math","calculator","数学与数感","口算·数感游戏·数独 每日打卡"));
-  main.appendChild(mk("english","languages","英语学习","主题单词 每日推送与朗读打卡"));
-  main.appendChild(mk("book","library","绘本读物","多地优质绘本 · 跟读+思考题"));
+  main.appendChild(mk("learning","graduation","学习", learningOn ? "语文 · 数学 · 英语 · 绘本，按孩子启停" : "学习包未启用，点此开启", learningOn ? "学习" : "未启用"));
   main.appendChild(mk("points","star","积分打卡","加分减分 · 月度行为积分表"));
   main.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 家长登录后自动同步云端</div>`));
+}
+
+function renderLearning(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("graduation","学习"));
+  const config = normalizeContentConfig(store.content_config);
+  const enabled = enabledModuleIds();
+  const settings = $(`
+    <div class="card">
+      <h3>${icon("grid")} 学习包设置</h3>
+      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
+      <label class="switch-row">
+        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
+        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
+      </label>
+      ${FOUNDATION_PACKAGE.modules.map((module) => `
+      <label class="switch-row">
+        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
+        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
+      </label>`).join("")}
+    </div>
+  `);
+  main.appendChild(settings);
+  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
+    input.onchange = () => updateContentPackage(input.checked);
+  });
+  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
+    input.onchange = () => updateContentModule(input.dataset.moduleId, input.checked);
+  });
+
+  if (enabled.length) {
+    const entries = enabled.map((moduleId) => {
+      const module = getContentModuleDefinition(moduleId);
+      const done = isChecked(moduleId);
+      return `<button class="card card-action" type="button" data-go="${escapeHtml(module.content_entry)}">
+        <h3>${icon(module.icon_key)} ${escapeHtml(module.name)}</h3>
+        <div class="desc">${done ? "今日已完成" : "今日待打卡"} · 累计 ${totalChecked(moduleId)} 天 · 连续 ${streak(moduleId)} 天</div>
+        <span class="pill">${done ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡"}</span>
+      </button>`;
+    }).join("");
+    main.appendChild($(`
+      <div class="card">
+        <h3>${icon("list")} 学习模块</h3>
+        ${entries}
+      </div>
+    `));
+    main.querySelectorAll("[data-go]").forEach((c) => (c.onclick = () => switchMod(c.dataset.go)));
+  } else {
+    main.appendChild($(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习包未启用</h3>
+        <div class="desc">开启上方「启用学习包」后，才能看到并进入学习模块。</div>
+      </div>
+    `));
+  }
+  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
 /* =========================================================
@@ -644,7 +987,7 @@ function renderChinese(){
   createWritingPrintRoot(worksheet);
   const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
   const card3 = $(`
-    <div class="card">
+    <div class="card" data-writing-practice>
       <h3>${icon("pen")} 写字打卡 <span class="pill">今日字帖 · 4 行</span></h3>
       <div class="desc">8 个基础笔画：${strokesHtml}</div>
       <div class="desc">今天练习下面 4 行字帖，先描一格，再试着独立书写。</div>
@@ -835,55 +1178,326 @@ function renderEnglish(){
 /* =========================================================
    渲染：成长
    ========================================================= */
+function openingStatusLabel(entry) {
+  if (!entry) return "";
+  if (entry.status === "pending" || entry.status === "retryable") return "待联网确认";
+  if (entry.status === "confirmed") return "已确认";
+  if (entry.status === "conflict") return "待处理";
+  return "确认失败";
+}
+
+function legacyImportPresentation(status) {
+  switch (status) {
+    case "confirmed":
+      return {
+        iconName: "checkCircle",
+        title: "旧积分已导入",
+        statusLabel: "云端已确认",
+        description: "旧积分打卡明细已由云端确认，余额已恢复；导入记录只计入余额，不计入行为统计。如需纠错，请使用普通积分调整流水。",
+        canRetry: false,
+      };
+    case "retryable":
+      return {
+        iconName: "refresh",
+        title: "旧积分等待云端重试",
+        statusLabel: "等待重试",
+        description: "本机明细已保留，云端确认暂时失败，将自动重试；当前状态不能视为云端导入完成。",
+        canRetry: false,
+      };
+    case "rejected":
+      return {
+        iconName: "alert",
+        title: "旧积分导入未完成",
+        statusLabel: "云端已拒绝",
+        description: "云端拒绝了这次导入，本机尝试未计入当前余额。请检查登录与家庭权限后重新导入。",
+        canRetry: true,
+      };
+    case "conflict":
+      return {
+        iconName: "alert",
+        title: "旧积分导入发生冲突",
+        statusLabel: "需要处理",
+        description: "云端发现批次或积分明细冲突，本机尝试未计入当前余额。请刷新云端记录后再重新导入。",
+        canRetry: true,
+      };
+    default:
+      return {
+        iconName: "refresh",
+        title: "本机已导入，待云端确认",
+        statusLabel: "待云端确认",
+        description: "旧积分明细已安全保存在本机，正在等待云端确认；确认前不能视为导入完成，也不会显示成云端已恢复。",
+        canRetry: false,
+      };
+  }
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("sprout","成长记录"));
-  const total = CHECKIN_MODULES.reduce((sum, module) => sum + totalChecked(module), 0);
-  const card = $(`
-    <div class="card">
-      <h3>${icon("trophy")} 打卡总览</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${totalChecked("chinese")}</div><div class="t">语文累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("math")}</div><div class="t">数学累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("english")}</div><div class="t">英语累计(天)</div></div>
-        <div class="stat"><div class="n">${totalChecked("book")}</div><div class="t">绘本累计(天)</div></div>
-      </div>
-      <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
-      <div class="desc mt-14">${icon("flame")} 连续打卡：语文 ${streak("chinese")} 天 · 数学 ${streak("math")} 天 · 英语 ${streak("english")} 天 · 绘本 ${streak("book")} 天</div>
-      <div class="progressbar"><i></i></div>
-      <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
-    </div>
-  `);
-  main.appendChild(card);
-  card.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
 
-  // 日历式最近记录
-  let cells="";
-  for(let i=29;i>=0;i--){
-    const k=dateKeyOffset(i);
-    const c=store.checkins[k];
-    const n = CHECKIN_MODULES.filter((module) => hasCheckin(c, module)).length;
-    const lvl = n;
-    const day = Number(k.slice(-2));
-    const label = `${k}，${n ? `已完成 ${n}/${CHECKIN_MODULES.length} 个学习模块` : "未打卡"}`;
-    cells += `<div class="cal-cell lvl-${lvl}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${CHECKIN_MODULES.length}</span></div>`;
-  }
-  const cal = $(`
-    <div class="card">
-      <h3>${icon("calendar")} 近 30 天打卡日历</h3>
-      <div class="cal-grid">${cells}</div>
-      <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${CHECKIN_MODULES.length} 个模块，边框表示今天。</div>
-      <div class="cal-legend" aria-label="成长日历图例">
-        <span class="cal-legend-item"><i class="cal-swatch lvl-0" aria-hidden="true"></i>0/${CHECKIN_MODULES.length} 未打卡</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-1" aria-hidden="true"></i>1/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-2" aria-hidden="true"></i>2/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-3" aria-hidden="true"></i>3/${CHECKIN_MODULES.length} 模块</span>
-        <span class="cal-legend-item"><i class="cal-swatch lvl-4" aria-hidden="true"></i>${CHECKIN_MODULES.length}/${CHECKIN_MODULES.length} 全部完成</span>
-        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+  if (learningOn) {
+    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
+    const overview = $(`
+      <div class="card">
+        <h3>${icon("trophy")} 打卡总览</h3>
+        <div class="stat-grid">
+          ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
+        </div>
+        <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
+        <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
+        <div class="progressbar"><i></i></div>
+        <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
       </div>
-    </div>
-  `);
-  main.appendChild(cal);
+    `);
+    main.appendChild(overview);
+    overview.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+
+    // 日历式最近记录（只统计已启用模块）
+    let cells="";
+    for(let i=29;i>=0;i--){
+      const k=dateKeyOffset(i);
+      const c=store.checkins[k];
+      const n = enabled.filter((module) => hasCheckin(c, module)).length;
+      const day = Number(k.slice(-2));
+      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
+      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
+    }
+    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
+      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
+    ).join("");
+    const cal = $(`
+      <div class="card">
+        <h3>${icon("calendar")} 近 30 天打卡日历</h3>
+        <div class="cal-grid">${cells}</div>
+        <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
+        <div class="cal-legend" aria-label="成长日历图例">
+          ${legendLevels}
+          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+        </div>
+      </div>
+    `);
+    main.appendChild(cal);
+  } else {
+    const hint = $(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
+        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
+        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
+      </div>
+    `);
+    main.appendChild(hint);
+    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
+  }
+
+  const balance = getBalance(growthLoopSnapshot);
+  const opening = getOpeningBalance(growthLoopSnapshot);
+  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
+  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
+  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
+  const legacyPreview = legacyEntries.slice(-6).reverse();
+
+  let openingCard;
+  if (opening) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("checkCircle")} 期初积分已确认</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
+          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
+      </div>
+    `);
+  } else if (legacyImport) {
+    const presentation = legacyImportPresentation(legacyImport.status);
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
+          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
+          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">${presentation.description}</div>
+        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
+      </div>
+    `);
+  } else if (legacyEntries.length > 0) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("download")} 恢复旧积分</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
+          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
+        </div>
+        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
+        <div class="legacy-preview">
+          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
+          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
+        </div>
+        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
+      </div>
+    `);
+  } else {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("star")} 期初积分</h3>
+        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
+        <form id="openingBalanceForm" class="growth-form">
+          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
+          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+        </form>
+      </div>
+    `);
+  }
+  main.appendChild(openingCard);
+  const openingForm = openingCard.querySelector("#openingBalanceForm");
+  if (openingForm) {
+    openingForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const value = Number(form.get("balance"));
+      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
+        alert("请填写 1 到 1000000 的整数积分。");
+        return;
+      }
+      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
+      try {
+        const result = await window.growthLoop.confirmOpeningBalance({
+          balance: value,
+          note: "期初积分",
+          request_id: clientRequestId("opening"),
+        });
+        if (result.error === "opening_balance_already_confirmed") {
+          alert("这个孩子的期初积分已经确认过了。");
+        } else if (result.error) {
+          alert("期初积分确认失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderGrow();
+        }
+      } catch (error) {
+        console.error("Growth Loop opening balance confirm failed:", error);
+        alert("期初积分没有保存成功，请稍后重试。");
+      }
+    };
+  }
+  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
+  if (legacyImportBtn) {
+    legacyImportBtn.onclick = async () => {
+      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
+      legacyImportBtn.disabled = true;
+      try {
+        const result = await window.growthLoop.importLegacyPoints({
+          entries: legacyEntries,
+          request_id: clientRequestId("legacy-import"),
+        });
+        if (result.error === "legacy_points_already_imported") {
+          alert("这个孩子的旧积分已经导入过了。");
+        } else if (result.error) {
+          alert("旧积分导入失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderGrow();
+        }
+      } catch (error) {
+        console.error("Growth Loop legacy points import failed:", error);
+        alert("旧积分没有导入成功，请稍后重试。");
+      } finally {
+        legacyImportBtn.disabled = false;
+      }
+    };
+  }
+
+  const rewards = window.growthLoop?.getRewards?.() || [];
+  const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
+  const rewardCards = rewards.map((reward) => {
+    const cost = Number(reward.cost_points || 0);
+    const latest = growthLoopSnapshot.redemptions
+      .filter((item) => item.reward_id === reward.id)
+      .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
+    const status = latest?.status === "pending" ? "待联网确认" : latest?.status === "fulfilled" ? "已兑现" : "";
+    return `<div class="reward-card">
+      <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
+      <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
+      <span class="pts-badge">${cost}分</span>
+      <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${status || "兑换"}</button>
+    </div>`;
+  }).join("");
+  const rewardCard = $(`<div class="card growth-reward-card">
+      <h3>${icon("gift")} 奖励兑换</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
+        <div class="stat"><div class="n">${pendingRedemptions}</div><div class="t">待联网确认</div></div>
+      </div>
+      <div class="desc">离线兑换会先记为“待联网确认”，联网并完成服务端确认前不代表最终成功。</div>
+      <form id="rewardForm" class="growth-form">
+        <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
+        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加奖励</button>
+      </form>
+      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励，先添加一个约定吧。</div>'}</div>
+    </div>`);
+  main.appendChild(rewardCard);
+  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const cost = Number(form.get("cost"));
+    if (!name || !Number.isInteger(cost) || cost < 1 || cost > 100000) {
+      alert("请填写奖励名称，并输入 1 到 100000 的整数积分。");
+      return;
+    }
+    try {
+      await window.growthLoop.createReward({
+        request_id: clientRequestId("reward"),
+        reward: { name, description: "家庭约定奖励", cost_points: cost, category: "family", icon_key: "gift" },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    } catch (error) {
+      console.error("Growth Loop reward creation failed:", error);
+      alert("奖励没有保存成功，请稍后重试。");
+    }
+  };
+  rewardCard.querySelectorAll("[data-reward-id]").forEach((button) => {
+    button.onclick = async () => {
+      const requestId = clientRequestId("redemption");
+      button.disabled = true;
+      const result = await window.growthLoop.redeemReward({ reward_id: button.dataset.rewardId, request_id: requestId });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "insufficient_points" ? "积分还不够，继续积累后再兑换吧。" : "这个奖励暂时不能兑换，请刷新后重试。");
+        return;
+      }
+      void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    };
+  });
+
+  const historyEntries = growthLoopSnapshot.ledger
+    .filter((entry) => !["rejected", "conflict"].includes(entry.status))
+    .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
+      || String(right.created_at || "").localeCompare(String(left.created_at || "")))
+    .slice(0, 20);
+  const historyCard = $(`<div class="card growth-history-card">
+      <h3>${icon("list")} 最近积分明细</h3>
+      ${historyEntries.length
+        ? `<ul class="growth-history-list">
+             ${historyEntries.map((entry) => {
+               const dateLabel = escapeHtml(entry.occurred_on || "");
+               const nameLabel = escapeHtml(entry.item_name_snapshot || "积分调整");
+               const entryClass = entry.entry_type === "redemption" ? "neg" : entry.delta > 0 ? "pos" : "neg";
+               return `<li><span class="date">${dateLabel}</span><span class="name">${nameLabel}</span><span class="pts ${entryClass}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></li>`;
+             }).join("")}
+           </ul>`
+        : `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`}
+    </div>`);
+  main.appendChild(historyCard);
+
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
@@ -893,18 +1507,20 @@ function renderGrow(){
 /* 积分卡片辅助 */
 const PTS_ICON = {"一起做家务":"house","认真完成学习":"bookCheck","帮带带弟弟":"learner","古诗词跟读":"bookMarked","撒谎":"circleX","白天摸当众摸鸡鸡":"alert","不收玩具":"eraser"};
 let PT_DAY = null;
-function ptsCardHTML(it, i, day){
-  const done = pointOn(i, day);
-  const sub = it.pts < 0;
-  const ptsIcon = PTS_ICON[it.name] || (sub ? "alert" : "star");
+function ptsCardHTML(it, day){
+  const done = pointOn(it.id, day);
+  const points = Number(it.default_points ?? it.pts ?? 0);
+  const description = it.description ?? it.desc ?? "";
+  const sub = points < 0;
+  const ptsIcon = it.icon_key || PTS_ICON[it.name] || (sub ? "alert" : "star");
   return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
     <div class="pts-ic">${icon(ptsIcon)}</div>
     <div class="pts-info">
-      <div class="pts-name">${it.name}</div>
-      ${it.desc?`<div class="pts-desc">${it.desc}</div>`:""}
+      <div class="pts-name">${escapeHtml(it.name)}</div>
+      ${description?`<div class="pts-desc">${escapeHtml(description)}</div>`:""}
     </div>
-    <div class="pts-badge">${it.pts>0?'+':'-'}${Math.abs(it.pts)}分</div>
-    <button class="pts-toggle" type="button" data-i="${i}" aria-pressed="${done}" aria-label="${done?"取消":"记录"}${it.name}">${done?icon("check"):icon("plus")}</button>
+    <div class="pts-badge">${points>0?'+':'-'}${Math.abs(points)}分</div>
+    <button class="pts-toggle" type="button" data-item-id="${escapeHtml(it.id)}" aria-pressed="${done}" aria-label="${done?"取消":"记录"}${escapeHtml(it.name)}">${done?icon("check"):icon("plus")}</button>
   </div>`;
 }
 
@@ -920,7 +1536,8 @@ function renderPoints(){
   if(PT_DAY===null || PT_DAY > daysInMonth) PT_DAY = Math.min(today, daysInMonth);
   const activeDay = PT_DAY;
   const mt = monthTotal();
-  const dt = dayTotal(activeDay);
+  const dt = getPointDayTotal(growthLoopSnapshot, dateKeyForDay(activeDay));
+  const pointItems = visiblePointItems();
 
   // 挖掘机主题横幅
   main.appendChild($(`<div class="exc-banner">
@@ -968,20 +1585,70 @@ function renderPoints(){
       <div class="pts-sec">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
       ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
       <div class="pts-sec">${icon("plus")} 加分项</div>
-      ${POINT_ITEMS.filter(it=>it.group==="加分项").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
       <div class="pts-sec">${icon("minus")} 减分项目</div>
-      ${POINT_ITEMS.filter(it=>it.group==="减分项目").map((it)=>ptsCardHTML(it,POINT_ITEMS.indexOf(it),activeDay)).join("")}
+      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
     </div>`);
   main.appendChild(head);
-  head.querySelectorAll(".pts-toggle").forEach(b=>b.onclick=()=>{ togglePoint(+b.dataset.i, activeDay); renderPoints(); });
+  head.querySelectorAll(".pts-toggle").forEach((button)=>{
+    button.onclick=()=>{
+      togglePoint(button.dataset.itemId, activeDay);
+      button.disabled = true;
+    };
+  });
   const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
 
-  // 清空
-  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 清空本月积分</button></div>`));
-  el("ptclear").onclick=()=>{
-    if(confirm("确定清空本月所有积分打卡记录？")){
-      store = transitionLearningState(store, { type: "POINTS_CLEARED", month: ymKey() });
-      save(); PT_DAY=today; renderPoints();
+  const customCard = $(`<div class="card growth-custom-card">
+      <h3>${icon("pencil")} 自定义积分项</h3>
+      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
+      <form id="pointItemForm" class="growth-form">
+        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
+        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
+      </form>
+    </div>`);
+  main.appendChild(customCard);
+  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const points = Number(form.get("points"));
+    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
+      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
+      return;
+    }
+    try {
+      await window.growthLoop.createPointItem({
+        request_id: clientRequestId("point-item"),
+        item: {
+          name,
+          description: "自定义成长任务",
+          default_points: points,
+          category: "growth",
+          icon_key: points > 0 ? "star" : "alert",
+          item_kind: "custom",
+        },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderPoints();
+    } catch (error) {
+      console.error("Growth Loop custom point item creation failed:", error);
+      alert("积分项没有保存成功，请稍后重试。");
+    }
+  };
+
+  // 结束当前积分周期：保留历史，通过不可变的反向调整归零当前月。
+  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 结束本月积分周期</button><div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div></div>`));
+  el("ptclear").onclick=async()=>{
+    if(confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")){
+      try {
+        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
+        window.cloudSync?.scheduleGrowthLoop?.();
+        PT_DAY=today; renderPoints();
+      } catch (error) {
+        console.error("Growth Loop point period close failed:", error);
+        alert("积分周期没有结束成功，请稍后重试。");
+      }
     }
   };
   main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
@@ -1044,6 +1711,7 @@ function renderBook(){
   card2.querySelectorAll("[data-bk]").forEach(c=>{
     c.style.opacity = store.bookShelf[+c.dataset.bk] ? 1 : 0.55;
     c.onclick=()=>{
+      if (!canWriteLearningState()) return;
       const i=+c.dataset.bk;
       store = transitionLearningState(store, { type: "SHELF_TOGGLED", bookIndex: i });
       save(); renderBook();
@@ -1091,6 +1759,7 @@ function renderBook(){
   card3.querySelectorAll("[data-pb]").forEach(c=>{
     c.style.opacity = store.peanutRead[+c.dataset.pb] ? 1 : 0.6;
     c.onclick=()=>{
+    if (!canWriteLearningState()) return;
     const i=+c.dataset.pb;
     store = transitionLearningState(store, { type: "PEANUT_READ_TOGGLED", bookIndex: i });
     save(); renderBook();
@@ -1108,6 +1777,7 @@ function renderBook(){
   starEls.forEach(s=>s.onclick=()=>{ rating=+s.dataset.n; paintStars(rating); });
   // 绑定：添加记录
   el("pbAdd").onclick=()=>{
+    if (!canWriteLearningState()) return;
     const title = el("pbTitle").value.trim();
     if(!title){ alert("请先输入书名"); return; }
     const d = new Date();
@@ -1120,6 +1790,7 @@ function renderBook(){
   };
   // 绑定：删除记录
   card3.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
+    if (!canWriteLearningState()) return;
     const i = +x.dataset.del;
     store = transitionLearningState(store, {
       type: "READING_LOG_REMOVED",
@@ -1148,7 +1819,7 @@ function renderGuide(){
         <div class="guide-steps">
           <article class="guide-step"><span class="guide-step-no">1</span><div><h4>家长登录</h4><p>点击右上角“登录”，输入家长邮箱。可以使用邮箱验证码或共享密码登录；尚未设置密码时，先用验证码完成登录。</p></div></article>
           <article class="guide-step"><span class="guide-step-no">2</span><div><h4>建立家庭空间</h4><p>填写家庭名称和第一个学习者；之后可以在家庭空间里添加孩子、修改资料和切换当前孩子。</p></div></article>
-          <article class="guide-step"><span class="guide-step-no">3</span><div><h4>开始学习和打卡</h4><p>从左侧选择语文、数学、英语或绘本。每个任务单独打卡，再次点击同一个按钮即可取消。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">3</span><div><h4>开始学习和打卡</h4><p>从左侧进入“学习”，再选择语文、数学、英语或绘本。每个任务单独打卡，再次点击同一个按钮即可取消。</p></div></article>
         </div>
       </section>
 
@@ -1159,7 +1830,7 @@ function renderGuide(){
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
+          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的高质量离线语音包（约 115MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
         </div>
         <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
       </section>
@@ -1196,10 +1867,9 @@ function checkinBtn(mod,label){
 /* =========================================================
    导航切换
    ========================================================= */
-let CURRENT_MOD = "home";
 function switchMod(mod){
-  removeWritingPrintRoot();
   CURRENT_MOD = mod;
+  removeWritingPrintRoot();
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
     b.classList.toggle("active", active);
@@ -1207,6 +1877,7 @@ function switchMod(mod){
     else b.removeAttribute("aria-current");
   });
   if(mod==="home") renderHome();
+  else if(mod==="learning") renderLearning();
   else if(mod==="chinese") renderChinese();
   else if(mod==="math") renderMath();
   else if(mod==="english") renderEnglish();
@@ -1259,86 +1930,109 @@ wechatDialog?.addEventListener("close", () => {
 // 初始渲染
 switchMod("home");
 
+function persistenceScopeLabel() {
+  return getHanziLearnerScope();
+}
+
+function compatibilityScopeObject(scope) {
+  if (scope === "anonymous") return { household_id: null, profile_id: null };
+  const profileId = String(scope).replace(/^profile:/, "");
+  return {
+    household_id: "compatibility-household",
+    profile_id: profileId,
+  };
+}
+
 window.learningDesk = {
   getState(scope){
-    if (scope !== undefined) return scopedStateStorage.load(scope);
-    return structuredClone(store);
+    if (scope !== undefined && scope !== persistenceScopeLabel()) {
+      return createLearningState();
+    }
+    return JSON.parse(JSON.stringify(store));
   },
   getPersistenceScope(){
-    return persistenceScope;
+    return persistenceScopeLabel();
   },
-  getPersistenceStatus(scope = persistenceScope){
-    return scopedStateStorage.getStatus(scope);
+  getPersistenceStatus(){
+    return { pending: false };
   },
   activateScope(scope, options = {}){
     if (typeof scope !== "string" || scope.trim().length === 0) return false;
-    const previousScope = persistenceScope;
-    const previousStore = store;
-    const nextState = Object.hasOwn(options, "state") && options.state !== undefined
-      ? options.state
-      : scopedStateStorage.load(scope);
-    const nextStore = normalizeLearningStateForScope(nextState, scope);
-    const previousStatus = scopedStateStorage.getStatus(previousScope, previousStore);
-    if (options.persist !== false && scope !== previousScope && !scopedStateStorage.save(previousScope, previousStore, {
-      pending: previousStatus.pending,
-    })) return false;
-    const targetStatus = scopedStateStorage.getStatus(scope, nextStore);
-    if (options.persist !== false && !scopedStateStorage.save(scope, nextStore, {
-      pending: Object.hasOwn(options, "pending") ? options.pending : targetStatus.pending,
-    })) return false;
-    if (scope !== previousScope) removeWritingPrintRoot();
-    persistenceScope = scope;
-    store = nextStore;
+    if (!canWriteLearningState({ allowScopeTransition: true })) return false;
+    const previousScope = persistenceScopeLabel();
+    const nextState = options.state ?? (scope === previousScope ? store : {});
+    removeWritingPrintRoot();
+    learningEnvelope = {
+      ...learningEnvelope,
+      scope: compatibilityScopeObject(scope),
+    };
+    store = createLearningState(nextState);
+    if (options.persist !== false) persistLearningState({ allowScopeTransition: true });
     if (options.render !== false) switchMod(CURRENT_MOD);
     return true;
   },
   activateSafeAnonymousScope(){
     removeWritingPrintRoot();
-    persistenceScope = "anonymous";
-    store = normalizeLearningStateForScope({}, persistenceScope);
+    learningEnvelope = migrateLegacyLearningState({}, {});
+    store = createLearningState();
     switchMod(CURRENT_MOD);
     return true;
   },
   flushLocalState(){
-    return scopedStateStorage.save(persistenceScope, store);
+    return persistLearningState();
   },
   markCloudConfirmed(scope, state){
-    return scopedStateStorage.markCloudConfirmed(scope, state);
+    if (scope !== persistenceScopeLabel()) return false;
+    store = createLearningState(state);
+    learningEnvelope = {
+      ...learningEnvelope,
+      learning: structuredClone(store),
+    };
+    return true;
   },
   renderCurrent(){
     switchMod(CURRENT_MOD);
   },
-  replaceState(next, options = {}){
-    const nextStore = transitionLearningState(store, { type: "STATE_REPLACED", state: next });
-    const scopedNextStore = normalizeLearningStateForScope(nextStore, persistenceScope);
-    if(options.persist && !scopedStateStorage.save(persistenceScope, scopedNextStore, {
-      pending: Object.hasOwn(options, "pending") ? options.pending : true,
-    })) return false;
-    store = scopedNextStore;
-    if (options.render !== false) switchMod(CURRENT_MOD);
-    return true;
+  getEnvelope(){
+    return structuredClone({
+      ...learningEnvelope,
+      schema_version: 2,
+      product_id: "shadow-mate",
+      learning: store,
+    });
   },
-  removePersistenceScope(scope){
-    const removed = scopedStateStorage.remove(scope);
-    if (!removed) return false;
-    if (scope === persistenceScope) {
-      persistenceScope = "anonymous";
-      store = normalizeLearningState(scopedStateStorage.load(persistenceScope));
-      switchMod(CURRENT_MOD);
-    }
-    return removed;
+  async setScope(scope, options = {}){
+    return setLearningScope(scope, options);
+  },
+  getPendingState(){
+    const pending = loadLearningStateEnvelope(localStorage, {});
+    return structuredClone(pending);
+  },
+  replaceState(next, options = {}){
+    if (!canWriteLearningState()) return false;
+    store = transitionLearningState(store, { type: "STATE_REPLACED", state: learningStateFromEnvelope(next) });
+    if(options.persist) persistLearningState();
+    switchMod(CURRENT_MOD);
+    return true;
   },
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
-    if (!scopedStateStorage.clear()) return false;
+    clearLearningDeskStorage(localStorage);
     removeWritingPrintRoot();
     if (reload) {
       window.location.reload();
-      return true;
+      return;
     }
-    persistenceScope = "anonymous";
-    store = normalizeLearningState({});
+    learningEnvelope = migrateLegacyLearningState({}, {});
+    store = createLearningState();
     switchMod(CURRENT_MOD);
-    return true;
-  }
+  },
+  removePersistenceScope(scope){
+    if (scope !== persistenceScopeLabel()) return true;
+    return this.activateSafeAnonymousScope();
+  },
 };
+
+void growthLoopController.hydrate().catch((error) => {
+  console.warn("Growth Loop 本地数据库初始化失败，已保持只读推荐项：", error);
+});

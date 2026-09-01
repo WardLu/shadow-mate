@@ -16,7 +16,7 @@ test.describe("Offline voice download errors", () => {
         `,
       });
     });
-    await page.route("**/piper/en_US-ljspeech-medium.onnx", async (route) => {
+    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", async (route) => {
       await route.fulfill({ status: 503, contentType: "text/plain", body: "unavailable" });
     });
     await page.goto("/");
@@ -30,7 +30,8 @@ test.describe("Offline voice download errors", () => {
         value: function SpeechSynthesisUtterance() {},
       });
     });
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
     await page.click('.voice-dialog-actions [data-action="ok"]');

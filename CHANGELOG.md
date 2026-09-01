@@ -1,5 +1,80 @@
 # Changelog
 
+## [Unreleased]
+
+_No unreleased changes._
+
+## [1.3.12] - 2026-09-01
+
+### Fixed
+- 修复删除家庭后重新登录并重新建立学习空间时，Growth Loop 首次返回陈旧学习者作用域导致孩子切换未完成的问题；当前切换仍有效时会自动重试一次，仍无法确认完整作用域时继续安全回滚。
+
+### Security
+- 修复本地开发或 Preview 在未配置环境变量时静默使用生产 Supabase 的问题；非生产来源默认只允许 loopback 本地 Supabase，远程连接必须显式设置 `VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE=1`。
+- 本地 Auth 邮件主题改用 `product_id` 识别影伴，支持任意 feature worktree 端口；经过明确授权的生产临时验收会固定回跳到 `sm.shadow.wang`，避免邮件回退为 Shadow Nexus。
+
+## [1.3.11] - 2026-09-01
+
+### Changed
+- 统一共享 Supabase 的 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板，均按 `RedirectTo` 或 `product_id` 动态显示产品名称与页脚标语：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo；未知来源回退为 Shadow Nexus。共享 SMTP 发件人名称仍为 `Shadow Nexus`。
+- Auth 邮件页脚的产品详情链接与品牌信息保持同一环境和产品来源，避免已登录某个产品却收到通用 Shadow Nexus 的产品信息。
+
+### Fixed
+- 修复删除家庭数据后使用同一认证账号重新登录时，客户端误把成功的登录回调当作本地清理状态而忽略，导致页面停留在本地模式且没有任何提示；现在会正常进入登录态并显示建立家庭学习空间的入口。
+- 修复孩子切换并发期间的完整 active tuple 回滚：active profile、profile key、cloud version、Growth Loop 和 Learning Desk 必须一起回到原作用域，否则 fail-closed。
+- fail-closed 标记改为跨 browsing session 持久化，并将本机清理作为应用内唯一解除入口；旧 outbox claim 通过 immutable operation context/lease 绑定到发送前复核。
+- profile-scoped business IndexedDB 写入覆盖 request-success 到 transaction-complete 的 stale 窗口，发现作用域失效时主动 abort，避免旧学习者数据落盘；tuple-safe claim release 与显式 cleanup 保持各自的保护边界。
+- 同一 worker 的 live `(worker_id, operation_id, lease_id)` claim 不能被并发 operation 覆盖；发送前重读并校验当前 lease，失效 claim 不会触发 cloud send。
+- 本机清理成功前始终保持 fail-closed；清理失败可重试且不会因重开页面恢复本机写入。
+
+### Tests
+- 增加删除家庭后同一账号重新登录并显示家庭创建界面的端到端回归。
+- 新增真实 `checkins` 驱动的 B save in-flight → C 失败回归，以及 fail-closed 重开零 IndexedDB 写、清理失败保留 marker、same-worker lease、send 前重读和 transaction-completion microtask AbortSignal 回归。
+- `tests/unit/email-templates.test.js` 覆盖 6 个 Auth 邮件模板的产品身份、页脚标语、链接环境和认证变量。
+
+## [1.3.10] - 2026-08-23
+
+### Fixed
+- 修复每日写作积分在跨月、跨年和月份切换时沿用错误 workbook 的问题，按目标年月稳定选择并保留同一 workbook 的本地/云端状态。
+- 修复家庭档案切换期间的并发竞态：完整 active tuple、profile-scoped IndexedDB 写入、fail-closed 恢复和 outbox lease 均在作用域变化时安全失效，避免旧孩子的数据写入或发送到新作用域。
+
+### Included migration prerequisite
+- 本版本依赖 Shadow Portal 控制面迁移 `20260819120000_growth_loop_legacy_points_import.sql`，用于一次性导入历史每日积分并与期初积分恢复互斥；必须先完成生产迁移并通过 schema/RLS/ACL 验收，再发布前端。
+
+### Production migration evidence
+- 已由 Shadow Portal 控制面按单条受控 linked migration 执行；生产 `schema_migrations` 已登记版本/name，`statement_count=17`。
+- 生产 schema 验收通过：`legacy_import_batch_id`、两条账本约束、两个索引、两个 `SECURITY DEFINER` RPC、`search_path=''`、`anon` EXECUTE 已撤销、`authenticated` EXECUTE 保留；`learning_point_ledger` RLS 仍启用且策略基线存在。
+
+### Tests
+- 代码合并后的 `npm run verify`、云端 E2E `48/48` 和定向 sign-out 回归通过；生产迁移与 schema 验收已完成，正式域名部署和真实账号验收仍待完成。
+
+## [1.3.9] - 2026-08-19
+
+### Added
+- Growth Loop 积分模块：积分账本、自定义积分项/自定义成长项目、奖励与兑换（对应后端表与 RPC 已部署共享 Supabase）。
+- 期初积分恢复：家长/监护人确认一次即可把旧积分结转进新账本（受控 RPC `learning_confirm_opening_balance`，每孩子仅一次，幂等），修复已打开新版本用户积分显示为 0 的问题。
+- 邮箱变更、邀请、二次认证、密码找回统一品牌邮件模板。
+
+### Changed
+- 共享 Supabase 本地测试改经统一宿主路由，测试层级与本地数据库测试路由约定见 `docs/`。
+- GitHub Release 发布后自动快进 `production` 分支触发部署，并为 `production` 分支启用 ruleset 保护，防止绕过发布闸门。
+
+### Removed
+- 移除不再引用的 legacy 语音资源文件。
+
+## [1.3.8] - 2026-08-15
+
+### Changed
+- 将离线英语语音模型改为从 `voice.shadow.wang` CDN 分发（`en_US-ljspeech-medium`，约 63.5MB）：首次使用时下载并缓存到浏览器，之后可离线合成，不上传录音。
+- 移除本地分片模型拼接与 Worker 运行时选择，本地 Piper 推理在主线程执行。
+- CSP `connect-src` 增加 `https://voice.shadow.wang`，并同步 README、使用指南与第三方许可清单中的语音分发方式。
+
+## [1.3.7] - 2026-08-13
+
+### Fixed
+- 将国产 Android（无 GMS）离线英语兜底切换为 `en_US-lessac-high`，修复 `ljspeech-high` 单词输出过短、发音不完整的问题；首次下载的声音模型约 115MB。
+- 明确设备语音路径：有可用英语系统语音时仍优先使用系统 TTS；无 GMS Android 没有系统英语语音时使用浏览器本地 Piper。模型更新后使用新的缓存资源地址，避免继续复用旧模型。
+
 ## [1.3.6] - 2026-08-12
 
 ### Fixed
@@ -185,7 +260,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Docs
 - README.md 项目概述与本地运行指南
-- docs/architecture.md 架构设计与实施方案（v2.1）
 - docs/security-baseline.md 安全基线与发布闸门
 - docs/auth-setup.md Supabase Auth 配置指南
 - PRIVACY.md / SECURITY.md / CONTRIBUTING.md

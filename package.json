@@ -1,11 +1,12 @@
 {
   "name": "shadow-mate",
-  "version": "1.3.6",
+  "version": "1.3.12",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "local-dev": "node scripts/start-local-dev.mjs",
+    "check:integration": "node scripts/check-integration.mjs",
     "build": "vite build",
     "check": "node scripts/check.mjs",
     "public:check": "node scripts/public-check.mjs",

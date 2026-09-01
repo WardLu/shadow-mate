@@ -38,6 +38,8 @@ test.describe("System speech fallback", () => {
         configurable: true,
         value: function SpeechSynthesisUtterance(text) { this.text = text; },
       });
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
       Object.defineProperty(window, "caches", {
         configurable: true,
         value: {
@@ -55,7 +57,8 @@ test.describe("System speech fallback", () => {
       });
     });
     await page.goto("/");
-    await page.click('[data-mod="english"]');
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
 
     const button = page.locator("[data-speak]").first();
     await button.click();

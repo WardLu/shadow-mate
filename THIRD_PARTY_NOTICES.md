@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-08-12
+更新时间：2026-08-13
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -28,10 +28,10 @@
 | `public/onnx/ort-wasm-simd-threaded.wasm` | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
 | `public/piper/piper_phonemize.wasm` | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
 | `public/piper/piper_phonemize.data` | 与上述 piper-tts-web 提交配套的运行时数据 |
-| `public/piper/en_US-ljspeech-medium.onnx` | [Piper Voices](https://huggingface.co/rhasspy/piper-voices) 的 `en_US-ljspeech-medium` 模型 |
-| `public/piper/en_US-ljspeech-medium.onnx.json` | 上述模型的配置文件 |
 
 eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
+
+此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) 的 `en_US/ljspeech/medium`，模型卡标注训练数据为 public domain。
 
 ## 资源指纹
 
@@ -41,5 +41,3 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 | `public/onnx/ort-wasm-simd-threaded.wasm` | `207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea` |
 | `public/piper/piper_phonemize.data` | `a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa` |
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
-| `public/piper/en_US-ljspeech-medium.onnx` | `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22` |
-| `public/piper/en_US-ljspeech-medium.onnx.json` | `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860` |

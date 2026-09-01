@@ -1,15 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
-import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PROFILE_ID = "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const THIRD_PROFILE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
-const SCOPED_KEY = "shadow_mate_workbench_scoped_v1";
-const AUTH_SEED_MARKER = "shadow_mate_e2e_auth_seeded_v1";
-const SCOPED_SEED_MARKER = "shadow_mate_e2e_scoped_seeded_v1";
+const SENSITIVE_MARK_PAYLOAD = "synthetic-mark-payload-not-for-telemetry";
 
 const emptyState = {
   checkins: {},
@@ -20,45 +17,39 @@ const emptyState = {
   peanutRead: {},
 };
 
-const HANZI_PACK = getActiveHanziWritingPack();
-
-function makeRotationState(learnerScope) {
-  return resolveDailyWorksheet({
-    rotationState: {},
-    pack: HANZI_PACK,
-    learnerScope,
-    now: new Date("2026-09-01T00:30:00.000Z"),
-    timeZone: "Asia/Singapore",
-  }).rotationState;
+async function openModule(page, mod) {
+  await page.click('[data-mod="learning"]');
+  await page.click(`[data-go="${mod}"]`);
 }
 
-function stateWithMarker(marker, learnerScope) {
-  return {
-    ...structuredClone(emptyState),
-    checkins: { "2026-09-01": { [marker]: true } },
-    extra: {
-      marker,
-      hanziWorksheetRotationV1: makeRotationState(learnerScope),
-    },
-  };
-}
-
-function profileFixture(id, displayName) {
-  return {
-    id,
-    household_id: HOUSEHOLD_ID,
-    display_name: displayName,
-    grade_level: 3,
-  };
+async function readWritingSnapshot(page) {
+  return page.evaluate(() => {
+    const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
+      itemId: row.dataset.writingItemId,
+      glyph: row.querySelector("[data-writing-glyph]")?.textContent,
+    }));
+    const readSheet = (root) => ({
+      assignmentId: root?.dataset.writingAssignmentId,
+      dayKey: root?.dataset.writingDayKey,
+      packVersion: root?.dataset.writingPackVersion,
+      rows: readRows(root),
+    });
+    return {
+      screen: readSheet(document.querySelector("[data-writing-worksheet]")),
+      print: readSheet(document.querySelector("[data-writing-print-sheet]")),
+    };
+  });
 }
 
 async function seedAuthenticatedSession(page) {
   const configuredUrl = process.env.VITE_SUPABASE_URL || `https://${PROJECT_REF}.supabase.co`;
   const projectRef = new URL(configuredUrl).hostname.split(".")[0];
-  await page.addInitScript(({ authSeedMarker, projectRef, userId }) => {
-    if (sessionStorage.getItem(authSeedMarker) === "1") return;
-    localStorage.clear();
-    sessionStorage.clear();
+  await page.addInitScript(({ projectRef, userId }) => {
+    if (window.name !== "shadow-mate-e2e-seeded") {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.name = "shadow-mate-e2e-seeded";
+    }
     const now = Math.floor(Date.now() / 1000);
     sessionStorage.setItem(
       `sb-${projectRef}-auth-token`,
@@ -76,58 +67,55 @@ async function seedAuthenticatedSession(page) {
         },
       }),
     );
-    sessionStorage.setItem(authSeedMarker, "1");
-  }, { authSeedMarker: AUTH_SEED_MARKER, projectRef, userId: USER_ID });
-}
-
-async function seedScopedStates(page, scopes) {
-  await page.addInitScript(({ seedMarker, scopedKey, scopes: seededScopes }) => {
-    if (sessionStorage.getItem(seedMarker) === "1") return;
-    localStorage.setItem(scopedKey, JSON.stringify({ schemaVersion: 1, scopes: seededScopes }));
-    sessionStorage.setItem(seedMarker, "1");
-  }, { seedMarker: SCOPED_SEED_MARKER, scopedKey: SCOPED_KEY, scopes });
+  }, { projectRef, userId: USER_ID });
 }
 
 async function mockCloudApi(page, {
   remoteState = emptyState,
-  remoteStates = {},
-  profiles = null,
-  stateDelays = {},
-  stateErrors = {},
-  workspaceDelayMs = 0,
-  rpcDelayMs = 0,
   rpcResponses = ["success"],
+  legacyImportResponses = ["success"],
+  growthPointItemsFailures = 0,
+  growthPointItemsResponses = null,
+  growthPointItemsDelayMs = 0,
+  profileStateDelayMs = 0,
+  rpcDelayMs = 0,
   hasPassword = true,
   createDelayMs = 0,
   householdCreateDelayMs = 0,
   noMembership = false,
+  createdProfileIds = [SECOND_PROFILE_ID],
+  profileStateResponses = {},
+  profileStateData = {},
+  profileStateVersions = {},
+  initialProfiles = [],
+  workspaceAncillaryDelayMs = 0,
+  consentMetadataResponses = null,
+  consentMetadataDelayMs = workspaceAncillaryDelayMs,
 } = {}) {
-  let workspaceProfiles = structuredClone(profiles || [{
-    id: PROFILE_ID,
-    household_id: HOUSEHOLD_ID,
-    display_name: "E2E Learner",
-    grade_level: 3,
-  }]);
-  const stateByProfile = new Map(workspaceProfiles.map((profile) => [
-    profile.id,
-    structuredClone(Object.hasOwn(remoteStates, profile.id) ? remoteStates[profile.id] : remoteState),
-  ]));
-  const versionByProfile = new Map(workspaceProfiles.map((profile) => [profile.id, 3]));
-  const existingProfileIds = new Set(workspaceProfiles.map((profile) => profile.id));
+  let state = structuredClone(remoteState);
+  let version = 3;
   let rpcIndex = 0;
+  let legacyImportIndex = 0;
+  let rpcSettledCount = 0;
+  let growthPointItemsRequests = 0;
+  let growthPointItemsResponseIndex = 0;
+  let consentMetadataResponseIndex = 0;
   const rpcPayloads = [];
-  const stateRequests = [];
+  const legacyImportPayloads = [];
+  const activityPayloads = [];
   const deletedProfiles = [];
   const deletedHouseholds = [];
   const createdProfiles = [];
   const createdHouseholds = [];
   const createdConsents = [];
-  let membershipReady = !noMembership;
-
-  const filterValue = (url, name) => {
-    const value = url.searchParams.get(name);
-    return value?.startsWith("eq.") ? value.slice(3) : value;
-  };
+  const profileRows = [{
+    id: PROFILE_ID,
+    household_id: HOUSEHOLD_ID,
+    display_name: "E2E Learner",
+    grade_level: 3,
+  }, ...initialProfiles];
+  let householdCreated = !noMembership;
+  let profileExists = true;
 
   await page.route("**/auth/v1/logout**", async (route) => {
     await route.fulfill({
@@ -145,29 +133,89 @@ async function mockCloudApi(page, {
     if (path.endsWith("/rpc/learning_save_state")) {
       const payload = JSON.parse(request.postData() || "{}");
       rpcPayloads.push(payload);
-      const response = rpcResponses[Math.min(rpcIndex++, rpcResponses.length - 1)];
+      const responseIndex = rpcIndex++;
+      const response = rpcResponses[Math.min(responseIndex, rpcResponses.length - 1)];
+      const responseDelayMs = Array.isArray(rpcDelayMs)
+        ? rpcDelayMs[Math.min(responseIndex, rpcDelayMs.length - 1)]
+        : rpcDelayMs;
+      if (responseDelayMs) await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
       if (response === "conflict") {
         await route.fulfill({
           status: 409,
           contentType: "application/json",
           body: JSON.stringify({ code: "P0001", message: "learning_state_conflict" }),
         });
+        rpcSettledCount += 1;
         return;
       }
-      stateByProfile.set(payload.p_profile_id, structuredClone(payload.p_state));
-      const version = (versionByProfile.get(payload.p_profile_id) || 3) + 1;
-      versionByProfile.set(payload.p_profile_id, version);
-      if (rpcDelayMs) await new Promise((resolve) => setTimeout(resolve, rpcDelayMs));
+      state = payload.p_state;
+      version += 1;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ version, updated_at: "2026-08-01T09:00:00.000Z" }),
       });
+      rpcSettledCount += 1;
+      return;
+    }
+
+    if (path.endsWith("/rpc/learning_import_legacy_points")) {
+      const payload = JSON.parse(request.postData() || "{}");
+      legacyImportPayloads.push(payload);
+      const response = legacyImportResponses[Math.min(legacyImportIndex++, legacyImportResponses.length - 1)];
+      if (response === "retryable") {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST000", details: null, hint: null, message: "upstream unavailable" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ id: "legacy-ledger-1" }]),
+      });
+      return;
+    }
+
+    if (path.endsWith("/rpc/learning_record_activity_event")) {
+      activityPayloads.push(JSON.parse(request.postData() || "{}"));
+      await route.fulfill({ status: 200, contentType: "application/json", body: "null" });
       return;
     }
 
     if (path.endsWith("/rpc/learning_has_password")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(hasPassword) });
+      return;
+    }
+
+    if (path.endsWith("/learning_point_items")) {
+      growthPointItemsRequests += 1;
+      const response = growthPointItemsResponses?.[
+        Math.min(growthPointItemsResponseIndex++, growthPointItemsResponses.length - 1)
+      ] || (growthPointItemsRequests <= growthPointItemsFailures ? "retryable" : "success");
+      if (response === "retryable") {
+        await route.fulfill({
+          status: 502,
+          contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST000", details: null, hint: null, message: "snapshot unavailable" }),
+        });
+        return;
+      }
+      if (growthPointItemsDelayMs) await new Promise((resolve) => setTimeout(resolve, growthPointItemsDelayMs));
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+
+    if ([
+      "/learning_profile_point_items",
+      "/learning_rewards",
+      "/learning_profile_rewards",
+      "/learning_point_ledger",
+      "/learning_redemptions",
+    ].some((suffix) => path.endsWith(suffix))) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       return;
     }
 
@@ -179,15 +227,14 @@ async function mockCloudApi(page, {
 
     if (path.endsWith("/learning_household_members")) {
       if (request.method() === "POST") {
-        membershipReady = true;
+        householdCreated = true;
         await route.fulfill({ status: 201, body: "" });
         return;
       }
-      if (workspaceDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceDelayMs));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(membershipReady ? [{ household_id: HOUSEHOLD_ID, role: "owner" }] : []),
+        body: JSON.stringify(householdCreated ? [{ household_id: HOUSEHOLD_ID, role: "owner" }] : []),
       });
       return;
     }
@@ -198,10 +245,18 @@ async function mockCloudApi(page, {
         await route.fulfill({ status: 201, body: "" });
         return;
       }
+      const responseIndex = consentMetadataResponseIndex++;
+      const consentRows = consentMetadataResponses?.[
+        Math.min(responseIndex, consentMetadataResponses.length - 1)
+      ] ?? (householdCreated ? [{ household_id: HOUSEHOLD_ID }] : []);
+      const consentDelay = Array.isArray(consentMetadataDelayMs)
+        ? consentMetadataDelayMs[Math.min(responseIndex, consentMetadataDelayMs.length - 1)]
+        : consentMetadataDelayMs;
+      if (consentDelay) await new Promise((resolve) => setTimeout(resolve, consentDelay));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(membershipReady ? [{ household_id: HOUSEHOLD_ID }] : []),
+        body: JSON.stringify(consentRows),
       });
       return;
     }
@@ -210,75 +265,57 @@ async function mockCloudApi(page, {
       if (request.method() === "POST") {
         const payload = JSON.parse(request.postData() || "{}");
         createdProfiles.push(payload);
+        const profileId = createdProfileIds[Math.min(createdProfiles.length - 1, createdProfileIds.length - 1)];
+        const createdProfile = {
+          id: profileId,
+          household_id: HOUSEHOLD_ID,
+          display_name: payload.display_name,
+          grade_level: payload.grade_level,
+        };
         if (createDelayMs) await new Promise((resolve) => setTimeout(resolve, createDelayMs));
         await route.fulfill({
           status: 201,
           contentType: "application/json",
-          body: JSON.stringify({
-            id: SECOND_PROFILE_ID,
-            household_id: HOUSEHOLD_ID,
-            display_name: payload.display_name,
-            grade_level: payload.grade_level,
-          }),
+          body: JSON.stringify(createdProfile),
         });
-        if (!existingProfileIds.has(SECOND_PROFILE_ID)) {
-          workspaceProfiles.push({
-            id: SECOND_PROFILE_ID,
-            household_id: HOUSEHOLD_ID,
-            display_name: payload.display_name,
-            grade_level: payload.grade_level,
-          });
-          existingProfileIds.add(SECOND_PROFILE_ID);
-          stateByProfile.set(SECOND_PROFILE_ID, null);
-          versionByProfile.set(SECOND_PROFILE_ID, 3);
-        }
         return;
       }
       if (request.method() === "DELETE") {
-        const profileId = filterValue(url, "id");
-        deletedProfiles.push(profileId);
-        existingProfileIds.delete(profileId);
-        workspaceProfiles = workspaceProfiles.filter((profile) => profile.id !== profileId);
+        deletedProfiles.push(url.searchParams.get("id"));
+        profileExists = false;
         await route.fulfill({ status: 204, body: "" });
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(workspaceProfiles.filter((profile) => existingProfileIds.has(profile.id))),
+        body: JSON.stringify(profileExists ? profileRows : []),
       });
       return;
     }
 
     if (path.endsWith("/learning_profile_states")) {
-      const select = url.searchParams.get("select") || "";
-      const profileId = filterValue(url, "profile_id");
-      if (profileId && stateDelays[profileId]) {
-        stateRequests.push(profileId);
-        await new Promise((resolve) => setTimeout(resolve, stateDelays[profileId]));
-      } else if (profileId) {
-        stateRequests.push(profileId);
-      }
-      if (profileId && select.includes("state") && stateErrors[profileId]) {
+      const profileFilter = url.searchParams.get("profile_id") || "";
+      const requestedProfileId = profileFilter.replace(/^eq\./, "");
+      const response = profileStateResponses[requestedProfileId];
+      if (response === "error") {
         await route.fulfill({
           status: 503,
           contentType: "application/json",
-          body: JSON.stringify({ code: "PGRST503", message: stateErrors[profileId] }),
+          body: JSON.stringify({ code: "PGRST000", message: "profile state unavailable" }),
         });
         return;
       }
+      const select = url.searchParams.get("select") || "";
+      const profileState = profileStateData[requestedProfileId] ?? state;
+      const profileVersion = profileStateVersions[requestedProfileId] ?? version;
       const body = select.includes("state")
-        ? (stateByProfile.get(profileId || PROFILE_ID) === null
-          ? []
-          : [{
-            profile_id: profileId || PROFILE_ID,
-            state: stateByProfile.get(profileId || PROFILE_ID) || emptyState,
-            version: versionByProfile.get(profileId || PROFILE_ID) || 3,
-            updated_at: "2026-08-01T08:00:00.000Z",
-          }])
-        : workspaceProfiles
-          .filter((profile) => existingProfileIds.has(profile.id))
-          .map((profile) => ({ profile_id: profile.id, updated_at: "2026-08-01T08:00:00.000Z" }));
+        ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState, version: profileVersion, updated_at: "2026-08-01T08:00:00.000Z" }]
+        : [{ profile_id: requestedProfileId || PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
+      const profileStateDelay = typeof profileStateDelayMs === "object"
+        ? profileStateDelayMs[requestedProfileId] || 0
+        : profileStateDelayMs;
+      if (profileStateDelay) await new Promise((resolve) => setTimeout(resolve, profileStateDelay));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       return;
     }
@@ -286,11 +323,12 @@ async function mockCloudApi(page, {
     if (path.endsWith("/learning_households")) {
       if (request.method() === "POST") {
         createdHouseholds.push(JSON.parse(request.postData() || "{}"));
-        membershipReady = true;
+        householdCreated = true;
         if (householdCreateDelayMs) await new Promise((resolve) => setTimeout(resolve, householdCreateDelayMs));
         await route.fulfill({ status: 201, body: "" });
         return;
       }
+      if (workspaceAncillaryDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceAncillaryDelayMs));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -304,17 +342,118 @@ async function mockCloudApi(page, {
 
   return {
     rpcPayloads,
-    stateRequests,
+    legacyImportPayloads,
+    activityPayloads,
     deletedProfiles,
     deletedHouseholds,
     createdProfiles,
     createdHouseholds,
     createdConsents,
-    getState: (profileId = PROFILE_ID) => stateByProfile.get(profileId),
+    getGrowthPointItemsRequests: () => growthPointItemsRequests,
+    getConsentMetadataRequests: () => consentMetadataResponseIndex,
+    getRpcSettledCount: () => rpcSettledCount,
+    getState: () => state,
   };
 }
 
 test.describe("Authenticated cloud workspace", () => {
+  test("backs off repeated Growth Loop snapshot 5xx responses instead of polling every second", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    const requestsBeforeWindow = api.getGrowthPointItemsRequests();
+    // Negative timing assertion: fixed 1s polling reaches at least four calls
+    // in this window, while exponential backoff adds at most two calls.
+    await page.waitForTimeout(4500);
+    expect(api.getGrowthPointItemsRequests() - requestsBeforeWindow).toBeLessThanOrEqual(2);
+  });
+
+  test("retries the first Growth Loop snapshot fetch failure", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: 1 });
+
+    await page.goto("/");
+
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.getGrowthPointItemsRequests(), { timeout: 5000 }).toBe(2);
+  });
+
+  test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
+    const clockStart = new Date(Date.now() + 60_000);
+    await page.clock.install({ time: clockStart });
+    await page.clock.pauseAt(clockStart);
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBeGreaterThan(0);
+    const requestsBeforeOnline = api.getGrowthPointItemsRequests();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.clock.runFor(0);
+
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(requestsBeforeOnline + 1);
+  });
+
+  test("resets snapshot backoff after a successful fetch", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-08-20T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-08-20T00:00:00Z"));
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      growthPointItemsResponses: ["retryable", "success", "retryable", "success"],
+    });
+
+    await page.goto("/");
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(1);
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(2);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.evaluate(() => window.cloudSync.scheduleGrowthLoop());
+    await page.clock.runFor(600);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(3);
+    await page.evaluate(() => Promise.resolve());
+
+    await page.clock.runFor(1300);
+    await expect.poll(() => api.getGrowthPointItemsRequests()).toBe(4);
+  });
+
+  test("retries the same legacy import batch after the browser comes online", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { legacyImportResponses: ["retryable", "success"] });
+    const batchId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.activityPayloads.length).toBeGreaterThan(0);
+    await page.evaluate(async ({ batchId }) => {
+      await window.growthLoop.importLegacyPoints({
+        request_id: batchId,
+        entries: [{
+          occurred_on: "2026-08-01",
+          delta: 2,
+          item_name_snapshot: "一起做家务",
+          note: "旧积分记录",
+        }],
+      });
+      window.cloudSync.scheduleGrowthLoop();
+    }, { batchId });
+
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(1);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(2);
+    expect(api.legacyImportPayloads[1]).toEqual(api.legacyImportPayloads[0]);
+    expect(api.legacyImportPayloads[1]).toEqual(expect.objectContaining({
+      p_profile_id: PROFILE_ID,
+      p_request_id: batchId,
+      p_entries: [expect.objectContaining({ delta: 2 })],
+    }));
+    expect(api.legacyImportPayloads[1].p_entries[0].request_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   test("creates only one household after rapid repeated setup clicks", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { noMembership: true, householdCreateDelayMs: 500 });
@@ -334,6 +473,31 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.createdConsents.length).toBe(1);
   });
 
+  test("does not reopen password setup over a just-closed account dialog", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      noMembership: true,
+      hasPassword: false,
+      growthPointItemsDelayMs: 300,
+    });
+
+    await page.goto("/");
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+    await page.locator('#householdSetupForm input[name="household"]').fill("延迟同步测试家庭");
+    await page.locator('#householdSetupForm input[name="learner"]').fill("延迟同步学习者");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
+    await page.locator("#householdSetupForm").getByRole("button", { name: "创建并同步" }).click();
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /E2E Learner/);
+
+    const cloudDialog = page.locator("#cloudDialog");
+    await cloudDialog.evaluate((element) => {
+      if (element.open) element.close();
+    });
+    await page.waitForTimeout(500);
+    await page.click("#accountButton");
+    await expect(page.locator("#cloudPanel .learner-choice")).toContainText("E2E Learner");
+  });
+
   test("loads a learner profile and completes a manual cloud sync", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page);
@@ -347,6 +511,1132 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(1);
     await expect(page.locator("#syncToast")).toBeVisible();
+  });
+
+  test("activates the local profile before delayed remote hydration and emits de-identified marks", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      workspaceAncillaryDelayMs: 900,
+      profileStateDelayMs: 900,
+      remoteState: { ...emptyState, extra: { synthetic_payload: SENSITIVE_MARK_PAYLOAD } },
+    });
+
+    await page.goto("/");
+
+    const activation = await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      marks: performance.getEntriesByType("mark")
+        .map((entry) => entry.name)
+        .filter((name) => name.startsWith("shadow-mate:")),
+    })), { timeout: 650 }).toEqual({
+      active: PROFILE_ID,
+      learning: PROFILE_ID,
+      growth: PROFILE_ID,
+      marks: expect.arrayContaining([
+        "shadow-mate:workspace:start",
+        "shadow-mate:workspace:profiles-ready",
+        "shadow-mate:profile:local-ready",
+      ]),
+    });
+
+    expect(activation).toBeUndefined();
+    const marks = await page.evaluate(() => performance.getEntriesByType("mark")
+      .map((entry) => entry.name)
+      .filter((name) => name.startsWith("shadow-mate:")));
+    expect(marks.join("|")).not.toContain(PROFILE_ID);
+    expect(marks.join("|")).not.toContain(HOUSEHOLD_ID);
+    expect(marks.join("|")).not.toContain("parent@example.test");
+    expect(marks.join("|")).not.toContain("e2e-access-token");
+    expect(marks.join("|")).not.toContain(SENSITIVE_MARK_PAYLOAD);
+  });
+
+  test("waits for delayed consent metadata before adding a learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 3000 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("metadata 延迟学习者");
+    await page.locator('#addLearnerForm input[name="guardianConsent"]').check();
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    await page.waitForTimeout(800);
+    expect(api.createdConsents).toEqual([]);
+    expect(api.createdProfiles).toEqual([]);
+    await expect.poll(() => api.createdProfiles.length).toBe(1);
+    expect(api.createdConsents).toEqual([]);
+  });
+
+  test("ignores delayed workspace metadata after signing out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 1600 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => api.getConsentMetadataRequests()).toBe(1);
+    await expect.poll(() => page.evaluate(() => ({
+      profilesReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:profiles-ready"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      profilesReady: true,
+      metadataReady: false,
+    });
+
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
+
+    await page.waitForTimeout(1900);
+    await expect.poll(() => page.evaluate(() => ({
+      accountState: document.querySelector("#accountButton")?.dataset.state || null,
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      metadataReady: performance.getEntriesByType("mark")
+        .some((entry) => entry.name === "shadow-mate:workspace:metadata-ready"),
+    }))).toEqual({
+      accountState: "local",
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      metadataReady: false,
+    });
+  });
+
+  test("fails closed when a background hydrate returns a mismatched profile scope", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      profileStateData: {
+        [PROFILE_ID]: {
+          schema_version: 2,
+          scope: { household_id: HOUSEHOLD_ID, profile_id: SECOND_PROFILE_ID },
+          learning: emptyState,
+        },
+      },
+    });
+
+    await page.goto("/");
+
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      canWrite: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({ blocked: "1", active: null, canWrite: false });
+  });
+
+  test("does not save against an unknown version while remote hydration is pending", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { profileStateDelayMs: 2000 });
+
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType("mark")
+      .some((entry) => entry.name === "shadow-mate:profile:local-ready"))).toBe(true);
+    await page.evaluate(() => window.cloudSync.schedule(true));
+
+    await page.waitForTimeout(800);
+    expect(api.rpcPayloads).toEqual([]);
+  });
+
+  test("ignores a delayed profile A hydrate after profile B becomes active", async ({ page }) => {
+    const remoteEnvelope = (profileId, marker) => ({
+      schema_version: 2,
+      scope: { household_id: HOUSEHOLD_ID, profile_id: profileId },
+      learning: { ...emptyState, extra: { hydrate_marker: marker } },
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+      ],
+      profileStateData: {
+        [PROFILE_ID]: remoteEnvelope(PROFILE_ID, "profile-a"),
+        [SECOND_PROFILE_ID]: remoteEnvelope(SECOND_PROFILE_ID, "profile-b"),
+      },
+      profileStateVersions: { [PROFILE_ID]: 11, [SECOND_PROFILE_ID]: 22 },
+      profileStateDelayMs: { [PROFILE_ID]: 1200 },
+    });
+
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(PROFILE_ID);
+    await page.click("#accountButton");
+    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(SECOND_PROFILE_ID);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.hydrate_marker)).toBe("profile-b");
+
+    await page.waitForTimeout(1300);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      scope: window.learningDesk.getEnvelope().scope?.profile_id,
+      marker: window.learningDesk.getState().extra?.hydrate_marker,
+      version: window.cloudSync.getProfileCommitState().cloud_version,
+    }))).toEqual({
+      active: SECOND_PROFILE_ID,
+      scope: SECOND_PROFILE_ID,
+      marker: "profile-b",
+      version: 22,
+    });
+  });
+
+  test("keeps the same daily writing workbook and isolates its print sheet for a logged-in user", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await openModule(page, "chinese");
+
+    await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
+    const beforeCheckin = await readWritingSnapshot(page);
+    expect(beforeCheckin.screen.rows).toHaveLength(4);
+
+    await page.locator('[data-cmod="chinese-writing"]').click();
+    const afterCheckin = await readWritingSnapshot(page);
+    expect(afterCheckin.screen).toEqual(beforeCheckin.screen);
+
+    await page.evaluate(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
+    await page.locator("[data-print]").click();
+    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    expect(await readWritingSnapshot(page)).toEqual(afterCheckin);
+
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expect(page.locator(".app")).toBeHidden();
+    await expect(page.locator("[data-writing-worksheet]")).toBeHidden();
+    await expect(page.locator("[data-writing-print-sheet] button")).toHaveCount(0);
+
+    await page.emulateMedia({ media: "screen" });
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
+  });
+
+  test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      const open = indexedDB.open.bind(indexedDB);
+      indexedDB.open = (...args) => {
+        const request = open(...args);
+        if (args[0] === "shadow-mate-learning-v1") {
+          request.addEventListener("success", () => {
+            window.__learningDbConnection = request.result;
+          });
+        }
+        return request;
+      };
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.__learningDbConnection))).toBe(true);
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const secondProfileId = SECOND_PROFILE_ID;
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${secondProfileId}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.__learningDbConnection.close());
+    await firstChoice.click();
+
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(PROFILE_ID);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("keeps the current learner active and shows a retryable error when IndexedDB reopen fails", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      const open = indexedDB.open.bind(indexedDB);
+      window.__rejectLearningDbReopen = false;
+      indexedDB.open = (...args) => {
+        if (args[0] === "shadow-mate-learning-v1" && window.__rejectLearningDbReopen) {
+          const request = {};
+          queueMicrotask(() => {
+            request.error = new DOMException("Local Growth Loop database could not reopen.", "UnknownError");
+            request.onerror?.();
+          });
+          return request;
+        }
+        const request = open(...args);
+        if (args[0] === "shadow-mate-learning-v1") {
+          request.addEventListener("success", () => {
+            window.__learningDbConnection = request.result;
+          });
+        }
+        return request;
+      };
+    });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.__learningDbConnection))).toBe(true);
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const secondProfileId = SECOND_PROFILE_ID;
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${secondProfileId}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => {
+      window.__growthWriteScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthWriteScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+      let failNextProfileLoad = true;
+      const hasPendingData = window.growthLoop.hasPendingData.bind(window.growthLoop);
+      window.growthLoop.hasPendingData = async (...args) => {
+        const result = await hasPendingData(...args);
+        if (failNextProfileLoad) {
+          failNextProfileLoad = false;
+          window.__learningDbConnection.close();
+          window.__rejectLearningDbReopen = true;
+        }
+        return result;
+      };
+    });
+
+    await firstChoice.click();
+
+    await expect(secondChoice).toHaveClass(/active/);
+    await expect(firstChoice).not.toHaveClass(/active/);
+    await expect(page.locator("#syncToast")).toContainText("当前孩子未变，请重试");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(secondProfileId);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(secondProfileId);
+    await expect.poll(() => page.evaluate(() => window.__growthWriteScopes)).toEqual([]);
+
+    await page.evaluate(() => {
+      window.__rejectLearningDbReopen = false;
+    });
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(PROFILE_ID);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("serializes rapid profile switches and keeps every scope on the last learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.activityPayloads.length = 0;
+    await page.evaluate(({ firstProfileId, secondProfileId }) => {
+      window.__growthActivityScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthActivityScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+
+      let release;
+      window.__delayedGrowthLoadStarted = false;
+      window.__releaseDelayedGrowthLoad = () => release?.();
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextFirstLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (delayNextFirstLoad && scope.profile_id === firstProfileId) {
+          delayNextFirstLoad = false;
+          window.__delayedGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        return loadScope(scope, options);
+      };
+
+      document.querySelector(`[data-profile="${firstProfileId}"]`).click();
+    }, { firstProfileId: PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await secondChoice.click();
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__releaseDelayedGrowthLoad());
+
+    await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({
+      active: document.querySelector(`[data-profile="${secondProfileId}"]`)?.classList.contains("active"),
+      inactive: document.querySelector(`[data-profile="${firstProfileId}"]`)?.classList.contains("active"),
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      activity: window.__growthActivityScopes,
+    }), { firstProfileId: PROFILE_ID, secondProfileId: SECOND_PROFILE_ID })).toEqual({
+      active: true,
+      inactive: false,
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+      activity: expect.not.arrayContaining([PROFILE_ID]),
+    });
+  });
+
+  test("keeps the locally selected scope when a stale switch is followed by a failed remote hydrate", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(thirdChoice).toBeVisible();
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ secondProfileId }) => {
+      let release;
+      window.__scopeLoads = [];
+      window.__staleGrowthLoadStarted = false;
+      window.__staleGenerationObserved = false;
+      window.__staleLocalWrites = [];
+      window.__releaseStaleGrowthLoad = () => release?.();
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextSecondLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__scopeLoads.push({ profileId: scope.profile_id, phase: "start" });
+        if (delayNextSecondLoad && scope.profile_id === secondProfileId) {
+          delayNextSecondLoad = false;
+          window.__staleGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        const result = await loadScope(scope, options);
+        window.__scopeLoads.push({ profileId: scope.profile_id, phase: "end" });
+        return result;
+      };
+      document.querySelector(`[data-profile="${secondProfileId}"]`).click();
+    }, { secondProfileId: SECOND_PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__staleGrowthLoadStarted)).toBe(true);
+    await thirdChoice.click();
+    await page.evaluate(() => { window.__staleGenerationObserved = true; });
+    await page.evaluate(() => window.__releaseStaleGrowthLoad());
+
+    await expect(firstChoice).not.toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(({ secondProfileId }) => window.__scopeLoads.some(
+      (entry) => entry.profileId === secondProfileId && entry.phase === "end",
+    ), { secondProfileId: SECOND_PROFILE_ID })).toBe(true);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+    }))).toEqual({
+      active: THIRD_PROFILE_ID,
+      learning: THIRD_PROFILE_ID,
+      growth: THIRD_PROFILE_ID,
+    });
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).not.toContain(SECOND_PROFILE_ID);
+    expect(api.activityPayloads.map((payload) => payload.p_event?.profile_id)).not.toContain(SECOND_PROFILE_ID);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+  });
+
+  test("drains a manual save queued for the new profile after the old save settles", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcDelayMs: 1800 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.cloudSync.schedule());
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await page.click("[data-sync]");
+
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
+    await expect.poll(() => api.getRpcSettledCount(), { timeout: 6000 }).toBe(2);
+    await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
+  });
+
+  test("drains an automatic save queued for the new profile after the old save settles", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, { rpcDelayMs: 1800 });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await page.evaluate(() => window.cloudSync.schedule());
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await page.evaluate(() => window.cloudSync.schedule());
+
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
+  });
+
+  test("binds an automatic debounce save to the learner that scheduled it", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+
+    await page.evaluate(() => window.cloudSync.schedule());
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toHaveProperty("p_profile_id", SECOND_PROFILE_ID);
+    expect(api.rpcPayloads[0].p_state).toMatchObject({ scope: { profile_id: SECOND_PROFILE_ID } });
+  });
+
+  test("binds a manual debounce save to the learner that scheduled it", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    api.rpcPayloads.length = 0;
+
+    await page.evaluate(() => window.cloudSync.schedule(true));
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toHaveProperty("p_profile_id", SECOND_PROFILE_ID);
+    expect(api.rpcPayloads[0].p_state).toMatchObject({ scope: { profile_id: SECOND_PROFILE_ID } });
+    await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
+  });
+
+  test("keeps the local active tuple when a save becomes stale before the next remote hydrate fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      rpcDelayMs: 1200,
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+      profileStateData: { [SECOND_PROFILE_ID]: emptyState },
+      profileStateVersions: { [PROFILE_ID]: 3, [SECOND_PROFILE_ID]: 90 },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(thirdChoice).toBeVisible();
+
+    await page.evaluate(({ householdId, profileId }) => {
+      localStorage.setItem(
+        `shadow_mate_learning_v2:${encodeURIComponent(householdId)}:${encodeURIComponent(profileId)}`,
+        JSON.stringify({
+          schema_version: 2,
+          product_id: "shadow-mate",
+          scope: { household_id: householdId, profile_id: profileId },
+          learning: {
+            checkins: { "2026-08-20": { math: true } },
+            extra: { queuedFromProfileB: true },
+            bookShelf: {},
+            peanutLog: [],
+            peanutRead: [],
+          },
+          legacy: { points_readonly: {} },
+          extensions: { legacy_unknown: {} },
+        }),
+      );
+    }, { householdId: HOUSEHOLD_ID, profileId: SECOND_PROFILE_ID });
+
+    await secondChoice.click();
+    await expect.poll(() => api.rpcPayloads.length).toBe(1);
+    expect(api.rpcPayloads[0]).toMatchObject({
+      p_profile_id: SECOND_PROFILE_ID,
+      p_state: {
+        scope: { profile_id: SECOND_PROFILE_ID },
+        learning: { checkins: { "2026-08-20": { math: true } } },
+      },
+    });
+    await expect.poll(() => api.getRpcSettledCount()).toBe(0);
+    await thirdChoice.click();
+    await expect.poll(() => api.getRpcSettledCount()).toBe(1);
+
+    await expect(firstChoice).not.toHaveClass(/active/);
+    await expect(secondChoice).not.toHaveClass(/active/);
+    await expect(thirdChoice).toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => ({
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      tuple: window.cloudSync.getProfileCommitState?.(),
+    }))).toEqual({
+      active: THIRD_PROFILE_ID,
+      learning: THIRD_PROFILE_ID,
+      growth: THIRD_PROFILE_ID,
+      tuple: {
+        active_profile_id: THIRD_PROFILE_ID,
+        active_profile_key: THIRD_PROFILE_ID,
+        cloud_version: null,
+      },
+    });
+    expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID]);
+  });
+
+  test("isolates rollback failures and fails closed before stale profile writes", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(thirdChoice).toBeVisible();
+    await expect.poll(() => api.activityPayloads.length).toBeGreaterThan(0);
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ firstProfileId, secondProfileId, thirdProfileId }) => {
+      window.__rollbackTrace = [];
+      window.__staleGenerationObserved = false;
+      window.__failGrowthRollback = false;
+      window.__staleLocalWrites = [];
+      window.__staleLearningLoadStarted = false;
+      let release;
+      window.__releaseStaleLearningLoad = () => release?.();
+      window.__triggerStaleSwitch = () => {
+        window.__staleGenerationObserved = true;
+        document.querySelector(`[data-profile="${thirdProfileId}"]`).click();
+      };
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+
+      const originalGrowthLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__rollbackTrace.push({
+          domain: "growth",
+          profileId: scope.profile_id,
+          stale: window.__staleGenerationObserved,
+        });
+        if (scope.profile_id === firstProfileId && window.__failGrowthRollback) {
+          throw new Error("injected_growth_rollback_failure");
+        }
+        return originalGrowthLoadScope(scope, options);
+      };
+
+      const originalLearningSetScope = window.learningDesk.setScope.bind(window.learningDesk);
+      let delaySecondScope = true;
+      window.learningDesk.setScope = async (scope, options) => {
+        if (delaySecondScope && scope.profile_id === secondProfileId) {
+          delaySecondScope = false;
+          window.__staleLearningLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        window.__rollbackTrace.push({
+          domain: "learning",
+          profileId: scope.profile_id,
+          stale: window.__staleGenerationObserved,
+        });
+        const result = await originalLearningSetScope(scope, options);
+        if (scope.profile_id === secondProfileId) window.__triggerStaleSwitch();
+        return result;
+      };
+    }, {
+      firstProfileId: PROFILE_ID,
+      secondProfileId: SECOND_PROFILE_ID,
+      thirdProfileId: THIRD_PROFILE_ID,
+    });
+
+    await secondChoice.click();
+    await expect.poll(() => page.evaluate(() => window.__staleLearningLoadStarted)).toBe(true);
+    await page.evaluate(() => {
+      window.__failGrowthRollback = true;
+      window.__releaseStaleLearningLoad();
+    });
+
+    await expect.poll(() => page.evaluate((firstProfileId) => window.__rollbackTrace.some(
+      (entry) => entry.domain === "learning" && entry.profileId === firstProfileId && entry.stale,
+    ), PROFILE_ID)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cloudSync.isProfileScopeWriteBlocked?.())).toBe(true);
+
+    const traceAfterStale = await page.evaluate(() => window.__rollbackTrace.filter((entry) => entry.stale));
+    expect(traceAfterStale).toEqual(expect.arrayContaining([
+      { domain: "growth", profileId: PROFILE_ID, stale: true },
+      { domain: "learning", profileId: PROFILE_ID, stale: true },
+    ]));
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+
+    await page.evaluate(() => {
+      window.cloudSync.schedule(true);
+      window.cloudSync.scheduleGrowthLoop();
+    });
+    await page.waitForTimeout(800);
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBeNull();
+
+    const blockedUiWrites = await page.evaluate(async () => {
+      const writes = [];
+      const originalSetItem = localStorage.setItem.bind(localStorage);
+      const originalRemoveItem = localStorage.removeItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        writes.push({ method: "setItem", key, value });
+        return originalSetItem(key, value);
+      };
+      localStorage.removeItem = (key) => {
+        writes.push({ method: "removeItem", key });
+        return originalRemoveItem(key);
+      };
+      const beforeLearning = window.learningDesk.getState();
+      const beforeGrowth = window.growthLoop.getSnapshot();
+      const beforeOutbox = await window.growthLoop.pendingOutbox();
+      await window.learningDesk.replaceState({
+        ...beforeLearning,
+        extra: { ...beforeLearning.extra, blockedUiMutation: true },
+      }, { persist: true });
+      await window.growthLoop.recordPoint({
+        item: { id: "blocked-item", name: "不应写入", default_points: 1 },
+        occurred_on: "2026-08-20",
+        request_id: "blocked-point",
+      });
+      await window.growthLoop.queueActivity({
+        event_type: "growth_activity_recorded",
+        event_id: "blocked-activity",
+      });
+      return {
+        writes,
+        learningUnchanged: JSON.stringify(window.learningDesk.getState()) === JSON.stringify(beforeLearning),
+        growthUnchanged: JSON.stringify(window.growthLoop.getSnapshot()) === JSON.stringify(beforeGrowth),
+        outboxUnchanged: JSON.stringify(await window.growthLoop.pendingOutbox()) === JSON.stringify(beforeOutbox),
+      };
+    });
+    expect(blockedUiWrites).toEqual({
+      writes: [],
+      learningUnchanged: true,
+      growthUnchanged: true,
+      outboxUnchanged: true,
+    });
+
+    // A closed tab clears sessionStorage, but must not clear the fail-closed
+    // marker. Only the explicit local-data cleanup flow may remove it.
+    await page.addInitScript(() => {
+      window.__readwriteLearningTransactions = 0;
+      window.__localStorageWrites = [];
+      const originalTransaction = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (...args) {
+        if (args[1] === "readwrite") window.__readwriteLearningTransactions += 1;
+        return originalTransaction.apply(this, args);
+      };
+      const originalSetItem = Storage.prototype.setItem;
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "setItem", key, value });
+        return originalSetItem.call(this, key, value);
+      };
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage) window.__localStorageWrites.push({ method: "removeItem", key });
+        return originalRemoveItem.call(this, key);
+      };
+    });
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+    expect(await page.evaluate(() => window.__readwriteLearningTransactions)).toBe(0);
+    expect(await page.evaluate(() => window.__localStorageWrites.filter(({ key }) => (
+      key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")
+    )))).toEqual([]);
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.click("#accountButton");
+    await page.evaluate(() => {
+      window.__originalClearAllLocalData = window.growthLoop.clearAllLocalData.bind(window.growthLoop);
+      window.growthLoop.clearAllLocalData = async () => {
+        throw new Error("injected_clear_failure");
+      };
+    });
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    await page.evaluate(() => {
+      window.growthLoop.clearAllLocalData = window.__originalClearAllLocalData;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
+  });
+
+  test("aborts the controller operation before a real IndexedDB transaction can commit a stale row", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto("/");
+      await page.waitForTimeout(500);
+
+      const result = await page.evaluate(async () => {
+        await window.growthLoop.clearAllLocalData();
+        const { createIndexedDbLearningDb } = await import("/src/learning-local-db.js");
+        const { createGrowthLoopController } = await import("/src/learning-growth-loop-controller.js");
+        const controller = createGrowthLoopController({ db: createIndexedDbLearningDb() });
+        const originalPut = IDBObjectStore.prototype.put;
+        const originalSetInterval = window.setInterval;
+        const originalAbort = AbortController.prototype.abort;
+        let requestSucceeded = false;
+        let abortCount = 0;
+        window.setInterval = () => 0;
+        AbortController.prototype.abort = function (...args) {
+          abortCount += 1;
+          return originalAbort.apply(this, args);
+        };
+        IDBObjectStore.prototype.put = function (...args) {
+          const request = originalPut.apply(this, args);
+          if (this.name === "snapshots") {
+            request.addEventListener("success", () => queueMicrotask(() => {
+              requestSucceeded = true;
+              controller.invalidateWriteOperations?.();
+            }), { once: true });
+          }
+          return request;
+        };
+
+        try {
+          await controller.recordPoint({
+            item: { id: "stale-item", name: "不应落盘", default_points: 1 },
+            occurred_on: "2026-08-20",
+            request_id: "stale-real-idb-row",
+          });
+        } finally {
+          IDBObjectStore.prototype.put = originalPut;
+          window.setInterval = originalSetInterval;
+          AbortController.prototype.abort = originalAbort;
+        }
+
+        const persisted = await new Promise((resolve, reject) => {
+          const request = indexedDB.open("shadow-mate-learning-v1", 1);
+          request.onerror = () => reject(request.error || new Error("open_failed"));
+          request.onsuccess = () => {
+            const database = request.result;
+            const transaction = database.transaction(["snapshots"], "readonly");
+            const read = transaction.objectStore("snapshots").get("pending:pending");
+            read.onerror = () => reject(read.error || new Error("read_failed"));
+            read.onsuccess = () => {
+              resolve(read.result?.snapshot?.ledger?.some((entry) => entry.request_id === "stale-real-idb-row") || false);
+              database.close();
+            };
+          };
+        });
+        return { requestSucceeded, abortCount, persisted_row: persisted };
+      });
+
+      expect(result.requestSucceeded).toBe(true);
+      expect(result.abortCount).toBeGreaterThan(0);
+      expect(result.persisted_row).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("fails closed when Learning rollback fails after Growth rollback succeeds", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const api = await mockCloudApi(page, {
+      initialProfiles: [
+        { id: SECOND_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第二个学习者", grade_level: 3 },
+        { id: THIRD_PROFILE_ID, household_id: HOUSEHOLD_ID, display_name: "第三个学习者", grade_level: 3 },
+      ],
+      profileStateResponses: { [THIRD_PROFILE_ID]: "error" },
+    });
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+    await expect(page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`)).toBeVisible();
+    api.rpcPayloads.length = 0;
+    api.activityPayloads.length = 0;
+
+    await page.evaluate(({ firstProfileId, secondProfileId, thirdProfileId }) => {
+      window.__rollbackTrace = [];
+      window.__failLearningRollback = false;
+      window.__staleGenerationObserved = false;
+      window.__staleLocalWrites = [];
+      window.__staleLearningLoadStarted = false;
+      let release;
+      window.__releaseStaleLearningLoad = () => release?.();
+      window.__triggerStaleSwitch = () => {
+        window.__staleGenerationObserved = true;
+        document.querySelector(`[data-profile="${thirdProfileId}"]`).click();
+      };
+      const setItem = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = (key, value) => {
+        if (window.__staleGenerationObserved && key.includes(secondProfileId)) {
+          window.__staleLocalWrites.push({ key, value });
+        }
+        return setItem(key, value);
+      };
+
+      const originalGrowthLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      window.growthLoop.loadScope = async (scope, options) => {
+        window.__rollbackTrace.push({ domain: "growth", profileId: scope.profile_id, stale: window.__staleGenerationObserved });
+        return originalGrowthLoadScope(scope, options);
+      };
+
+      const originalLearningSetScope = window.learningDesk.setScope.bind(window.learningDesk);
+      let delaySecondScope = true;
+      window.learningDesk.setScope = async (scope, options) => {
+        if (delaySecondScope && scope.profile_id === secondProfileId) {
+          delaySecondScope = false;
+          window.__staleLearningLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        window.__rollbackTrace.push({ domain: "learning", profileId: scope.profile_id, stale: window.__staleGenerationObserved });
+        if (scope.profile_id === firstProfileId && window.__failLearningRollback) {
+          throw new Error("injected_learning_rollback_failure");
+        }
+        const result = await originalLearningSetScope(scope, options);
+        if (scope.profile_id === secondProfileId) window.__triggerStaleSwitch();
+        return result;
+      };
+    }, {
+      firstProfileId: PROFILE_ID,
+      secondProfileId: SECOND_PROFILE_ID,
+      thirdProfileId: THIRD_PROFILE_ID,
+    });
+
+    await secondChoice.click();
+    await expect.poll(() => page.evaluate(() => window.__staleLearningLoadStarted)).toBe(true);
+    await page.evaluate(() => {
+      window.__failLearningRollback = true;
+      window.__releaseStaleLearningLoad();
+    });
+
+    await expect.poll(() => page.evaluate((firstProfileId) => window.__rollbackTrace.some(
+      (entry) => entry.domain === "growth" && entry.profileId === firstProfileId && entry.stale,
+    ), PROFILE_ID)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cloudSync.isProfileScopeWriteBlocked?.())).toBe(true);
+    expect(api.rpcPayloads).toEqual([]);
+    expect(api.activityPayloads).toEqual([]);
+    expect(await page.evaluate(() => window.__staleLocalWrites)).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBeNull();
+  });
+
+  test("cleans every Learning Desk key and retains the marker when one deletion fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const envelope = JSON.stringify({ schema_version: 2, learning: {} });
+      localStorage.setItem("shadow_mate_workbench_v1", "legacy");
+      localStorage.setItem("shadow_mate_learning_v2:household-a:profile-a", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:household-b:profile-b", envelope);
+      localStorage.setItem("shadow_mate_learning_v2:legacy_backup:test", "legacy-backup");
+    });
+
+    await page.click("#accountButton");
+    await expect(page.locator("[data-clear-local]")).toBeVisible();
+    await page.evaluate(() => {
+      window.__originalLearningRemoveItem = Storage.prototype.removeItem;
+      const blockedKey = "shadow_mate_learning_v2:household-b:profile-b";
+      Storage.prototype.removeItem = function (key) {
+        if (key === blockedKey) throw new Error("injected_learning_key_delete_failure");
+        return window.__originalLearningRemoveItem.call(this, key);
+      };
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect(page.locator("#syncToast")).toContainText("本机数据清理未完成");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBe("1");
+
+    const failedCleanupKeys = await page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null));
+    expect(failedCleanupKeys).toContain("shadow_mate_learning_v2:household-b:profile-b");
+
+    await page.evaluate(() => {
+      Storage.prototype.removeItem = window.__originalLearningRemoveItem;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("[data-clear-local]").click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_profile_scope_blocked"))).toBeNull();
+    await expect.poll(() => page.evaluate(() => [
+      "shadow_mate_workbench_v1",
+      "shadow_mate_learning_v2:household-a:profile-a",
+      "shadow_mate_learning_v2:household-b:profile-b",
+      "shadow_mate_learning_v2:legacy_backup:test",
+    ].filter((key) => localStorage.getItem(key) !== null))).toEqual([]);
+  });
+
+  test("does not let a delayed background refresh overwrite a newer learner", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个学习者");
+    await page.click('#addLearnerForm button[type="submit"]');
+
+    const firstChoice = page.locator(`[data-profile="${PROFILE_ID}"]`);
+    const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
+    await expect(secondChoice).toHaveClass(/active/);
+    await firstChoice.click();
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await page.evaluate(({ firstProfileId }) => {
+      window.__growthActivityScopes = [];
+      const queueActivity = window.growthLoop.queueActivity.bind(window.growthLoop);
+      window.growthLoop.queueActivity = async (...args) => {
+        window.__growthActivityScopes.push(window.growthLoop.getScope().profile_id);
+        return queueActivity(...args);
+      };
+
+      let release;
+      window.__delayedGrowthLoadStarted = false;
+      window.__releaseDelayedGrowthLoad = () => release?.();
+      const loadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let delayNextFirstLoad = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (delayNextFirstLoad && scope.profile_id === firstProfileId) {
+          delayNextFirstLoad = false;
+          window.__delayedGrowthLoadStarted = true;
+          await new Promise((resolve) => { release = resolve; });
+        }
+        return loadScope(scope, options);
+      };
+      window.dispatchEvent(new Event("online"));
+    }, { firstProfileId: PROFILE_ID });
+
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await secondChoice.click();
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.__releaseDelayedGrowthLoad());
+
+    await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({
+      active: document.querySelector(`[data-profile="${secondProfileId}"]`)?.classList.contains("active"),
+      inactive: document.querySelector(`[data-profile="${firstProfileId}"]`)?.classList.contains("active"),
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+      activity: window.__growthActivityScopes,
+    }), { firstProfileId: PROFILE_ID, secondProfileId: SECOND_PROFILE_ID })).toEqual({
+      active: true,
+      inactive: false,
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+      activity: expect.not.arrayContaining([PROFILE_ID]),
+    });
   });
 
   test("creates only one learner after rapid repeated clicks", async ({ page }) => {
@@ -366,7 +1656,6 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("retries after a version conflict and keeps the remote state", async ({ page }) => {
-    const profileAScope = "profile:" + PROFILE_ID;
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       remoteState: { ...emptyState, extra: { conflictMarker: "remote" } },
@@ -374,517 +1663,11 @@ test.describe("Authenticated cloud workspace", () => {
     });
 
     await page.goto("/");
-    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
     await page.click("#accountButton");
     await page.click("[data-sync]");
     await expect.poll(() => api.rpcPayloads.length).toBe(2);
-    await expect.poll(async () => page.evaluate(({ scopedKey, profileId }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return envelope.scopes?.[`profile:${profileId}`]?.extra?.conflictMarker;
-    }, { scopedKey: SCOPED_KEY, profileId: PROFILE_ID })).toBe("remote");
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").extra?.conflictMarker)).toBe("remote");
     expect(api.rpcPayloads[1]).toHaveProperty("p_profile_id", PROFILE_ID);
-  });
-
-  test("keeps learner A and learner B local scopes isolated across switches", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("profile-b", profileBScope),
-    });
-    await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
-    });
-
-    await page.goto("/");
-    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-b");
-    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-a");
-    await expect.poll(() => page.evaluate(({ scopedKey, profileAScope, profileBScope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return [envelope.scopes?.[profileAScope]?.extra?.marker, envelope.scopes?.[profileBScope]?.extra?.marker];
-    }, { scopedKey: SCOPED_KEY, profileAScope, profileBScope })).toEqual(["profile-a", "profile-b"]);
-  });
-
-  test("hydrates an existing remote profile without merging the current learner", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    const currentState = stateWithMarker("current-a", profileAScope);
-    const cachedBState = stateWithMarker("cached-b", profileBScope);
-    const remoteBState = stateWithMarker("remote-b", profileBScope);
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: currentState,
-      [profileBScope]: cachedBState,
-    });
-    await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("remote-b");
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.hanziWorksheetRotationV1?.learnerScope)).toBe(profileBScope);
-    await expect.poll(() => page.evaluate(({ scopedKey, profileAScope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return envelope.scopes?.[profileAScope]?.extra?.marker;
-    }, { scopedKey: SCOPED_KEY, profileAScope })).toBe("current-a");
-  });
-
-  test("preserves target-scope offline edits during remote hydration", async ({ page }) => {
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    const cachedBState = stateWithMarker("cached-b", profileBScope);
-    const remoteBState = stateWithMarker("remote-b", profileBScope);
-    remoteBState.extra.remoteDuringHydrate = true;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, { [profileBScope]: cachedBState });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
-      stateDelays: { [SECOND_PROFILE_ID]: 600 },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
-    await page.evaluate(() => {
-      const state = window.learningDesk.getState();
-      state.extra.localDuringHydrate = true;
-      window.learningDesk.replaceState(state, { persist: true });
-    });
-
-    await expect.poll(() => page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      local: window.learningDesk.getState().extra?.localDuringHydrate,
-      remote: window.learningDesk.getState().extra?.remoteDuringHydrate,
-    }))).toEqual({ scope: profileBScope, local: true, remote: true });
-    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).toMatchObject({
-      p_state: {
-        extra: { localDuringHydrate: true, remoteDuringHydrate: true },
-      },
-    });
-    expect(await page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("cached-b");
-    expect(await page.evaluate(({ scopedKey, profileBScope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return envelope.scopes?.[profileBScope]?.extra;
-    }, { scopedKey: SCOPED_KEY, profileBScope })).toMatchObject({
-      localDuringHydrate: true,
-      remoteDuringHydrate: true,
-    });
-  });
-
-  test("preserves pending target check-in and rotation completion before remote hydration", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    const remoteBState = stateWithMarker("remote-b", profileBScope);
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("cached-b", profileBScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: remoteBState },
-      stateDelays: { [SECOND_PROFILE_ID]: 600 },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.evaluate(({ scope }) => {
-      window.learningDesk.activateScope(scope, {
-        state: window.learningDesk.getState(scope),
-        persist: true,
-        render: false,
-      });
-      const state = window.learningDesk.getState();
-      state.checkins["2026-09-01"] ??= {};
-      state.checkins["2026-09-01"]["chinese-writing"] = true;
-      const rotation = state.extra.hanziWorksheetRotationV1;
-      const assignment = rotation.assignments["2026-09-01"];
-      assignment.completions[assignment.canonicalAssignmentId] = {
-        completedAt: "2026-09-01T02:00:00.000Z",
-      };
-      window.learningDesk.replaceState(state, { persist: true, render: false });
-    }, { scope: profileBScope });
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
-    await expect.poll(() => page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      checked: window.learningDesk.getState().checkins["2026-09-01"]?.["chinese-writing"],
-      completed: Object.keys(window.learningDesk.getState().extra.hanziWorksheetRotationV1.assignments["2026-09-01"].completions).length,
-      remoteMarker: window.learningDesk.getState().extra.remoteOnly,
-    }))).toEqual({
-      scope: profileBScope,
-      checked: true,
-      completed: 1,
-      remoteMarker: undefined,
-    });
-    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).toMatchObject({
-      p_state: {
-        checkins: { "2026-09-01": { "chinese-writing": true } },
-      },
-    });
-    expect(await page.evaluate(() => window.learningDesk.getState().extra.marker)).toBe("cached-b");
-  });
-
-  test("retains pending target edits through a failed hydration and reload", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("cached-b", profileBScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope) },
-      stateErrors: { [SECOND_PROFILE_ID]: "network timeout" },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await expect(page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`)).toBeVisible();
-    await page.evaluate(({ scopedKey, scope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey));
-      const state = envelope.scopes[scope];
-      state.extra.offlineBeforeReload = true;
-      envelope.scopes[scope] = state;
-      localStorage.setItem(scopedKey, JSON.stringify(envelope));
-      localStorage.setItem(`${scopedKey}_sync_v1`, JSON.stringify({
-        schemaVersion: 1,
-        scopes: { [scope]: { pending: true, lastConfirmed: null } },
-      }));
-    }, { scopedKey: SCOPED_KEY, scope: profileBScope });
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      offline: window.learningDesk.getState().extra.offlineBeforeReload,
-      pending: window.learningDesk.getPersistenceStatus().pending,
-    }))).toEqual({ scope: profileBScope, offline: true, pending: true });
-    await page.reload();
-    await expect.poll(() => page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      offline: window.learningDesk.getState().extra.offlineBeforeReload,
-      pending: window.learningDesk.getPersistenceStatus().pending,
-    }))).toEqual({ scope: profileBScope, offline: true, pending: true });
-    expect(api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID).length).toBeGreaterThan(0);
-  });
-
-  test("migrates only anonymous local state into an empty newly selected profile", async ({ page }) => {
-    const anonymousScope = "anonymous";
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [anonymousScope]: stateWithMarker("anonymous", anonymousScope),
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [],
-      noMembership: true,
-    });
-
-    await page.goto("/");
-    await expect(page.locator("#householdSetupForm")).toBeVisible();
-    await page.evaluate(() => {
-      document.querySelector('[data-mod="chinese"]')?.click();
-      document.querySelector('#main [data-cmod="chinese-writing"]')?.click();
-    });
-    await page.locator('#householdSetupForm input[name="household"]').fill("迁移测试家庭");
-    await page.locator('#householdSetupForm input[name="learner"]').fill("学习者 B");
-    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
-    await page.locator('#householdSetupForm button[type="submit"]').click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
-    await expect.poll(() => api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID)).not.toBeUndefined();
-    const migratedPayload = api.rpcPayloads.find((payload) => payload.p_profile_id === SECOND_PROFILE_ID);
-    expect(migratedPayload.p_state.extra.marker).toBe("anonymous");
-    expect(migratedPayload.p_state.extra.hanziWorksheetRotationV1.learnerScope).toBe(profileBScope);
-    expect(migratedPayload.p_state.checkins).toHaveProperty("2026-09-01.anonymous");
-    expect(migratedPayload.p_state.checkins).not.toHaveProperty("2026-09-01.profile-a");
-    expect(Object.values(migratedPayload.p_state.checkins).some((day) => day["chinese-writing"])).toBe(true);
-    expect(Object.values(migratedPayload.p_state.extra.hanziWorksheetRotationV1.assignments)
-      .some((assignment) => Object.keys(assignment.completions).length > 0)).toBe(true);
-  });
-
-  test("clearing local data removes anonymous and every learner scope", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      anonymous: stateWithMarker("anonymous", "anonymous"),
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("profile-b", profileBScope),
-    });
-    await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
-    });
-    await page.addInitScript(() => { window.confirm = () => true; });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator("[data-clear-local]").click();
-
-    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
-    await expect(page.evaluate(({ scopedKey }) => localStorage.getItem(scopedKey), { scopedKey: SCOPED_KEY })).resolves.toBeNull();
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      state: window.learningDesk.getState(),
-    }))).resolves.toEqual({ scope: "anonymous", state: emptyState });
-  });
-
-  test("does not report success or reset context when local clear fails", async ({ page }) => {
-    const profileScope = `profile:${PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, { [profileScope]: stateWithMarker("recoverable", profileScope) });
-    await mockCloudApi(page, { remoteStates: { [PROFILE_ID]: null } });
-    await page.addInitScript(({ scopedKey }) => {
-      const removeItem = Storage.prototype.removeItem;
-      Storage.prototype.removeItem = function (key) {
-        if (key === scopedKey) throw new Error("scoped storage remove failed");
-        return removeItem.call(this, key);
-      };
-      window.confirm = () => true;
-    }, { scopedKey: SCOPED_KEY });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator("[data-clear-local]").click();
-
-    await expect(page.locator("#syncToast")).toHaveText("本机数据清除失败，本机状态未重置，请稍后重试。");
-    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      marker: window.learningDesk.getState().extra?.marker,
-    }))).resolves.toEqual({ scope: profileScope, marker: "recoverable" });
-  });
-
-  test("invalidates an in-flight profile save when local data is cleared", async ({ page }) => {
-    const profileScope = `profile:${PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, { [profileScope]: stateWithMarker("clear-in-flight", profileScope) });
-    const api = await mockCloudApi(page, {
-      remoteStates: { [PROFILE_ID]: stateWithMarker("remote", profileScope) },
-      rpcDelayMs: 800,
-    });
-    await page.addInitScript(() => { window.confirm = () => true; });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator("[data-sync]").click();
-    await expect.poll(() => api.rpcPayloads.length).toBe(1);
-    await page.locator("[data-clear-local]").click();
-
-    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
-    await expect(page.evaluate(() => window.learningDesk.getPersistenceScope())).resolves.toBe("anonymous");
-    await page.waitForTimeout(1000);
-    expect(api.rpcPayloads).toHaveLength(1);
-    expect(api.rpcPayloads[0].p_profile_id).toBe(PROFILE_ID);
-  });
-
-  test("deleting one learner removes only that learner's local scope", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("profile-b", profileBScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
-    });
-    await page.addInitScript(() => { window.confirm = () => true; });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-delete-profile="${PROFILE_ID}"]`).click();
-
-    await expect.poll(() => api.deletedProfiles.length).toBe(1);
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-b");
-    await expect(page.evaluate(({ scopedKey, profileAScope, profileBScope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return {
-        deleted: envelope.scopes?.[profileAScope],
-        retained: envelope.scopes?.[profileBScope]?.extra?.marker,
-      };
-    }, { scopedKey: SCOPED_KEY, profileAScope, profileBScope })).resolves.toEqual({
-      deleted: undefined,
-      retained: "profile-b",
-    });
-  });
-
-  test("does not report learner deletion success when local scope removal fails", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("profile-b", profileBScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: null },
-    });
-    await page.addInitScript(() => { window.confirm = () => true; });
-
-    await page.goto("/");
-    await page.evaluate(({ scopedKey }) => {
-      const setItem = Storage.prototype.setItem;
-      Storage.prototype.setItem = function (key, value) {
-        if (key === scopedKey) throw new Error("scoped storage write failed");
-        return setItem.call(this, key, value);
-      };
-    }, { scopedKey: SCOPED_KEY });
-    await page.click("#accountButton");
-    await page.locator(`[data-delete-profile="${PROFILE_ID}"]`).click();
-
-    await expect.poll(() => api.deletedProfiles.length).toBe(1);
-    await expect(page.locator("#syncToast")).toHaveText("云端学习者已删除，但本机缓存清除失败，请稍后重试。");
-    await expect(page.evaluate(({ scopedKey, profileAScope }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return envelope.scopes?.[profileAScope]?.extra?.marker;
-    }, { scopedKey: SCOPED_KEY, profileAScope })).resolves.toBe("profile-a");
-    expect(await page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileAScope);
-    expect(await page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("profile-a");
-    expect(api.deletedProfiles).toEqual([PROFILE_ID]);
-  });
-
-  test("ignores a delayed old-profile response after switching to a newer learner", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await page.addInitScript(({ profileId }) => {
-      localStorage.setItem("shadow_mate_active_profile", profileId);
-    }, { profileId: SECOND_PROFILE_ID });
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("cached-a", profileAScope),
-      [profileBScope]: stateWithMarker("cached-b", profileBScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: {
-        [PROFILE_ID]: stateWithMarker("remote-a", profileAScope),
-        [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope),
-      },
-      stateDelays: { [PROFILE_ID]: 1000 },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
-    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === PROFILE_ID).length).toBeGreaterThan(0);
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra?.marker)).toBe("remote-b");
-    await page.waitForTimeout(1200);
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      marker: window.learningDesk.getState().extra?.marker,
-    }))).resolves.toEqual({ scope: profileBScope, marker: "remote-b" });
-  });
-
-  test("does not let a delayed profile response write after logout", async ({ page }) => {
-    const profileScope = `profile:${PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      anonymous: stateWithMarker("anonymous", "anonymous"),
-      [profileScope]: stateWithMarker("cached-profile", profileScope),
-    });
-    const api = await mockCloudApi(page, {
-      remoteStates: { [PROFILE_ID]: stateWithMarker("remote-profile", profileScope) },
-      stateDelays: { [PROFILE_ID]: 800 },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await expect(page.locator(`[data-profile="${PROFILE_ID}"]`)).toBeVisible();
-    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
-    await expect.poll(() => api.stateRequests.filter((profileId) => profileId === PROFILE_ID).length).toBeGreaterThan(1);
-    await page.locator("[data-signout]").click();
-
-    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
-    await page.waitForTimeout(1000);
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      marker: window.learningDesk.getState().extra?.marker,
-    }))).resolves.toEqual({ scope: "anonymous", marker: "anonymous" });
-    expect(api.rpcPayloads).toHaveLength(0);
-  });
-
-  test("fails closed before hydrating a profile with a mismatched local rotation scope", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      [profileAScope]: stateWithMarker("profile-a", profileAScope),
-      [profileBScope]: stateWithMarker("wrong-scope", profileAScope),
-    });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: null, [SECOND_PROFILE_ID]: stateWithMarker("remote-b", profileBScope) },
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect(page.locator("#syncToast")).toHaveText("本机记录与当前学习者不匹配，暂未加载。");
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      marker: window.learningDesk.getState().extra?.marker,
-    }))).resolves.toEqual({ scope: profileAScope, marker: "profile-a" });
-    expect(api.stateRequests.filter((profileId) => profileId === SECOND_PROFILE_ID)).toHaveLength(0);
-  });
-
-  test("binds cloud saves to the starting profile, scope, and state snapshot", async ({ page }) => {
-    const profileAScope = `profile:${PROFILE_ID}`;
-    const profileBScope = `profile:${SECOND_PROFILE_ID}`;
-    const stateBeforeSave = stateWithMarker("before-save", profileAScope);
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, { [profileAScope]: stateBeforeSave });
-    const api = await mockCloudApi(page, {
-      profiles: [profileFixture(PROFILE_ID, "学习者 A"), profileFixture(SECOND_PROFILE_ID, "学习者 B")],
-      remoteStates: { [PROFILE_ID]: stateBeforeSave, [SECOND_PROFILE_ID]: null },
-      rpcDelayMs: 800,
-    });
-
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator("[data-sync]").click();
-    await expect.poll(() => api.rpcPayloads.length).toBe(1);
-    await page.evaluate(() => {
-      const state = window.learningDesk.getState();
-      state.extra.marker = "after-save-start";
-      window.learningDesk.replaceState(state, { persist: true });
-    });
-    await page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`).click();
-
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileBScope);
-    expect(api.rpcPayloads[0]).toMatchObject({
-      p_profile_id: PROFILE_ID,
-      p_state: { extra: { marker: "before-save" } },
-    });
   });
 
   test("stops after repeated version conflicts instead of retrying forever", async ({ page }) => {
@@ -977,10 +1760,7 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-delete-profile]");
     await expect.poll(() => api.deletedProfiles.length).toBe(1);
     await expect(page.locator("#cloudPanel .learner-choice")).toHaveCount(0);
-    await expect(page.evaluate(({ scopedKey, profileId }) => {
-      const envelope = JSON.parse(localStorage.getItem(scopedKey) || "{}");
-      return envelope.scopes?.[`profile:${profileId}`];
-    }, { scopedKey: SCOPED_KEY, profileId: PROFILE_ID })).resolves.toBeUndefined();
+    await expect(page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").checkins)).resolves.toEqual({});
   });
 
   test("exports family data and lets the owner delete the family workspace", async ({ page }) => {
@@ -1002,61 +1782,359 @@ test.describe("Authenticated cloud workspace", () => {
     expect(api.deletedHouseholds[0]).toEqual({ p_household_id: HOUSEHOLD_ID });
     await expect(page.locator("#syncToast")).toHaveText("家庭数据已删除，已退出登录");
   });
-  test("returns to local mode after signing out of the cloud workspace", async ({ page }) => {
-    const profileScope = `profile:${PROFILE_ID}`;
+
+  test("can sign in again after deleting the household and shows setup", async ({ page }) => {
+    let householdDeleted = false;
+    let passwordRequests = 0;
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "password-after-delete-access-token",
+      refresh_token: "password-after-delete-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: { id: USER_ID, aud: "authenticated", role: "authenticated", email: "parent@example.test" },
+    };
+
     await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      anonymous: stateWithMarker("anonymous", "anonymous"),
-      [profileScope]: stateWithMarker("cached-profile", profileScope),
+    await mockCloudApi(page);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
     });
-    await mockCloudApi(page, {
-      remoteState: stateWithMarker("remote-profile", profileScope),
+    await page.route("**/rest/v1/rpc/learning_delete_household", async (route) => {
+      householdDeleted = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/rest/v1/learning_household_members**", async (route) => {
+      if (householdDeleted) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/auth/v1/token?grant_type=password", async (route) => {
+      passwordRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
     });
 
     await page.goto("/");
     await page.click("#accountButton");
-    await page.click("[data-signout]");
-
+    await page.click("[data-delete-household]");
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
-    await expect(page.evaluate(() => ({
-      scope: window.learningDesk.getPersistenceScope(),
-      marker: window.learningDesk.getState().extra?.marker,
-    }))).resolves.toEqual({ scope: "anonymous", marker: "anonymous" });
+
+    // The app-wide rapid-action guard keeps the account button on a 500ms cooldown.
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#emailLoginForm")).toBeVisible();
+    await page.click('[data-auth-mode="password"]');
+    await page.locator('#emailLoginForm input[name="email"]').fill("parent@example.test");
+    await page.locator('#emailLoginForm input[name="password"]').fill("SharedPassword123!");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect.poll(() => passwordRequests).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
   });
 
-  test("fails closed when logout cannot save the profile scope", async ({ page }) => {
-    const profileScope = `profile:${PROFILE_ID}`;
-    await seedAuthenticatedSession(page);
-    await seedScopedStates(page, {
-      anonymous: stateWithMarker("anonymous", "anonymous"),
-      [profileScope]: stateWithMarker("cached-profile", profileScope),
-    });
-    const api = await mockCloudApi(page, {
-      remoteState: stateWithMarker("remote-profile", profileScope),
-    });
+  test("recovers learner activation after deleting and recreating a household", async ({ page }) => {
+    let householdDeleted = false;
+    let setupHouseholdCreated = false;
+    let setupHouseholdId = null;
+    let passwordRequests = 0;
+    const createdProfiles = [];
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "password-after-delete-recreate-access-token",
+      refresh_token: "password-after-delete-recreate-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: { id: USER_ID, aud: "authenticated", role: "authenticated", email: "parent@example.test" },
+    };
 
-    await page.goto("/");
-    await page.click("#accountButton");
-    await page.locator(`[data-profile="${PROFILE_ID}"]`).click();
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(profileScope);
-    await page.evaluate((scopedKey) => {
-      const originalSetItem = Storage.prototype.setItem;
-      Object.defineProperty(Storage.prototype, "setItem", {
-        configurable: true,
-        value(key, value) {
-          if (key === scopedKey) {
-            throw new Error("simulated logout storage failure");
-          }
-          return originalSetItem.call(this, key, value);
-        },
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("**/rest/v1/rpc/learning_delete_household", async (route) => {
+      householdDeleted = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/rest/v1/learning_household_members**", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({ status: 201, body: "" });
+        return;
+      }
+      if (householdDeleted && !setupHouseholdCreated) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+        return;
+      }
+      if (setupHouseholdCreated) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ household_id: setupHouseholdId, role: "owner" }]),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/rest/v1/learning_guardian_consents**", async (route) => {
+      if (route.request().method() === "POST" || !setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ household_id: setupHouseholdId }]),
       });
-    }, SCOPED_KEY);
+    });
+    await page.route("**/rest/v1/learning_households**", async (route) => {
+      if (route.request().method() === "POST") {
+        const household = JSON.parse(route.request().postData() || "{}");
+        setupHouseholdId = household.id;
+        setupHouseholdCreated = true;
+        await route.fulfill({ status: 201, body: "" });
+        return;
+      }
+      if (!setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ name: "重新建立的家庭" }]),
+      });
+    });
+    await page.route("**/rest/v1/learning_profiles**", async (route) => {
+      if (route.request().method() === "POST") {
+        const profile = JSON.parse(route.request().postData() || "{}");
+        const createdProfile = {
+          ...profile,
+          id: profile.id || SECOND_PROFILE_ID,
+          household_id: setupHouseholdId,
+        };
+        createdProfiles.push(createdProfile);
+        await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(createdProfile) });
+        return;
+      }
+      if (!setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(createdProfiles) });
+    });
+    await page.route("**/auth/v1/token?grant_type=password", async (route) => {
+      passwordRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-delete-household]");
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#emailLoginForm")).toBeVisible();
+    await page.click('[data-auth-mode="password"]');
+    await page.locator('#emailLoginForm input[name="email"]').fill("parent@example.test");
+    await page.locator('#emailLoginForm input[name="password"]').fill("SharedPassword123!");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect.poll(() => passwordRequests).toBe(1);
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+    // A stale Growth Loop operation returns the previous snapshot without throwing;
+    // profile activation must retry while its auth generation is still current.
+    await page.evaluate(() => {
+      const originalLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let returnStaleSnapshotOnce = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (returnStaleSnapshotOnce && scope.profile_id) {
+          returnStaleSnapshotOnce = false;
+          return window.growthLoop.getSnapshot();
+        }
+        return originalLoadScope(scope, options);
+      };
+    });
+    await page.locator('#householdSetupForm input[name="household"]').fill("重新建立的家庭");
+    await page.locator('#householdSetupForm input[name="learner"]').fill("第一个孩子");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
+    await page.click('#householdSetupForm button[type="submit"]');
+    await expect.poll(() => createdProfiles.length).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /第一个孩子/);
+
+    // Respect the app-wide rapid-action cooldown before reopening the account panel.
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#cloudPanel")).toContainText("家长同意已记录");
+    const firstProfileId = createdProfiles[0].id;
+    const firstChoice = page.locator(`[data-profile="${firstProfileId}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个孩子");
+    await page.click('#addLearnerForm button[type="submit"]');
+    await expect.poll(() => createdProfiles.length).toBe(2);
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /第二个孩子/);
+  });
+
+  test("returns to local mode after signing out of the cloud workspace", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+    }))).toEqual({
+      growth: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      learning: { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID },
+      activeProfile: PROFILE_ID,
+      activeProfileKey: PROFILE_ID,
+    });
+    await page.click("#accountButton");
     await page.click("[data-signout]");
 
     await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe("anonymous");
-    expect(api.rpcPayloads).toHaveLength(0);
+    await expect.poll(() => page.evaluate(() => ({
+      growth: window.growthLoop.getScope(),
+      learning: window.learningDesk.getEnvelope().scope,
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+      activeProfileKey: localStorage.getItem("shadow_mate_active_profile"),
+      canWriteLocalState: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({
+      growth: { household_id: null, profile_id: null },
+      learning: { household_id: null, profile_id: null },
+      activeProfile: null,
+      activeProfileKey: null,
+      canWriteLocalState: true,
+    });
+
+    const signedOutWrite = await page.evaluate(({ householdId, profileId }) => {
+      const nextState = window.learningDesk.getState();
+      nextState.extra = { ...nextState.extra, signed_out_local_write: true };
+      const changed = window.learningDesk.replaceState(nextState, { persist: true });
+      return {
+        changed,
+        pending: localStorage.getItem("shadow_mate_learning_v2:pending"),
+        previousProfile: localStorage.getItem(`shadow_mate_learning_v2:${householdId}:${profileId}`),
+      };
+    }, { householdId: HOUSEHOLD_ID, profileId: PROFILE_ID });
+    expect(signedOutWrite.changed).toBe(true);
+    expect(JSON.parse(signedOutWrite.pending)).toEqual(expect.objectContaining({
+      scope: { household_id: null, profile_id: null },
+      learning: expect.objectContaining({ extra: expect.objectContaining({ signed_out_local_write: true }) }),
+    }));
+    expect(JSON.parse(signedOutWrite.previousProfile || "{}")?.learning?.extra?.signed_out_local_write).not.toBe(true);
   });
+
+  test("fails closed when the sign-out profile scope reset fails", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      window.growthLoop.loadScope = async () => {
+        throw new Error("injected_signed_out_scope_reset_failure");
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+    }))).toEqual({ blocked: true, marker: "1" });
+  });
+
+  test("fails closed when the active profile key cannot be removed after sign-out", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.evaluate(() => {
+      const originalRemoveItem = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (key) {
+        if (this === localStorage && key === "shadow_mate_active_profile") {
+          throw new Error("injected_active_profile_key_remove_failure");
+        }
+        return originalRemoveItem.call(this, key);
+      };
+    });
+    await page.click("#accountButton");
+    await page.click("[data-signout]");
+
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: window.cloudSync.isProfileScopeWriteBlocked?.(),
+      marker: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      activeProfile: window.cloudSync.getProfileCommitState().active_profile_id,
+    }))).toEqual({ blocked: true, marker: "1", activeProfile: null });
+  });
+});
+
+test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
+    window.__blockedStorageTrace = {
+      opens: 0,
+      versionchanges: 0,
+      readwrites: 0,
+      localWrites: [],
+    };
+    const originalOpen = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (...args) => {
+      window.__blockedStorageTrace.opens += 1;
+      const request = originalOpen(...args);
+      request.addEventListener("upgradeneeded", () => {
+        window.__blockedStorageTrace.versionchanges += 1;
+      });
+      return request;
+    };
+    const originalTransaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      if (args[1] === "readwrite") window.__blockedStorageTrace.readwrites += 1;
+      return originalTransaction.apply(this, args);
+    };
+    const originalSetItem = Storage.prototype.setItem;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "setItem", key, value });
+      }
+      return originalSetItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key) {
+      if (this === localStorage && key !== "shadow_mate_profile_scope_blocked" && !key.startsWith("lswt-")) {
+        window.__blockedStorageTrace.localWrites.push({ method: "removeItem", key });
+      }
+      return originalRemoveItem.call(this, key);
+    };
+  });
+  await page.goto("/");
+  await page.waitForTimeout(300);
+
+  await expect.poll(() => page.evaluate(() => window.__blockedStorageTrace)).toEqual({
+    opens: 0,
+    versionchanges: 0,
+    readwrites: 0,
+    localWrites: [],
+  });
+  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).filter(
+    ({ name }) => name === "shadow-mate-learning-v1",
+  ))).toEqual([]);
+  await context.close();
 });
 
 test.describe("Email OTP sign-in", () => {

@@ -95,7 +95,6 @@ const metadataFindings = collectReleaseFindings({
   readme: await readText("README.md"),
   changelog: await readText("CHANGELOG.md"),
   releaseNotes: await readText("RELEASE_NOTES.md"),
-  requireDeploymentChecklist: config.requireDeploymentChecklist === true,
   tag,
 });
 if (tag) {

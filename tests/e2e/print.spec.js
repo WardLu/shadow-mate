@@ -5,10 +5,17 @@ const TIME_ZONE = "Asia/Singapore";
 
 test.use({ timezoneId: TIME_ZONE });
 
+async function openLearningModule(page, module) {
+  await page.locator('.navbtn[data-mod="learning"]').click();
+  const moduleCard = page.locator(`[data-go="${module}"]`);
+  await expect(moduleCard).toBeVisible();
+  await moduleCard.click();
+}
+
 async function openChineseAtFixedTime(page) {
   await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
   await page.goto("/");
-  await page.locator('.navbtn[data-mod="chinese"]').click();
+  await openLearningModule(page, "chinese");
   await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
   await page.clock.pauseAt(FIXED_NOW);
 }

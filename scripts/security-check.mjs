@@ -31,7 +31,9 @@ const secretRules = [
   ["credentialed database URL", /postgres(?:ql)?:\/\/[^\s:'"]+:[^\s@'"]+@/i],
 ];
 // vendored 第三方打包产物：无法逐行审计，内容含 base64 二进制（可能误匹配密钥正则），跳过密钥/邮箱扫描
-const vendoredAssetPaths = new Set(["public/piper-tts-web.js"]);
+const vendoredAssetPaths = new Set([
+  "public/piper-tts-web.js",
+]);
 const allowedEmailDomains = new Set([
   "example.com",
   "example.test",

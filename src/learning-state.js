@@ -1,4 +1,5 @@
 import { normalizeRotationState } from "./hanzi-worksheet-rotation.js";
+import { normalizeContentConfig } from "./learning-content-package.js";
 
 const STATE_KEYS = ["checkins", "extra", "points", "bookShelf", "peanutLog", "peanutRead"];
 const HANZI_ROTATION_STATE_KEY = "hanziWorksheetRotationV1";
@@ -39,6 +40,7 @@ export function createLearningState(initial = {}) {
     bookShelf: cloneRecord(source.bookShelf),
     peanutLog: Array.isArray(source.peanutLog) ? structuredClone(source.peanutLog) : [],
     peanutRead: cloneRecord(source.peanutRead),
+    content_config: normalizeContentConfig(source.content_config),
   };
 }
 
@@ -54,18 +56,11 @@ export function hasCompatibleHanziRotationScope(state, learnerScope) {
 }
 
 /**
- * Normalizes a state without hiding a rotation scope mismatch. Callers that
- * explicitly choose to discard an incompatible rotation may opt into that
- * lossy operation; ordinary hydration and activation must retain the
- * mismatch so hasCompatibleHanziRotationScope() can fail closed.
+ * Keeps an incompatible rotation scope visible to callers. Hydration and
+ * activation must reject that state explicitly rather than silently dropping
+ * a learner's worksheet history.
  */
-export function normalizeLearningStateForScope(
-  state,
-  _learnerScope,
-) {
-  // The expected scope is intentionally not used to rewrite or discard data.
-  // Callers must inspect hasCompatibleHanziRotationScope() and choose an
-  // explicit drop API when losing an incompatible rotation is acceptable.
+export function normalizeLearningStateForScope(state, _learnerScope) {
   return normalizeLearningState(state);
 }
 
@@ -85,7 +80,7 @@ export function replaceHanziRotationState(state, rotationState) {
     const expectedLearnerScope = currentRotation?.learnerScope;
     next.extra[HANZI_ROTATION_STATE_KEY] = normalizeRotationState(
       rotationState,
-      expectedLearnerScope ? { learnerScope: expectedLearnerScope } : {}
+      expectedLearnerScope ? { learnerScope: expectedLearnerScope } : {},
     );
   }
   return next;

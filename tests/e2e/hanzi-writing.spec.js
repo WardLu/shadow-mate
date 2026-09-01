@@ -5,10 +5,17 @@ const TIME_ZONE = "Asia/Singapore";
 
 test.use({ timezoneId: TIME_ZONE });
 
+async function openLearningModule(page, module) {
+  await page.locator('.navbtn[data-mod="learning"]').click();
+  const moduleCard = page.locator(`[data-go="${module}"]`);
+  await expect(moduleCard).toBeVisible();
+  await moduleCard.click();
+}
+
 async function openChineseAtFixedTime(page) {
   await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
   await page.goto("/");
-  await page.locator('.navbtn[data-mod="chinese"]').click();
+  await openLearningModule(page, "chinese");
   await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
   await page.clock.pauseAt(FIXED_NOW);
 }
@@ -79,10 +86,10 @@ test.describe("Hanzi writing worksheet", () => {
     const first = await readWorksheetSnapshot(page);
 
     await page.reload();
-    await page.locator('.navbtn[data-mod="chinese"]').click();
-    await page.locator('.navbtn[data-mod="english"]').click();
-    await page.locator('.navbtn[data-mod="chinese"]').click();
-    await page.locator('.navbtn[data-mod="chinese"]').click();
+    await openLearningModule(page, "chinese");
+    await openLearningModule(page, "english");
+    await openLearningModule(page, "chinese");
+    await openLearningModule(page, "chinese");
 
     const repeated = await readWorksheetSnapshot(page);
     expect(repeated.screen).toEqual(first.screen);
@@ -97,7 +104,7 @@ test.describe("Hanzi writing worksheet", () => {
     const first = await readWorksheetSnapshot(page);
 
     await page.clock.setFixedTime(new Date("2026-09-02T02:00:00.000Z"));
-    await page.locator('.navbtn[data-mod="chinese"]').click();
+    await openLearningModule(page, "chinese");
 
     const nextDay = await readWorksheetSnapshot(page);
     expect(nextDay.screen.dayKey).toBe("2026-09-02");
@@ -179,7 +186,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(cleared.screen.assignmentId).not.toBe(profile.screen.assignmentId);
     expect(cleared.print).toEqual(cleared.screen);
 
-    await page.locator('.navbtn[data-mod="english"]').click();
+    await openLearningModule(page, "english");
     await expect(page.locator("[data-writing-print-sheet]")).toHaveCount(0);
   });
 });

@@ -1,32 +1,45 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
-import { ANALYTICS_EVENTS, recordAnalyticsEvent } from "./analytics.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
-import {
-  hasCompatibleHanziRotationScope,
-  normalizeLearningState,
-  normalizeLearningStateForScope,
-} from "./learning-state.js";
-import { rebindStateScope } from "./local-state.js";
+import { buildCloudSavePayload, normalizeCloudLearningState } from "./learning-cloud-state.js";
+import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "./learning-growth-cloud.js";
+import { buildHouseholdExport } from "./learning-export.js";
+import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
+import { mergeGrowthLoopSnapshot } from "./learning-growth-loop.js";
+import { createGrowthLoopRetryScheduler } from "./learning-growth-loop-retry.js";
+import { isCurrentWorkspaceMetadata } from "./workspace-metadata-guard.js";
 
 const PRODUCT_ID = CLOUD_CONFIG.productId;
 const AUTH_PRODUCT_NAME = "影伴 Shadow Mate";
 const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`;
 const PASSWORD_PROMPT_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_password_prompt_skipped`;
+const PROFILE_SCOPE_BLOCKED_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_profile_scope_blocked`;
 export const GUARDIAN_CONSENT_TYPE = "learner_data_processing";
 export const PRIVACY_POLICY_VERSION = "privacy-v1";
 const PRIVACY_POLICY_URL = "https://sm.shadow.wang/privacy";
 const MAX_CONFLICT_RETRIES = 2;
 const CONFLICT_RETRY_DELAY_MS = 200;
-const ANONYMOUS_SCOPE = "anonymous";
+const GROWTH_LOOP_SYNC_DEBOUNCE_MS = 500;
+const GROWTH_LOOP_RETRY_FALLBACK_MS = 1000;
+const PERFORMANCE_MARKS = new Set([
+  "shadow-mate:workspace:start",
+  "shadow-mate:workspace:memberships-ready",
+  "shadow-mate:workspace:profiles-ready",
+  "shadow-mate:workspace:metadata-ready",
+  "shadow-mate:profile:local-ready",
+  "shadow-mate:profile:remote-hydrate-start",
+  "shadow-mate:profile:remote-hydrate-ready",
+  "shadow-mate:profile:remote-hydrate-failed",
+]);
 const supabaseUrl = CLOUD_CONFIG.supabaseUrl;
 const publishableKey = CLOUD_CONFIG.supabasePublishableKey;
 const AUTH_STORAGE_KEY = supabaseUrl
   ? `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`
   : null;
 const cloudEnabled = Boolean(supabaseUrl && publishableKey);
+const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin;
 const supabase = cloudEnabled
   ? createClient(supabaseUrl, publishableKey, {
       auth: {
@@ -37,11 +50,23 @@ const supabase = cloudEnabled
       },
     })
   : null;
+const growthLoopTransport = cloudEnabled ? createGrowthLoopTransport({ client: supabase }) : null;
+
+function readProfileScopeBlock() {
+  const blocked = localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
+    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
+  if (blocked && localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  }
+  return blocked;
+}
 
 let session = null;
 let memberships = [];
 let profiles = [];
 let guardianConsentHouseholds = new Set();
+let guardianConsentMetadataReady = false;
+let workspaceMetadataLoading = Promise.resolve();
 let activeProfile = null;
 let editingProfileId = null;
 let editingHousehold = false;
@@ -49,22 +74,43 @@ let householdName = "";
 let cloudVersion = null;
 let saveTimer = null;
 let saveInFlight = false;
-let saveQueued = false;
+let saveQueued = null;
 let cloudSyncBlocked = false;
+let profileScopeWriteBlocked = readProfileScopeBlock();
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
 let authChangeVersion = 0;
-let profileSwitchGeneration = 0;
 let localResetInProgress = false;
+let profileScopeResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
+let profileOperationQueue = Promise.resolve();
+let profileOperationGeneration = 0;
+let remoteHydratePending = null;
+
+const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
+  onTimer() {
+    if (profileScopeWriteBlocked) return;
+    const profile = activeProfile;
+    if (!profile) return;
+    const generation = profileOperationGeneration;
+    void loadGrowthLoopProfile(profile, { generation }).catch((error) => {
+      console.warn("Growth Loop cloud sync deferred:", error);
+    });
+  },
+});
 
 const accountButton = document.querySelector("#accountButton");
 const dialog = document.querySelector("#cloudDialog");
 const panel = document.querySelector("#cloudPanel");
 const toast = document.querySelector("#syncToast");
+
+function markPerformance(name) {
+  if (!PERFORMANCE_MARKS.has(name) || typeof globalThis.performance?.mark !== "function") return;
+  globalThis.performance.mark(name);
+}
 
 function restoreToastLocation() {
   if (!toast?.classList.contains("show")) return;
@@ -97,6 +143,298 @@ function showToast(message, duration = 2800) {
   toastTimer = setTimeout(hideToast, duration);
 }
 
+function isActiveGrowthLoopProfile(profile) {
+  const scope = window.growthLoop?.getScope?.() || {};
+  return activeProfile?.id === profile?.id
+    && activeProfile?.household_id === profile?.household_id
+    && scope.profile_id === profile?.id
+    && scope.household_id === profile?.household_id;
+}
+
+function isActiveProfile(profile) {
+  return activeProfile?.id === profile?.id
+    && activeProfile?.household_id === profile?.household_id;
+}
+
+function sameProfileScope(left = {}, right = {}) {
+  return left?.household_id === right?.household_id
+    && left?.profile_id === right?.profile_id;
+}
+
+function failClosedProfileScope() {
+  profileScopeWriteBlocked = true;
+  try {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  } catch (error) {
+    console.warn("Unable to persist the profile scope block:", error);
+  }
+  advanceProfileOperationGeneration();
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saveQueued = null;
+  resetGrowthLoopRemoteRetry();
+  activeProfile = null;
+  cloudVersion = null;
+  cloudSyncBlocked = true;
+  try {
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  } catch (error) {
+    console.warn("Unable to remove the active profile key while failing closed:", error);
+  }
+  setAccountState();
+  showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请在账号面板点击“清除本机数据”后重试。", 7000);
+}
+
+async function restoreScopeWithCas({ name, getScope, restoreScope, previousScope, targetScope }) {
+  try {
+    const currentScope = getScope?.() || {};
+    if (sameProfileScope(currentScope, previousScope)) return { restored: true, already: true };
+    if (!sameProfileScope(currentScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
+    const compareScope = getScope?.() || {};
+    if (!sameProfileScope(compareScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
+    await restoreScope?.(previousScope, { adoptPending: false });
+    const restoredScope = getScope?.() || {};
+    if (!sameProfileScope(restoredScope, previousScope)) {
+      throw new Error(`${name}_scope_rollback_not_committed`);
+    }
+    return { restored: true };
+  } catch (rollbackError) {
+    console.warn(`${name} profile scope rollback failed:`, rollbackError);
+    return { failed: true };
+  }
+}
+
+async function restoreProfileScopes(previousGrowthScope, previousLearningScope, targetScope) {
+  const growthResult = await restoreScopeWithCas({
+    name: "Growth Loop",
+    getScope: () => window.growthLoop?.getScope?.(),
+    restoreScope: (scope, options) => window.growthLoop?.loadScope?.(scope, options),
+    previousScope: previousGrowthScope,
+    targetScope,
+  });
+  const learningResult = await restoreScopeWithCas({
+    name: "Learning Desk",
+    getScope: () => window.learningDesk?.getEnvelope?.()?.scope,
+    restoreScope: (scope, options) => window.learningDesk?.setScope?.(scope, options),
+    previousScope: previousLearningScope,
+    targetScope,
+  });
+
+  const growthScope = window.growthLoop?.getScope?.() || {};
+  const learningScope = window.learningDesk?.getEnvelope?.()?.scope || {};
+  const rollbackFailed = growthResult.failed || learningResult.failed;
+  if (
+    rollbackFailed
+    || !sameProfileScope(growthScope, previousGrowthScope)
+    || !sameProfileScope(learningScope, previousLearningScope)
+  ) {
+    failClosedProfileScope();
+    return false;
+  }
+  return true;
+}
+
+function captureProfileCommitState() {
+  return {
+    activeProfile: activeProfile ? structuredClone(activeProfile) : null,
+    activeProfileKey: localStorage.getItem(ACTIVE_PROFILE_KEY),
+    cloudVersion,
+    cloudSyncBlocked,
+    lastSyncAt,
+    growthScope: window.growthLoop?.getScope?.() || {},
+    learningScope: window.learningDesk?.getEnvelope?.()?.scope || {},
+  };
+}
+
+function sameActiveProfile(left, right) {
+  return (left?.id || null) === (right?.id || null)
+    && (left?.household_id || null) === (right?.household_id || null);
+}
+
+function restoreActiveProfileTuple(previous, targetProfile) {
+  const targetTuple = activeProfile?.id === targetProfile?.id
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === targetProfile?.id;
+  const alreadyPrevious = sameActiveProfile(activeProfile, previous.activeProfile)
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null);
+  if (!targetTuple && !alreadyPrevious) return false;
+
+  activeProfile = previous.activeProfile ? structuredClone(previous.activeProfile) : null;
+  cloudVersion = previous.cloudVersion;
+  cloudSyncBlocked = previous.cloudSyncBlocked;
+  lastSyncAt = previous.lastSyncAt;
+  if (previous.activeProfileKey) localStorage.setItem(ACTIVE_PROFILE_KEY, previous.activeProfileKey);
+  else localStorage.removeItem(ACTIVE_PROFILE_KEY);
+
+  return sameActiveProfile(activeProfile, previous.activeProfile)
+    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null)
+    && cloudVersion === previous.cloudVersion
+    && sameProfileScope(window.growthLoop?.getScope?.() || {}, previous.growthScope)
+    && sameProfileScope(window.learningDesk?.getEnvelope?.()?.scope || {}, previous.learningScope);
+}
+
+async function restoreProfileCommit(previous, targetProfile) {
+  const restoredScopes = await restoreProfileScopes(previous.growthScope, previous.learningScope, {
+    household_id: targetProfile?.household_id,
+    profile_id: targetProfile?.id,
+  });
+  if (!restoredScopes || !restoreActiveProfileTuple(previous, targetProfile)) {
+    if (!profileScopeWriteBlocked) failClosedProfileScope();
+    return false;
+  }
+  setAccountState();
+  return true;
+}
+
+function enqueueProfileOperation(operation, { advanceGeneration = true } = {}) {
+  const generation = advanceGeneration
+    ? advanceProfileOperationGeneration()
+    : profileOperationGeneration;
+  const result = profileOperationQueue.then(() => operation(generation));
+  profileOperationQueue = result.catch(() => false);
+  return result;
+}
+
+function advanceProfileOperationGeneration() {
+  profileOperationGeneration += 1;
+  window.growthLoop?.invalidateWriteOperations?.();
+  return profileOperationGeneration;
+}
+
+function isCurrentProfileOperation(generation) {
+  return !profileScopeWriteBlocked
+    && (generation === null || generation === profileOperationGeneration);
+}
+
+async function loadGrowthLoopProfile(profile, { adoptPending = false, generation = null } = {}) {
+  const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
+  if (profileScopeWriteBlocked || !profile || !window.growthLoop || !window.learningDesk || !isCurrent()) return;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  await window.growthLoop.loadScope(scope, { adoptPending, canCommit: isCurrent });
+  if (!isCurrent()) return;
+  await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED, {}, "once", { generation });
+  if (!isCurrent()) return;
+  if (!growthLoopTransport) return;
+  let remote;
+  try {
+    remote = await fetchGrowthLoopSnapshot(supabase, {
+      householdId: profile.household_id,
+      profileId: profile.id,
+    });
+  } catch (error) {
+    if (isCurrent()) scheduleGrowthLoopRemoteRetry();
+    throw error;
+  }
+  if (!isCurrent()) return;
+  // A not-yet-migrated environment must not overwrite local records with an
+  // empty fallback snapshot. Release-time migrations enable this path.
+  if (remote.errors.length) {
+    if (remote.errors.some(isRetryableGrowthLoopFetchError)) {
+      scheduleGrowthLoopRemoteRetry();
+    }
+    return { skipped: true, reason: "remote_fetch_failed", errors: remote.errors };
+  }
+  if (!isCurrent()) return;
+  resetGrowthLoopRemoteRetry();
+  await window.growthLoop.mergeRemote(remote.snapshot);
+  if (!isCurrent()) return;
+  const report = await window.growthLoop.sync({ transport: growthLoopTransport });
+  if (!isCurrent()) return;
+  if (report.retryable || report.conflict || report.rejected) {
+    await queueGrowthCloudActivity(profile, ACTIVITY_EVENT_TYPES.SYNC_FAILED, {
+      source: "growth_loop_sync",
+      error_code: report.conflict ? "conflict" : report.rejected ? "rejected" : "retryable",
+      retryable: Boolean(report.retryable),
+    }, `sync:${new Date().toISOString().slice(0, 13)}`, { generation });
+  }
+  if (!isCurrent()) return;
+  if (report.next_attempt_at !== null && report.next_attempt_at !== undefined) {
+    void scheduleGrowthLoopRetry({ notBefore: report.next_attempt_at, generation });
+  } else if (report.retryable || report.conflict || report.rejected) {
+    scheduleGrowthLoopSync();
+  }
+  return report;
+}
+
+async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false, generation = null } = {}) {
+  if (profileScopeWriteBlocked || !profile || !window.growthLoop) return null;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  if (!scope.household_id || !scope.profile_id) return null;
+  const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
+  try {
+    if (!isCurrent()) return null;
+    const currentScope = window.growthLoop.getScope();
+    if (currentScope.household_id !== scope.household_id || currentScope.profile_id !== scope.profile_id) {
+      if (!ensureScope) return null;
+      await window.growthLoop.loadScope(scope, { adoptPending: false, canCommit: isCurrent });
+    }
+    if (!isCurrent() || window.growthLoop.getScope().profile_id !== scope.profile_id) return null;
+    const event = await window.growthLoop.queueActivity({
+      event_type,
+      event_id: activityEventIdFor({ ...scope, event_type, bucket }),
+      payload,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      client_version: document.documentElement.dataset.version || null,
+    });
+    return event;
+  } catch (error) {
+    console.warn("Growth Loop cloud activity event deferred:", error);
+    return null;
+  }
+}
+
+function isRetryableGrowthLoopFetchError(error = {}) {
+  const status = Number(error.status ?? error.code);
+  return !Number.isFinite(status) || status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+function nextGrowthLoopAttemptAt(events, now = Date.now()) {
+  // The outbox is FIFO, so the queue head is the earliest eligible attempt;
+  // later pending events cannot skip a retryable head that is backing off.
+  const next = (events || [])
+    .filter((event) => event.status === "pending" || event.status === "retryable")
+    .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0))[0];
+  if (!next) return null;
+  return Math.max(now, Number(next.next_attempt_at || 0));
+}
+
+function scheduleGrowthLoopSyncAt(targetAt) {
+  if (profileScopeWriteBlocked || !activeProfile) return null;
+  return growthLoopRetryScheduler.scheduleAt(targetAt);
+}
+
+function scheduleGrowthLoopRemoteRetry() {
+  if (!activeProfile) return null;
+  return growthLoopRetryScheduler.recordRemoteFailure();
+}
+
+function resetGrowthLoopRemoteRetry() {
+  growthLoopRetryScheduler.resetRemoteFailures({ clearTimer: true });
+}
+
+async function scheduleGrowthLoopRetry({
+  notBefore = Date.now(),
+  fallbackDelayMs = GROWTH_LOOP_RETRY_FALLBACK_MS,
+  generation = null,
+} = {}) {
+  if (profileScopeWriteBlocked || !activeProfile || !isCurrentProfileOperation(generation)) return null;
+  const profileId = activeProfile.id;
+  const now = Date.now();
+  let scheduledAt = Math.max(Number(notBefore) || now, now + fallbackDelayMs);
+  try {
+    const events = await window.growthLoop?.pendingOutbox?.();
+    if (!isCurrentProfileOperation(generation) || activeProfile?.id !== profileId) return null;
+    const nextAttemptAt = nextGrowthLoopAttemptAt(events, now);
+    if (nextAttemptAt !== null) scheduledAt = Math.max(Number(notBefore) || now, nextAttemptAt);
+  } catch (error) {
+    console.warn("Growth Loop retry schedule deferred:", error);
+  }
+  return scheduleGrowthLoopSyncAt(scheduledAt);
+}
+
+function scheduleGrowthLoopSync() {
+  return scheduleGrowthLoopSyncAt(Date.now() + GROWTH_LOOP_SYNC_DEBOUNCE_MS);
+}
+
 function guardianConsentField() {
   return `<label class="cloud-consent cloud-field">
     <input type="checkbox" name="guardianConsent" value="on" required>
@@ -113,26 +451,17 @@ function guardianConsentPayload(householdId) {
   };
 }
 
-function resetCloudContext() {
-  profileSwitchGeneration += 1;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  saveQueued = false;
-  cloudSyncBlocked = false;
-  cloudVersion = null;
-  lastSyncAt = null;
-  activeProfile = null;
-}
-
 async function clearLocalAccountState() {
-  const localStateCleared = window.learningDesk.clearLocalData({ reload: false });
-  if (!localStateCleared) {
-    return { ok: false, signOutError: null };
+  resetGrowthLoopRemoteRetry();
+  profileScopeWriteBlocked = true;
+  cloudSyncBlocked = true;
+  try {
+    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  } catch (error) {
+    console.warn("Unable to persist the profile scope block before cleanup:", error);
   }
-
-  resetCloudContext();
+  advanceProfileOperationGeneration();
   let signOutError = null;
-  let localCleanupFailed = false;
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
     signOutError = error;
@@ -141,38 +470,96 @@ async function clearLocalAccountState() {
   }
   try {
     if (AUTH_STORAGE_KEY) sessionStorage.clear();
-  } catch {
-    localCleanupFailed = true;
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    await window.growthLoop?.clearAllLocalData?.();
+    window.learningDesk.clearLocalData({ reload: false });
+  } catch (error) {
+    profileScopeWriteBlocked = true;
+    cloudSyncBlocked = true;
+    try {
+      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+    } catch (markerError) {
+      console.warn("Unable to persist the profile scope block after cleanup failure:", markerError);
+    }
+    setAccountState();
+    throw error;
   }
   try {
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-  } catch {
-    localCleanupFailed = true;
+    localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
+    sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
+  } catch (error) {
+    profileScopeWriteBlocked = true;
+    cloudSyncBlocked = true;
+    try {
+      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+    } catch (markerError) {
+      console.warn("Unable to restore the profile scope block:", markerError);
+    }
+    setAccountState();
+    throw error;
   }
   session = null;
   memberships = [];
   profiles = [];
   guardianConsentHouseholds = new Set();
+  activeProfile = null;
+  profileScopeWriteBlocked = false;
+  cloudSyncBlocked = false;
   setAccountState();
-  return { ok: !localCleanupFailed, signOutError };
+  return signOutError;
 }
 
 async function completeLocalAccountReset(successMessage) {
   localResetInProgress = true;
-  const resetResult = await clearLocalAccountState();
-  if (!resetResult.ok) {
-    localResetInProgress = false;
-    showToast("本机数据清除失败，本机状态未重置，请稍后重试。", 6000);
+  let signOutError;
+  try {
+    signOutError = await clearLocalAccountState();
+  } catch (error) {
+    console.warn("Local account cleanup failed; fail-closed protection remains:", error);
+    showToast("本机数据清理未完成，保护模式仍保持；请重试。", 7000);
     return false;
+  } finally {
+    localResetInProgress = false;
   }
   closeDialog();
   showToast(
-    resetResult.signOutError
+    signOutError
       ? `${successMessage}；本机已退出登录，云端会话注销未完成，请稍后重试。`
       : successMessage,
     5000,
   );
   return true;
+}
+
+async function resetSignedOutProfileScope(changeVersion) {
+  const pendingScope = { household_id: null, profile_id: null };
+  const canCommit = () => !session
+    && changeVersion === authChangeVersion;
+  try {
+    if (!canCommit()) return false;
+    if (
+      typeof window.growthLoop?.loadScope !== "function"
+      || typeof window.growthLoop?.getScope !== "function"
+      || typeof window.learningDesk?.setScope !== "function"
+      || typeof window.learningDesk?.getEnvelope !== "function"
+    ) {
+      throw new Error("signed_out_profile_scope_reset_dependencies_missing");
+    }
+    await window.growthLoop.loadScope(pendingScope, { adoptPending: false, canCommit });
+    if (!canCommit()) return false;
+    await window.learningDesk.setScope(pendingScope, { adoptPending: false, canCommit });
+    if (!canCommit()) return false;
+    const growthScope = window.growthLoop.getScope();
+    const learningScope = window.learningDesk.getEnvelope()?.scope;
+    if (!sameProfileScope(growthScope, pendingScope) || !sameProfileScope(learningScope, pendingScope)) {
+      throw new Error("signed_out_profile_scope_not_reset");
+    }
+    return true;
+  } catch (error) {
+    console.warn("Unable to reset profile scope after sign-out:", error);
+    failClosedProfileScope();
+    return false;
+  }
 }
 
 function formatSyncTime(value) {
@@ -198,7 +585,7 @@ async function sendLoginOtp(email) {
     email,
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: window.location.origin,
+      emailRedirectTo: AUTH_REDIRECT_ORIGIN,
       data: {
         product_id: PRODUCT_ID,
         product_name: AUTH_PRODUCT_NAME,
@@ -367,7 +754,7 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
         return;
       }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: AUTH_REDIRECT_ORIGIN,
       });
       if (error) {
         showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。"), 6000);
@@ -386,25 +773,6 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
 // escapeHtml imported from lib.js
 function readRememberedProfileId() {
   return localStorage.getItem(ACTIVE_PROFILE_KEY);
-}
-
-function profilePersistenceScope(profileId) {
-  return `profile:${profileId}`;
-}
-
-function isCurrentAuthContext({ authGeneration = authChangeVersion, requestSession = session } = {}) {
-  return authGeneration === authChangeVersion &&
-    session === requestSession &&
-    !localResetInProgress;
-}
-
-function isCurrentProfileContext({ generation, profileId, scope, requestSession = session, authGeneration = authChangeVersion } = {}) {
-  return scope === profilePersistenceScope(profileId)
-    && scope !== ANONYMOUS_SCOPE
-    && generation === profileSwitchGeneration
-    && isCurrentAuthContext({ authGeneration, requestSession })
-    && activeProfile?.id === profileId
-    && window.learningDesk?.getPersistenceScope?.() === scope;
 }
 
 // stateHasData, mergeObjects, mergeState imported from lib.js
@@ -569,7 +937,9 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     ${
       cloudEnabled
         ? ""
-        : `<div class="cloud-status">${icon("alert")} 尚未配置云端环境，当前只能使用本机模式。</div>`
+        : `<div class="cloud-status">${icon("alert")} ${CLOUD_CONFIG.connectionBlocked
+          ? "已阻止非生产环境连接远程 Supabase，请配置本地 shared_test。"
+          : "尚未配置云端环境，当前只能使用本机模式。"}</div>`
     }
   `;
   restoreToastLocation();
@@ -581,14 +951,12 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     });
   });
   panel.querySelector("[data-close]").onclick = closeDialog;
-  panel.querySelector("[data-clear-local]").onclick = () => {
+  panel.querySelector("[data-clear-local]").onclick = async () => {
     const confirmed = window.confirm("将清除此设备上的影伴学习记录。此操作不可撤销，是否继续？");
     if (!confirmed) return;
-    if (!window.learningDesk.clearLocalData()) {
-      showToast("本机数据清除失败，本机状态未重置，请稍后重试。", 6000);
-      return;
-    }
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    await runLockedAction(panel.querySelector("[data-clear-local]"), () => (
+      completeLocalAccountReset("本机数据已清除")
+    ), { busyText: "正在清除…" });
   };
   panel.querySelector("[data-toggle-login-password]")?.addEventListener("click", (event) => {
     const input = panel.querySelector("[name=password]");
@@ -730,7 +1098,19 @@ function renderSetup() {
         showToast(formatCloudError(profileError, "创建学习者失败，请稍后再试。"), 5000);
         return;
       }
-      await loadWorkspace(profileId, { migrateLocal: true });
+      await loadWorkspace(profileId, { migrateLocal: true, deferGrowthLoopSync: true });
+      void enqueueProfileOperation(
+        (generation) => queueGrowthCloudActivity(
+          { household_id: householdId, id: profileId },
+          ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
+          { source: "household_setup" },
+          `learner:${profileId}`,
+          { ensureScope: true, generation },
+        ),
+        { advanceGeneration: false },
+      ).catch((error) => {
+        console.warn("Growth Loop learner-created activity deferred:", error);
+      });
       showToast("家庭学习空间已建立，正在同步本机记录");
       renderPanel();
       const prompted = await maybePromptPasswordSetup({ force: true });
@@ -811,8 +1191,24 @@ function renderAccount() {
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await runLockedAction(button, async () => {
-        const switched = await selectProfile(button.dataset.profile);
-        if (switched && session) renderAccount();
+        await enqueueProfileOperation(async (generation) => {
+          let migrateLocal = false;
+          try {
+            if (button.dataset.profile !== activeProfile?.id && await window.growthLoop?.hasPendingData?.()) {
+              if (!isCurrentProfileOperation(generation)) return false;
+              migrateLocal = window.confirm("发现这台设备上还有未关联学习记录。是否将它们导入到这个孩子的档案？");
+            }
+          } catch (growthError) {
+            console.warn("Growth Loop profile switch blocked:", growthError);
+            if (isCurrentProfileOperation(generation)) {
+              showToast("孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。", 6000);
+            }
+            return false;
+          }
+          if (!isCurrentProfileOperation(generation)) return false;
+          return selectProfileNow(button.dataset.profile, { migrateLocal }, generation);
+        });
+        renderAccount();
       }, { busyText: "正在切换…" });
     };
   });
@@ -832,16 +1228,14 @@ function renderAccount() {
           return;
         }
         const deletingActive = activeProfile?.id === profile.id;
-        const localScopeRemoved = window.learningDesk.removePersistenceScope(profilePersistenceScope(profile.id));
-        if (!localScopeRemoved) {
-          showToast("云端学习者已删除，但本机缓存清除失败，请稍后重试。", 6000);
-          return;
-        }
+        await window.growthLoop?.clearScope?.({ household_id: profile.household_id, profile_id: profile.id });
         profiles = profiles.filter((item) => item.id !== profile.id);
         if (deletingActive) {
+          resetGrowthLoopRemoteRetry();
           activeProfile = null;
           cloudVersion = null;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
+          window.learningDesk.replaceState({}, { persist: true });
         }
         await loadWorkspace();
         renderAccount();
@@ -885,7 +1279,21 @@ function renderAccount() {
     };
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async (event) => {
-    await runLockedAction(event.currentTarget, () => saveCloudState(true), { busyText: "正在同步…" });
+    await runLockedAction(event.currentTarget, async () => {
+      await enqueueProfileOperation(async (generation) => {
+        const profile = activeProfile;
+        if (!profile) return;
+        const request = captureSaveRequest(true);
+        if (!request) return;
+        await saveCloudState(true, request);
+        if (!isCurrentProfileOperation(generation) || !isActiveGrowthLoopProfile(profile)) return;
+        try {
+          await loadGrowthLoopProfile(profile, { generation });
+        } catch (growthError) {
+          console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+        }
+      }, { advanceGeneration: false });
+    }, { busyText: "正在同步…" });
   });
   panel.querySelector("[data-export]")?.addEventListener("click", async (event) => {
     await runLockedAction(event.currentTarget, exportWorkspace, { busyText: "正在导出…" });
@@ -951,6 +1359,10 @@ function renderAccount() {
       const form = new FormData(formElement);
       const householdId = memberships[0]?.household_id;
       if (!householdId) return;
+      if (!await waitForGuardianConsentMetadata()) {
+        showToast("正在确认家长同意状态，请稍后重试。", 5000);
+        return;
+      }
       if (!guardianConsentHouseholds.has(householdId)) {
         if (form.get("guardianConsent") !== "on") {
           showToast("请先确认你是家长或监护人并阅读隐私说明。", 5000);
@@ -980,7 +1392,19 @@ function renderAccount() {
         return;
       }
       profiles.push(data);
-      await selectProfile(data.id);
+      const selected = await selectProfile(data.id);
+      if (!selected) {
+        renderAccount();
+        return;
+      }
+      const selectedGeneration = profileOperationGeneration;
+      await queueGrowthCloudActivity(
+        data,
+        ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
+        { source: "add_learner" },
+        `learner:${data.id}`,
+        { ensureScope: true, generation: selectedGeneration },
+      );
       renderAccount();
       showToast("已添加新的学习者");
     }, { busyText: "正在添加…" });
@@ -993,76 +1417,84 @@ function renderPanel() {
   else renderAccount();
 }
 
-async function fetchWorkspace({ authGeneration = authChangeVersion, requestSession = session } = {}) {
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const userId = requestSession?.user?.id;
-  if (!userId) return false;
-
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const { data: memberRows, error: memberError } = await supabase
-    .from("learning_household_members")
-    .select("household_id, role")
-    .eq("user_id", userId);
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (memberError) throw memberError;
-
-  const nextMemberships = memberRows || [];
-  if (!nextMemberships.length) {
-    memberships = [];
-    profiles = [];
-    guardianConsentHouseholds = new Set();
-    householdName = "";
-    activeProfile = null;
-    lastSyncAt = null;
-    return true;
-  }
-
-  const householdIds = nextMemberships.map((item) => item.household_id);
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const { data: consentRows, error: consentError } = await supabase
+function refreshWorkspaceMetadata({ householdIds, workspaceProfiles, requestSession }) {
+  const stateMetadata = workspaceProfiles.length
+    ? supabase
+      .from("learning_profile_states")
+      .select("profile_id, updated_at")
+      .in("profile_id", workspaceProfiles.map((profile) => profile.id))
+    : Promise.resolve({ data: [], error: null });
+  const consentMetadata = supabase
     .from("learning_guardian_consents")
     .select("household_id")
     .in("household_id", householdIds)
-    .eq("user_id", userId)
+    .eq("user_id", requestSession.user.id)
     .eq("consent_type", GUARDIAN_CONSENT_TYPE)
     .eq("policy_version", PRIVACY_POLICY_VERSION);
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (consentError) throw consentError;
+  const householdMetadata = supabase.from("learning_households").select("name").in("id", householdIds);
 
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
+  return Promise.all([consentMetadata, stateMetadata, householdMetadata]).then(([
+    { data: consentRows, error: consentError },
+    { data: stateRows, error: stateMetaError },
+    { data: householdRows },
+  ]) => {
+    if (!isCurrentWorkspaceMetadata(requestSession, session)) return false;
+    if (!consentError) {
+      guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
+      guardianConsentMetadataReady = true;
+    }
+    if (!stateMetaError) lastSyncAt = latestUpdatedAt(stateRows || []);
+    householdName = householdRows?.[0]?.name || "";
+    markPerformance("shadow-mate:workspace:metadata-ready");
+    if (dialog?.open && !passwordRecoveryActive) renderPanel();
+    return !consentError;
+  }).catch((error) => {
+    if (isCurrentWorkspaceMetadata(requestSession, session)) console.warn("Workspace metadata refresh deferred:", error);
+    return false;
+  });
+}
+
+async function waitForGuardianConsentMetadata() {
+  if (guardianConsentMetadataReady) return true;
+  await workspaceMetadataLoading;
+  return guardianConsentMetadataReady;
+}
+
+async function fetchWorkspace() {
+  const requestSession = session;
+  if (!requestSession) return;
+  markPerformance("shadow-mate:workspace:start");
+  lastSyncAt = null;
+  const { data: memberRows, error: memberError } = await supabase
+    .from("learning_household_members")
+    .select("household_id, role")
+    .eq("user_id", requestSession.user.id);
+  if (memberError) throw memberError;
+  if (session !== requestSession) return;
+  memberships = memberRows || [];
+  markPerformance("shadow-mate:workspace:memberships-ready");
+  if (!memberships.length) {
+    profiles = [];
+    guardianConsentHouseholds = new Set();
+    guardianConsentMetadataReady = true;
+    workspaceMetadataLoading = Promise.resolve(true);
+    resetGrowthLoopRemoteRetry();
+    activeProfile = null;
+    return;
+  }
+  const householdIds = memberships.map((item) => item.household_id);
+  guardianConsentHouseholds = new Set();
+  guardianConsentMetadataReady = false;
   const { data: profileRows, error: profileError } = await supabase
     .from("learning_profiles")
     .select("id, household_id, display_name, grade_level")
     .in("household_id", householdIds)
     .order("created_at");
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
   if (profileError) throw profileError;
-
-  const nextProfiles = profileRows || [];
-  let nextLastSyncAt = null;
-  if (nextProfiles.length) {
-    if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-    const { data: stateRows, error: stateMetaError } = await supabase
-      .from("learning_profile_states")
-      .select("profile_id, updated_at")
-      .in("profile_id", nextProfiles.map((profile) => profile.id));
-    if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-    if (!stateMetaError) nextLastSyncAt = latestUpdatedAt(stateRows || []);
-  }
-
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const { data: hhRows } = await supabase
-    .from("learning_households")
-    .select("name")
-    .in("id", householdIds);
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-
-  memberships = nextMemberships;
-  profiles = nextProfiles;
-  guardianConsentHouseholds = new Set((consentRows || []).map((row) => row.household_id));
-  lastSyncAt = nextLastSyncAt;
-  householdName = hhRows?.[0]?.name || "";
-  return true;
+  if (session !== requestSession) return;
+  profiles = profileRows || [];
+  markPerformance("shadow-mate:workspace:profiles-ready");
+  workspaceMetadataLoading = refreshWorkspaceMetadata({ householdIds, workspaceProfiles: profiles, requestSession });
 }
 
 async function exportWorkspace() {
@@ -1094,22 +1526,58 @@ async function exportWorkspace() {
     stateRows = data || [];
   }
   const statesByProfile = new Map(stateRows.map((row) => [row.profile_id, row]));
+  const consentResult = await supabase
+    .from("learning_guardian_consents")
+    .select("household_id, consent_type, policy_version, consented_at, created_at")
+    .in("household_id", householdIds)
+    .eq("user_id", session.user.id);
+  const consents = consentResult.error ? [] : (consentResult.data || []);
+  const growthResults = await Promise.all(profilesForExport.map(async (profile) => ({
+    profile,
+    result: await fetchGrowthLoopSnapshot(supabase, {
+      householdId: profile.household_id,
+      profileId: profile.id,
+    }),
+  })));
+  const growthLoop = growthResults.reduce((result, current) => {
+    const localSnapshot = current.profile.id === activeProfile?.id && window.growthLoop?.getSnapshot?.();
+    const snapshot = localSnapshot
+      ? mergeGrowthLoopSnapshot(current.result.snapshot, localSnapshot)
+      : current.result.snapshot;
+    for (const item of snapshot.point_items) result.pointItems.set(item.id, item);
+    for (const reward of snapshot.rewards) result.rewards.set(reward.id, reward);
+    for (const binding of snapshot.profile_point_items) result.profilePointItems.set(`${binding.profile_id}:${binding.point_item_id}`, binding);
+    for (const binding of snapshot.profile_rewards) result.profileRewards.set(`${binding.profile_id}:${binding.reward_id}`, binding);
+    result.ledger.push(...snapshot.ledger);
+    result.redemptions.push(...snapshot.redemptions);
+    return result;
+  }, {
+    pointItems: new Map(),
+    profilePointItems: new Map(),
+    rewards: new Map(),
+    profileRewards: new Map(),
+    ledger: [],
+    redemptions: [],
+  });
+  growthLoop.pointItems = [...growthLoop.pointItems.values()];
+  growthLoop.profilePointItems = [...growthLoop.profilePointItems.values()];
+  growthLoop.rewards = [...growthLoop.rewards.values()];
+  growthLoop.profileRewards = [...growthLoop.profileRewards.values()];
   const household = {
     id: householdIds[0],
     name: householdName || "家庭",
   };
-  const payload = {
-    schema_version: 1,
-    product_id: PRODUCT_ID,
-    exported_at: new Date().toISOString(),
+  const payload = buildHouseholdExport({
     household,
+    consents,
     learners: profilesForExport.map((profile) => ({
       ...profile,
       state: statesByProfile.get(profile.id)?.state || {},
       state_version: statesByProfile.get(profile.id)?.version || null,
       state_updated_at: statesByProfile.get(profile.id)?.updated_at || null,
     })),
-  };
+    growthLoop,
+  });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1122,394 +1590,355 @@ async function exportWorkspace() {
   showToast("家庭数据已导出");
 }
 
-async function loadWorkspace(preferredProfileId = null, options = {}, context = {}) {
-  const authGeneration = context.authGeneration ?? authChangeVersion;
-  const requestSession = context.requestSession ?? session;
-  const profileGenerationAtStart = profileSwitchGeneration;
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const loaded = await fetchWorkspace({ authGeneration, requestSession });
-  if (!loaded || !isCurrentAuthContext({ authGeneration, requestSession })) return false;
+async function loadWorkspace(preferredProfileId = null, options = {}) {
+  await fetchWorkspace();
   if (!memberships.length) {
     renderPanel();
-    return true;
+    return false;
   }
   const remembered = preferredProfileId || readRememberedProfileId();
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
   if (remembered && !profiles.some((item) => item.id === remembered)) {
     // 残留引用指向已不存在的 profile（如云端删除 / household 残留）→ 清除，
     // 避免后续对不存在的 profile 发起无效同步（曾在生产触发 not_found 冲突风暴）。
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    if (!profileScopeWriteBlocked) localStorage.removeItem(ACTIVE_PROFILE_KEY);
   }
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
   const profile = profiles.find((item) => item.id === remembered) || profiles[0] || null;
-  if (profileGenerationAtStart !== profileSwitchGeneration) return true;
-  if (profile) return selectProfile(profile.id, options, { authGeneration, requestSession });
-  return true;
+  return profile ? selectProfile(profile.id, options) : false;
 }
 
-async function selectProfile(profileId, { migrateLocal = false } = {}, context = {}) {
-  const authGeneration = context.authGeneration ?? authChangeVersion;
-  const requestSession = context.requestSession ?? session;
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
+function selectProfile(profileId, options = {}) {
+  return enqueueProfileOperation((generation) => selectProfileNow(profileId, options, generation));
+}
+
+async function selectProfileNow(profileId, { migrateLocal = false } = {}, generation) {
+  const isCurrent = () => isCurrentProfileOperation(generation);
+  if (profileScopeWriteBlocked) return false;
   const profile = profiles.find((item) => item.id === profileId);
-  if (!profile || !isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const generation = ++profileSwitchGeneration;
-  const scope = profilePersistenceScope(profile.id);
-  const isCurrent = () => isCurrentProfileContext({
-    generation,
-    profileId: profile.id,
-    scope,
-    requestSession,
-    authGeneration,
-  });
-  const previousScope = window.learningDesk.getPersistenceScope();
-  const previousState = window.learningDesk.getState();
-  const previousProfile = activeProfile;
-  const previousCloudVersion = cloudVersion;
-  const previousRememberedProfileId = readRememberedProfileId();
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  saveQueued = false;
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (!window.learningDesk.flushLocalState()) {
-    showToast("本机记录保存失败，暂未切换学习者，请稍后重试。", 5000);
-    return false;
-  }
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  const anonymousState = migrateLocal
-    ? (previousScope === ANONYMOUS_SCOPE ? previousState : window.learningDesk.getState(ANONYMOUS_SCOPE))
-    : null;
+  if (!profile) return false;
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  const profileChanged = activeProfile?.id !== profile.id
+    || activeProfile?.household_id !== profile.household_id;
+  const previousProfileState = captureProfileCommitState();
 
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  activeProfile = profile;
-  cloudSyncBlocked = false;
-  cloudVersion = null;
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
-  const activationOptions = { persist: true, render: false };
-  if (previousScope === scope) activationOptions.state = previousState;
-  if (!isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (!window.learningDesk.activateScope(scope, activationOptions)) {
-    activeProfile = previousProfile;
-    cloudVersion = previousCloudVersion;
-    if (previousRememberedProfileId) localStorage.setItem(ACTIVE_PROFILE_KEY, previousRememberedProfileId);
-    else localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    setAccountState();
-    showToast("本机记录加载失败，暂未切换学习者，请稍后重试。", 5000);
-    return false;
-  }
-  if (!isCurrent()) return false;
-  const targetStateAtHydrationStart = window.learningDesk.getState();
-  const targetStatusAtHydrationStart = window.learningDesk.getPersistenceStatus();
-  if (!hasCompatibleHanziRotationScope(targetStateAtHydrationStart, scope)) {
-    activeProfile = previousProfile;
-    cloudVersion = previousCloudVersion;
-    if (previousScope !== scope) {
-      window.learningDesk.activateScope(previousScope, { state: previousState, persist: true, render: false });
-    }
-    if (previousRememberedProfileId) localStorage.setItem(ACTIVE_PROFILE_KEY, previousRememberedProfileId);
-    else localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    showToast("本机记录与当前学习者不匹配，暂未加载。", 5000);
-    window.learningDesk.renderCurrent();
-    return false;
-  }
-  const canMigrateAnonymousState = hasCompatibleHanziRotationScope(anonymousState, ANONYMOUS_SCOPE);
-  const migratedAnonymousState = migrateLocal && canMigrateAnonymousState && stateHasData(anonymousState)
-    ? normalizeLearningStateForScope(rebindStateScope(anonymousState, scope), scope)
-    : null;
-  setAccountState();
-
-  if (!isCurrent()) return false;
-  if (!isCurrent()) return false;
-  const { data, error } = await supabase
-    .from("learning_profile_states")
-    .select("state, version, updated_at")
-    .eq("profile_id", profile.id)
-    .maybeSingle();
-  if (!isCurrent()) return false;
-  if (error) {
-    recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-    showToast(formatCloudError(error, "读取云端记录失败，请稍后再试。"), 5000);
-    if (isCurrent()) {
-      // A failed remote read is still a successful local profile activation.
-      // Re-assert the target scope so a late workspace result cannot restore A.
-      activeProfile = profile;
-      localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
-      window.learningDesk.activateScope(scope, {
-        state: targetStateAtHydrationStart,
-        persist: true,
-        pending: true,
-        render: false,
-      });
-      window.learningDesk.renderCurrent();
-    }
-    return false;
-  }
-
-  if (!data) {
-    cloudVersion = null;
-    let localState = window.learningDesk.getState();
-    if (migrateLocal && !stateHasData(localState) && stateHasData(migratedAnonymousState)) {
-      localState = mergeState(migratedAnonymousState, localState);
-      if (!window.learningDesk.replaceState(localState, { persist: true, pending: true, render: false })) {
-        showToast("本机记录保存失败，暂未完成学习者迁移，请稍后重试。", 5000);
+  // The Growth Loop controller commits its scope only after the local database
+  // load succeeds. Make it the profile-switch commit barrier so a failed
+  // IndexedDB reopen cannot leave the UI on a new learner and Growth Loop on
+  // the old scope.
+  try {
+    let growthScope;
+    // A superseded local read can return the previous snapshot without throwing;
+    // retry once while this profile operation is still current.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await window.growthLoop?.loadScope?.(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
+      if (!isCurrent()) {
+        await restoreProfileCommit(previousProfileState, profile);
         return false;
       }
+      growthScope = window.growthLoop?.getScope?.();
+      if (sameProfileScope(growthScope, scope)) break;
+      if (attempt === 1) throw new Error("growth_loop_scope_not_ready");
     }
-    if (stateHasData(localState)) {
-      if (!isCurrent()) return false;
-      await saveCloudState(true, {
-        generation,
-        profileId: profile.id,
-        scope,
-        authGeneration,
-        state: localState,
-      });
-      if (!isCurrent()) return false;
-    }
-  } else {
+  } catch (growthError) {
+    console.warn("Growth Loop profile switch blocked:", growthError);
+    const restored = await restoreProfileCommit(previousProfileState, profile);
+    if (!restored) return false;
     if (!isCurrent()) return false;
-    const remoteState = normalizeLearningStateForScope(data.state, scope);
-    if (!hasCompatibleHanziRotationScope(remoteState, scope)) {
-      showToast("云端记录与当前学习者不匹配，暂未加载。", 5000);
-      window.learningDesk.renderCurrent();
-      return false;
-    }
-    lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
-    cloudVersion = data.version;
-    const localState = normalizeLearningStateForScope(window.learningDesk.getState(), scope);
-    if (!hasCompatibleHanziRotationScope(localState, scope)) {
-      showToast("本机记录与当前学习者不匹配，暂未加载。", 5000);
-      activeProfile = previousProfile;
-      cloudVersion = previousCloudVersion;
-      if (previousScope !== scope) {
-        window.learningDesk.activateScope(previousScope, {
-          state: previousState,
-          persist: true,
-          render: false,
-        });
-      }
-      if (previousRememberedProfileId) localStorage.setItem(ACTIVE_PROFILE_KEY, previousRememberedProfileId);
-      else localStorage.removeItem(ACTIVE_PROFILE_KEY);
-      window.learningDesk.renderCurrent();
-      return false;
-    }
-    const targetScopeIsDirty = targetStatusAtHydrationStart.pending ||
-      JSON.stringify(localState) !== JSON.stringify(targetStateAtHydrationStart);
-    let hydratedState = remoteState;
-    if (targetScopeIsDirty) {
-      try {
-        hydratedState = mergeState(localState, remoteState);
-      } catch (mergeError) {
-        showToast(formatCloudError(mergeError, "云端记录冲突，暂未覆盖本机记录。"), 5000);
-        window.learningDesk.renderCurrent();
-        return false;
-      }
-    }
-    if (!window.learningDesk.replaceState(hydratedState, {
-      persist: true,
-      pending: targetScopeIsDirty,
-      render: false,
-    })) {
-      showToast("本机记录保存失败，暂未完成云端加载，请稍后重试。", 5000);
-      return false;
-    }
-    if (targetScopeIsDirty) {
-      if (!isCurrent()) return false;
-      await saveCloudState(true, {
-        generation,
-        profileId: profile.id,
-        scope,
-        authGeneration,
-        state: hydratedState,
-        expectedVersion: data.version,
-      });
-      if (!isCurrent()) return false;
-    } else if (!window.learningDesk.markCloudConfirmed(scope, remoteState)) {
-      // A concurrent local write remains pending; do not turn it into a clean snapshot.
-      if (!isCurrent()) return false;
-    }
+    showToast("孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。", 6000);
+    return false;
   }
-  if (isCurrent()) {
-    window.learningDesk.renderCurrent();
-    setAccountState();
-    return true;
+
+  try {
+    await window.learningDesk.setScope(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
+    if (!isCurrent()) {
+      await restoreProfileCommit(previousProfileState, profile);
+      return false;
+    }
+  } catch (scopeError) {
+    console.warn("Learning profile switch rolled back:", scopeError);
+    const restored = await restoreProfileCommit(previousProfileState, profile);
+    if (!restored) return false;
+    if (!isCurrent()) return false;
+    showToast("孩子切换未完成，本机学习记录暂时不可用；当前孩子未变，请重试。", 6000);
+    return false;
   }
-  return false;
+
+  if (!isCurrent()) {
+    await restoreProfileCommit(previousProfileState, profile);
+    return false;
+  }
+  if (profileChanged) resetGrowthLoopRemoteRetry();
+  activeProfile = profile;
+  cloudVersion = null;
+  cloudSyncBlocked = false;
+  localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
+  setAccountState();
+  markPerformance("shadow-mate:profile:local-ready");
+  void queueGrowthCloudActivity(
+    profile,
+    ACTIVITY_EVENT_TYPES.HOUSEHOLD_ACTIVATED,
+    {},
+    "once",
+    { generation },
+  );
+  void loadGrowthLoopProfile(profile, { adoptPending: migrateLocal, generation }).catch((growthError) => {
+    console.warn("Growth Loop cloud data unavailable until release migration:", growthError);
+  });
+  const hydrateOperation = { profileId: profile.id, generation };
+  remoteHydratePending = hydrateOperation;
+  void hydrateProfileRemote(profile, { migrateLocal, generation }).finally(() => {
+    if (remoteHydratePending === hydrateOperation) remoteHydratePending = null;
+  });
+  return isCurrent() && activeProfile?.id === profile.id;
+}
+
+async function hydrateProfileRemote(profile, { migrateLocal = false, generation = null } = {}) {
+  const scope = { household_id: profile.household_id, profile_id: profile.id };
+  const isCurrent = () => isCurrentProfileOperation(generation)
+    && isActiveProfile(profile)
+    && sameProfileScope(window.learningDesk?.getEnvelope?.()?.scope || {}, scope);
+  if (!isCurrent()) return;
+  markPerformance("shadow-mate:profile:remote-hydrate-start");
+  try {
+    const { data, error } = await supabase
+      .from("learning_profile_states")
+      .select("state, version, updated_at")
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+    if (!isCurrent()) return;
+    if (error) {
+      markPerformance("shadow-mate:profile:remote-hydrate-failed");
+      showToast(formatCloudError(error, "读取云端记录失败，本机学习记录可继续使用。"), 5000);
+      return;
+    }
+    const normalizedRemote = data ? normalizeCloudLearningState(data, scope) : null;
+    if (normalizedRemote?.scope_mismatch) {
+      markPerformance("shadow-mate:profile:remote-hydrate-failed");
+      failClosedProfileScope();
+      return;
+    }
+    const localState = window.learningDesk.getState();
+    if (!data) {
+      cloudVersion = null;
+      if (migrateLocal || stateHasData(localState)) {
+        await saveCloudState(true, { generation, profileId: profile.id, allowPendingRemoteHydrate: true });
+        if (!isCurrent()) return;
+      }
+    } else {
+      lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
+      cloudVersion = normalizedRemote.version;
+      const remoteLearningState = normalizedRemote.state.learning;
+      const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
+      window.learningDesk.replaceState(merged, { persist: true });
+      if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
+        await saveCloudState(true, { generation, profileId: profile.id, allowPendingRemoteHydrate: true });
+        if (!isCurrent()) return;
+      }
+    }
+    markPerformance("shadow-mate:profile:remote-hydrate-ready");
+  } catch (error) {
+    if (!isCurrent()) return;
+    markPerformance("shadow-mate:profile:remote-hydrate-failed");
+    console.warn("Profile remote hydrate unavailable:", error);
+  }
+}
+
+function captureSaveRequest(manual = false) {
+  if (profileScopeWriteBlocked || !session || !activeProfile) return null;
+  return {
+    profileId: activeProfile.id,
+    generation: profileOperationGeneration,
+    manual: Boolean(manual),
+    requestSession: session,
+    state: window.learningDesk.getEnvelope(),
+    expectedVersion: cloudVersion,
+    fromDebounce: true,
+  };
 }
 
 async function saveCloudState(manual = false, {
-  generation = profileSwitchGeneration,
+  generation = null,
   profileId = null,
-  scope = null,
+  requestSession = null,
   state = null,
   expectedVersion = undefined,
-  authGeneration = authChangeVersion,
-  requestSession = session,
+  fromDebounce = false,
+  allowPendingRemoteHydrate = false,
 } = {}) {
-  const requestProfileId = profileId ?? activeProfile?.id ?? null;
-  const requestScope = scope ?? window.learningDesk?.getPersistenceScope?.() ?? null;
-  if (!requestSession || !activeProfile || requestProfileId !== activeProfile.id ||
-    requestScope !== profilePersistenceScope(requestProfileId) ||
-    !isCurrentAuthContext({ authGeneration, requestSession })) return false;
-  if (saveInFlight) {
-    saveQueued = true;
-    return false;
+  if (profileScopeWriteBlocked) return;
+  const requestedProfileId = profileId ?? activeProfile?.id ?? null;
+  const requestedGeneration = generation ?? profileOperationGeneration;
+  const saveSession = requestSession ?? session;
+  const requestedState = state ? structuredClone(state) : null;
+  const requestedVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
+  if (requestSession && session !== requestSession) return;
+  if (!allowPendingRemoteHydrate
+    && remoteHydratePending?.generation === requestedGeneration
+    && remoteHydratePending?.profileId === requestedProfileId) {
+    if (manual) showToast("正在读取云端记录，请稍后再试。", 3000);
+    return;
   }
-  const isCurrent = () => isCurrentProfileContext({
-    generation,
-    profileId: requestProfileId,
-    scope: requestScope,
-    requestSession,
-    authGeneration,
-  });
-  if (!isCurrent()) return false;
-  if (cloudSyncBlocked && !manual) return false;
+  if (saveInFlight) {
+    if (session && saveSession === session && requestedProfileId) {
+      const queuedRequest = {
+        profileId: requestedProfileId,
+        generation: requestedGeneration,
+        manual: Boolean(manual),
+        requestSession: saveSession,
+        state: requestedState,
+        expectedVersion: requestedVersion,
+        fromDebounce: Boolean(fromDebounce),
+      };
+      saveQueued = {
+        ...queuedRequest,
+        manual: queuedRequest.manual || (
+          saveQueued?.profileId === queuedRequest.profileId
+          && saveQueued?.generation === queuedRequest.generation
+          && saveQueued.manual
+        ),
+      };
+    }
+    return;
+  }
+  if (!session || !saveSession || session !== saveSession || !requestedProfileId) return;
+  const saveProfile = profiles.find((profile) => profile.id === requestedProfileId)
+    || (activeProfile?.id === requestedProfileId ? activeProfile : null);
+  if (!saveProfile) return;
+  const requestScope = requestedState?.scope;
+  if (requestScope?.profile_id && !sameProfileScope(requestScope, {
+    household_id: saveProfile.household_id,
+    profile_id: saveProfile.id,
+  })) return;
+  const saveGeneration = requestedGeneration;
+  const canWrite = () => !profileScopeWriteBlocked
+    && session === saveSession
+    && (fromDebounce || (
+      isCurrentProfileOperation(saveGeneration)
+      && activeProfile?.id === saveProfile.id
+      && requestedProfileId === saveProfile.id
+    ));
+  const canApplyActiveState = () => !profileScopeWriteBlocked
+    && session === saveSession
+    && isCurrentProfileOperation(saveGeneration)
+    && activeProfile?.id === saveProfile.id;
+  if (!canWrite()) return;
+  if (cloudSyncBlocked && !manual) return;
   if (manual) cloudSyncBlocked = false;
-  let requestState = normalizeLearningStateForScope(state ?? window.learningDesk.getState(), requestScope);
-  let requestVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
   saveInFlight = true;
-  let saved = false;
   let conflictRetries = 0;
+  let requestState = requestedState || window.learningDesk.getEnvelope();
+  let requestVersion = requestedVersion;
   try {
     while (true) {
-      if (!isCurrent()) break;
-      const requestSnapshot = structuredClone(requestState);
-      if (!isCurrent()) break;
+      if (!canWrite()) break;
       const { data, error } = await supabase.rpc("learning_save_state", {
-        p_profile_id: requestProfileId,
-        p_state: requestSnapshot,
-        p_expected_version: requestVersion,
+        p_profile_id: saveProfile.id,
+        ...buildCloudSavePayload(requestState, requestVersion),
       });
-      if (!isCurrent()) break;
+      if (!canWrite()) break;
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
-          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-          if (isCurrent()) showToast("操作过于频繁，请稍后再试。", 5000);
+          showToast("操作过于频繁，请稍后再试。", 5000);
           break;
         }
         if (!error.message.includes("learning_state_conflict")) {
-          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-          if (isCurrent()) showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+          showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
           break;
         }
         // 旧服务端兼容：learning_state_conflict 错误 → 走下方统一冲突处理。
       } else {
         const row = Array.isArray(data) ? data[0] : data;
         if (row) {
-          if (isCurrent()) {
+          if (canApplyActiveState()) {
             cloudVersion = row?.version ?? cloudVersion;
             lastSyncAt = latestUpdatedAt([{ updated_at: row?.updated_at }, { updated_at: lastSyncAt }]);
-            window.learningDesk.markCloudConfirmed(requestScope, requestSnapshot);
             updateSyncStatus();
-            if (manual) showToast("云端记录已更新");
           }
-          saved = true;
+          if (manual) showToast("云端记录已更新");
           break;
         }
         // 空集 = 版本冲突（服务端不再 raise，避免事务回滚绕过限流）→ 走下方统一冲突处理。
       }
 
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
-        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-        if (isCurrent()) {
-          cloudSyncBlocked = true;
-          showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
-        }
+        if (canApplyActiveState()) cloudSyncBlocked = true;
+        showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
         break;
       }
 
-      if (!isCurrent()) break;
       const { data: remote, error: remoteError } = await supabase
         .from("learning_profile_states")
         .select("state, version")
-        .eq("profile_id", requestProfileId)
+        .eq("profile_id", saveProfile.id)
         .single();
-      if (!isCurrent()) break;
+      if (!canWrite()) break;
       if (remoteError || !remote) {
         if (remoteError?.code === "PGRST116" || (!remoteError && !remote)) {
           // 目标 profile 在云端已不存在 → 熔断自动同步，避免每次编辑都触发一次无效冲突往返
-          if (isCurrent()) {
+          if (canApplyActiveState()) {
+            resetGrowthLoopRemoteRetry();
             activeProfile = null;
             cloudSyncBlocked = true;
             localStorage.removeItem(ACTIVE_PROFILE_KEY);
           }
-          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-          if (isCurrent()) showToast("云端记录已不存在，已停止自动同步。", 6000);
+          showToast("云端记录已不存在，已停止自动同步。", 6000);
         } else {
-          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-          if (isCurrent()) showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+          showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
         }
         break;
       }
 
+      if (!canWrite()) break;
       requestVersion = remote.version;
-      try {
-        const remoteState = normalizeLearningStateForScope(remote.state, requestScope);
-        if (!hasCompatibleHanziRotationScope(remoteState, requestScope)) {
-          throw new Error("cloud rotation state does not match the requested learner scope");
-        }
-        const localState = isCurrent() ? window.learningDesk.getState() : requestState;
-        if (isCurrent() && !hasCompatibleHanziRotationScope(localState, requestScope)) {
-          throw new Error("local rotation state does not match the requested learner scope");
-        }
-        requestState = mergeState(localState, remoteState);
-      } catch (mergeError) {
-        if (isCurrent()) {
-          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
-          showToast(formatCloudError(mergeError, "云端记录冲突，暂未覆盖本机记录。"), 5000);
-        }
-        break;
-      }
-      if (isCurrent() && !window.learningDesk.replaceState(requestState, {
-        persist: true,
-        pending: true,
-        render: false,
-      })) {
-        showToast("本机记录保存失败，云端冲突合并已停止，请稍后重试。", 5000);
-        break;
+      requestState = mergeState(requestState, remote.state);
+      if (canApplyActiveState()) {
+        cloudVersion = remote.version;
+        window.learningDesk.replaceState(requestState, { persist: true });
       }
       conflictRetries += 1;
-      if (!isCurrent()) break;
       await new Promise((resolve) => window.setTimeout(resolve, CONFLICT_RETRY_DELAY_MS * conflictRetries));
-      if (!isCurrent()) break;
     }
   } finally {
     saveInFlight = false;
   }
 
-  const currentAfterSave = isCurrent();
   const queuedAfterSave = saveQueued;
-  saveQueued = false;
-  if (queuedAfterSave && currentAfterSave && requestSession === session && activeProfile &&
-    window.learningDesk?.getPersistenceScope?.() === profilePersistenceScope(activeProfile.id)) {
-    if (!isCurrent()) return saved;
-    await saveCloudState(false, {
-      generation,
-      profileId: requestProfileId,
-      scope: requestScope,
-      authGeneration,
-      requestSession,
-    });
-  } else if (queuedAfterSave && session && activeProfile &&
-    window.learningDesk?.getPersistenceScope?.() === profilePersistenceScope(activeProfile.id)) {
-    scheduleSave();
+  saveQueued = null;
+  if (queuedAfterSave) {
+    await saveCloudState(queuedAfterSave.manual, queuedAfterSave);
   }
-  return saved;
 }
 
-function scheduleSave() {
-  if (cloudSyncBlocked || !session || !activeProfile ||
-    window.learningDesk?.getPersistenceScope?.() !== profilePersistenceScope(activeProfile.id)) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    return;
-  }
+function scheduleSave(manual = false) {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveCloudState(false), 500);
+  saveTimer = null;
+  if (manual && !profileScopeWriteBlocked) cloudSyncBlocked = false;
+  const request = captureSaveRequest(manual);
+  if (!cloudSyncBlocked && request) {
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void saveCloudState(request.manual, request);
+    }, 500);
+  }
+  scheduleGrowthLoopSync();
 }
 
-window.cloudSync = { schedule: scheduleSave };
+window.cloudSync = {
+  schedule: scheduleSave,
+  scheduleGrowthLoop: scheduleGrowthLoopSync,
+  isProfileScopeWriteBlocked: () => profileScopeWriteBlocked,
+  canWriteLocalState: () => !profileScopeWriteBlocked
+    && !profileScopeResetInProgress
+    && (!session || Boolean(activeProfile)),
+  canWriteScopeTransition: () => !profileScopeWriteBlocked,
+  getProfileCommitState: () => ({
+    active_profile_id: activeProfile?.id || null,
+    active_profile_key: localStorage.getItem(ACTIVE_PROFILE_KEY),
+    cloud_version: cloudVersion,
+  }),
+};
+window.addEventListener("online", () => {
+  if (activeProfile && !profileScopeWriteBlocked) growthLoopRetryScheduler.scheduleNow();
+});
 
 async function maybePromptPasswordSetup(options = {}) {
   if (!session || passwordRecoveryActive) return false;
@@ -1532,36 +1961,50 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
-  profileSwitchGeneration += 1;
+  profileScopeResetInProgress = false;
+  advanceProfileOperationGeneration();
+  resetGrowthLoopRemoteRetry();
+  const existingScopeBlock = profileScopeWriteBlocked || readProfileScopeBlock();
   session = nextSession;
   memberships = [];
   profiles = [];
+  guardianConsentHouseholds = new Set();
+  guardianConsentMetadataReady = false;
+  workspaceMetadataLoading = Promise.resolve(false);
+  remoteHydratePending = null;
   activeProfile = null;
   cloudVersion = null;
   lastSyncAt = null;
   cloudSyncBlocked = false;
+  profileScopeWriteBlocked = existingScopeBlock;
+  if (profileScopeWriteBlocked) localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   if (!session) {
-    const anonymousActivated = window.learningDesk.activateScope(
-      ANONYMOUS_SCOPE,
-      { persist: !localResetInProgress },
-    );
-    if (!anonymousActivated) {
-      window.learningDesk.activateSafeAnonymousScope();
-      showToast("退出登录完成，但本机记录保存失败，已进入安全本地模式；修复存储后可恢复。", 6000);
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    saveQueued = null;
+    try {
+      localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    } catch (error) {
+      console.warn("Unable to remove the active profile key after sign-out:", error);
+      failClosedProfileScope();
+      return;
     }
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
+    if (!existingScopeBlock) {
+      profileScopeResetInProgress = true;
+      await resetSignedOutProfileScope(changeVersion);
+      if (changeVersion === authChangeVersion) profileScopeResetInProgress = false;
+    }
   }
+  if (changeVersion !== authChangeVersion) return;
   setAccountState();
   let passwordUiOpened = false;
   if (session) {
-    workspaceLoading = loadWorkspace(null, {}, {
-      authGeneration: changeVersion,
-      requestSession: nextSession,
-    });
+    workspaceLoading = loadWorkspace();
     try {
-      const workspaceLoaded = await workspaceLoading;
-      if (workspaceLoaded && changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
+      const selected = await workspaceLoading;
+      if (selected && changeVersion === authChangeVersion && session === nextSession && !localResetInProgress) {
         showToast("已连接云端学习空间");
       }
     } catch (error) {
