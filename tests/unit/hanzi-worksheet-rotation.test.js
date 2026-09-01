@@ -136,6 +136,106 @@ describe("rotation-v1 daily worksheet selection", () => {
     });
   });
 
+  it("copies visual learning metadata into immutable snapshots through build, normalize, and merge", () => {
+    const resolved = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    const row = resolved.worksheet.rows[0];
+    const item = PACK.items.find((candidate) => candidate.id === row.itemId);
+
+    expect(row).toMatchObject({
+      concept: item.concept,
+      exampleWords: item.exampleWords,
+      sentence: item.sentence,
+      writing: item.writing,
+    });
+
+    const normalized = normalizeRotationState(resolved.rotationState, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: PACK_REF,
+      pack: PACK,
+    });
+    const merged = mergeRotationState(resolved.rotationState, resolved.rotationState);
+
+    expect(normalized).toEqual(resolved.rotationState);
+    expect(merged).toEqual(resolved.rotationState);
+
+    const storedState = structuredClone(resolved.rotationState);
+    row.concept.visual.alt = "改掉的视觉描述";
+    row.writing.hint = "改掉的书写提示";
+    expect(resolved.rotationState).toEqual(storedState);
+  });
+
+  it("repairs a same-Pilot legacy snapshot from stable item identity without losing completion", () => {
+    const resolved = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    const legacyState = structuredClone(resolved.rotationState);
+    const assignment = legacyState.assignments["2026-09-01"];
+    const assignmentId = assignment.canonicalAssignmentId;
+    const legacyWorksheet = assignment.candidates[assignmentId];
+    legacyWorksheet.rows.forEach((row) => {
+      delete row.concept;
+      delete row.exampleWords;
+      delete row.sentence;
+      delete row.writing;
+    });
+    assignment.completions[assignmentId] = { completedAt: "2026-09-01T03:00:00.000Z" };
+
+    const repaired = normalizeRotationState(legacyState, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: PACK_REF,
+      pack: PACK,
+      referenceDayKey: "2026-09-01",
+    });
+    const repairedWorksheet = repaired.assignments["2026-09-01"].candidates[assignmentId];
+
+    expect(repairedWorksheet.rows).toHaveLength(4);
+    repairedWorksheet.rows.forEach((row) => {
+      const item = PACK.items.find((candidate) => candidate.id === row.itemId);
+      expect(row).toMatchObject({
+        glyph: item.glyph,
+        concept: item.concept,
+        exampleWords: item.exampleWords,
+        sentence: item.sentence,
+        writing: item.writing,
+      });
+    });
+    expect(repaired.assignments["2026-09-01"].canonicalAssignmentId).toBe(assignmentId);
+    expect(repaired.assignments["2026-09-01"].completions).toEqual({
+      [assignmentId]: { completedAt: "2026-09-01T03:00:00.000Z" },
+    });
+
+    const hydratedLegacy = normalizeRotationState(legacyState, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: PACK_REF,
+    });
+    const resolvedLegacy = resolveDailyWorksheet({
+      rotationState: hydratedLegacy,
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    expect(resolvedLegacy.worksheet).toEqual(repairedWorksheet);
+    expect(resolvedLegacy.rotationState.assignments["2026-09-01"].completions).toEqual({
+      [assignmentId]: { completedAt: "2026-09-01T03:00:00.000Z" },
+    });
+
+    const mergedLegacy = mergeRotationState(hydratedLegacy, resolved.rotationState);
+    expect(mergedLegacy.assignments["2026-09-01"].candidates[assignmentId]).toEqual(
+      resolved.worksheet
+    );
+  });
+
   it("fails closed for partial rows and snapshot content forged against the active pack", () => {
     const validState = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
     const assignment = validState.assignments["2026-09-01"];
@@ -828,10 +928,30 @@ describe("rotation-v1 daily worksheet selection", () => {
       layoutVersion: "focus-rows-v1",
       packRef: PACK_REF,
       rows: [
-        { rowId: "row-1", itemId: "hz-011", glyph: "火", pinyin: "huǒ", exampleWord: "火山" },
-        { rowId: "row-2", itemId: "hz-010", glyph: "水", pinyin: "shuǐ", exampleWord: "水果" },
-        { rowId: "row-3", itemId: "hz-013", glyph: "山", pinyin: "shān", exampleWord: "大山" },
-        { rowId: "row-4", itemId: "hz-012", glyph: "木", pinyin: "mù", exampleWord: "木头" },
+        {
+          rowId: "row-1", itemId: "hz-011", glyph: "火", pinyin: "huǒ", exampleWord: "火山",
+          concept: { label: "火山", visual: { kind: "emoji", value: "🌋", alt: "一座火山" }, englishLabel: "volcano" },
+          exampleWords: ["火山", "火光"], sentence: "火山有火。",
+          writing: { strokeCount: 4, structure: "独体字", hint: "先看两点，再写中间像人一样的部分。" },
+        },
+        {
+          rowId: "row-2", itemId: "hz-010", glyph: "水", pinyin: "shuǐ", exampleWord: "水果",
+          concept: { label: "水滴", visual: { kind: "emoji", value: "💧", alt: "一滴清清的水" }, englishLabel: "water" },
+          exampleWords: ["水果", "水花"], sentence: "小鱼在水里。",
+          writing: { strokeCount: 4, structure: "独体字", hint: "中间的竖钩要挺直，左右要舒展。" },
+        },
+        {
+          rowId: "row-3", itemId: "hz-013", glyph: "山", pinyin: "shān", exampleWord: "大山",
+          concept: { label: "高山", visual: { kind: "emoji", value: "⛰️", alt: "一座高高的山" }, englishLabel: "mountain" },
+          exampleWords: ["大山", "山羊"], sentence: "山上有云。",
+          writing: { strokeCount: 3, structure: "独体字", hint: "中间的竖最高，三笔要站稳。" },
+        },
+        {
+          rowId: "row-4", itemId: "hz-012", glyph: "木", pinyin: "mù", exampleWord: "木头",
+          concept: { label: "大树", visual: { kind: "emoji", value: "🌳", alt: "一棵枝叶茂盛的大树" }, englishLabel: "tree" },
+          exampleWords: ["木头", "木马"], sentence: "小鸟站在木头上。",
+          writing: { strokeCount: 4, structure: "独体字", hint: "横要平，竖在中间，撇捺向两边展开。" },
+        },
       ],
     });
     expect(first.rotationState).toMatchObject({

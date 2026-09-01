@@ -153,22 +153,45 @@
   .stroke-list{display:flex;flex-wrap:wrap;gap:8px;}
   .stroke-chip{background:var(--green-soft);border-radius:14px;padding:8px 12px;font-size:14px;font-weight:700;color:var(--green-deep);}
 
-  /* 今日字帖：屏幕与打印共用 worksheet snapshot 的行结构 */
+  /* 今日图字学习：屏幕与打印共用 worksheet snapshot 的行结构 */
   .writing-worksheet{margin-top:10px;padding:10px 0 2px;border-top:1px solid var(--line);}
   .writing-worksheet-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;}
   .writing-worksheet-label{font-size:13px;font-weight:800;color:var(--green-deep);}
   .writing-worksheet-day{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .hanzi-learning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px;}
   .writing-row{padding:10px 0;border-top:1px solid var(--line);break-inside:avoid;page-break-inside:avoid;}
   .writing-row:first-child{border-top:0;}
-  .writing-row-copy{display:flex;align-items:baseline;gap:8px;min-width:0;}
-  .writing-row-pinyin{font-size:13px;font-weight:800;color:var(--green-deep);}
-  .writing-row-example{font-size:12px;color:var(--ink-soft);}
-  .writing-row-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:8px;}
+  .hanzi-learning-card{min-width:0;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:var(--shadow);}
+  .hanzi-learning-grid .hanzi-learning-card{border-top:1px solid var(--line);}
+  .hanzi-learning-grid .hanzi-learning-card:first-child{border-top:1px solid var(--line);}
+  .hanzi-learning-visual{margin-bottom:10px;}
+  .hanzi-visual{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:10px;row-gap:2px;padding:10px;border-radius:14px;background:var(--green-soft);}
+  .hanzi-visual-value{grid-row:span 3;font-size:38px;line-height:1;}
+  .hanzi-concept-label{font-size:14px;font-weight:800;color:var(--ink);}
+  .hanzi-english-label{font-size:11px;color:var(--ink-soft);font-style:italic;}
+  .hanzi-visual-alt{font-size:11px;color:var(--ink-soft);line-height:1.35;}
+  .hanzi-learning-word{display:grid;gap:5px;margin-bottom:8px;}
+  .hanzi-section-label{font-size:11px;font-weight:800;color:var(--green-deep);}
+  .hanzi-example-words{display:flex;gap:6px;flex-wrap:wrap;}
+  .hanzi-example-word{padding:5px 9px;border-radius:999px;background:var(--green-soft);color:var(--ink);font-size:14px;font-weight:700;}
+  .hanzi-example-word mark{background:var(--yellow-soft);color:inherit;border-radius:3px;padding-inline:1px;}
+  .hanzi-learning-target{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line);}
+  .hanzi-target-glyph{font-size:46px;font-weight:800;color:var(--ink);line-height:1;}
+  .hanzi-target-pinyin{font-size:16px;font-weight:800;color:var(--green-deep);}
+  .hanzi-speech-actions{display:flex;gap:5px;margin-left:auto;flex-wrap:wrap;}
+  .hanzi-speech-actions button{border:1px solid var(--green);border-radius:999px;padding:5px 8px;background:var(--card);color:var(--green-deep);font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
+  .hanzi-sentence{margin:7px 0 0;color:var(--ink);font-size:13px;line-height:1.55;}
+  .hanzi-writing-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;color:var(--ink-soft);font-size:11px;}
+  .hanzi-writing-meta span{padding:4px 7px;border-radius:8px;background:var(--green-soft);}
+  .hanzi-writing-hint{margin:7px 0 0;padding:8px 9px;border-left:3px solid var(--yellow);border-radius:0 9px 9px 0;background:var(--yellow-soft);color:var(--ink);font-size:12px;line-height:1.5;}
+  .writing-row-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px;}
   .writing-cell{aspect-ratio:1;min-width:0;border:2px solid var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;background:
     linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
     linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
     linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
     linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
+  .writing-cell-model{background-color:var(--green-soft);}
+  .writing-cell-model [data-writing-glyph]{font-size:34px;font-weight:800;line-height:1;color:var(--ink);}
   .writing-cell-trace{color:rgba(31,122,57,.45);}
   .writing-cell-trace [data-writing-glyph]{font-size:34px;font-weight:800;line-height:1;}
   .writing-cell-empty{background:
@@ -177,6 +200,10 @@
     linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
     linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
   .writing-print-root{display:none;}
+  @media (max-width:680px){
+    .hanzi-learning-grid{grid-template-columns:1fr;}
+    .hanzi-learning-card{padding:13px;}
+  }
 
   /* 数学口算 */
   .quiz-box{text-align:center;padding:10px 0;}
@@ -392,12 +419,31 @@
     .writing-print-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12mm;border-bottom:1px solid #222;padding-bottom:5mm;margin-bottom:3mm;}
     .writing-print-heading h1{margin:0;font-size:22pt;line-height:1.2;}
     .writing-print-meta{font-size:10pt;color:#444;}
-    #writingPrintRoot .writing-row{padding:5mm 0;}
-    #writingPrintRoot .writing-row-copy{gap:4mm;}
-    #writingPrintRoot .writing-row-pinyin{font-size:12pt;color:#111;}
-    #writingPrintRoot .writing-row-example{font-size:11pt;color:#444;}
-    #writingPrintRoot .writing-row-grid{gap:3mm;margin-top:3mm;}
+    #writingPrintRoot .writing-print-rows{display:grid;gap:3mm;}
+    #writingPrintRoot .hanzi-learning-card{display:grid;grid-template-columns:29mm minmax(0,1fr);column-gap:4mm;row-gap:1.5mm;padding:3mm 0;border:0;border-bottom:0.35mm solid #bbb;border-radius:0;background:#fff;box-shadow:none;}
+    #writingPrintRoot .hanzi-learning-visual{grid-row:span 2;margin:0;}
+    #writingPrintRoot .hanzi-visual{height:100%;box-sizing:border-box;padding:2mm;column-gap:2mm;background:#f3f7f3;}
+    #writingPrintRoot .hanzi-visual-value{font-size:22pt;}
+    #writingPrintRoot .hanzi-concept-label{font-size:10pt;color:#111;}
+    #writingPrintRoot .hanzi-english-label{font-size:8pt;color:#444;}
+    #writingPrintRoot .hanzi-visual-alt{font-size:8pt;color:#444;}
+    #writingPrintRoot .hanzi-learning-word{grid-column:2;display:block;margin:0;}
+    #writingPrintRoot .hanzi-section-label{font-size:8pt;color:#222;}
+    #writingPrintRoot .hanzi-example-words{display:inline-flex;margin-left:2mm;vertical-align:middle;}
+    #writingPrintRoot .hanzi-example-word{padding:1mm 2mm;background:#f3f7f3;color:#111;font-size:10pt;}
+    #writingPrintRoot .hanzi-example-word mark{background:#fff0bd;}
+    #writingPrintRoot .hanzi-learning-target{grid-column:2;padding:1mm 0;border-top:0;gap:3mm;}
+    #writingPrintRoot .hanzi-target-glyph{font-size:23pt;color:#111;}
+    #writingPrintRoot .hanzi-target-pinyin{font-size:11pt;color:#111;}
+    #writingPrintRoot .hanzi-speech-actions,#writingPrintRoot button{display:none !important;}
+    #writingPrintRoot .hanzi-sentence{grid-column:1/-1;margin:0;font-size:9.5pt;color:#222;}
+    #writingPrintRoot .hanzi-writing-meta{grid-column:1/-1;margin:0;font-size:8pt;color:#444;}
+    #writingPrintRoot .hanzi-writing-meta span{padding:1mm 1.5mm;background:#f3f7f3;}
+    #writingPrintRoot .hanzi-writing-hint{grid-column:1/-1;margin:0;padding:1.5mm 2mm;border-left:1mm solid #c99b2e;background:#fff8df;color:#222;font-size:9pt;}
+    #writingPrintRoot .writing-row-grid{grid-column:1/-1;gap:3mm;margin-top:1mm;}
     #writingPrintRoot .writing-cell{border:0.5mm solid #333;border-radius:1mm;}
+    #writingPrintRoot .writing-cell-model{background-color:#f3f7f3;}
+    #writingPrintRoot .writing-cell-model [data-writing-glyph]{font-size:21pt;color:#111;}
     #writingPrintRoot .writing-cell-trace{color:rgba(31,122,57,.45);}
     #writingPrintRoot .writing-cell-trace [data-writing-glyph]{font-size:30pt;}
   }

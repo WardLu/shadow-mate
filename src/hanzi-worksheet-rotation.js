@@ -5,9 +5,11 @@ const MAX_RETAINED_DAYS = 90;
 const MAX_PAYLOAD_BYTES = 200 * 1024;
 const MAX_ID_LENGTH = 256;
 const MAX_SNAPSHOT_TEXT_LENGTH = 1024;
+const MAX_SNAPSHOT_ARRAY_LENGTH = 16;
 const MAX_COMPLETION_LENGTH = 256;
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-](?:0\d|1[0-3]):[0-5]\d|[+-]14:00)$/;
+const SNAPSHOT_METADATA_KEYS = ["concept", "exampleWords", "sentence", "writing"];
 
 export const ROTATION_ALGORITHM_VERSION = "rotation-v1";
 
@@ -148,6 +150,66 @@ function truncateSnapshotText(value) {
   return Array.from(value).slice(0, MAX_SNAPSHOT_TEXT_LENGTH).join("");
 }
 
+function normalizeSnapshotText(value) {
+  return isNonEmptyString(value) ? truncateSnapshotText(value) : undefined;
+}
+
+function normalizeSnapshotMetadata(source) {
+  if (!isRecord(source) || !isRecord(source.concept) || !isRecord(source.concept.visual) ||
+    source.concept.visual.kind !== "emoji" || !Array.isArray(source.exampleWords) ||
+    source.exampleWords.length < 2 || source.exampleWords.length > MAX_SNAPSHOT_ARRAY_LENGTH ||
+    !isRecord(source.writing) || !Number.isInteger(source.writing.strokeCount) ||
+    source.writing.strokeCount < 1 || source.writing.strokeCount > 64) {
+    return undefined;
+  }
+
+  const conceptLabel = normalizeSnapshotText(source.concept.label);
+  const visualValue = normalizeSnapshotText(source.concept.visual.value);
+  const visualAlt = normalizeSnapshotText(source.concept.visual.alt);
+  const englishLabel = normalizeSnapshotText(source.concept.englishLabel);
+  const sentence = normalizeSnapshotText(source.sentence);
+  const structure = normalizeSnapshotText(source.writing.structure);
+  const hint = normalizeSnapshotText(source.writing.hint);
+  const exampleWords = source.exampleWords.map((word) => normalizeSnapshotText(word));
+
+  if ([conceptLabel, visualValue, visualAlt, englishLabel, sentence, structure, hint]
+    .some((value) => value === undefined) || exampleWords.some((word) => word === undefined)) {
+    return undefined;
+  }
+
+  return {
+    concept: {
+      label: conceptLabel,
+      visual: {
+        kind: "emoji",
+        value: visualValue,
+        alt: visualAlt,
+      },
+      englishLabel,
+    },
+    exampleWords,
+    sentence,
+    writing: {
+      strokeCount: source.writing.strokeCount,
+      structure,
+      hint,
+    },
+  };
+}
+
+function getSnapshotMetadata(row, item) {
+  const hasMetadata = SNAPSHOT_METADATA_KEYS.some((key) =>
+    Object.hasOwn(row, key) || Object.hasOwn(item || {}, key)
+  );
+  if (!hasMetadata) return null;
+
+  const source = Object.fromEntries(SNAPSHOT_METADATA_KEYS.map((key) => [
+    key,
+    Object.hasOwn(row, key) ? row[key] : item?.[key],
+  ]));
+  return normalizeSnapshotMetadata(source);
+}
+
 function getPackItems(pack, worksheetPackRef) {
   if (pack === undefined) return undefined;
   if (!isRecord(pack) || !samePackRef(getPackRef(pack), worksheetPackRef)) return null;
@@ -203,12 +265,16 @@ function normalizeWorksheet(
         return undefined;
       }
     }
+    const metadata = getSnapshotMetadata(row, packItems?.get(row.itemId));
+    if (metadata === undefined) return undefined;
+
     return {
       rowId: row.rowId,
       itemId: row.itemId,
       glyph: truncateSnapshotText(row.glyph),
       pinyin: truncateSnapshotText(row.pinyin),
       exampleWord: truncateSnapshotText(row.exampleWord),
+      ...(metadata || {}),
     };
   });
 
@@ -401,6 +467,63 @@ function chooseStableValue(left, right) {
   return cloneValue(JSON.stringify(left) <= JSON.stringify(right) ? left : right);
 }
 
+function hasSameWorksheetIdentity(left, right) {
+  if (!left || !right || left.assignmentId !== right.assignmentId ||
+    left.dayKey !== right.dayKey || left.layoutVersion !== right.layoutVersion ||
+    !samePackRef(left.packRef, right.packRef) || !Array.isArray(left.rows) ||
+    left.rows.length !== right.rows?.length) {
+    return false;
+  }
+
+  return left.rows.every((leftRow, index) => {
+    const rightRow = right.rows[index];
+    return rightRow && ["rowId", "itemId", "glyph", "pinyin", "exampleWord"]
+      .every((key) => leftRow[key] === rightRow[key]);
+  });
+}
+
+function mergeWorksheetSnapshots(localWorksheet, remoteWorksheet) {
+  if (!localWorksheet) return cloneValue(remoteWorksheet);
+  if (!remoteWorksheet) return cloneValue(localWorksheet);
+  if (JSON.stringify(localWorksheet) === JSON.stringify(remoteWorksheet)) {
+    return cloneValue(localWorksheet);
+  }
+  if (!hasSameWorksheetIdentity(localWorksheet, remoteWorksheet)) return undefined;
+
+  const rows = localWorksheet.rows.map((localRow, index) => {
+    const remoteRow = remoteWorksheet.rows[index];
+    const row = {
+      rowId: localRow.rowId,
+      itemId: localRow.itemId,
+      glyph: localRow.glyph,
+      pinyin: localRow.pinyin,
+      exampleWord: localRow.exampleWord,
+    };
+
+    for (const key of SNAPSHOT_METADATA_KEYS) {
+      const localValue = localRow[key];
+      const remoteValue = remoteRow[key];
+      if (localValue !== undefined && remoteValue !== undefined &&
+        JSON.stringify(localValue) !== JSON.stringify(remoteValue)) {
+        return undefined;
+      }
+      if (localValue !== undefined || remoteValue !== undefined) {
+        row[key] = cloneValue(localValue !== undefined ? localValue : remoteValue);
+      }
+    }
+    return row;
+  });
+
+  if (rows.some((row) => row === undefined)) return undefined;
+  return {
+    assignmentId: localWorksheet.assignmentId,
+    dayKey: localWorksheet.dayKey,
+    layoutVersion: localWorksheet.layoutVersion,
+    packRef: clonePackRef(localWorksheet.packRef),
+    rows,
+  };
+}
+
 function mergeAssignments(localAssignment, remoteAssignment) {
   const candidateIds = new Set([
     ...Object.keys(localAssignment?.candidates || {}),
@@ -411,14 +534,7 @@ function mergeAssignments(localAssignment, remoteAssignment) {
   [...candidateIds].sort(compareStrings).forEach((candidateId) => {
     const localCandidate = localAssignment?.candidates?.[candidateId];
     const remoteCandidate = remoteAssignment?.candidates?.[candidateId];
-    if (localCandidate && remoteCandidate &&
-      JSON.stringify(localCandidate) !== JSON.stringify(remoteCandidate)) {
-      return;
-    }
-    const candidate = chooseStableValue(
-      localCandidate,
-      remoteCandidate
-    );
+    const candidate = mergeWorksheetSnapshots(localCandidate, remoteCandidate);
     if (candidate) candidates[candidateId] = candidate;
   });
 
@@ -484,6 +600,30 @@ function getAssignmentId({ packRef, learnerScope, dayKey, rows }) {
   ].join("|");
 
   return `${ROTATION_ALGORITHM_VERSION}-${stableHash(identity).toString(16).padStart(8, "0")}`;
+}
+
+function buildWorksheet({ packRef, learnerScope, dayKey, selectedItems }) {
+  const rows = selectedItems.map((item, index) => {
+    const metadata = normalizeSnapshotMetadata(item);
+    if (!metadata) return undefined;
+    return {
+      rowId: `row-${index + 1}`,
+      itemId: item.id,
+      glyph: item.glyph,
+      pinyin: item.pinyin,
+      exampleWord: item.exampleWord,
+      ...metadata,
+    };
+  });
+  if (rows.some((row) => row === undefined)) return undefined;
+
+  return {
+    assignmentId: getAssignmentId({ packRef, learnerScope, dayKey, rows }),
+    dayKey,
+    layoutVersion: WORKSHEET_LAYOUT_VERSION,
+    packRef: clonePackRef(packRef),
+    rows,
+  };
 }
 
 function toDate(now) {
@@ -658,20 +798,13 @@ export function resolveDailyWorksheet({
       rotationState: state,
     };
   }
-  const rows = selectedItems.map((item, index) => ({
-    rowId: `row-${index + 1}`,
-    itemId: item.id,
-    glyph: item.glyph,
-    pinyin: item.pinyin,
-    exampleWord: item.exampleWord,
-  }));
-  const worksheet = {
-    assignmentId: getAssignmentId({ packRef, learnerScope, dayKey, rows }),
-    dayKey,
-    layoutVersion: WORKSHEET_LAYOUT_VERSION,
-    packRef: clonePackRef(packRef),
-    rows,
-  };
+  const worksheet = buildWorksheet({ packRef, learnerScope, dayKey, selectedItems });
+  if (!worksheet) {
+    return {
+      worksheet: undefined,
+      rotationState: state,
+    };
+  }
   const snapshot = cloneValue(worksheet);
 
   const assignments = pruneAssignments({
