@@ -582,9 +582,24 @@ function stopActivePlayback() {
   }
 }
 
-async function speak(t, button){
-  const originalLabel = button?.dataset.label || "听发音";
-  const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
+function findSystemVoice(locale) {
+  const synth = window.speechSynthesis;
+  if (!(synth && typeof window.SpeechSynthesisUtterance === "function")) return null;
+  const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+  if (!Array.isArray(voices)) return null;
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  const language = normalizedLocale.split("-")[0];
+  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
+  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
+    || voices.find((voice) => normalizeVoiceLocale(voice) === language)
+    || null;
+}
+
+async function speak(t, button, locale = "en-US"){
+  const originalLabel = button?.dataset.label || button?.textContent?.trim() || "听发音";
+  const voiceHelp = locale === "zh-CN"
+    ? "请在系统设置中安装中文（普通话）语音，然后重试"
+    : "请在系统设置中安装英语语音包，然后重试";
   const showSpeechGuide = () => {
     if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
     const guideLink = document.createElement("button");
@@ -610,7 +625,7 @@ async function speak(t, button){
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
-    button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
+    button.title = message.startsWith("未检测到") ? voiceHelp : message;
     button.dataset.speechFailure = "true";
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
@@ -618,7 +633,7 @@ async function speak(t, button){
       error_code: errorCode,
       retryable: true,
     }, `${errorCode}:${Date.now()}`);
-    showSpeechGuide();
+    if (locale !== "zh-CN") showSpeechGuide();
     window.setTimeout(() => {
       if (button.dataset.speechFailure === "true") restore();
     }, 5000);
@@ -775,6 +790,45 @@ async function speak(t, button){
       }
     }
   };
+
+  if (locale === "zh-CN") {
+    const synth = window.speechSynthesis;
+    const voice = findSystemVoice(locale);
+    if (!voice) {
+      fail("未检测到中文普通话语音，请重试");
+      return;
+    }
+
+    const Utterance = window.SpeechSynthesisUtterance;
+    const utterance = new Utterance(t);
+    utterance.lang = locale;
+    utterance.rate = 0.9;
+    utterance.voice = voice;
+    utterance.onend = () => restore();
+    utterance.onerror = () => fail("中文发音失败，请重试");
+    setBusy();
+    try {
+      try {
+        synth.cancel();
+      } catch (_) {
+        // Some browser speech implementations throw while cancelling a prior utterance.
+      }
+      // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
+      synth.speak(utterance);
+      systemTimer = window.setTimeout(() => {
+        if (!button?.disabled) return;
+        try {
+          synth.cancel();
+        } catch (_) {
+          // Some browser speech implementations throw while cancelling a stalled utterance.
+        }
+        fail("中文发音未响应，请重试");
+      }, 4000);
+    } catch (_) {
+      fail("中文发音失败，请重试");
+    }
+    return;
+  }
 
   // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
   if (hasSystemEnglishVoice()) {
@@ -1000,6 +1054,13 @@ function renderChinese(){
   `);
   main.appendChild(card3);
   card3.querySelector("[data-print]").onclick = () => window.print();
+  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak]").forEach((button) => {
+    button.onclick = () => speak(
+      button.dataset.speechText || "",
+      button,
+      button.dataset.speechLocale || "en-US",
+    );
+  });
 }
 
 /* =========================================================

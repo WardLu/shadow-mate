@@ -22,6 +22,36 @@ async function openModule(page, mod) {
   await page.click(`[data-go="${mod}"]`);
 }
 
+async function installSpeechMock(page) {
+  await page.addInitScript(() => {
+    const utterances = [];
+    Object.defineProperty(window, "__speechUtterances", {
+      configurable: true,
+      value: utterances,
+    });
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: function SpeechSynthesisUtterance(text) {
+        this.text = text;
+        this.lang = "";
+      },
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices() {
+          return [{ lang: "zh-CN" }, { lang: "en-US" }];
+        },
+        speak(utterance) {
+          utterances.push({ text: utterance.text, lang: utterance.lang });
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+}
+
 async function readWritingSnapshot(page) {
   return page.evaluate(() => {
     const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
@@ -732,6 +762,36 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.emulateMedia({ media: "screen" });
     await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
+  });
+
+  test("keeps the logged-in writing workbook stable when bilingual learning-card speech is clicked", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
+    await installSpeechMock(page);
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await openModule(page, "chinese");
+    await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
+
+    const before = await readWritingSnapshot(page);
+    const beforeState = await page.evaluate(() => window.learningDesk.getState());
+    const firstCard = page.locator("[data-writing-worksheet] [data-hanzi-learning-card]").first();
+    const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
+    const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
+    const expectedUtterances = await Promise.all([zhButton, enButton].map(async (button) => ({
+      text: await button.getAttribute("data-speech-text"),
+      lang: await button.getAttribute("data-speech-locale"),
+    })));
+
+    await zhButton.click();
+    await enButton.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual(expectedUtterances);
+
+    expect(await readWritingSnapshot(page)).toEqual(before);
+    expect(await page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(`profile:${PROFILE_ID}`);
+    expect(await page.evaluate(() => window.learningDesk.getState())).toEqual(beforeState);
   });
 
   test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {

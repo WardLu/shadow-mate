@@ -20,6 +20,36 @@ async function openChineseAtFixedTime(page) {
   await page.clock.pauseAt(FIXED_NOW);
 }
 
+async function installSpeechMock(page, voices = [{ lang: "zh-CN" }, { lang: "en-US" }]) {
+  await page.addInitScript((configuredVoices) => {
+    const utterances = [];
+    Object.defineProperty(window, "__speechUtterances", {
+      configurable: true,
+      value: utterances,
+    });
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: function SpeechSynthesisUtterance(text) {
+        this.text = text;
+        this.lang = "";
+      },
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices() {
+          return configuredVoices;
+        },
+        speak(utterance) {
+          utterances.push({ text: utterance.text, lang: utterance.lang });
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  }, voices);
+}
+
 async function readWorksheetSnapshot(page) {
   return page.evaluate(() => {
     const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
@@ -79,6 +109,72 @@ test.describe("Hanzi writing worksheet", () => {
       },
       rows: snapshot.screen.rows,
     });
+  });
+
+  test("renders rich learning cards and routes bilingual speech without changing learning state", async ({ page }) => {
+    await installSpeechMock(page);
+    await openChineseAtFixedTime(page);
+
+    const cards = page.locator("[data-writing-worksheet] [data-hanzi-learning-card]");
+    await expect(cards).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
+    await expect(cards.locator(".hanzi-target-highlight")).toHaveCount(8);
+    await expect(cards.locator("[data-hanzi-sentence]")).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]')).toHaveCount(4);
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="en-US"]')).toHaveCount(4);
+
+    const firstCard = cards.first();
+    await expect(firstCard.locator("[data-hanzi-visual]")).toHaveAttribute("role", "img");
+    await expect(firstCard.locator("[data-hanzi-sentence]")).not.toBeEmpty();
+    await expect(firstCard.locator("[data-hanzi-writing-hint]")).not.toBeEmpty();
+
+    const before = await readWorksheetSnapshot(page);
+    const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
+    const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
+    const expectedUtterances = await Promise.all([zhButton, enButton].map(async (button) => ({
+      text: await button.getAttribute("data-speech-text"),
+      lang: await button.getAttribute("data-speech-locale"),
+    })));
+
+    await zhButton.click();
+    await enButton.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual(expectedUtterances);
+
+    const after = await readWorksheetSnapshot(page);
+    expect(after.screen).toEqual(before.screen);
+    expect(after.print).toEqual(before.print);
+    expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(after.assignment.completions).toEqual(before.assignment.completions);
+    expect(after.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("shows retryable Chinese speech feedback without entering the English Piper path", async ({ page }) => {
+    let piperEngineRequests = 0;
+    await page.route("**/piper-tts-web.js*", async (route) => {
+      piperEngineRequests += 1;
+      await route.continue();
+    });
+    await installSpeechMock(page, [{ lang: "en-US" }]);
+    await openChineseAtFixedTime(page);
+
+    const before = await readWorksheetSnapshot(page);
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+
+    await expect(button).toContainText("未检测到中文普通话语音");
+    await expect(button).toHaveAttribute("data-speech-failure", "true");
+    expect(await page.locator("[data-speech-guide]").count()).toBe(0);
+    expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
+    expect(piperEngineRequests).toBe(0);
+
+    const after = await readWorksheetSnapshot(page);
+    expect(after.screen).toEqual(before.screen);
+    expect(after.print).toEqual(before.print);
+    expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(after.assignment.completions).toEqual(before.assignment.completions);
+    expect(after.state.checkins).toEqual(before.state.checkins);
   });
 
   test("keeps the same assignment, order, and glyphs after reload and module switches", async ({ page }) => {
