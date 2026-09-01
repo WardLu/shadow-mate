@@ -16,7 +16,11 @@ test.describe("Offline voice download errors", () => {
         `,
       });
     });
-    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", async (route) => {
+    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx*", async (route) => {
+      if (route.request().method() === "HEAD") {
+        await route.fulfill({ status: 200, headers: { "content-length": "5" } });
+        return;
+      }
       await route.fulfill({ status: 503, contentType: "text/plain", body: "unavailable" });
     });
     await page.goto("/");
