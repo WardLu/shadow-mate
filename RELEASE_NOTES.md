@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+_No unreleased changes._
+
+- Fixed a learner switch that could remain incomplete after signing in again and creating a new family space.
+- Hardened local and Preview environment boundaries so development does not silently connect to production services.
+- Fixed product identification in local Auth emails so they no longer fall back to the Shadow Nexus brand.
+
+## v1.3.12 - 2026-09-01
+
 - Fixed a learner switch that could remain incomplete after signing in again and creating a new family space.
 - Hardened local and Preview environment boundaries so development does not silently connect to production services.
 - Fixed product identification in local Auth emails so they no longer fall back to the Shadow Nexus brand.
