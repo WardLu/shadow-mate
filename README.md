@@ -147,6 +147,20 @@ Browser-local state
 - Deleting a family removes Shadow Mate's associated family data without deleting the shared Auth identity.
 - Full identity deletion is enabled only in an isolated Supabase project with an explicitly authorized server-side flow.
 
+## Repository structure
+
+```text
+src/app.js                 UI rendering, interaction, and local state
+src/learning-state.js      Learning state machine and module grouping
+src/cloud.js               Authentication, family space, sync, export, and deletion
+src/action-lock.js         Duplicate-action and async-operation guards
+src/icons.js               Lucide icon rendering and hydration
+supabase/migrations/       Migration proposals and isolated CI test copies
+supabase/functions/        Account-level server functions
+tests/unit/                Pure-function and state-machine tests
+tests/e2e/                 Offline, cloud, and data-lifecycle tests
+```
+
 ## Supabase and security boundary
 
 The browser uses only a publishable Supabase key. Data isolation is enforced by Supabase RLS, household membership, and product identity. Never expose a secret or service-role key in browser code.
@@ -155,9 +169,24 @@ This repository contains migration proposals and isolated CI test copies. Produc
 
 The local Supabase profile and migration sources are checked by the shared local-development contract. This local contract does not grant production migration permissions.
 
+## Current release boundary
+
+Shadow Mate is an open-source family learning PWA. It has no advertising and no independent child accounts. Anonymous, aggregated page-visit data may be collected through [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). See [Privacy](PRIVACY.md) for data scope and deletion behavior, and [Security](SECURITY.md) for private vulnerability reports.
+
 ## Speech fallback
 
 “Listen” prefers an English system voice when one is available. Devices without a usable English system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the `en_US-ljspeech-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+
+## Acknowledgements
+
+The speech fallback uses these open-source projects:
+
+- [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
+- [rhasspy/piper](https://github.com/rhasspy/piper) (MIT): lightweight neural speech synthesis
+- [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT): browser inference runtime
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` voice model distributed through `voice.shadow.wang`
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and license details.
 
 ## Documentation
 
@@ -185,4 +214,3 @@ I share product and AI-building work across several channels:
 ## License
 
 The code is released under the [MIT License](LICENSE). Third-party content, models, and trademarks remain the property of their respective owners.
-
