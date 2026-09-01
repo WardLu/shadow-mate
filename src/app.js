@@ -610,6 +610,18 @@ function findSystemVoice(locale) {
 
 async function speak(t, button, locale = "en-US"){
   const originalLabel = button?.dataset.label || button?.textContent?.trim() || "听发音";
+  if (button && button.dataset.speechOriginalAriaLabel === undefined) {
+    button.dataset.speechOriginalAriaLabel = button.getAttribute("aria-label") || originalLabel;
+  }
+  if (button && button.dataset.speechOriginalTitle === undefined) {
+    button.dataset.speechOriginalTitle = button.getAttribute("title") || "";
+  }
+  const originalAriaLabel = button?.dataset.speechOriginalAriaLabel || originalLabel;
+  const originalTitle = button?.dataset.speechOriginalTitle || "";
+  if (button) {
+    button.setAttribute("aria-live", "polite");
+    button.setAttribute("aria-atomic", "true");
+  }
   const voiceHelp = locale === "zh-CN"
     ? "请在系统设置中安装中文（普通话）语音，然后重试"
     : "请在系统设置中安装英语语音包，然后重试";
@@ -626,18 +638,32 @@ async function speak(t, button, locale = "en-US"){
     };
     button.after(guideLink);
   };
+  let shouldRestoreButtonFocus = false;
+  const restoreButtonFocus = () => {
+    if (!button || !shouldRestoreButtonFocus) return;
+    const activeElement = document.activeElement;
+    if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
+      button.focus({ preventScroll: true });
+    }
+    shouldRestoreButtonFocus = false;
+  };
   const restore = () => {
     clearSystemTimer();
     if (!button) return;
     button.innerHTML = buttonContent("volume", originalLabel);
+    button.setAttribute("aria-label", originalAriaLabel);
+    if (originalTitle) button.title = originalTitle;
+    else button.removeAttribute("title");
     button.disabled = false;
     button.removeAttribute("aria-busy");
     button.removeAttribute("data-speech-failure");
+    restoreButtonFocus();
   };
   const fail = (message) => {
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
+    button.setAttribute("aria-label", message);
     button.title = message.startsWith("未检测到") ? voiceHelp : message;
     button.dataset.speechFailure = "true";
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
@@ -653,8 +679,13 @@ async function speak(t, button, locale = "en-US"){
   };
   const setBusy = (label = "播放中…") => {
     if (!button) return;
+    if (document.activeElement === button) shouldRestoreButtonFocus = true;
     button.dataset.label = originalLabel;
     button.innerHTML = buttonContent("volume", label);
+    button.setAttribute("aria-label", originalAriaLabel);
+    if (originalTitle) button.title = originalTitle;
+    else button.removeAttribute("title");
+    button.removeAttribute("data-speech-failure");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
   };
@@ -1068,6 +1099,8 @@ function renderChinese(){
   main.appendChild(card3);
   card3.querySelector("[data-print]").onclick = () => window.print();
   card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak]").forEach((button) => {
+    button.setAttribute("aria-live", "polite");
+    button.setAttribute("aria-atomic", "true");
     button.onclick = () => speak(
       button.dataset.speechText || "",
       button,

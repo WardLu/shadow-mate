@@ -204,9 +204,13 @@ test.describe("Hanzi writing worksheet", () => {
 
     const before = await readWorksheetSnapshot(page);
     const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
     await button.click();
 
     await expect(button).toContainText("未检测到中文普通话语音");
+    await expect(button).toHaveAccessibleName("未检测到中文普通话语音，请重试");
+    await expect(button).toHaveAttribute("aria-live", "polite");
+    await expect(button).toBeFocused();
     await expect(button).toHaveAttribute("data-speech-failure", "true");
     expect(await page.locator("[data-speech-guide]").count()).toBe(0);
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
@@ -252,8 +256,12 @@ test.describe("Hanzi writing worksheet", () => {
 
     const before = await readWorksheetSnapshot(page);
     const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
     await button.click();
     await expect(button).toContainText("中文发音失败，请重试");
+    await expect(button).toHaveAccessibleName("中文发音失败，请重试");
+    await expect(button).toHaveAttribute("aria-live", "polite");
+    await expect(button).toBeFocused();
     await expect(button).not.toBeDisabled();
     await expect(button).toHaveAttribute("data-speech-failure", "true");
 
@@ -266,8 +274,12 @@ test.describe("Hanzi writing worksheet", () => {
     await page.clock.fastForward(600);
     await button.click();
     await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
+    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
+    await expect(button).toHaveAttribute("aria-live", "polite");
+    await expect(button).toBeFocused();
     await expect(button).not.toBeDisabled();
     expect(await button.getAttribute("data-speech-failure")).toBeNull();
+    expect(await button.getAttribute("aria-busy")).toBeNull();
 
     const afterRetry = await readWorksheetSnapshot(page);
     expect(afterRetry.screen).toEqual(before.screen);

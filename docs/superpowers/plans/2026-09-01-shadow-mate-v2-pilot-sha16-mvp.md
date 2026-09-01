@@ -464,7 +464,7 @@ npm run verify
 - Quick-flomo `sm2-compat-v1` 复习评分、家长确认、同日更正和历史重算；
 - V2 累计 200 字、P1 基础内容混排以及按阶段不同的每日新内容预算；
 - learner profile 级 P1/P2/P3 阶段选择和切换；
-- 普通话系统/离线语音以及 Piper 中文模型；
+- 浏览器系统普通话语音已支持；普通话离线 Piper/中文模型仍 deferred；
 - 英语、数学、绘本、诗词和非汉字语文内容扩充；
 - 内容编辑后台、AI 自由选课、生产内容表和新的 Supabase migration；
 - `LearningEvent`、`UserCharacterProgress` 或字符级 mastery 平台。
