@@ -1,6 +1,9 @@
 const REQUIRED_SOURCE_REF = "shadow-mate-preschool-hanzi-curriculum";
 const UNSAFE_TEXT_PATTERN = /<\s*\/?\s*[a-z][^>]*>|(?:java|vb)script\s*:|on[a-z]+\s*=/iu;
+const VISUAL_VALUE_URL_PATTERN = /(?:[a-z][a-z\d+.-]*:|\/\/|(?:^|[\s(])www\.)/iu;
 const SINGLE_CJK_IDEOGRAPH_PATTERN = /^\p{Script=Han}$/u;
+const MAX_METADATA_STRING_LENGTH = 120;
+const MAX_VISUAL_GRAPHEME_COUNT = 8;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -47,6 +50,22 @@ function requireString(value, path, errors) {
   return true;
 }
 
+function requireBoundedString(value, path, errors) {
+  if (!requireString(value, path, errors)) return false;
+  if (value.length > MAX_METADATA_STRING_LENGTH) {
+    errors.push(`${path} must be at most ${MAX_METADATA_STRING_LENGTH} characters`);
+    return false;
+  }
+  return true;
+}
+
+function countGraphemes(value) {
+  if (typeof Intl?.Segmenter === "function") {
+    return Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)).length;
+  }
+  return Array.from(value).length;
+}
+
 function validateStringArray(value, path, errors) {
   if (!Array.isArray(value) || value.length === 0) {
     errors.push(`${path} must be a non-empty array of strings`);
@@ -70,6 +89,78 @@ function validateExactTuple(value, expected, path, errors) {
     return false;
   }
   return true;
+}
+
+function validateConcept(item, path, errors) {
+  const conceptPath = `${path}.concept`;
+  if (!isRecord(item.concept)) {
+    errors.push(`${conceptPath} must be an object`);
+    return;
+  }
+
+  requireBoundedString(item.concept.label, `${conceptPath}.label`, errors);
+  requireBoundedString(item.concept.englishLabel, `${conceptPath}.englishLabel`, errors);
+
+  const visualPath = `${conceptPath}.visual`;
+  if (!isRecord(item.concept.visual)) {
+    errors.push(`${visualPath} must be an object`);
+    return;
+  }
+
+  if (item.concept.visual.kind !== "emoji") {
+    errors.push(`${visualPath}.kind must be "emoji"`);
+  }
+
+  const visualValuePath = `${visualPath}.value`;
+  if (!isNonEmptyString(item.concept.visual.value)) {
+    errors.push(`${visualValuePath} must be a non-empty string`);
+  } else {
+    const graphemeCount = countGraphemes(item.concept.visual.value);
+    if (graphemeCount < 1 || graphemeCount > MAX_VISUAL_GRAPHEME_COUNT) {
+      errors.push(`${visualValuePath} must contain 1-${MAX_VISUAL_GRAPHEME_COUNT} Unicode graphemes`);
+    }
+    if (VISUAL_VALUE_URL_PATTERN.test(item.concept.visual.value)) {
+      errors.push(`${visualValuePath} must not contain a URL`);
+    }
+  }
+
+  requireBoundedString(item.concept.visual.alt, `${visualPath}.alt`, errors);
+}
+
+function validateExampleWords(item, path, errors) {
+  if (!Array.isArray(item.exampleWords) || item.exampleWords.length < 2) {
+    errors.push(`${path}.exampleWords must contain at least two non-empty words`);
+    return;
+  }
+
+  item.exampleWords.forEach((word, wordIndex) => {
+    const wordPath = `${path}.exampleWords[${wordIndex}]`;
+    if (!requireString(word, wordPath, errors)) return;
+    if (isNonEmptyString(item.glyph) && !word.includes(item.glyph)) {
+      errors.push(`${wordPath} must contain glyph "${item.glyph}"`);
+    }
+  });
+}
+
+function validateWriting(item, path, errors) {
+  const writingPath = `${path}.writing`;
+  if (item.traceEligible === false) {
+    if (Object.hasOwn(item, "writing")) {
+      errors.push(`${writingPath} must be omitted when traceEligible is false`);
+    }
+    return;
+  }
+
+  if (!isRecord(item.writing)) {
+    errors.push(`${writingPath} must be an object`);
+    return;
+  }
+
+  if (!Number.isInteger(item.writing.strokeCount) || item.writing.strokeCount < 1 || item.writing.strokeCount > 64) {
+    errors.push(`${writingPath}.strokeCount must be an integer from 1 to 64`);
+  }
+  requireBoundedString(item.writing.structure, `${writingPath}.structure`, errors);
+  requireBoundedString(item.writing.hint, `${writingPath}.hint`, errors);
 }
 
 function validateItem(item, index, packSourceRefs, ids, glyphs, orders, errors) {
@@ -126,6 +217,13 @@ function validateItem(item, index, packSourceRefs, ids, glyphs, orders, errors) 
 
   if (typeof item.traceEligible !== "boolean") {
     errors.push(`${path}.traceEligible must be a boolean`);
+  }
+
+  if (item.status === "active") {
+    validateConcept(item, path, errors);
+    validateExampleWords(item, path, errors);
+    requireBoundedString(item.sentence, `${path}.sentence`, errors);
+    validateWriting(item, path, errors);
   }
 
   return { active: item.status === "active" };

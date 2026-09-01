@@ -9,6 +9,31 @@ function clonePack() {
   return structuredClone(HANZI_WRITING_V2_PILOT);
 }
 
+function clonePackWithLearningMetadata() {
+  const pack = clonePack();
+
+  pack.items.forEach((item) => {
+    item.concept = {
+      label: `${item.glyph}概念`,
+      visual: {
+        kind: "emoji",
+        value: "🌟",
+        alt: "一个学习画面",
+      },
+      englishLabel: "learning concept",
+    };
+    item.exampleWords = [item.exampleWord, `${item.glyph}词`];
+    item.sentence = `这是${item.glyph}。`;
+    item.writing = {
+      strokeCount: 1,
+      structure: "独体字",
+      hint: "先看清字的样子。",
+    };
+  });
+
+  return pack;
+}
+
 function expectInvalid(pack, messagePart) {
   const result = validateHanziWritingPack(pack);
 
@@ -47,10 +72,27 @@ describe("Hanzi writing V2 Pilot content pack", () => {
         "traceEligible",
       ].every((field) => Object.hasOwn(item, field))
     )).toBe(true);
+
+    expect(pack.items.every((item) =>
+      Object.hasOwn(item, "concept") &&
+      Object.hasOwn(item.concept, "label") &&
+      Object.hasOwn(item.concept, "visual") &&
+      Object.hasOwn(item.concept.visual, "kind") &&
+      Object.hasOwn(item.concept.visual, "value") &&
+      Object.hasOwn(item.concept.visual, "alt") &&
+      Object.hasOwn(item.concept, "englishLabel") &&
+      Object.hasOwn(item, "exampleWords") &&
+      Object.hasOwn(item, "sentence") &&
+      Object.hasOwn(item, "writing")
+    )).toBe(true);
   });
 
   it("accepts the checked-in pilot pack", () => {
     expect(validateHanziWritingPack(getActiveHanziWritingPack())).toEqual({ valid: true, errors: [] });
+  });
+
+  it("accepts a complete learning metadata fixture", () => {
+    expect(validateHanziWritingPack(clonePackWithLearningMetadata())).toEqual({ valid: true, errors: [] });
   });
 
   it("rejects duplicate item ids", () => {
@@ -137,5 +179,89 @@ describe("Hanzi writing V2 Pilot content pack", () => {
     pack.items[0].exampleWord = "<script>alert(1)</script>";
 
     expectInvalid(pack, "unsafe HTML-like text");
+  });
+
+  it("requires the visual descriptor", () => {
+    const pack = clonePackWithLearningMetadata();
+    delete pack.items[0].concept.visual;
+
+    expectInvalid(pack, "items[0].concept.visual");
+  });
+
+  it("requires at least two example words", () => {
+    const pack = clonePackWithLearningMetadata();
+    delete pack.items[0].exampleWords;
+
+    expectInvalid(pack, "items[0].exampleWords");
+  });
+
+  it("requires a child-readable sentence", () => {
+    const pack = clonePackWithLearningMetadata();
+    delete pack.items[0].sentence;
+
+    expectInvalid(pack, "items[0].sentence");
+  });
+
+  it("requires writing metadata for traceable items", () => {
+    const pack = clonePackWithLearningMetadata();
+    delete pack.items[0].writing;
+
+    expectInvalid(pack, "items[0].writing");
+  });
+
+  it("rejects a visual kind other than emoji", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.kind = "image";
+
+    expectInvalid(pack, "items[0].concept.visual.kind");
+  });
+
+  it("rejects a visual value with more than eight graphemes", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.value = "😀😀😀😀😀😀😀😀😀";
+
+    expectInvalid(pack, "items[0].concept.visual.value");
+  });
+
+  it("rejects URLs in visual values", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.value = "https://example.com";
+
+    expectInvalid(pack, "items[0].concept.visual.value");
+  });
+
+  it("rejects an overlong visual alt", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.alt = "a".repeat(121);
+
+    expectInvalid(pack, "items[0].concept.visual.alt");
+  });
+
+  it("requires every example word to contain the target glyph", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].exampleWords[1] = "没有目标字";
+
+    expectInvalid(pack, "items[0].exampleWords[1]");
+  });
+
+  it("rejects stroke counts outside the supported range", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].writing.strokeCount = 65;
+
+    expectInvalid(pack, "items[0].writing.strokeCount");
+  });
+
+  it("does not allow writing metadata when tracing is disabled", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].traceEligible = false;
+
+    expectInvalid(pack, "items[0].writing");
+  });
+
+  it("runs unsafe text checks through every new field path", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.alt = "<script>alert(1)</script>";
+
+    expectInvalid(pack, "items[0].concept.visual.alt contains unsafe HTML-like text");
   });
 });
