@@ -236,6 +236,40 @@ describe("rotation-v1 daily worksheet selection", () => {
     );
   });
 
+  it("rejects metadata drift when a snapshot keeps the same core item identity", () => {
+    const resolved = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF }),
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    });
+    const mutations = [
+      (row) => { row.concept.visual.alt = "伪造视觉描述"; },
+      (row) => { row.exampleWords[0] = "伪造例词"; },
+      (row) => { row.sentence = "伪造句子"; },
+      (row) => { row.writing.hint = "伪造书写提示"; },
+    ];
+
+    for (const mutate of mutations) {
+      const corrupted = structuredClone(resolved.rotationState);
+      const assignment = corrupted.assignments["2026-09-01"];
+      const candidateId = assignment.canonicalAssignmentId;
+      const row = assignment.candidates[candidateId].rows[0];
+      mutate(row);
+      assignment.completions[candidateId] = { completedAt: "2026-09-01T03:00:00.000Z" };
+
+      const normalized = normalizeRotationState(corrupted, {
+        learnerScope: LEARNER_SCOPE,
+        packRef: PACK_REF,
+        pack: PACK,
+        referenceDayKey: "2026-09-01",
+      });
+
+      expect(normalized.assignments["2026-09-01"]).toBeUndefined();
+    }
+  });
+
   it("fails closed for partial rows and snapshot content forged against the active pack", () => {
     const validState = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
     const assignment = validState.assignments["2026-09-01"];

@@ -207,7 +207,18 @@ function getSnapshotMetadata(row, item) {
     key,
     Object.hasOwn(row, key) ? row[key] : item?.[key],
   ]));
-  return normalizeSnapshotMetadata(source);
+  const metadata = normalizeSnapshotMetadata(source);
+  if (!metadata) return undefined;
+  if (!item) return metadata;
+
+  const packMetadata = normalizeSnapshotMetadata(item);
+  if (!packMetadata) return undefined;
+  if (SNAPSHOT_METADATA_KEYS.some((key) =>
+    Object.hasOwn(row, key) && JSON.stringify(metadata[key]) !== JSON.stringify(packMetadata[key])
+  )) {
+    return undefined;
+  }
+  return packMetadata;
 }
 
 function getPackItems(pack, worksheetPackRef) {
