@@ -76,6 +76,13 @@ flowchart TB
 - 云端状态写入通过版本号检测并发冲突。
 - 浏览器永远不持有 `service_role` 或 secret key。
 
+运行时环境也有独立的连接边界：`sm.shadow.wang` 才允许使用生产 Supabase 默认值；localhost、
+127.0.0.1、Preview 和其他非生产来源默认只允许显式配置的 loopback Supabase。非生产来源即使误配
+远程 `VITE_SUPABASE_URL` 也会 fail-closed；只有明确授权的临时生产验收才可设置
+`VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE=1`。
+本地认证邮件使用请求中的 `product_id` 识别影伴，避免依赖某一个 feature worktree 端口；显式连接生产
+进行临时验收时，认证回跳固定使用 `https://sm.shadow.wang`，确保生产邮件模板命中影伴品牌分支。
+
 ## 4. 数据模型
 
 ```mermaid

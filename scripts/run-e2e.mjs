@@ -8,9 +8,10 @@ const e2eEnv = {
   ...process.env,
   FORCE_COLOR: "1",
   // Vite loads .env.local automatically, while Playwright only sees process
-  // env. Keep the auth storage key derivation identical in both processes when
-  // a real E2E Supabase URL was not explicitly supplied.
-  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || "https://dutepjyocxcvecmsrtfp.supabase.co",
+  // env. Keep the auth storage key derivation identical in both processes and
+  // keep the default E2E target on the local shared stack.
+  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || "http://127.0.0.1:54321",
+  VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_e2e_local_only",
 };
 const viteEntry = resolve("node_modules/vite/bin/vite.js");
 const playwrightEntry = resolve("node_modules/@playwright/test/cli.js");

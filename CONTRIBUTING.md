@@ -13,6 +13,11 @@ Get the noreply address from GitHub **Settings → Emails**. Do not use a person
 
 Maintainers may create an ignored `.security-local-denylist` file with one private term per line. The security check scans tracked and untracked candidate files without publishing the denylist itself.
 
+本地和 Preview 环境禁止静默连接生产 Supabase。开发前应在未提交的 `.env.local` 中配置 loopback
+`VITE_SUPABASE_URL` 与本地 publishable key；缺少 key 时应用必须保持本机模式。只有明确授权的临时
+生产验收才允许设置 `VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE=1`，并且该变量不能提交到仓库或写入
+自动化默认环境。
+
 ## 测试范围与分层
 
 先写清本次改动的范围、明确不做什么、验收条件和受影响边界，再按风险选择最小充分的验证层级。开发循环不要求每次小改动都运行全量测试；合并、发布和高风险边界仍必须经过完整门禁。

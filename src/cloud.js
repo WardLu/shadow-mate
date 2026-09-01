@@ -39,6 +39,7 @@ const AUTH_STORAGE_KEY = supabaseUrl
   ? `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`
   : null;
 const cloudEnabled = Boolean(supabaseUrl && publishableKey);
+const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin;
 const supabase = cloudEnabled
   ? createClient(supabaseUrl, publishableKey, {
       auth: {
@@ -584,7 +585,7 @@ async function sendLoginOtp(email) {
     email,
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: window.location.origin,
+      emailRedirectTo: AUTH_REDIRECT_ORIGIN,
       data: {
         product_id: PRODUCT_ID,
         product_name: AUTH_PRODUCT_NAME,
@@ -753,7 +754,7 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
         return;
       }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: AUTH_REDIRECT_ORIGIN,
       });
       if (error) {
         showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。"), 6000);
@@ -936,7 +937,9 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     ${
       cloudEnabled
         ? ""
-        : `<div class="cloud-status">${icon("alert")} 尚未配置云端环境，当前只能使用本机模式。</div>`
+        : `<div class="cloud-status">${icon("alert")} ${CLOUD_CONFIG.connectionBlocked
+          ? "已阻止非生产环境连接远程 Supabase，请配置本地 shared_test。"
+          : "尚未配置云端环境，当前只能使用本机模式。"}</div>`
     }
   `;
   restoreToastLocation();

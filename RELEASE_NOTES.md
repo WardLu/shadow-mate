@@ -3,6 +3,8 @@
 ## Unreleased
 
 - 修复删除家庭后重新登录并重新建立学习空间时，孩子切换可能停在“切换未完成”的问题；Growth Loop 返回陈旧作用域时会在当前操作仍有效的情况下自动重试一次，仍失败则保持安全保护并提示重试。
+- 加固本地/Preview 的 Supabase 环境边界：没有明确配置时默认使用 loopback 本地地址，不再静默连接生产；远程 Supabase 仅在生产域名或显式授权 override 下启用。
+- 修正本地 feature worktree 的 Auth 邮件识别：邮件主题使用 `product_id` 保持影伴品牌；显式生产验收使用正式产品域名回跳，避免显示为 Shadow Nexus。
 
 ## v1.3.11 - 2026-09-01
 
