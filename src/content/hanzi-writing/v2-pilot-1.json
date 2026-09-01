@@ -30,7 +30,9 @@
           "value": "🪵",
           "alt": "一根小棍子"
         },
-        "englishLabel": "one"
+        "englishLabel": "one",
+        "characterEnglishLabel": "one",
+        "characterMeaning": "表示数量一"
       },
       "exampleWords": ["一个", "一天"],
       "sentence": "一只小鸟飞。",
@@ -58,7 +60,9 @@
           "value": "✌️",
           "alt": "两根小手指"
         },
-        "englishLabel": "two"
+        "englishLabel": "two",
+        "characterEnglishLabel": "two",
+        "characterMeaning": "表示数量二"
       },
       "exampleWords": ["二月", "二人"],
       "sentence": "二月有小雨。",
@@ -86,7 +90,9 @@
           "value": "3️⃣",
           "alt": "数字三的符号"
         },
-        "englishLabel": "three"
+        "englishLabel": "three",
+        "characterEnglishLabel": "three",
+        "characterMeaning": "表示数量三"
       },
       "exampleWords": ["三天", "三个"],
       "sentence": "三只小猫跑。",
@@ -114,7 +120,9 @@
           "value": "🔟",
           "alt": "十个小手指"
         },
-        "englishLabel": "ten"
+        "englishLabel": "ten",
+        "characterEnglishLabel": "ten",
+        "characterMeaning": "表示数量十"
       },
       "exampleWords": ["十天", "十个"],
       "sentence": "十个小手指。",
@@ -142,7 +150,9 @@
           "value": "🧒",
           "alt": "一个小朋友"
         },
-        "englishLabel": "person"
+        "englishLabel": "person",
+        "characterEnglishLabel": "person",
+        "characterMeaning": "人类；有生命的个体"
       },
       "exampleWords": ["大人", "人口"],
       "sentence": "小朋友是人。",
@@ -170,7 +180,9 @@
           "value": "👄",
           "alt": "一张嘴巴"
         },
-        "englishLabel": "mouth"
+        "englishLabel": "mouth",
+        "characterEnglishLabel": "mouth",
+        "characterMeaning": "嘴；也表示入口"
       },
       "exampleWords": ["口水", "开口"],
       "sentence": "小猫张开口。",
@@ -198,7 +210,9 @@
           "value": "🖐️",
           "alt": "一只张开的手"
         },
-        "englishLabel": "hand"
+        "englishLabel": "hand",
+        "characterEnglishLabel": "hand",
+        "characterMeaning": "人的上肢；用来做事"
       },
       "exampleWords": ["小手", "手心"],
       "sentence": "我用小手拿。",
@@ -226,7 +240,9 @@
           "value": "☀️",
           "alt": "一轮温暖的太阳"
         },
-        "englishLabel": "sun"
+        "englishLabel": "sun",
+        "characterEnglishLabel": "sun",
+        "characterMeaning": "太阳；也表示一天"
       },
       "exampleWords": ["日子", "日出"],
       "sentence": "今日有太阳。",
@@ -254,7 +270,9 @@
           "value": "🌙",
           "alt": "一弯明亮的月亮"
         },
-        "englishLabel": "moon"
+        "englishLabel": "moon",
+        "characterEnglishLabel": "moon",
+        "characterMeaning": "月亮；也表示月份"
       },
       "exampleWords": ["月儿", "月光"],
       "sentence": "月亮出来了。",
@@ -282,7 +300,9 @@
           "value": "💧",
           "alt": "一滴清清的水"
         },
-        "englishLabel": "water"
+        "englishLabel": "water",
+        "characterEnglishLabel": "water",
+        "characterMeaning": "没有颜色、会流动的液体"
       },
       "exampleWords": ["水果", "水花"],
       "sentence": "小鱼在水里。",
@@ -310,7 +330,9 @@
           "value": "🌋",
           "alt": "一座火山"
         },
-        "englishLabel": "volcano"
+        "englishLabel": "volcano",
+        "characterEnglishLabel": "fire",
+        "characterMeaning": "燃烧时发光发热的东西"
       },
       "exampleWords": ["火山", "火光"],
       "sentence": "火山有火。",
@@ -338,7 +360,9 @@
           "value": "🌳",
           "alt": "一棵枝叶茂盛的大树"
         },
-        "englishLabel": "tree"
+        "englishLabel": "tree",
+        "characterEnglishLabel": "wood",
+        "characterMeaning": "树木；木头"
       },
       "exampleWords": ["木头", "木马"],
       "sentence": "小鸟站在木头上。",
@@ -366,7 +390,9 @@
           "value": "⛰️",
           "alt": "一座高高的山"
         },
-        "englishLabel": "mountain"
+        "englishLabel": "mountain",
+        "characterEnglishLabel": "mountain",
+        "characterMeaning": "地面上高起的地方"
       },
       "exampleWords": ["大山", "山羊"],
       "sentence": "山上有云。",
@@ -394,7 +420,9 @@
           "value": "🪨",
           "alt": "一块圆圆的石头"
         },
-        "englishLabel": "stone"
+        "englishLabel": "stone",
+        "characterEnglishLabel": "stone",
+        "characterMeaning": "坚硬的石块"
       },
       "exampleWords": ["石头", "石子"],
       "sentence": "石头在地上。",
@@ -422,7 +450,9 @@
           "value": "🌾",
           "alt": "一片金色的田地"
         },
-        "englishLabel": "field"
+        "englishLabel": "field",
+        "characterEnglishLabel": "field",
+        "characterMeaning": "种庄稼的土地"
       },
       "exampleWords": ["田地", "田野"],
       "sentence": "小鸟飞过田地。",
@@ -450,7 +480,9 @@
           "value": "🟫",
           "alt": "一块松松的泥土"
         },
-        "englishLabel": "soil"
+        "englishLabel": "soil",
+        "characterEnglishLabel": "soil",
+        "characterMeaning": "地面上的泥土"
       },
       "exampleWords": ["土地", "泥土"],
       "sentence": "花长在土里。",
@@ -478,7 +510,9 @@
           "value": "⬆️",
           "alt": "指向上方的箭头"
         },
-        "englishLabel": "up"
+        "englishLabel": "up",
+        "characterEnglishLabel": "up",
+        "characterMeaning": "位置在高处或前面"
       },
       "exampleWords": ["上下", "上学"],
       "sentence": "小鸟飞上天。",
@@ -506,7 +540,9 @@
           "value": "⬇️",
           "alt": "指向下方的箭头"
         },
-        "englishLabel": "down"
+        "englishLabel": "down",
+        "characterEnglishLabel": "down",
+        "characterMeaning": "位置在低处或后面"
       },
       "exampleWords": ["下雨", "下来"],
       "sentence": "小猫跳下台阶。",
@@ -534,7 +570,9 @@
           "value": "🐘",
           "alt": "一头大大的象"
         },
-        "englishLabel": "elephant"
+        "englishLabel": "elephant",
+        "characterEnglishLabel": "big",
+        "characterMeaning": "体积、面积或程度较大"
       },
       "exampleWords": ["大门", "大人"],
       "sentence": "大象很大。",
@@ -562,7 +600,9 @@
           "value": "🐈",
           "alt": "一只小小的猫"
         },
-        "englishLabel": "kitten"
+        "englishLabel": "kitten",
+        "characterEnglishLabel": "small",
+        "characterMeaning": "体积、面积或程度较小"
       },
       "exampleWords": ["小猫", "小鸟"],
       "sentence": "小猫睡觉了。",
@@ -590,7 +630,9 @@
           "value": "🎯",
           "alt": "靶心在正中间"
         },
-        "englishLabel": "middle"
+        "englishLabel": "middle",
+        "characterEnglishLabel": "middle",
+        "characterMeaning": "位置在两边之间"
       },
       "exampleWords": ["中间", "中心"],
       "sentence": "小球在中间。",
@@ -618,7 +660,9 @@
           "value": "🌤️",
           "alt": "有云的蓝蓝天空"
         },
-        "englishLabel": "sky"
+        "englishLabel": "sky",
+        "characterEnglishLabel": "sky",
+        "characterMeaning": "天空；一天的时间"
       },
       "exampleWords": ["天空", "天气"],
       "sentence": "今天的天很蓝。",
@@ -646,7 +690,9 @@
           "value": "🤴",
           "alt": "一位戴王冠的国王"
         },
-        "englishLabel": "king"
+        "englishLabel": "king",
+        "characterEnglishLabel": "king",
+        "characterMeaning": "古代的最高统治者"
       },
       "exampleWords": ["王子", "大王"],
       "sentence": "王子骑马。",
@@ -674,7 +720,9 @@
           "value": "🐎",
           "alt": "一匹奔跑的小马"
         },
-        "englishLabel": "horse"
+        "englishLabel": "horse",
+        "characterEnglishLabel": "horse",
+        "characterMeaning": "一种常见的哺乳动物"
       },
       "exampleWords": ["马车", "马上"],
       "sentence": "马儿跑得快。",
@@ -702,7 +750,9 @@
           "value": "🐄",
           "alt": "一头黑白花奶牛"
         },
-        "englishLabel": "cow"
+        "englishLabel": "cow",
+        "characterEnglishLabel": "cow",
+        "characterMeaning": "一种能耕地的家畜"
       },
       "exampleWords": ["水牛", "牛奶"],
       "sentence": "奶牛吃草。",
@@ -730,7 +780,9 @@
           "value": "🐑",
           "alt": "一只软软的小羊"
         },
-        "englishLabel": "sheep"
+        "englishLabel": "sheep",
+        "characterEnglishLabel": "sheep",
+        "characterMeaning": "一种有角的家畜"
       },
       "exampleWords": ["山羊", "小羊"],
       "sentence": "小羊在山上。",
@@ -758,7 +810,9 @@
           "value": "🐦",
           "alt": "一只飞翔的小鸟"
         },
-        "englishLabel": "bird"
+        "englishLabel": "bird",
+        "characterEnglishLabel": "bird",
+        "characterMeaning": "有羽毛、会飞的动物"
       },
       "exampleWords": ["小鸟", "鸟儿"],
       "sentence": "小鸟在唱歌。",
@@ -786,7 +840,9 @@
           "value": "🐛",
           "alt": "一只慢慢爬的小虫"
         },
-        "englishLabel": "bug"
+        "englishLabel": "bug",
+        "characterEnglishLabel": "bug",
+        "characterMeaning": "小型无脊椎动物的统称"
       },
       "exampleWords": ["虫子", "小虫"],
       "sentence": "小虫爬过叶子。",
@@ -814,7 +870,9 @@
           "value": "☁️",
           "alt": "一朵软绵绵的白云"
         },
-        "englishLabel": "cloud"
+        "englishLabel": "cloud",
+        "characterEnglishLabel": "cloud",
+        "characterMeaning": "天空中由水汽形成的团状物"
       },
       "exampleWords": ["白云", "云朵"],
       "sentence": "白云飘在天上。",
@@ -842,7 +900,9 @@
           "value": "🌧️",
           "alt": "天空下着细细的雨"
         },
-        "englishLabel": "rain"
+        "englishLabel": "rain",
+        "characterEnglishLabel": "rain",
+        "characterMeaning": "从云中降落的水滴"
       },
       "exampleWords": ["下雨", "雨水"],
       "sentence": "下雨了，带好伞。",
@@ -870,7 +930,9 @@
           "value": "🌬️",
           "alt": "一阵轻轻吹来的风"
         },
-        "englishLabel": "wind"
+        "englishLabel": "wind",
+        "characterEnglishLabel": "wind",
+        "characterMeaning": "空气的流动"
       },
       "exampleWords": ["大风", "风车"],
       "sentence": "风车转起来。",
@@ -898,7 +960,9 @@
           "value": "🌸",
           "alt": "一朵粉色的小花"
         },
-        "englishLabel": "flower"
+        "englishLabel": "flower",
+        "characterEnglishLabel": "flower",
+        "characterMeaning": "植物开放的部分"
       },
       "exampleWords": ["花朵", "花开"],
       "sentence": "花朵开了。",

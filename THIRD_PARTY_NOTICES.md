@@ -33,6 +33,12 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 
 此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) 的 `en_US/ljspeech/medium`，模型卡标注训练数据为 public domain。
 
+## 字帖字体资源
+
+| 文件或资源 | 来源和许可证 |
+| --- | --- |
+| `public/brand_assets/shadow-mate-writing-hand.ttf` | 项目负责人提供的“瑞美加张清平硬笔楷书”字体文件；许可证或公开分发授权信息未随仓库提供，公开发布前需补充确认并保留相应授权说明 |
+
 ## 资源指纹
 
 | 文件 | SHA-256 |
@@ -41,3 +47,4 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 | `public/onnx/ort-wasm-simd-threaded.wasm` | `207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea` |
 | `public/piper/piper_phonemize.data` | `a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa` |
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
+| `public/brand_assets/shadow-mate-writing-hand.ttf` | `38e6473bcbe4e3d2dba2218eb7235b4b5f7f3f080d75528f8e4d1fc8bc1c4a10` |

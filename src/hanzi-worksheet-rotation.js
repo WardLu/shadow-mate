@@ -167,6 +167,8 @@ function normalizeSnapshotMetadata(source) {
   const visualValue = normalizeSnapshotText(source.concept.visual.value);
   const visualAlt = normalizeSnapshotText(source.concept.visual.alt);
   const englishLabel = normalizeSnapshotText(source.concept.englishLabel);
+  const characterEnglishLabel = normalizeSnapshotText(source.concept.characterEnglishLabel);
+  const characterMeaning = normalizeSnapshotText(source.concept.characterMeaning);
   const sentence = normalizeSnapshotText(source.sentence);
   const structure = normalizeSnapshotText(source.writing.structure);
   const hint = normalizeSnapshotText(source.writing.hint);
@@ -177,8 +179,7 @@ function normalizeSnapshotMetadata(source) {
     return undefined;
   }
 
-  return {
-    concept: {
+  const concept = {
       label: conceptLabel,
       visual: {
         kind: "emoji",
@@ -186,7 +187,12 @@ function normalizeSnapshotMetadata(source) {
         alt: visualAlt,
       },
       englishLabel,
-    },
+  };
+  if (characterEnglishLabel !== undefined) concept.characterEnglishLabel = characterEnglishLabel;
+  if (characterMeaning !== undefined) concept.characterMeaning = characterMeaning;
+
+  return {
+    concept,
     exampleWords,
     sentence,
     writing: {

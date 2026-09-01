@@ -21,6 +21,8 @@ function clonePackWithLearningMetadata() {
         alt: "一个学习画面",
       },
       englishLabel: "learning concept",
+      characterEnglishLabel: "learning character",
+      characterMeaning: "这个单字的意思",
     };
     item.exampleWords = [item.exampleWord, `${item.glyph}词`];
     item.sentence = `这是${item.glyph}。`;
@@ -81,6 +83,8 @@ describe("Hanzi writing V2 Pilot content pack", () => {
       Object.hasOwn(item.concept.visual, "value") &&
       Object.hasOwn(item.concept.visual, "alt") &&
       Object.hasOwn(item.concept, "englishLabel") &&
+      Object.hasOwn(item.concept, "characterEnglishLabel") &&
+      Object.hasOwn(item.concept, "characterMeaning") &&
       Object.hasOwn(item, "exampleWords") &&
       Object.hasOwn(item, "sentence") &&
       Object.hasOwn(item, "writing")

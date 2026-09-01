@@ -22,7 +22,7 @@ async function openChineseAtFixedTime(page) {
   await page.clock.pauseAt(FIXED_NOW);
 }
 
-async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
+async function expectRichLearningCards(root, { includeSpeech = false, gridCells = null } = {}) {
   const cards = root.locator("[data-hanzi-learning-card]");
   await expect(cards).toHaveCount(4);
   await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
@@ -31,8 +31,12 @@ async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
   await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
   await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
   await expect(cards.locator("[data-writing-pinyin]")).toHaveCount(4);
-  await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
-  await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(20);
+  if (gridCells === null) {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(0);
+  } else {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
+    await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(gridCells * 4);
+  }
 
   expect(await cards.evaluateAll((elements) => elements.map((card) => ({
     visual: card.querySelectorAll("[data-hanzi-visual]").length,
@@ -49,7 +53,7 @@ async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
     pinyin: true,
     sentence: true,
     writingHint: true,
-    gridCells: 5,
+    gridCells: gridCells === null ? 0 : gridCells,
   })));
 
   if (includeSpeech) {
@@ -93,7 +97,7 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
   test("mocks window.print without changing state or creating completion", async ({ page }) => {
     await openChineseAtFixedTime(page);
     await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
-    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
     const before = await readPrintSnapshot(page);
     expect(before.screen).toMatchObject({
       dayKey: "2026-09-01",
@@ -128,7 +132,8 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
     await page.emulateMedia({ media: "print" });
 
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
-    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    await page.evaluate(() => document.fonts.ready);
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
     await expect(page.locator(".app")).toBeHidden();
     await expect(page.locator(".nav")).toBeHidden();
     await expect(page.locator("[data-writing-worksheet]")).toBeHidden();
@@ -160,6 +165,9 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
       const sheet = document.querySelector("[data-writing-print-sheet]");
       const style = getComputedStyle(sheet);
       const sheetRect = sheet.getBoundingClientRect();
+      const paper = sheet.querySelector(".writing-print-paper");
+      const paperStyle = getComputedStyle(paper);
+      const paperRect = paper.getBoundingClientRect();
       const cards = [...sheet.querySelectorAll("[data-hanzi-learning-card]")].map((card) => {
         const rect = card.getBoundingClientRect();
         return {
@@ -173,13 +181,20 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
         cssSource: [...document.querySelectorAll('link[rel="stylesheet"]')]
           .find((link) => link.href.endsWith("/src/app.css"))?.href || "",
         boxSizing: style.boxSizing,
+        fontLoaded: document.fonts.check("14pt ShadowMateWriting"),
         paddingTop: parseFloat(style.paddingTop),
         paddingBottom: parseFloat(style.paddingBottom),
+        paperPaddingTop: parseFloat(paperStyle.paddingTop),
+        paperPaddingBottom: parseFloat(paperStyle.paddingBottom),
         minHeight: parseFloat(style.minHeight),
+        height: parseFloat(style.height),
         sheetTop: sheetRect.top,
         sheetBottom: sheetRect.bottom,
         sheetHeight: sheetRect.height,
         sheetScrollHeight: sheet.scrollHeight,
+        paperTop: paperRect.top,
+        paperBottom: paperRect.bottom,
+        paperHeight: paperRect.height,
         cards,
       };
     });
@@ -187,18 +202,23 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
       ? await page.evaluate((href) => fetch(href).then((response) => response.text()), printModel.cssSource)
       : "";
     expect(printCssSource).toMatch(/@page\s*\{\s*size:\s*A4\s+portrait;\s*margin:\s*0;/i);
+    expect(printCssSource).toMatch(/ShadowMateWriting/);
+    expect(printCssSource).toMatch(/shadow-mate-writing-hand/);
     expect(printModel.pageRules.join("\n")).toMatch(/size:\s*a4\b/i);
     expect(printModel.pageRules.join("\n")).toMatch(/margin:\s*0/i);
     expect(printModel.boxSizing).toBe("border-box");
-    expect(printModel.paddingTop).toBeCloseTo((12 * 96) / 25.4, 0);
-    expect(printModel.minHeight).toBeCloseTo((297 * 96) / 25.4, 0);
+    expect(printModel.fontLoaded).toBe(true);
+    expect(printModel.paddingTop).toBeCloseTo(0, 0);
+    expect(printModel.paperPaddingTop).toBeCloseTo((7.5 * 96) / 25.4, 0);
+    expect(printModel.paperPaddingBottom).toBeCloseTo((4.5 * 96) / 25.4, 0);
+    expect(printModel.height).toBeCloseTo((297 * 96) / 25.4, 0);
     expect(printModel.cards).toHaveLength(4);
     expect(printModel.sheetHeight).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
     expect(printModel.sheetScrollHeight).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
     expect(printModel.sheetBottom - printModel.sheetTop).toBeLessThanOrEqual(A4_PORTRAIT_HEIGHT_PX + 1);
     expect(printModel.cards.every((card) => (
-      card.top >= printModel.sheetTop + printModel.paddingTop - 1
-      && card.bottom <= printModel.sheetTop + A4_PORTRAIT_HEIGHT_PX - printModel.paddingBottom + 1
+      card.top >= printModel.paperTop + printModel.paperPaddingTop - 1
+      && card.bottom <= printModel.paperTop + printModel.paperHeight - printModel.paperPaddingBottom + 1
     ))).toBe(true);
     expect(printModel.cards.every((card) => card.height > 0)).toBe(true);
 

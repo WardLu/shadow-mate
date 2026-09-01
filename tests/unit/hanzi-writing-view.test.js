@@ -55,6 +55,8 @@ const worksheet = {
         label: "火山",
         visual: { kind: "emoji", value: "🌋", alt: "一座火山" },
         englishLabel: "volcano",
+        characterEnglishLabel: "fire",
+        characterMeaning: "燃烧时发光发热的东西",
       },
       exampleWords: ["火山", "火光"],
       sentence: "火山有火。",
@@ -70,6 +72,8 @@ const worksheet = {
         label: "水滴",
         visual: { kind: "emoji", value: "💧", alt: "一滴清清的水" },
         englishLabel: "water",
+        characterEnglishLabel: "water",
+        characterMeaning: "没有颜色、会流动的液体",
       },
       exampleWords: ["水果", "水花"],
       sentence: "小鱼在水里。",
@@ -85,6 +89,8 @@ const worksheet = {
         label: "高山",
         visual: { kind: "emoji", value: "⛰️", alt: "一座高高的山" },
         englishLabel: "mountain",
+        characterEnglishLabel: "mountain",
+        characterMeaning: "地面上高起的地方",
       },
       exampleWords: ["大山", "山羊"],
       sentence: "山上有云。",
@@ -100,6 +106,8 @@ const worksheet = {
         label: "大树",
         visual: { kind: "emoji", value: "🌳", alt: "一棵枝叶茂盛的大树" },
         englishLabel: "tree",
+        characterEnglishLabel: "wood",
+        characterMeaning: "树木；木头",
       },
       exampleWords: ["木头", "木马"],
       sentence: "小鸟站在木头上。",
@@ -130,19 +138,30 @@ describe("Hanzi writing snapshot renderers", () => {
     expect(firstCard.querySelector("[data-hanzi-english-label]").textContent).toBe("volcano");
     expect(firstCard.querySelectorAll("[data-hanzi-example-word]")).toHaveLength(2);
     expect(firstCard.querySelectorAll("[data-hanzi-target-glyph]")).not.toHaveLength(0);
-    expect(firstCard.querySelector("[data-hanzi-sentence]").textContent).toBe("火山有火。");
+    expect(firstCard.querySelector("[data-hanzi-sentence]").textContent).toBe("例句：火山有火。");
     expect(firstCard.querySelector("[data-hanzi-stroke-count]").textContent).toContain("4");
     expect(firstCard.querySelector("[data-hanzi-structure]").textContent).toBe("独体字");
+    expect(firstCard.querySelector("[data-hanzi-stroke-order]").textContent).toBe("笔顺：丶 丿 丿 ㇏");
+    expect(firstCard.querySelector("[data-hanzi-meaning-text]").textContent).toBe("燃烧时发光发热的东西");
+    expect(firstCard.querySelectorAll("[data-hanzi-concrete-meaning]")).toHaveLength(0);
+    expect(firstCard.querySelector(".hanzi-meaning-label").textContent).toBe("字意：");
+    expect(firstCard.querySelectorAll("[data-hanzi-meaning-speak]")).toHaveLength(1);
     expect(firstCard.querySelector("[data-hanzi-writing-hint]").textContent).toBe("先看两点，再写中间。");
-    expect(firstCard.querySelectorAll(".writing-cell")).toHaveLength(5);
-    expect(firstCard.querySelectorAll(".writing-cell.model")).toHaveLength(1);
-    expect(firstCard.querySelectorAll(".writing-cell.trace")).toHaveLength(1);
-    expect(firstCard.querySelectorAll(".writing-cell.empty")).toHaveLength(3);
+    expect(firstCard.querySelector("[data-writing-grid]")).toBeNull();
+
+    const firstPrintCard = print.querySelector("[data-hanzi-learning-card]");
+    expect(firstPrintCard.querySelectorAll(".writing-cell")).toHaveLength(9);
+    expect(firstPrintCard.querySelectorAll(".writing-cell.model")).toHaveLength(1);
+    expect(firstPrintCard.querySelectorAll(".writing-cell.trace")).toHaveLength(4);
+    expect(firstPrintCard.querySelectorAll(".writing-cell.empty")).toHaveLength(4);
+    expect(firstPrintCard.querySelectorAll(".writing-print-rice-line")).toHaveLength(36);
+    expect(print.querySelector(".writing-print-brand-logo").getAttribute("aria-label")).toBe("Shadow Mate");
+    expect(print.querySelectorAll("[data-hanzi-speak]")).toHaveLength(0);
 
     const speechButtons = firstCard.querySelectorAll("[data-hanzi-speak]");
     expect(speechButtons).toHaveLength(2);
     expect([...speechButtons].map((button) => button.dataset.speechLocale)).toEqual(["zh-CN", "en-US"]);
-    expect([...speechButtons].map((button) => button.dataset.speechText)).toEqual(["火", "volcano"]);
+    expect([...speechButtons].map((button) => button.dataset.speechText)).toEqual(["火", "fire"]);
 
     const readWorksheetMetadata = (root) => ({
       assignmentId: root.dataset.writingAssignmentId,
@@ -164,15 +183,15 @@ describe("Hanzi writing snapshot renderers", () => {
   });
 
   it("escapes hostile snapshot fields as text and data attributes", () => {
-    for (const html of [
-      renderWritingWorksheetHtml(hostileWorksheet),
-      renderWritingPrintSheetHtml(hostileWorksheet),
+    for (const [html, isScreen] of [
+      [renderWritingWorksheetHtml(hostileWorksheet), true],
+      [renderWritingPrintSheetHtml(hostileWorksheet), false],
     ]) {
       const container = parse(html);
       const section = container.firstElementChild;
       const row = section.querySelector("[data-writing-row]");
 
-    expect(container.querySelector("script, img, b")).toBeNull();
+      expect(container.querySelector("script, img, b")).toBeNull();
       expect(container.querySelector("[onerror], [onmouseover]")).toBeNull();
       expect(section.dataset.writingAssignmentId).toBe(hostileWorksheet.assignmentId);
       expect(section.dataset.writingDayKey).toBe(hostileWorksheet.dayKey);
@@ -182,7 +201,9 @@ describe("Hanzi writing snapshot renderers", () => {
       expect(row.querySelector("[data-writing-pinyin]").textContent).toBe(hostileWorksheet.rows[0].pinyin);
       expect(row.querySelector("[data-writing-example-word]").textContent).toBe(hostileWorksheet.rows[0].exampleWord);
       expect(row.querySelector("[data-hanzi-visual]").getAttribute("aria-label")).toBe(hostileWorksheet.rows[0].concept.visual.alt);
-      expect(row.querySelector("[data-hanzi-sentence]").textContent).toBe(hostileWorksheet.rows[0].sentence);
+      expect(row.querySelector("[data-hanzi-sentence]").textContent).toBe(isScreen
+        ? `例句：${hostileWorksheet.rows[0].sentence}`
+        : hostileWorksheet.rows[0].sentence);
       expect(row.querySelector("[data-hanzi-writing-hint]").textContent).toBe(hostileWorksheet.rows[0].writing.hint);
     }
   });

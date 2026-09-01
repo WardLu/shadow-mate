@@ -23,9 +23,12 @@ async function openChineseAtFixedTime(page) {
 async function installSpeechMock(page, {
   voices = [{ lang: "zh-CN" }, { lang: "en-US" }],
   mode = "end",
+  cancelError = null,
+  voiceChanges = false,
 } = {}) {
-  await page.addInitScript(({ configuredVoices, configuredMode }) => {
+  await page.addInitScript(({ configuredVoices, configuredMode, configuredCancelError, configuredVoiceChanges }) => {
     const utterances = [];
+    let activeUtterance = null;
     Object.defineProperty(window, "__speechUtterances", {
       configurable: true,
       value: utterances,
@@ -54,23 +57,51 @@ async function installSpeechMock(page, {
     Object.defineProperty(window, "speechSynthesis", {
       configurable: true,
       value: {
-        cancel() {},
+        speaking: false,
+        pending: false,
+        cancel() {
+          const prior = activeUtterance;
+          activeUtterance = null;
+          this.speaking = false;
+          this.pending = false;
+          if (configuredCancelError && prior) {
+            queueMicrotask(() => prior.onerror?.({ error: configuredCancelError }));
+          }
+        },
         getVoices() {
           return window.__speechVoices;
         },
         speak(utterance) {
+          activeUtterance = utterance;
           utterances.push({ text: utterance.text, lang: utterance.lang });
           window.__speechVoiceLangs.push(utterance.voice?.lang || null);
+          if (configuredMode === "active") {
+            this.speaking = true;
+            return;
+          }
           if (window.__speechMode === "error") {
             queueMicrotask(() => utterance.onerror?.({ error: "synthesis-failed" }));
             return;
           }
           if (window.__speechMode === "pending") return;
-          queueMicrotask(() => utterance.onend?.());
+          queueMicrotask(() => {
+            if (activeUtterance === utterance) activeUtterance = null;
+            utterance.onend?.();
+          });
         },
       },
     });
-  }, { configuredVoices: voices, configuredMode: mode });
+    if (configuredVoiceChanges) {
+      const listeners = new Set();
+      window.speechSynthesis.addEventListener = (type, listener) => {
+        if (type === "voiceschanged") listeners.add(listener);
+      };
+      window.speechSynthesis.removeEventListener = (type, listener) => {
+        if (type === "voiceschanged") listeners.delete(listener);
+      };
+      window.__emitSpeechVoicesChanged = () => listeners.forEach((listener) => listener());
+    }
+  }, { configuredVoices: voices, configuredMode: mode, configuredCancelError: cancelError, configuredVoiceChanges: voiceChanges });
 }
 
 async function readWorksheetSnapshot(page) {
@@ -138,6 +169,8 @@ test.describe("Hanzi writing worksheet", () => {
     await installSpeechMock(page);
     await openChineseAtFixedTime(page);
 
+    await expect(page.locator("[data-writing-practice] .stroke-chip .stroke-glyph")).toHaveText(["丶", "一", "丨", "丿", "㇏", "㇀", "㇕", "亅"]);
+    await expect(page.locator("[data-writing-practice] .stroke-chip svg")).toHaveCount(0);
     const cards = page.locator("[data-writing-worksheet] [data-hanzi-learning-card]");
     await expect(cards).toHaveCount(4);
     await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
@@ -145,6 +178,12 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(cards.locator(".hanzi-target-highlight")).toHaveCount(8);
     await expect(cards.locator("[data-hanzi-sentence]")).toHaveCount(4);
     await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-stroke-order]")).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-meaning-text]")).toHaveCount(4);
+    await expect(cards.locator("[data-hanzi-concrete-meaning]")).toHaveCount(0);
+    await expect(cards.locator("[data-hanzi-meaning-text]").first()).toHaveText("燃烧时发光发热的东西");
+    await expect(cards.locator("[data-hanzi-meaning-speak]")).toHaveCount(4);
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(0);
     await expect(cards.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]')).toHaveCount(4);
     await expect(cards.locator('[data-hanzi-speak][data-speech-locale="en-US"]')).toHaveCount(4);
 
@@ -157,10 +196,10 @@ test.describe("Hanzi writing worksheet", () => {
       "播放“木”的中文发音",
     ];
     const expectedEnglishNames = [
-      "播放“volcano”的英文发音",
+      "播放“fire”的英文发音",
       "播放“water”的英文发音",
       "播放“mountain”的英文发音",
-      "播放“tree”的英文发音",
+      "播放“wood”的英文发音",
     ];
     for (const [index, name] of expectedChineseNames.entries()) {
       await expect(chineseSpeechButtons.nth(index)).toHaveAccessibleName(name);
@@ -170,6 +209,7 @@ test.describe("Hanzi writing worksheet", () => {
     }
     expect(new Set(await chineseSpeechButtons.allTextContents()).size).toBe(1);
     expect(new Set(await englishSpeechButtons.allTextContents()).size).toBe(1);
+    expect(await englishSpeechButtons.allTextContents()).toEqual(Array.from({ length: 4 }, () => "英文发音"));
 
     const firstCard = cards.first();
     await expect(firstCard.locator("[data-hanzi-visual]")).toHaveAttribute("role", "img");
@@ -179,14 +219,19 @@ test.describe("Hanzi writing worksheet", () => {
     const before = await readWorksheetSnapshot(page);
     const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
     const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
-    const expectedUtterances = await Promise.all([zhButton, enButton].map(async (button) => ({
-      text: await button.getAttribute("data-speech-text"),
-      lang: await button.getAttribute("data-speech-locale"),
-    })));
+    const expectedUtterances = [
+      { text: "火", lang: "zh-CN" },
+      { text: "fire", lang: "en-US" },
+    ];
 
     await zhButton.click();
     await enButton.click();
     await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual(expectedUtterances);
+
+    const meaningButton = firstCard.locator("[data-hanzi-meaning-speak]");
+    await meaningButton.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(3);
+    expect((await page.evaluate(() => window.__speechUtterances)).at(-1)).toEqual({ text: "燃烧时发光发热的东西", lang: "zh-CN" });
 
     const after = await readWorksheetSnapshot(page);
     expect(after.screen).toEqual(before.screen);
@@ -194,6 +239,69 @@ test.describe("Hanzi writing worksheet", () => {
     expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
     expect(after.assignment.completions).toEqual(before.assignment.completions);
     expect(after.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("ignores rapid repeated clicks on one speech action", async ({ page }) => {
+    await installSpeechMock(page, { mode: "pending" });
+    await openChineseAtFixedTime(page);
+
+    const meaningButton = page.locator("[data-writing-worksheet] [data-hanzi-meaning-speak]").first();
+    await meaningButton.click();
+    await page.evaluate(() => {
+      const button = document.querySelector("[data-writing-worksheet] [data-hanzi-meaning-speak]");
+      for (let index = 0; index < 3; index += 1) {
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
+
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: "燃烧时发光发热的东西", lang: "zh-CN" },
+    ]);
+    await expect(meaningButton).toBeDisabled();
+  });
+
+  test("treats an externally cancelled Chinese utterance as a cancellation, not a failure", async ({ page }) => {
+    await installSpeechMock(page, { mode: "active", cancelError: "canceled" });
+    await openChineseAtFixedTime(page);
+
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    await page.evaluate(() => window.speechSynthesis.cancel());
+
+    await expect(button).toContainText("中文发音");
+    await expect(button).toBeEnabled();
+    await expect(button).not.toContainText("失败");
+  });
+
+  test("waits for voiceschanged before reporting a missing Mandarin voice", async ({ page }) => {
+    await installSpeechMock(page, { voices: [], voiceChanges: true });
+    await openChineseAtFixedTime(page);
+
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    await page.evaluate(() => {
+      window.__speechVoices = [{ lang: "zh-CN" }];
+      window.__emitSpeechVoicesChanged();
+    });
+
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: "火", lang: "zh-CN" },
+    ]);
+    await expect(button).toBeEnabled();
+    await expect(button).not.toContainText("没有中文");
+  });
+
+  test("does not report an active English system utterance as a false failure", async ({ page }) => {
+    await installSpeechMock(page, { mode: "active" });
+    await openChineseAtFixedTime(page);
+
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="en-US"]').first();
+    await button.click();
+    await page.clock.runFor(4100);
+
+    await expect(button).toHaveText("英文发音");
+    await expect(button).toBeEnabled();
+    await expect(button).not.toContainText("失败");
   });
 
   test("recovers when a Mandarin voice becomes available without entering the English Piper path", async ({ page }) => {

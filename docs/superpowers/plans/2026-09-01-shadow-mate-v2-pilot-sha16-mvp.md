@@ -26,7 +26,7 @@
 
 ## SHA-16 acceptance boundary after the V2 Pilot visual slice
 
-`focus-rows-v1` 仍保留为 rotation worksheet snapshot 的技术 `layoutVersion` 兼容标识，但当前页面不再把它作为裸字帖输出标准。原来的 `focus-rows-v1` 裸字帖输出已被 V2 Pilot 的图字纵向学习切片替换：语文页先展示 4 张 rich learning cards，再提供每卡 5 格的轻量临摹区。
+`focus-rows-v1` 仍保留为 rotation worksheet snapshot 的技术 `layoutVersion` 兼容标识，但当前页面不再把它作为裸字帖输出标准。原来的 `focus-rows-v1` 裸字帖输出已被 V2 Pilot 的图字纵向学习切片替换：语文页先展示 4 张 rich learning cards，屏幕不展示字帖或田字格；打印 A4 字帖使用独立的确认版式，每页 4 字、每字 1 个示范格 + 4 个描红格 + 4 个临写格。
 
 rotation、print 和 state 的约束不变：同日 assignment 稳定、屏幕与打印消费同一份 snapshot、打印不推进轮动或写入完成、`chinese-writing` 打卡仍可撤销且不删除 worksheet completion。完整课程、SM-2、P1/P3 仍明确 deferred，不属于本次 SHA-16 验收。
 
@@ -57,7 +57,7 @@ rotation、print 和 state 的约束不变：同日 assignment 稳定、屏幕�
 - `scripts/check.mjs`：增加 active pack validator 门禁。
 - `docs/user-guide.md`：只补充实际存在的每日字帖/打印行为，不描述尚未实现的 SM-2 或完整课程。
 
-不修改 `src/piper-tts.js`、普通英语发音逻辑、Supabase migration、`public/sw.js` 或其他学习模块；静态 pack 随应用构建，不新增运行时网络依赖。
+不修改 `src/piper-tts.js`、Supabase migration、`public/sw.js` 或其他学习模块；普通英语发音仍沿用现有系统语音与 Piper 兜底，仅修正系统语音仍在播放时的超时判定；静态 pack 随应用构建，不新增运行时网络依赖。
 
 ## Migration Plan
 

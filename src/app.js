@@ -98,6 +98,20 @@ const POEMS = [
 ];
 
 const STROKES = ["点","横","竖","撇","捺","提","折","钩"];
+const STROKE_GLYPHS = Object.freeze({
+  点: "丶",
+  横: "一",
+  竖: "丨",
+  撇: "丿",
+  捺: "㇏",
+  提: "㇀",
+  折: "㇕",
+  钩: "亅",
+});
+
+function renderStrokeChip(stroke) {
+  return `<span class="stroke-chip" aria-label="基础笔画：${escapeHtml(stroke)}"><span class="stroke-glyph" aria-hidden="true">${escapeHtml(STROKE_GLYPHS[stroke] || "")}</span><span>${escapeHtml(stroke)}</span></span>`;
+}
 
 const ENGLISH = [
   ["apple","/ˈæp.əl/","苹果","水果"],["banana","/bəˈnɑː.nə/","香蕉","水果"],["orange","/ˈɒr.ɪndʒ/","橙子","水果"],
@@ -530,6 +544,7 @@ let activeAudio = null;
 let activeAudioSource = null;
 let activeAudioSourceUrl = null;
 let sharedAudioContext = null;
+let activeSpeechRequest = null;
 
 function getAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -608,7 +623,49 @@ function findSystemVoice(locale) {
     || null;
 }
 
+function waitForSystemVoice(locale, timeoutMs = 1200) {
+  const immediateVoice = findSystemVoice(locale);
+  if (immediateVoice) return Promise.resolve(immediateVoice);
+
+  const synth = window.speechSynthesis;
+  if (!synth || typeof synth.addEventListener !== "function") return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    let timer = null;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      synth.removeEventListener?.("voiceschanged", check);
+      resolve(findSystemVoice(locale));
+    };
+    const check = () => {
+      if (findSystemVoice(locale)) finish();
+    };
+    synth.addEventListener?.("voiceschanged", check);
+    timer = window.setTimeout(finish, timeoutMs);
+    check();
+  });
+}
+
 async function speak(t, button, locale = "en-US"){
+  if (button?.dataset.speechInFlight === "true") return;
+  if (activeSpeechRequest) {
+    if (activeSpeechRequest.button?.isConnected) return;
+    activeSpeechRequest.cancelled = true;
+    activeSpeechRequest = null;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling a stale utterance.
+    }
+    stopActivePlayback();
+  }
+  const speechRequest = { button, cancelled: false };
+  activeSpeechRequest = speechRequest;
+  const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
+  if (button) button.dataset.speechInFlight = "true";
   const initialVisibleLabel = button?.textContent?.trim() || button?.dataset.label || "听发音";
   if (button && button.dataset.speechOriginalLabel === undefined) {
     button.dataset.speechOriginalLabel = initialVisibleLabel;
@@ -653,7 +710,11 @@ async function speak(t, button, locale = "en-US"){
   };
   const restore = () => {
     clearSystemTimer();
-    if (!button) return;
+    if (!isCurrentSpeech()) return;
+    if (!button) {
+      activeSpeechRequest = null;
+      return;
+    }
     button.innerHTML = buttonContent("volume", originalLabel);
     button.setAttribute("aria-label", originalAriaLabel);
     if (originalTitle) button.title = originalTitle;
@@ -661,9 +722,12 @@ async function speak(t, button, locale = "en-US"){
     button.disabled = false;
     button.removeAttribute("aria-busy");
     button.removeAttribute("data-speech-failure");
+    button.removeAttribute("data-speech-in-flight");
+    activeSpeechRequest = null;
     restoreButtonFocus();
   };
   const fail = (message) => {
+    if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
@@ -731,7 +795,7 @@ async function speak(t, button, locale = "en-US"){
     };
     try {
       const status = await askDownloadVoice((received, total) => {
-        if (!button) return;
+        if (!isCurrentSpeech() || !button) return;
         button.innerHTML = buttonContent(
           "volume",
           total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
@@ -741,6 +805,7 @@ async function speak(t, button, locale = "en-US"){
         restore();
         return;
       }
+      if (!isCurrentSpeech()) return;
       if (status !== "ok") {
         fail("离线语音下载失败，请检查网络后重试");
         return;
@@ -748,9 +813,14 @@ async function speak(t, button, locale = "en-US"){
       startEngineWarmup();
       setBusy("加载语音引擎…");
       await engineWarmup;
+      if (!isCurrentSpeech()) return;
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
+      if (!isCurrentSpeech()) {
+        releaseObjectUrl(url);
+        return;
+      }
       stopActivePlayback();
 
       if (audioContext) {
@@ -841,7 +911,8 @@ async function speak(t, button, locale = "en-US"){
 
   if (locale === "zh-CN") {
     const synth = window.speechSynthesis;
-    const voice = findSystemVoice(locale);
+    const voice = await waitForSystemVoice(locale);
+    if (!isCurrentSpeech()) return;
     if (!voice) {
       fail("未检测到中文普通话语音，请重试");
       return;
@@ -852,8 +923,17 @@ async function speak(t, button, locale = "en-US"){
     utterance.lang = locale;
     utterance.rate = 0.9;
     utterance.voice = voice;
-    utterance.onend = () => restore();
-    utterance.onerror = () => fail("中文发音失败，请重试");
+    utterance.onend = () => {
+      if (isCurrentSpeech()) restore();
+    };
+    utterance.onerror = (event) => {
+      if (!isCurrentSpeech()) return;
+      if (event?.error === "canceled" || event?.error === "interrupted") {
+        restore();
+        return;
+      }
+      fail("中文发音失败，请重试");
+    };
     setBusy();
     try {
       try {
@@ -866,11 +946,11 @@ async function speak(t, button, locale = "en-US"){
       systemTimer = window.setTimeout(() => {
         if (!button?.disabled) return;
         try {
+          fail("中文发音未响应，请重试");
           synth.cancel();
         } catch (_) {
           // Some browser speech implementations throw while cancelling a stalled utterance.
         }
-        fail("中文发音未响应，请重试");
       }, 4000);
     } catch (_) {
       fail("中文发音失败，请重试");
@@ -879,7 +959,9 @@ async function speak(t, button, locale = "en-US"){
   }
 
   // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
-  if (hasSystemEnglishVoice()) {
+  const englishVoice = await waitForSystemVoice("en-US");
+  if (!isCurrentSpeech()) return;
+  if (englishVoice || hasSystemEnglishVoice()) {
     const synth = window.speechSynthesis;
     const Utterance = window.SpeechSynthesisUtterance;
     let fallbackStarted = false;
@@ -903,9 +985,14 @@ async function speak(t, button, locale = "en-US"){
       const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
       if (voice) utterance.voice = voice;
       utterance.onend = () => {
-        if (!fallbackStarted) restore();
+        if (isCurrentSpeech() && !fallbackStarted) restore();
       };
-      utterance.onerror = () => {
+      utterance.onerror = (event) => {
+        if (!isCurrentSpeech()) return;
+        if (event?.error === "canceled" || event?.error === "interrupted") {
+          restore();
+          return;
+        }
         if (!fallbackStarted) fallbackToLocal();
       };
       try {
@@ -913,7 +1000,12 @@ async function speak(t, button, locale = "en-US"){
         // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
         synth.speak(utterance);
         systemTimer = window.setTimeout(() => {
-          if (button?.disabled) fallbackToLocal();
+          if (!button?.disabled) return;
+          if (synth.speaking || synth.pending) {
+            restore();
+            return;
+          }
+          fallbackToLocal();
         }, 4000);
       } catch (_) {
         fallbackToLocal();
@@ -1087,7 +1179,7 @@ function renderChinese(){
   if (!worksheet) return;
   const worksheetHtml = renderWritingWorksheetHtml(worksheet);
   createWritingPrintRoot(worksheet);
-  const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
+  const strokesHtml = STROKES.map(renderStrokeChip).join("");
   const card3 = $(`
     <div class="card" data-writing-practice>
       <h3>${icon("pen")} 写字打卡 <span class="pill">今日字帖 · 4 行</span></h3>
@@ -1102,7 +1194,7 @@ function renderChinese(){
   `);
   main.appendChild(card3);
   card3.querySelector("[data-print]").onclick = () => window.print();
-  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak]").forEach((button) => {
+  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak], [data-hanzi-meaning-speak]").forEach((button) => {
     button.dataset.speechOriginalLabel = button.textContent?.trim() || "听发音";
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");

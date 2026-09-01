@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>今日写字字帖 · 设计稿 v7</title>
+  <style>
+    @font-face {
+      font-family: "WritingHand";
+      src: url("assets/fonts/瑞美加张清平硬笔楷书.ttf") format("truetype");
+      font-display: block;
+    }
+
+    :root {
+      --ink: #25344f;
+      --muted: #8391a8;
+      --faint: #dce5ee;
+      --violet: #5c56cf;
+      --violet-soft: #f0efff;
+      --pink: #e96d9d;
+      --pink-soft: #fff0f6;
+      --teal: #60bfa8;
+      --teal-soft: #eefaf6;
+      --amber: #efad4e;
+      --amber-soft: #fff7e8;
+      --cyan: #50aab7;
+      --grid: #cbd7e5;
+      --grid-cross: #dbe4ef;
+      --paper: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #e9edf6;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    body { padding: 18px; }
+
+    .page {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      margin: 0 auto;
+      padding: 7.5mm 7.5mm 4.5mm;
+      overflow: hidden;
+      background: var(--paper);
+      border: 2px solid var(--violet);
+      border-radius: 4.5mm;
+      box-shadow: 0 14px 38px rgba(46, 60, 92, .15);
+    }
+
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 5px;
+      background: linear-gradient(90deg, var(--violet) 0 36%, var(--teal) 36% 68%, var(--amber) 68% 86%, var(--pink) 86%);
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: 28px 48px 43px;
+      column-gap: 18px;
+      align-items: start;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #95a1b5;
+      font-size: 12px;
+      letter-spacing: .12em;
+      font-weight: 700;
+    }
+
+    .brand-logo {
+      display: block;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+      border-radius: 8px;
+      box-shadow: 0 3px 7px rgba(42, 166, 80, .2);
+    }
+
+    .eyebrow .slash { color: #c0c9d6; }
+
+    .practice-badge {
+      display: grid;
+      grid-template-columns: 38px auto;
+      align-items: center;
+      min-width: 128px;
+      height: 40px;
+      padding: 4px 12px 4px 5px;
+      border: 1px solid #d4d1ff;
+      border-radius: 14px;
+      background: #f4f3ff;
+    }
+
+    .practice-badge strong {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      color: #fff;
+      font-size: 18px;
+      border-radius: 10px;
+      background: var(--violet);
+    }
+
+    .practice-badge span {
+      color: var(--violet);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    h1 {
+      grid-column: 1 / -1;
+      margin: 2px 0 0;
+      color: var(--ink);
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: .05em;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: #8996ab;
+      font-size: 14px;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    .subtitle strong { color: var(--pink); font-weight: 800; }
+
+    .meta-bar {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: 1.05fr 1.05fr .72fr 1.05fr;
+      align-items: center;
+      height: 43px;
+      padding: 0 12px;
+      border: 1px solid #d9e2ed;
+      border-radius: 12px;
+      background: #fbfcfe;
+    }
+
+    .meta {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+      color: #9aa7ba;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .meta + .meta { padding-left: 12px; border-left: 1px solid #e7ecf3; }
+    .meta b { color: var(--ink); font-size: 12px; font-weight: 700; }
+    .meta .line { position: relative; top: 3px; display: inline-block; width: 54px; border-bottom: 1px solid #b8c5d6; }
+    .meta .stars { color: var(--amber); font-size: 16px; letter-spacing: 1px; line-height: 1; }
+
+    .lesson-strip {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 10px;
+      height: 56px;
+      margin-top: 8px;
+    }
+
+    .lesson-box,
+    .chars-box {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      padding: 7px 10px;
+      border: 1px solid #e6dfcf;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #fffaf0, #fffdf8);
+    }
+
+    .chars-box {
+      border-color: #cce9df;
+      background: linear-gradient(135deg, #f2fcf8, #fbfffd);
+    }
+
+    .box-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 78px;
+      font-size: 15px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .box-title::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 25px;
+      border-radius: 999px;
+      background: var(--amber);
+    }
+
+    .chars-box .box-title::before { background: var(--teal); }
+
+    .lesson-steps {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 5px;
+      color: #7f8da3;
+      font-size: 10.5px;
+      line-height: 1.25;
+    }
+
+    .lesson-steps span::before {
+      display: inline-grid;
+      width: 18px;
+      height: 18px;
+      margin-right: 3px;
+      place-items: center;
+      color: #b57922;
+      font-size: 9px;
+      font-weight: 800;
+      border-radius: 5px;
+      background: #ffedc2;
+      content: attr(data-step);
+    }
+
+    .chars-list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .char-tag {
+      display: grid;
+      width: 29px;
+      height: 30px;
+      place-items: center;
+      color: var(--ink);
+      font-family: "WritingHand", "PingFang SC", sans-serif;
+      font-size: 25px;
+      line-height: 1;
+      border: 1px solid #bfe3d6;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .8);
+    }
+
+    .char-tag:nth-child(odd) { color: var(--pink); }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 31px;
+      margin-top: 9px;
+      margin-bottom: 6px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+
+    .section-title .index {
+      display: inline-grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      color: #fff;
+      font-size: 13px;
+      border-radius: 9px;
+      background: var(--pink);
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #9ba7b8;
+      font-size: 12px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+    .legend .model i { background: var(--ink); }
+    .legend .trace i { background: var(--pink); }
+    .legend .practice i { border: 1px solid #afbece; background: #fff; }
+
+    .work-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: repeat(2, 278px);
+      gap: 8px;
+    }
+
+    .row-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #d8e1ec;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #fffafe, #fff);
+    }
+
+    .row-card:nth-child(2) { background: linear-gradient(135deg, #f8fdfb, #fff); }
+    .row-card:nth-child(3) { background: linear-gradient(135deg, #fffdf7, #fff); }
+    .row-card:nth-child(4) { background: linear-gradient(135deg, #f8fbff, #fff); }
+
+    .char-unit {
+      display: grid;
+      grid-template-rows: 37px 1fr 20px;
+      min-width: 0;
+      padding: 9px 10px 7px;
+    }
+
+    .char-unit + .char-unit { border-left: 1px solid #e1e8f0; }
+
+    .unit-head {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 6px;
+    }
+
+    .number {
+      display: inline-grid;
+      width: 23px;
+      height: 23px;
+      flex: 0 0 auto;
+      place-items: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      border-radius: 7px;
+      background: var(--violet);
+    }
+
+    .char-unit:nth-child(2) .number { background: var(--teal); }
+    .row-card:nth-child(3) .char-unit:nth-child(2) .number { background: var(--amber); }
+
+    .hanzi {
+      color: var(--ink);
+      font-family: "WritingHand", "PingFang SC", sans-serif;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .pronunciation { color: #8492a7; font-size: 12px; white-space: nowrap; }
+    .phrase { margin-left: auto; overflow: hidden; color: #6f809a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+    .unit-body {
+      display: grid;
+      grid-template-columns: 99px 1fr;
+      gap: 8px;
+      min-width: 0;
+      padding-top: 4px;
+    }
+
+    .model-info {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 94px auto;
+      gap: 5px 6px;
+      min-width: 0;
+      padding-right: 9px;
+      border-right: 1px dashed #d7e1ed;
+    }
+
+    .model-char {
+      position: relative;
+      display: grid;
+      width: 94px;
+      height: 94px;
+      place-items: center;
+      color: var(--ink);
+      font-family: "WritingHand", "PingFang SC", sans-serif;
+      font-size: 72px;
+      line-height: 1;
+      border: 1px solid #ccd8e6;
+      border-radius: 7px;
+      overflow: hidden;
+      background-color: #fff;
+      --guide: #d3dde8;
+    }
+
+    .rice-line {
+      position: absolute;
+      z-index: 0;
+      pointer-events: none;
+      border-color: var(--guide);
+      border-style: dashed;
+      border-width: 0;
+    }
+
+    .rice-line.horizontal {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      border-top-width: 1px;
+    }
+
+    .rice-line.vertical {
+      top: 0;
+      left: 50%;
+      height: 100%;
+      border-left-width: 1px;
+    }
+
+    .rice-line.diagonal {
+      top: 50%;
+      left: 50%;
+      width: 142%;
+      border-top-width: 1px;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .rice-line.diagonal-reverse {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
+
+    .model-char > span,
+    .cell > span { position: relative; z-index: 1; }
+
+    .info-line {
+      grid-column: 1 / -1;
+      overflow: hidden;
+      color: #7d8ba0;
+      font-size: 13px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: normal;
+    }
+
+    .info-line b { color: #53637a; font-weight: 800; white-space: nowrap; }
+    .info-line.order { display: flex; align-items: baseline; gap: 4px; }
+    .info-line.order .order-symbols { font-family: "WritingHand", "PingFang SC", sans-serif; font-size: 14px; letter-spacing: 1px; line-height: 1.15; }
+
+    .practice-area {
+      display: grid;
+      grid-template-rows: 61px 61px 1fr;
+      gap: 5px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .practice-row {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .practice-label {
+      color: #9ca9b9;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .practice-label.trace { color: var(--pink); }
+
+    .cells {
+      display: flex;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .cell {
+      position: relative;
+      display: grid;
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      place-items: center;
+      overflow: hidden;
+      --guide: #c6d3e0;
+      border: 1px solid var(--grid);
+      background-color: rgba(255, 255, 255, .72);
+    }
+
+    .cell.trace {
+      --guide: #efc0d3;
+      border-color: #efbad0;
+      background-color: var(--pink-soft);
+    }
+
+    .cell.trace span {
+      color: var(--pink);
+      font-family: "WritingHand", "PingFang SC", sans-serif;
+      font-size: 37px;
+      line-height: 1;
+      opacity: .5;
+    }
+
+    .sentence {
+      align-self: start;
+      padding-top: 4px;
+      overflow: hidden;
+      color: var(--cyan);
+      font-size: 11px;
+      line-height: 15px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sentence b { font-weight: 800; }
+
+    .bottom-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 28px;
+      margin-top: 8px;
+      margin-bottom: 5px;
+    }
+
+    .bottom-head .section-title { font-size: 17px; }
+    .bottom-head .index { background: var(--violet); }
+    .bottom-head .hint { margin-left: auto; color: #9ba7b8; font-size: 11px; }
+
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1.65fr .85fr;
+      gap: 7px;
+      height: 156px;
+    }
+
+    .module-card {
+      min-width: 0;
+      overflow: hidden;
+      padding: 10px 11px;
+      border: 1px solid #dbe4ef;
+      border-radius: 13px;
+      background: #fbfcff;
+    }
+
+    .module-card.phrases { background: linear-gradient(135deg, #fbfcff, #f7f9ff); }
+    .module-card.sentence-practice { border-color: #f0dec0; background: linear-gradient(135deg, #fffdf8, #fffaf0); }
+
+    .module-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 22px;
+      margin-bottom: 4px;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .module-title .bar {
+      display: inline-block;
+      width: 5px;
+      height: 15px;
+      border-radius: 999px;
+      background: var(--violet);
+    }
+
+    .sentence-practice .module-title .bar { background: var(--amber); }
+    .module-title small { margin-left: auto; color: #a0aabd; font-size: 10px; font-weight: 400; }
+
+    .phrase-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px 16px;
+    }
+
+    .phrase-row {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      height: 48px;
+    }
+
+    .phrase-name {
+      color: #8997ab;
+      font-family: "WritingHand", "PingFang SC", sans-serif;
+      font-size: 16px;
+      white-space: nowrap;
+    }
+
+    .phrase-row .cell { width: 42px; height: 42px; flex-basis: 42px; }
+    .phrase-row .cell.trace span { font-size: 31px; }
+
+    .sentence-copy { margin: 0 0 2px; color: #9b8d71; font-size: 11px; }
+
+    .ruled-line {
+      height: 21px;
+      border-bottom: 1px dashed #dbcaa9;
+    }
+
+    .self-check {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 5px;
+      padding-top: 4px;
+      border-top: 1px solid #f0e2c9;
+      color: #9b8d71;
+      font-size: 11px;
+    }
+
+    .self-check .stars { color: var(--amber); font-size: 16px; letter-spacing: 1px; }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 23px;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid #e7edf4;
+      color: #a2afbf;
+      font-size: 10px;
+    }
+
+    .footer strong { color: var(--violet); font-size: 11px; }
+    .footer .heart { color: var(--pink); font-size: 13px; vertical-align: -1px; }
+
+    @media print {
+      html,
+      body { width: 210mm; height: 297mm; background: #fff; }
+      body { padding: 0; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="今日写字字帖设计稿 v7">
+    <section class="top">
+      <div class="eyebrow"><img class="brand-logo" src="assets/shadow-mate.svg" alt="Shadow Mate"><span>SHADOW MATE</span><span class="slash">·</span><span>写字打卡练习</span></div>
+      <div class="practice-badge"><strong>01</strong><span>今日练习单</span></div>
+      <h1>今日写字字帖</h1>
+      <p class="subtitle"><strong>每天 15 分钟，认真写好一个字</strong>　先观察 · 再描红 · 后临写　|　把每一笔写在格子里</p>
+      <div class="meta-bar">
+        <div class="meta"><span>日期</span><b>2026年9月2日</b></div>
+        <div class="meta"><span>姓名</span><span class="line"></span></div>
+        <div class="meta"><span>用时</span><span class="line" style="width:34px"></span><span>分</span></div>
+        <div class="meta"><span>今日练习</span><b>4 字</b><span class="stars">☆ ☆ ☆</span></div>
+      </div>
+    </section>
+
+    <section class="lesson-strip" aria-label="练习说明和本页生字">
+      <div class="lesson-box">
+        <div class="box-title">写字课堂</div>
+        <div class="lesson-steps">
+          <span data-step="01">坐姿端正，纸张放平</span>
+          <span data-step="02">先看结构，再按笔顺</span>
+          <span data-step="03">描红慢一点，写准一点</span>
+          <span data-step="04">临写后比一比，改一改</span>
+        </div>
+      </div>
+      <div class="chars-box">
+        <div class="box-title">本页生字</div>
+        <div class="chars-list" aria-label="雨、风、花、木">
+          <span class="char-tag">雨</span><span class="char-tag">风</span><span class="char-tag">花</span><span class="char-tag">木</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-head">
+      <div class="section-title"><span class="index">01</span><span>笔画结构 · 描红与临写</span></div>
+      <div class="legend"><span class="model"><i></i>楷书示范</span><span class="trace"><i></i>描红 4 格</span><span class="practice"><i></i>临写 4 格</span></div>
+    </section>
+
+    <section id="work-grid" class="work-grid" aria-label="4 个生字练习"></section>
+
+    <section class="bottom-head">
+      <div class="section-title"><span class="index">02</span><span>组词与造句小练习</span></div>
+      <span class="hint">空白格用于独立书写 · 把词语写完整</span>
+    </section>
+
+    <section class="bottom-grid">
+      <div class="module-card phrases">
+        <div class="module-title"><span class="bar"></span><span>词语练一练</span><small>从今天的生字中选一组</small></div>
+        <div id="phrase-grid" class="phrase-grid"></div>
+      </div>
+      <div class="module-card sentence-practice">
+        <div class="module-title"><span class="bar"></span><span>造句练习</span></div>
+        <p class="sentence-copy">选一个词语写一句话：</p>
+        <div class="ruled-line"></div>
+        <div class="ruled-line"></div>
+        <div class="self-check"><span>今日自评</span><span class="stars">☆ ☆ ☆ ☆ ☆</span></div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>练习提示：黑色为楷书示范，粉色为浅色描红，空白格用于临写。</span>
+      <span><strong>今日完成</strong> <span class="heart">♥</span>　Shadow Mate · 写字打卡</span>
+    </footer>
+  </main>
+
+  <script>
+    const chars = [
+      { char: "雨", pinyin: "yǔ", strokes: 8, radical: "雨", structure: "独体", order: "一丨㇆丨丶丶丶丶", phrase: "下雨", sentence: "下雨了，带好伞。" },
+      { char: "风", pinyin: "fēng", strokes: 4, radical: "风", structure: "半包围", order: "丿㇈丿丶", phrase: "大风", sentence: "风车转起来。" },
+      { char: "花", pinyin: "huā", strokes: 7, radical: "艹", structure: "上下", order: "一丨丿丶丿丨丿", phrase: "花朵", sentence: "花朵在风中摇摆。" },
+      { char: "木", pinyin: "mù", strokes: 4, radical: "木", structure: "独体", order: "一丨丿㇏", phrase: "木头", sentence: "小鸟站在木头上。" }
+    ];
+
+    function riceGrid() {
+      return `<i class="rice-line horizontal"></i><i class="rice-line vertical"></i><i class="rice-line diagonal"></i><i class="rice-line diagonal diagonal-reverse"></i>`;
+    }
+
+    function cell(char, kind) {
+      return `<span class="cell ${kind}">${riceGrid()}${kind === "trace" ? `<span>${char}</span>` : ""}</span>`;
+    }
+
+    function unit(item, index) {
+      return `
+        <article class="char-unit">
+          <div class="unit-head">
+            <span class="number">${String(index + 1).padStart(2, "0")}</span>
+            <span class="hanzi">${item.char}</span>
+            <span class="pronunciation">${item.pinyin} · ${item.strokes}画</span>
+            <span class="phrase">${item.phrase}</span>
+          </div>
+          <div class="unit-body">
+            <div class="model-info">
+              <span class="model-char">${riceGrid()}<span>${item.char}</span></span>
+              <span class="info-line"><b>结构</b> ${item.structure}</span>
+              <span class="info-line order"><b>笔顺</b><span class="order-symbols">${item.order}</span></span>
+            </div>
+            <div class="practice-area">
+              <div class="practice-row"><span class="practice-label trace">描红</span><div class="cells">${cell(item.char, "trace")}${cell(item.char, "trace")}${cell(item.char, "trace")}${cell(item.char, "trace")}</div></div>
+              <div class="practice-row"><span class="practice-label">临写</span><div class="cells">${cell("", "practice")}${cell("", "practice")}${cell("", "practice")}${cell("", "practice")}</div></div>
+              <div class="sentence"><b>造句：</b>${item.sentence}</div>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    function phraseRow(item) {
+      const charsInPhrase = [...item.phrase];
+      const filled = charsInPhrase.map((char) => cell(char, "trace")).join("");
+      const blanks = Array.from({ length: Math.max(0, 4 - charsInPhrase.length) }, () => cell("", "practice")).join("");
+      return `<div class="phrase-row"><span class="phrase-name">${item.phrase}</span><div class="cells">${filled}${blanks}</div></div>`;
+    }
+
+    document.querySelector("#work-grid").innerHTML = chars.map(unit).join("");
+    document.querySelector("#phrase-grid").innerHTML = chars.map(phraseRow).join("");
+  </script>
+</body>
+</html>

@@ -5,7 +5,7 @@ async function openModule(page, mod) {
   await page.click(`[data-go="${mod}"]`);
 }
 
-async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
+async function expectRichLearningCards(root, { includeSpeech = false, gridCells = null } = {}) {
   const cards = root.locator("[data-hanzi-learning-card]");
   await expect(cards).toHaveCount(4);
   await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
@@ -14,8 +14,12 @@ async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
   await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
   await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
   await expect(cards.locator("[data-writing-pinyin]")).toHaveCount(4);
-  await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
-  await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(20);
+  if (gridCells === null) {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(0);
+  } else {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
+    await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(gridCells * 4);
+  }
 
   expect(await cards.evaluateAll((elements) => elements.map((card) => ({
     visual: card.querySelectorAll("[data-hanzi-visual]").length,
@@ -32,7 +36,7 @@ async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
     pinyin: true,
     sentence: true,
     writingHint: true,
-    gridCells: 5,
+    gridCells: gridCells === null ? 0 : gridCells,
   })));
 
   if (includeSpeech) {
@@ -278,7 +282,7 @@ test.describe("Offline mode (no login)", () => {
     });
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
     await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
-    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
     const beforePrint = await readWorksheetSnapshot();
     expect(beforePrint.screen).toMatchObject({
       dayKey: "2026-09-01",
@@ -306,7 +310,7 @@ test.describe("Offline mode (no login)", () => {
     await page.reload();
     await openModule(page, "chinese");
     await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
-    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
     const afterReload = await readWorksheetSnapshot();
     expect(afterReload.screen).toEqual(beforePrint.screen);
     expect(afterReload.print).toEqual(beforePrint.print);

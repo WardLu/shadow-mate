@@ -964,25 +964,25 @@ describe("rotation-v1 daily worksheet selection", () => {
       rows: [
         {
           rowId: "row-1", itemId: "hz-011", glyph: "火", pinyin: "huǒ", exampleWord: "火山",
-          concept: { label: "火山", visual: { kind: "emoji", value: "🌋", alt: "一座火山" }, englishLabel: "volcano" },
+          concept: { label: "火山", visual: { kind: "emoji", value: "🌋", alt: "一座火山" }, englishLabel: "volcano", characterEnglishLabel: "fire", characterMeaning: "燃烧时发光发热的东西" },
           exampleWords: ["火山", "火光"], sentence: "火山有火。",
           writing: { strokeCount: 4, structure: "独体字", hint: "先看两点，再写中间像人一样的部分。" },
         },
         {
           rowId: "row-2", itemId: "hz-010", glyph: "水", pinyin: "shuǐ", exampleWord: "水果",
-          concept: { label: "水滴", visual: { kind: "emoji", value: "💧", alt: "一滴清清的水" }, englishLabel: "water" },
+          concept: { label: "水滴", visual: { kind: "emoji", value: "💧", alt: "一滴清清的水" }, englishLabel: "water", characterEnglishLabel: "water", characterMeaning: "没有颜色、会流动的液体" },
           exampleWords: ["水果", "水花"], sentence: "小鱼在水里。",
           writing: { strokeCount: 4, structure: "独体字", hint: "中间的竖钩要挺直，左右要舒展。" },
         },
         {
           rowId: "row-3", itemId: "hz-013", glyph: "山", pinyin: "shān", exampleWord: "大山",
-          concept: { label: "高山", visual: { kind: "emoji", value: "⛰️", alt: "一座高高的山" }, englishLabel: "mountain" },
+          concept: { label: "高山", visual: { kind: "emoji", value: "⛰️", alt: "一座高高的山" }, englishLabel: "mountain", characterEnglishLabel: "mountain", characterMeaning: "地面上高起的地方" },
           exampleWords: ["大山", "山羊"], sentence: "山上有云。",
           writing: { strokeCount: 3, structure: "独体字", hint: "中间的竖最高，三笔要站稳。" },
         },
         {
           rowId: "row-4", itemId: "hz-012", glyph: "木", pinyin: "mù", exampleWord: "木头",
-          concept: { label: "大树", visual: { kind: "emoji", value: "🌳", alt: "一棵枝叶茂盛的大树" }, englishLabel: "tree" },
+          concept: { label: "大树", visual: { kind: "emoji", value: "🌳", alt: "一棵枝叶茂盛的大树" }, englishLabel: "tree", characterEnglishLabel: "wood", characterMeaning: "树木；木头" },
           exampleWords: ["木头", "木马"], sentence: "小鸟站在木头上。",
           writing: { strokeCount: 4, structure: "独体字", hint: "横要平，竖在中间，撇捺向两边展开。" },
         },

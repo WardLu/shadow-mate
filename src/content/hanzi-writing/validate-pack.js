@@ -100,6 +100,8 @@ function validateConcept(item, path, errors) {
 
   requireBoundedString(item.concept.label, `${conceptPath}.label`, errors);
   requireBoundedString(item.concept.englishLabel, `${conceptPath}.englishLabel`, errors);
+  requireBoundedString(item.concept.characterEnglishLabel, `${conceptPath}.characterEnglishLabel`, errors);
+  requireBoundedString(item.concept.characterMeaning, `${conceptPath}.characterMeaning`, errors);
 
   const visualPath = `${conceptPath}.visual`;
   if (!isRecord(item.concept.visual)) {
