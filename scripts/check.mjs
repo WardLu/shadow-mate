@@ -78,8 +78,17 @@ const config = await readFile("src/config.js", "utf8");
 if (!config.includes('productId: "shadow-mate"')) {
   throw new Error("Cloud product ID must be shadow-mate");
 }
-if (!/supabasePublishableKey:\s*(?:env\.VITE_SUPABASE_PUBLISHABLE_KEY\s*\|\|\s*)?"sb_publishable_[^"]+"/.test(config)) {
+if (!config.includes('const PRODUCTION_SUPABASE_URL = "https://dutepjyocxcvecmsrtfp.supabase.co"')) {
+  throw new Error("Production Supabase URL must remain explicit and auditable");
+}
+if (!/const PRODUCTION_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_[^"]+"/.test(config)) {
   throw new Error("Browser configuration must use a Supabase publishable key");
+}
+if (!config.includes('VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE')) {
+  throw new Error("Non-production production-Supabase access must require an explicit override");
+}
+if (!config.includes('remote_supabase_blocked')) {
+  throw new Error("Non-production remote Supabase connections must fail closed");
 }
 
 const serviceWorker = await readFile("public/sw.js", "utf8");
@@ -92,6 +101,7 @@ for (const marker of [
   'from "@supabase/supabase-js"',
   'const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`',
   "storage: window.sessionStorage",
+  "const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin",
   "readRememberedProfileId()",
   '"serviceWorker" in navigator && window.isSecureContext',
   'if (document.readyState === "complete") registerServiceWorker()',

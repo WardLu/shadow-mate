@@ -17,7 +17,9 @@ coverage/
 # Playwright MCP session artifacts (test snapshots/logs)
 .playwright-mcp/
 
-# Branding 候选与预览产物（未采用，不纳入版本控制）
+# Unadopted branding and legacy assets are not release sources.
+assets/logo-candidates/
+legacy/
 assets/logo-candidates/0[1-4]-*.png
 assets/logo-candidates/0[1-4]-*.svg
 assets/readme/logo-mark-green.svg

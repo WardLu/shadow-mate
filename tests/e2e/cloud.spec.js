@@ -1186,6 +1186,7 @@ test.describe("Authenticated cloud workspace", () => {
     const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
     await expect(firstChoice).toHaveClass(/active/);
     await expect(thirdChoice).toBeVisible();
+    await expect.poll(() => api.activityPayloads.length).toBeGreaterThan(0);
     api.rpcPayloads.length = 0;
     api.activityPayloads.length = 0;
 
@@ -1833,6 +1834,151 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => passwordRequests).toBe(1);
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await expect(page.locator("#householdSetupForm")).toBeVisible();
+  });
+
+  test("recovers learner activation after deleting and recreating a household", async ({ page }) => {
+    let householdDeleted = false;
+    let setupHouseholdCreated = false;
+    let setupHouseholdId = null;
+    let passwordRequests = 0;
+    const createdProfiles = [];
+    const now = Math.floor(Date.now() / 1000);
+    const authSession = {
+      access_token: "password-after-delete-recreate-access-token",
+      refresh_token: "password-after-delete-recreate-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: { id: USER_ID, aud: "authenticated", role: "authenticated", email: "parent@example.test" },
+    };
+
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("**/rest/v1/rpc/learning_delete_household", async (route) => {
+      householdDeleted = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/rest/v1/learning_household_members**", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({ status: 201, body: "" });
+        return;
+      }
+      if (householdDeleted && !setupHouseholdCreated) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+        return;
+      }
+      if (setupHouseholdCreated) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ household_id: setupHouseholdId, role: "owner" }]),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/rest/v1/learning_guardian_consents**", async (route) => {
+      if (route.request().method() === "POST" || !setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ household_id: setupHouseholdId }]),
+      });
+    });
+    await page.route("**/rest/v1/learning_households**", async (route) => {
+      if (route.request().method() === "POST") {
+        const household = JSON.parse(route.request().postData() || "{}");
+        setupHouseholdId = household.id;
+        setupHouseholdCreated = true;
+        await route.fulfill({ status: 201, body: "" });
+        return;
+      }
+      if (!setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ name: "重新建立的家庭" }]),
+      });
+    });
+    await page.route("**/rest/v1/learning_profiles**", async (route) => {
+      if (route.request().method() === "POST") {
+        const profile = JSON.parse(route.request().postData() || "{}");
+        const createdProfile = {
+          ...profile,
+          id: profile.id || SECOND_PROFILE_ID,
+          household_id: setupHouseholdId,
+        };
+        createdProfiles.push(createdProfile);
+        await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(createdProfile) });
+        return;
+      }
+      if (!setupHouseholdCreated) {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(createdProfiles) });
+    });
+    await page.route("**/auth/v1/token?grant_type=password", async (route) => {
+      passwordRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authSession) });
+    });
+
+    await page.goto("/");
+    await page.click("#accountButton");
+    await page.click("[data-delete-household]");
+    await expect(page.locator('#accountButton[data-state="local"]')).toBeVisible();
+
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#emailLoginForm")).toBeVisible();
+    await page.click('[data-auth-mode="password"]');
+    await page.locator('#emailLoginForm input[name="email"]').fill("parent@example.test");
+    await page.locator('#emailLoginForm input[name="password"]').fill("SharedPassword123!");
+    await page.click('#emailLoginForm button[type="submit"]');
+
+    await expect.poll(() => passwordRequests).toBe(1);
+    await expect(page.locator("#householdSetupForm")).toBeVisible();
+    // A stale Growth Loop operation returns the previous snapshot without throwing;
+    // profile activation must retry while its auth generation is still current.
+    await page.evaluate(() => {
+      const originalLoadScope = window.growthLoop.loadScope.bind(window.growthLoop);
+      let returnStaleSnapshotOnce = true;
+      window.growthLoop.loadScope = async (scope, options) => {
+        if (returnStaleSnapshotOnce && scope.profile_id) {
+          returnStaleSnapshotOnce = false;
+          return window.growthLoop.getSnapshot();
+        }
+        return originalLoadScope(scope, options);
+      };
+    });
+    await page.locator('#householdSetupForm input[name="household"]').fill("重新建立的家庭");
+    await page.locator('#householdSetupForm input[name="learner"]').fill("第一个孩子");
+    await page.locator('#householdSetupForm input[name="guardianConsent"]').check();
+    await page.click('#householdSetupForm button[type="submit"]');
+    await expect.poll(() => createdProfiles.length).toBe(1);
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /第一个孩子/);
+
+    // Respect the app-wide rapid-action cooldown before reopening the account panel.
+    await page.waitForTimeout(600);
+    await page.click("#accountButton");
+    await expect(page.locator("#cloudPanel")).toContainText("家长同意已记录");
+    const firstProfileId = createdProfiles[0].id;
+    const firstChoice = page.locator(`[data-profile="${firstProfileId}"]`);
+    await expect(firstChoice).toHaveClass(/active/);
+
+    await page.locator('#addLearnerForm input[name="learner"]').fill("第二个孩子");
+    await page.click('#addLearnerForm button[type="submit"]');
+    await expect.poll(() => createdProfiles.length).toBe(2);
+    await expect(page.locator('#accountButton[data-state="online"]')).toHaveAttribute("title", /第二个孩子/);
   });
 
   test("returns to local mode after signing out of the cloud workspace", async ({ page }) => {

@@ -39,6 +39,7 @@ const AUTH_STORAGE_KEY = supabaseUrl
   ? `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`
   : null;
 const cloudEnabled = Boolean(supabaseUrl && publishableKey);
+const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin;
 const supabase = cloudEnabled
   ? createClient(supabaseUrl, publishableKey, {
       auth: {
@@ -584,7 +585,7 @@ async function sendLoginOtp(email) {
     email,
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: window.location.origin,
+      emailRedirectTo: AUTH_REDIRECT_ORIGIN,
       data: {
         product_id: PRODUCT_ID,
         product_name: AUTH_PRODUCT_NAME,
@@ -753,7 +754,7 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
         return;
       }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: AUTH_REDIRECT_ORIGIN,
       });
       if (error) {
         showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。"), 6000);
@@ -936,7 +937,9 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
     ${
       cloudEnabled
         ? ""
-        : `<div class="cloud-status">${icon("alert")} 尚未配置云端环境，当前只能使用本机模式。</div>`
+        : `<div class="cloud-status">${icon("alert")} ${CLOUD_CONFIG.connectionBlocked
+          ? "已阻止非生产环境连接远程 Supabase，请配置本地 shared_test。"
+          : "尚未配置云端环境，当前只能使用本机模式。"}</div>`
     }
   `;
   restoreToastLocation();
@@ -1622,14 +1625,18 @@ async function selectProfileNow(profileId, { migrateLocal = false } = {}, genera
   // IndexedDB reopen cannot leave the UI on a new learner and Growth Loop on
   // the old scope.
   try {
-    await window.growthLoop?.loadScope?.(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
-    if (!isCurrent()) {
-      await restoreProfileCommit(previousProfileState, profile);
-      return false;
-    }
-    const growthScope = window.growthLoop?.getScope?.();
-    if (growthScope && (growthScope.household_id !== scope.household_id || growthScope.profile_id !== scope.profile_id)) {
-      throw new Error("growth_loop_scope_not_ready");
+    let growthScope;
+    // A superseded local read can return the previous snapshot without throwing;
+    // retry once while this profile operation is still current.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await window.growthLoop?.loadScope?.(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
+      if (!isCurrent()) {
+        await restoreProfileCommit(previousProfileState, profile);
+        return false;
+      }
+      growthScope = window.growthLoop?.getScope?.();
+      if (sameProfileScope(growthScope, scope)) break;
+      if (attempt === 1) throw new Error("growth_loop_scope_not_ready");
     }
   } catch (growthError) {
     console.warn("Growth Loop profile switch blocked:", growthError);

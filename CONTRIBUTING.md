@@ -13,6 +13,11 @@ Get the noreply address from GitHub **Settings → Emails**. Do not use a person
 
 Maintainers may create an ignored `.security-local-denylist` file with one private term per line. The security check scans tracked and untracked candidate files without publishing the denylist itself.
 
+本地和 Preview 环境禁止静默连接生产 Supabase。开发前应在未提交的 `.env.local` 中配置 loopback
+`VITE_SUPABASE_URL` 与本地 publishable key；缺少 key 时应用必须保持本机模式。只有明确授权的临时
+生产验收才允许设置 `VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE=1`，并且该变量不能提交到仓库或写入
+自动化默认环境。
+
 ## 测试范围与分层
 
 先写清本次改动的范围、明确不做什么、验收条件和受影响边界，再按风险选择最小充分的验证层级。开发循环不要求每次小改动都运行全量测试；合并、发布和高风险边界仍必须经过完整门禁。
@@ -60,11 +65,11 @@ Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
 
 1. 先同步 `package.json`、`package-lock.json`、`README.md`、`CHANGELOG.md` 和 `RELEASE_NOTES.md` 的版本号。
 2. 在目标 commit 创建匹配的 `vX.Y.Z` Tag；Tag 推送后等待 `Release verification` 全绿。
-3. 自动检查版本和 Tag 一致性、发布说明部署清单、最终 `dist`/压缩包的敏感内容、构建产物、第三方资源 SHA-256 和许可证清单。
+3. 自动检查版本和 Tag 一致性、面向用户的发布说明格式、最终 `dist`/压缩包的敏感内容、构建产物、第三方资源 SHA-256 和许可证清单；验证与部署记录放在内部发布记录中，不写入 `RELEASE_NOTES.md`。
 4. 创建 GitHub Release 前人工核对：Release 页面 Tag 与已验收 Tag 相同；附件来自已扫描的最终压缩包；附件 SHA-256 与本地/CI 记录一致；没有额外未扫描附件。
 5. GitHub Release 发布后自动部署：`Deploy release to production` 将 `production` 分支指针快进到该 Tag 的 commit（只快进、不 force、不并入 `main` 开发内容），Vercel 的 Branch Tracking 随之触发生产构建与部署。
 6. 部署完成后手动运行 `Release production verification`，填写同一个 Tag 和生产 HTTPS 地址，验收首页、Manifest、CSP、HSTS、X-Frame-Options 等响应头。
-7. 涉及 Supabase 迁移时，发布人必须在生产 Supabase 确认目标迁移已执行，再在发布说明记录结果；自动化测试不等于生产迁移已完成。
+7. 涉及 Supabase 迁移时，发布人必须在生产 Supabase 确认目标迁移已执行，并在内部发布记录登记结果；自动化测试不等于生产迁移已完成。
 
 ### production 分支与生产部署
 

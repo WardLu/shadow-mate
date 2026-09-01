@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [1.3.12] - 2026-09-01
+
+### Fixed
+- 修复删除家庭后重新登录并重新建立学习空间时，Growth Loop 首次返回陈旧学习者作用域导致孩子切换未完成的问题；当前切换仍有效时会自动重试一次，仍无法确认完整作用域时继续安全回滚。
+
+### Security
+- 修复本地开发或 Preview 在未配置环境变量时静默使用生产 Supabase 的问题；非生产来源默认只允许 loopback 本地 Supabase，远程连接必须显式设置 `VITE_SHADOW_ALLOW_PRODUCTION_SUPABASE=1`。
+- 本地 Auth 邮件主题改用 `product_id` 识别影伴，支持任意 feature worktree 端口；经过明确授权的生产临时验收会固定回跳到 `sm.shadow.wang`，避免邮件回退为 Shadow Nexus。
+
 ## [1.3.11] - 2026-09-01
 
 ### Changed

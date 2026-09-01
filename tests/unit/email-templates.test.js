@@ -75,6 +75,7 @@ describe("multi-product password recovery email", () => {
     expect(subjects).toHaveLength(6);
 
     for (const subject of subjects) {
+      expect(subject).toContain('(eq .Data.product_id "shadow-mate")');
       expect(subject).toContain("http://127.0.0.1:5173");
       expect(subject).toContain("http://localhost:5173");
       expect(subject).toContain("影伴 Shadow Mate");
