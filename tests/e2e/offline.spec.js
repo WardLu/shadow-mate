@@ -5,6 +5,42 @@ async function openModule(page, mod) {
   await page.click(`[data-go="${mod}"]`);
 }
 
+async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
+  const cards = root.locator("[data-hanzi-learning-card]");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-example-words]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-sentence]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-pinyin]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(20);
+
+  expect(await cards.evaluateAll((elements) => elements.map((card) => ({
+    visual: card.querySelectorAll("[data-hanzi-visual]").length,
+    word: Boolean(card.querySelector("[data-hanzi-example-word]")?.textContent?.trim()),
+    target: Boolean(card.querySelector("[data-hanzi-glyph]")?.textContent?.trim()),
+    pinyin: Boolean(card.querySelector("[data-writing-pinyin]")?.textContent?.trim()),
+    sentence: Boolean(card.querySelector("[data-hanzi-sentence]")?.textContent?.trim()),
+    writingHint: Boolean(card.querySelector("[data-hanzi-writing-hint]")?.textContent?.trim()),
+    gridCells: card.querySelectorAll("[data-writing-grid] .writing-cell").length,
+  })))).toEqual(Array.from({ length: 4 }, () => ({
+    visual: 1,
+    word: true,
+    target: true,
+    pinyin: true,
+    sentence: true,
+    writingHint: true,
+    gridCells: 5,
+  })));
+
+  if (includeSpeech) {
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]')).toHaveCount(4);
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="en-US"]')).toHaveCount(4);
+  }
+}
+
 test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
@@ -105,13 +141,22 @@ test.describe("Offline mode (no login)", () => {
     await expect(toast.evaluate((element) => element.parentElement?.id)).resolves.toBe("cloudPanel");
   });
 
-  test("navigation switches between modules", async ({ page }) => {
+  test("keeps exact top-level navigation and enters subjects from learning", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".navbtn")).toHaveText(["首页", "学习", "积分", "成长", "指南"]);
-    await expect(page.locator('.navbtn[data-mod="chinese"]')).toHaveCount(0);
-    await expect(page.locator('.navbtn[data-mod="math"]')).toHaveCount(0);
-    await expect(page.locator('.navbtn[data-mod="english"]')).toHaveCount(0);
-    await expect(page.locator('.navbtn[data-mod="book"]')).toHaveCount(0);
+    const topLevelNav = page.locator(".navbtn");
+    await expect(topLevelNav).toHaveCount(5);
+    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南"]);
+    for (const mod of ["chinese", "math", "english", "book"]) {
+      await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveCount(0);
+    }
+
+    await page.locator('[data-mod="learning"]').click();
+    await expect(page.locator("[data-go]")).toHaveCount(4);
+    await expect(page.locator('[data-go="chinese"]')).toBeVisible();
+    await expect(page.locator('[data-go="math"]')).toBeVisible();
+    await expect(page.locator('[data-go="english"]')).toBeVisible();
+    await expect(page.locator('[data-go="book"]')).toBeVisible();
+
     for (const [mod, label] of [
       ["chinese", "语文"],
       ["math", "数学"],
@@ -204,28 +249,44 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
-  test("keeps the daily writing workbook stable for local users, including printing", async ({ page }) => {
+  test("keeps the V2 Pilot learning-card snapshot stable for local users, including printing", async ({ page }) => {
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await page.goto("/");
     await openModule(page, "chinese");
+    await page.clock.pauseAt(new Date("2026-09-01T02:00:00.000Z"));
 
-    const readWorksheet = () => page.evaluate(() => {
+    const readWorksheetSnapshot = () => page.evaluate(() => {
       const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
+        rowId: row.dataset.writingRowId,
         itemId: row.dataset.writingItemId,
         glyph: row.querySelector("[data-writing-glyph]")?.textContent,
+        pinyin: row.querySelector("[data-writing-pinyin]")?.textContent,
+        exampleWord: row.querySelector("[data-writing-example-word]")?.textContent,
       }));
-      const screen = document.querySelector("[data-writing-worksheet]");
+      const readSheet = (root) => ({
+        assignmentId: root?.dataset.writingAssignmentId,
+        dayKey: root?.dataset.writingDayKey,
+        packId: root?.dataset.writingPackId,
+        packVersion: root?.dataset.writingPackVersion,
+        rows: root ? readRows(root) : [],
+      });
       return {
-        assignmentId: screen?.dataset.writingAssignmentId,
-        dayKey: screen?.dataset.writingDayKey,
-        packVersion: screen?.dataset.writingPackVersion,
-        rows: readRows(screen),
+        screen: readSheet(document.querySelector("[data-writing-worksheet]")),
+        print: readSheet(document.querySelector("[data-writing-print-sheet]")),
         state: window.learningDesk.getState(),
       };
     });
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
-    const beforePrint = await readWorksheet();
-    expect(beforePrint.rows).toHaveLength(4);
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    const beforePrint = await readWorksheetSnapshot();
+    expect(beforePrint.screen).toMatchObject({
+      dayKey: "2026-09-01",
+      packId: "hanzi-writing-v2",
+      packVersion: "hanzi-v2-pilot-1",
+    });
+    expect(beforePrint.screen.rows).toHaveLength(4);
+    expect(beforePrint.print).toEqual(beforePrint.screen);
 
     await page.evaluate(() => {
       window.__printCalls = 0;
@@ -235,17 +296,21 @@ test.describe("Offline mode (no login)", () => {
     });
     await page.locator("[data-print]").click();
     await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
-    expect(await readWorksheet()).toEqual(beforePrint);
+    expect(await readWorksheetSnapshot()).toEqual(beforePrint);
 
     await page.locator('[data-cmod="chinese-writing"]').click();
     await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveClass(/done/);
+    const afterCheckin = await readWorksheetSnapshot();
+    expect(afterCheckin.screen).toEqual(beforePrint.screen);
+    expect(afterCheckin.print).toEqual(beforePrint.print);
     await page.reload();
     await openModule(page, "chinese");
-    const afterReload = await readWorksheet();
-    expect(afterReload.assignmentId).toBe(beforePrint.assignmentId);
-    expect(afterReload.dayKey).toBe(beforePrint.dayKey);
-    expect(afterReload.packVersion).toBe(beforePrint.packVersion);
-    expect(afterReload.rows).toEqual(beforePrint.rows);
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
+    const afterReload = await readWorksheetSnapshot();
+    expect(afterReload.screen).toEqual(beforePrint.screen);
+    expect(afterReload.print).toEqual(beforePrint.print);
+    expect(afterReload.print).toEqual(afterReload.screen);
     await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveClass(/done/);
   });
 

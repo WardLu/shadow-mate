@@ -24,6 +24,12 @@
 
 ---
 
+## SHA-16 acceptance boundary after the V2 Pilot visual slice
+
+`focus-rows-v1` 仍保留为 rotation worksheet snapshot 的技术 `layoutVersion` 兼容标识，但当前页面不再把它作为裸字帖输出标准。原来的 `focus-rows-v1` 裸字帖输出已被 V2 Pilot 的图字纵向学习切片替换：语文页先展示 4 张 rich learning cards，再提供每卡 5 格的轻量临摹区。
+
+rotation、print 和 state 的约束不变：同日 assignment 稳定、屏幕与打印消费同一份 snapshot、打印不推进轮动或写入完成、`chinese-writing` 打卡仍可撤销且不删除 worksheet completion。完整课程、SM-2、P1/P3 仍明确 deferred，不属于本次 SHA-16 验收。
+
 ## File Map
 
 ### 新建文件

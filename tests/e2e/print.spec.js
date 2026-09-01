@@ -20,6 +20,42 @@ async function openChineseAtFixedTime(page) {
   await page.clock.pauseAt(FIXED_NOW);
 }
 
+async function expectRichLearningCards(root, { includeSpeech = false } = {}) {
+  const cards = root.locator("[data-hanzi-learning-card]");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-example-words]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-sentence]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-pinyin]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(20);
+
+  expect(await cards.evaluateAll((elements) => elements.map((card) => ({
+    visual: card.querySelectorAll("[data-hanzi-visual]").length,
+    word: Boolean(card.querySelector("[data-hanzi-example-word]")?.textContent?.trim()),
+    target: Boolean(card.querySelector("[data-hanzi-glyph]")?.textContent?.trim()),
+    pinyin: Boolean(card.querySelector("[data-writing-pinyin]")?.textContent?.trim()),
+    sentence: Boolean(card.querySelector("[data-hanzi-sentence]")?.textContent?.trim()),
+    writingHint: Boolean(card.querySelector("[data-hanzi-writing-hint]")?.textContent?.trim()),
+    gridCells: card.querySelectorAll("[data-writing-grid] .writing-cell").length,
+  })))).toEqual(Array.from({ length: 4 }, () => ({
+    visual: 1,
+    word: true,
+    target: true,
+    pinyin: true,
+    sentence: true,
+    writingHint: true,
+    gridCells: 5,
+  })));
+
+  if (includeSpeech) {
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]')).toHaveCount(4);
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="en-US"]')).toHaveCount(4);
+  }
+}
+
 async function readPrintSnapshot(page) {
   return page.evaluate(() => {
     const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
@@ -35,12 +71,14 @@ async function readPrintSnapshot(page) {
       screen: {
         assignmentId: screen?.dataset.writingAssignmentId,
         dayKey: screen?.dataset.writingDayKey,
+        packId: screen?.dataset.writingPackId,
         packVersion: screen?.dataset.writingPackVersion,
         rows: readRows(screen),
       },
       print: {
         assignmentId: print?.dataset.writingAssignmentId,
         dayKey: print?.dataset.writingDayKey,
+        packId: print?.dataset.writingPackId,
         packVersion: print?.dataset.writingPackVersion,
         rows: readRows(print),
       },
@@ -52,7 +90,16 @@ async function readPrintSnapshot(page) {
 test.describe("Snapshot-only Hanzi print sheet", () => {
   test("mocks window.print without changing state or creating completion", async ({ page }) => {
     await openChineseAtFixedTime(page);
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
     const before = await readPrintSnapshot(page);
+    expect(before.screen).toMatchObject({
+      dayKey: "2026-09-01",
+      packId: "hanzi-writing-v2",
+      packVersion: "hanzi-v2-pilot-1",
+    });
+    expect(before.screen.rows).toHaveLength(4);
+    expect(before.print).toEqual(before.screen);
     await page.evaluate(() => {
       window.__printCalls = 0;
       window.print = () => { window.__printCalls += 1; };
@@ -71,9 +118,11 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
 
   test("shows only the print sheet in print media", async ({ page }) => {
     await openChineseAtFixedTime(page);
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
     await page.emulateMedia({ media: "print" });
 
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"));
     await expect(page.locator(".app")).toBeHidden();
     await expect(page.locator(".nav")).toBeHidden();
     await expect(page.locator("[data-writing-worksheet]")).toBeHidden();
