@@ -539,7 +539,7 @@ function dayTotal(day){
    ========================================================= */
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
-function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
+function buttonContent(iconName, text){ return `${icon(iconName)}<span>${escapeHtml(text)}</span>`; }
 let activeAudio = null;
 let activeAudioSource = null;
 let activeAudioSourceUrl = null;
