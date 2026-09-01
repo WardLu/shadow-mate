@@ -20,12 +20,24 @@ async function openChineseAtFixedTime(page) {
   await page.clock.pauseAt(FIXED_NOW);
 }
 
-async function installSpeechMock(page, voices = [{ lang: "zh-CN" }, { lang: "en-US" }]) {
-  await page.addInitScript((configuredVoices) => {
+async function installSpeechMock(page, {
+  voices = [{ lang: "zh-CN" }, { lang: "en-US" }],
+  mode = "end",
+} = {}) {
+  await page.addInitScript(({ configuredVoices, configuredMode }) => {
     const utterances = [];
     Object.defineProperty(window, "__speechUtterances", {
       configurable: true,
       value: utterances,
+    });
+    Object.defineProperty(window, "__speechMode", {
+      configurable: true,
+      writable: true,
+      value: configuredMode,
+    });
+    Object.defineProperty(window, "__speechVoiceLangs", {
+      configurable: true,
+      value: [],
     });
     Object.defineProperty(window, "SpeechSynthesisUtterance", {
       configurable: true,
@@ -43,11 +55,17 @@ async function installSpeechMock(page, voices = [{ lang: "zh-CN" }, { lang: "en-
         },
         speak(utterance) {
           utterances.push({ text: utterance.text, lang: utterance.lang });
+          window.__speechVoiceLangs.push(utterance.voice?.lang || null);
+          if (window.__speechMode === "error") {
+            queueMicrotask(() => utterance.onerror?.({ error: "synthesis-failed" }));
+            return;
+          }
+          if (window.__speechMode === "pending") return;
           queueMicrotask(() => utterance.onend?.());
         },
       },
     });
-  }, voices);
+  }, { configuredVoices: voices, configuredMode: mode });
 }
 
 async function readWorksheetSnapshot(page) {
@@ -156,7 +174,7 @@ test.describe("Hanzi writing worksheet", () => {
       piperEngineRequests += 1;
       await route.continue();
     });
-    await installSpeechMock(page, [{ lang: "en-US" }]);
+    await installSpeechMock(page, { voices: [{ lang: "en-US" }] });
     await openChineseAtFixedTime(page);
 
     const before = await readWorksheetSnapshot(page);
@@ -175,6 +193,112 @@ test.describe("Hanzi writing worksheet", () => {
     expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
     expect(after.assignment.completions).toEqual(before.assignment.completions);
     expect(after.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("accepts a non-exact Mandarin voice locale without selecting a Cantonese voice", async ({ page }) => {
+    await installSpeechMock(page, {
+      voices: [{ lang: "yue-CN" }, { lang: "zh-Hans-CN" }],
+    });
+    await openChineseAtFixedTime(page);
+
+    const before = await readWorksheetSnapshot(page);
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    const expectedText = await button.getAttribute("data-speech-text");
+    await button.click();
+
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: expectedText, lang: "zh-CN" },
+    ]);
+    expect(await page.evaluate(() => window.__speechVoiceLangs)).toEqual(["zh-Hans-CN"]);
+
+    const after = await readWorksheetSnapshot(page);
+    expect(after.screen).toEqual(before.screen);
+    expect(after.print).toEqual(before.print);
+    expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(after.assignment.completions).toEqual(before.assignment.completions);
+    expect(after.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("recovers a Chinese speech error and allows a retry without changing learning state", async ({ page }) => {
+    await installSpeechMock(page, { mode: "error" });
+    await openChineseAtFixedTime(page);
+
+    const before = await readWorksheetSnapshot(page);
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    await expect(button).toContainText("中文发音失败，请重试");
+    await expect(button).not.toBeDisabled();
+    await expect(button).toHaveAttribute("data-speech-failure", "true");
+
+    const afterError = await readWorksheetSnapshot(page);
+    expect(afterError.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(afterError.assignment.completions).toEqual(before.assignment.completions);
+    expect(afterError.state.checkins).toEqual(before.state.checkins);
+
+    await page.evaluate(() => { window.__speechMode = "end"; });
+    await page.clock.fastForward(600);
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
+    await expect(button).not.toBeDisabled();
+    expect(await button.getAttribute("data-speech-failure")).toBeNull();
+
+    const afterRetry = await readWorksheetSnapshot(page);
+    expect(afterRetry.screen).toEqual(before.screen);
+    expect(afterRetry.print).toEqual(before.print);
+    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
+    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("recovers a pending Chinese utterance after the 4-second timeout and allows a retry", async ({ page }) => {
+    await installSpeechMock(page, { mode: "pending" });
+    await openChineseAtFixedTime(page);
+
+    const before = await readWorksheetSnapshot(page);
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    await expect(button).toBeDisabled();
+
+    await page.clock.fastForward(4000);
+    await expect(button).toContainText("中文发音未响应，请重试");
+    await expect(button).not.toBeDisabled();
+
+    await page.evaluate(() => { window.__speechMode = "end"; });
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
+    await expect(button).not.toBeDisabled();
+    expect(await button.getAttribute("data-speech-failure")).toBeNull();
+
+    const afterRetry = await readWorksheetSnapshot(page);
+    expect(afterRetry.screen).toEqual(before.screen);
+    expect(afterRetry.print).toEqual(before.print);
+    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
+    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
+    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
+  });
+
+  test("rebinds speech buttons after module switches without stale state or duplicate listeners", async ({ page }) => {
+    await installSpeechMock(page, { mode: "error" });
+    await openChineseAtFixedTime(page);
+
+    const oldButton = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await oldButton.click();
+    await expect(oldButton).toContainText("中文发音失败，请重试");
+
+    await openLearningModule(page, "english");
+    await openLearningModule(page, "chinese");
+    const newButton = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await expect(newButton).toContainText("中文发音");
+    expect(await newButton.getAttribute("data-speech-failure")).toBeNull();
+
+    await page.evaluate(() => { window.__speechMode = "end"; });
+    await newButton.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
+    await expect(newButton).not.toBeDisabled();
+    expect(await page.evaluate(() => window.__speechUtterances.map(({ lang }) => lang))).toEqual([
+      "zh-CN",
+      "zh-CN",
+    ]);
   });
 
   test("keeps the same assignment, order, and glyphs after reload and module switches", async ({ page }) => {

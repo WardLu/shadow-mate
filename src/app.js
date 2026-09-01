@@ -582,6 +582,13 @@ function stopActivePlayback() {
   }
 }
 
+function isMandarinChineseVoiceLocale(locale) {
+  return locale === "zh"
+    || locale === "cmn"
+    || /^zh-(?:cn|hans(?:-cn)?)(?:-|$)/.test(locale)
+    || /^cmn-cn(?:-|$)/.test(locale);
+}
+
 function findSystemVoice(locale) {
   const synth = window.speechSynthesis;
   if (!(synth && typeof window.SpeechSynthesisUtterance === "function")) return null;
@@ -591,7 +598,9 @@ function findSystemVoice(locale) {
   const language = normalizedLocale.split("-")[0];
   const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
   return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
-    || voices.find((voice) => normalizeVoiceLocale(voice) === language)
+    || voices.find((voice) => locale === "zh-CN"
+      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
+      : normalizeVoiceLocale(voice) === language)
     || null;
 }
 
