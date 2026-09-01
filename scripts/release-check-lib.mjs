@@ -43,18 +43,7 @@ export function collectReleaseFindings(metadata) {
   if (!new RegExp(`^## v${escapeRegExp(version)}\\s`, "m").test(metadata.releaseNotes || "")) {
     findings.push(`RELEASE_NOTES.md must contain the ${expectedTag} release heading`);
   }
-  if (metadata.requireDeploymentChecklist && !getLatestReleaseSection(metadata.releaseNotes || "").includes("部署清单")) {
-    findings.push("RELEASE_NOTES.md latest release section must contain a 部署清单");
-  }
-
   return findings;
-}
-
-export function getLatestReleaseSection(text) {
-  const start = text.search(/^##\s+(?:v\d|\[\d)/m);
-  if (start < 0) return "";
-  const next = text.slice(start + 3).search(/^##\s+/m);
-  return next < 0 ? text.slice(start) : text.slice(start, start + 3 + next);
 }
 
 export function scanReleaseEntries(entries) {

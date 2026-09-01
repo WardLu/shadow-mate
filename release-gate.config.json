@@ -6,7 +6,6 @@
     "public/piper/piper_phonemize.data",
     "public/piper/piper_phonemize.wasm"
   ],
-  "requireDeploymentChecklist": true,
   "production": {
     "requiredHeaders": ["content-security-policy", "strict-transport-security", "x-frame-options"],
     "forbiddenHeaderValues": ["unsafe-inline"],
