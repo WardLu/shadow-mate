@@ -27,7 +27,13 @@ export function recordAnalyticsEvent(eventName, {
   if (!ALLOWED_EVENTS.has(eventName)) return false;
 
   const flagKey = `${EVENT_FLAG_PREFIX}:${eventName}`;
-  if (once && storage?.getItem(flagKey) === "1") return false;
+  if (once) {
+    try {
+      if (storage?.getItem(flagKey) === "1") return false;
+    } catch (_) {
+      // Treat unavailable storage as if the event has not been recorded.
+    }
+  }
 
   try {
     // Deliberately send no properties: event names are the complete payload.
