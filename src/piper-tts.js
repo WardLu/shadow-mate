@@ -14,6 +14,9 @@ export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
 export const VOICE_FILES = [VOICE + ".onnx", VOICE + ".onnx.json"];
+export const VOICE_HEAD_TIMEOUT_MS = 10_000;
+export const VOICE_RESPONSE_TIMEOUT_MS = 20_000;
+export const VOICE_READ_TIMEOUT_MS = 30_000;
 export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
@@ -40,13 +43,49 @@ async function openVoiceCache() {
   return caches.open(VOICE_CACHE);
 }
 
-async function getContentLength(url, signal) {
+function createRequestController(parentSignal, timeoutMs, timeoutMessage) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromParent = () => controller.abort();
+  if (parentSignal?.aborted) controller.abort();
+  else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    timeoutError() {
+      if (!timedOut) return null;
+      const error = new Error(timeoutMessage);
+      error.name = "TimeoutError";
+      return error;
+    },
+    clear() {
+      window.clearTimeout(timer);
+      parentSignal?.removeEventListener?.("abort", abortFromParent);
+    },
+  };
+}
+
+async function fetchWithTimeout(url, options, timeoutMs, timeoutMessage) {
+  const request = createRequestController(options?.signal, timeoutMs, timeoutMessage);
   try {
-    const res = await fetch(url, { method: "HEAD", signal });
+    return await fetch(url, { ...options, signal: request.signal });
+  } catch (error) {
+    throw request.timeoutError() || error;
+  } finally {
+    request.clear();
+  }
+}
+
+async function getContentLength(url, signal, timeoutMs = VOICE_HEAD_TIMEOUT_MS) {
+  try {
+    const res = await fetchWithTimeout(url, { method: "HEAD", signal }, timeoutMs, "语音包请求超时");
     if (!res.ok) return 0;
     return Number(res.headers.get("content-length")) || 0;
   } catch (error) {
-    if (error?.name === "AbortError") throw error;
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") throw error;
     return 0;
   }
 }
@@ -60,45 +99,59 @@ export async function isVoiceCached() {
   }
 }
 
-export async function downloadVoice(onProgress, signal) {
+export async function downloadVoice(onProgress, signal, {
+  headTimeoutMs = VOICE_HEAD_TIMEOUT_MS,
+  responseTimeoutMs = VOICE_RESPONSE_TIMEOUT_MS,
+  readTimeoutMs = VOICE_READ_TIMEOUT_MS,
+} = {}) {
   const cache = await openVoiceCache();
   const pendingFiles = [];
   for (const url of VOICE_FILES) {
     if (!(await cache.match(url))) pendingFiles.push(url);
   }
 
-  const lengths = await Promise.all(pendingFiles.map((url) => getContentLength(url, signal)));
+  const lengths = await Promise.all(pendingFiles.map((url) => getContentLength(url, signal, headTimeoutMs)));
   const total = lengths.every((length) => length > 0) ? lengths.reduce((sum, length) => sum + length, 0) : 0;
   let receivedTotal = 0;
 
   for (let fileIndex = 0; fileIndex < pendingFiles.length; fileIndex += 1) {
     const url = pendingFiles[fileIndex];
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    const res = await fetch(url, { signal });
+    const res = await fetchWithTimeout(url, { signal }, responseTimeoutMs, "语音包下载超时，请检查网络或代理后重试");
     if (!res.ok) throw new Error("语音包下载失败");
     const fileTotal = Number(res.headers.get("content-length")) || lengths[fileIndex] || 0;
+    if (!res.body?.getReader) throw new Error("语音包响应无内容");
     const reader = res.body.getReader();
     const chunks = [];
     let receivedFile = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-      if (value) {
-        chunks.push(value);
-        receivedFile += value.length;
-        if (onProgress) {
-          const progressTotal = total || fileTotal;
-          const progressReceived = total ? receivedTotal + receivedFile : receivedFile;
-          onProgress(progressReceived, progressTotal, {
-            fileIndex,
-            fileCount: pendingFiles.length,
-            fileReceived: receivedFile,
-            fileTotal,
-            totalKnown: total > 0,
-          });
+    try {
+      for (;;) {
+        const { done, value } = await withTimeout(reader.read(), readTimeoutMs, "语音包下载超时，请检查网络或代理后重试");
+        if (done) break;
+        if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+        if (value) {
+          chunks.push(value);
+          receivedFile += value.length;
+          if (onProgress) {
+            const progressTotal = total || fileTotal;
+            const progressReceived = total ? receivedTotal + receivedFile : receivedFile;
+            onProgress(progressReceived, progressTotal, {
+              fileIndex,
+              fileCount: pendingFiles.length,
+              fileReceived: receivedFile,
+              fileTotal,
+              totalKnown: total > 0,
+            });
+          }
         }
       }
+    } catch (error) {
+      try {
+        await reader.cancel?.();
+      } catch (_) {
+        // The request has already failed; preserve the original timeout/network error.
+      }
+      throw error;
     }
     await cache.put(
       url,
@@ -231,7 +284,7 @@ export function askDownloadVoice(onProgress, { onDownloadStart } = {}) {
       } catch (error) {
         if (controller.signal.aborted || error?.name === "AbortError") return;
         if (onProgress) onProgress(0, 0);
-        finish("error");
+        finish(error?.name === "TimeoutError" ? "timeout" : error?.name === "TypeError" ? "network" : "error");
       }
     };
 

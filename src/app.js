@@ -807,7 +807,12 @@ async function speak(t, button, locale = "en-US"){
       }
       if (!isCurrentSpeech()) return;
       if (status !== "ok") {
-        fail("离线语音下载失败，请检查网络后重试");
+        const message = status === "timeout"
+          ? "离线英语语音下载超时，请检查网络或代理后重试"
+          : status === "network"
+            ? "离线英语语音下载失败，请检查网络、代理或 CDN 跨域配置后重试"
+            : "离线英语语音下载失败，请重试";
+        fail(message);
         return;
       }
       startEngineWarmup();

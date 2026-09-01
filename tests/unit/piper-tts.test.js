@@ -94,6 +94,39 @@ describe("offline Piper voice download", () => {
     expect(progress.at(-1)).toEqual([6, 6]);
   });
 
+  test("times out a stalled HEAD request", async () => {
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal("fetch", vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    })));
+
+    await expect(downloadVoice(undefined, undefined, { headTimeoutMs: 5 }))
+      .rejects.toMatchObject({ name: "TimeoutError", message: "语音包请求超时" });
+  });
+
+  test("times out a stalled GET response", async () => {
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal("fetch", vi.fn((url, options) => {
+      if (options?.method === "HEAD") {
+        return Promise.resolve(responseWithChunks([], { "content-length": url.endsWith(".onnx") ? "5" : "1" }));
+      }
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    }));
+
+    await expect(downloadVoice(undefined, undefined, { responseTimeoutMs: 5 }))
+      .rejects.toMatchObject({ name: "TimeoutError", message: "语音包下载超时，请检查网络或代理后重试" });
+  });
+
   test("rejects when speech synthesis never settles", async () => {
     await expect(withTimeout(new Promise(() => {}), 5, "发音合成超时")).rejects.toThrow("发音合成超时");
   });
