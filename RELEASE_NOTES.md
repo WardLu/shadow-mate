@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 修复删除家庭后重新登录并重新建立学习空间时，孩子切换可能停在“切换未完成”的问题；Growth Loop 返回陈旧作用域时会在当前操作仍有效的情况下自动重试一次，仍失败则保持安全保护并提示重试。
+
 ## v1.3.11 - 2026-09-01
 
 - 统一 Confirm signup、Magic Link/OTP、邮箱变更、邀请、二次认证和密码找回邮件模板的产品识别：影伴 Shadow Mate、影匣 Shadow Card、影裁 Shadow Size、影笺 Quick flomo 按认证请求动态显示名称、页脚标语和产品详情链接；未知来源回退为 Shadow Nexus。

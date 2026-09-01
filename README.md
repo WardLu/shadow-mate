@@ -98,6 +98,15 @@ shared_test、Schema、Edge generation 和 5173 产品进程；已运行且身�
 `supabase:local:start` 与 `supabase:local:functions:serve` 仍保留为一版兼容排查入口，
 不应与中央 Edge generation 同时启动。
 
+中央 `npm run local-dev` 的产品进程路径由 Shadow Portal 控制面登记的 canonical checkout
+决定，不会自动跟随命令所在的 feature worktree；它也不会因为调用者位于哪个 Git 分支而改变
+后端目标。验收 feature worktree 时，应在该 worktree 直接启动独立端口，例如
+`npm run dev -- --host 127.0.0.1 --port 5174`，并明确配置要使用的 `VITE_SUPABASE_URL`；不要让
+两个 worktree 复用同一个产品端口，也不要把 `npm run dev` 误认为会自动切换到本地 Supabase。
+共享本地 Supabase 包含 Mailpit；中央入口会复用或启动它，Web/API 地址为
+`http://127.0.0.1:54324`。feature worktree 直接启动 Vite 不会自动启用 Mailpit；需要本地 OTP
+验收时，还要显式把前端和受管 Edge Runtime 配置到共享本地 Supabase，不能仅凭端口判断环境。
+
 仅需兼容分步入口时：
 
 ```powershell

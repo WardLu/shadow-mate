@@ -182,6 +182,7 @@ erDiagram
 - Learning Desk 的兼容状态位于 localStorage；Growth Loop 的快照、activity event 和 outbox 位于 IndexedDB，二者都必须经过当前 profile scope 的写入 guard。
 - fail-closed marker 使用 localStorage 持久化。重开页面、刷新、普通退出登录和 Auth session 变化都不会解除 marker；marker 存在时，hydrate/loadScope 只允许保持内存只读状态，IndexedDB adapter 延迟 open，不创建数据库/versionchange/readwrite transaction，也不迁移或写入 localStorage。只有账号面板明确执行本机清理且两种本机存储都清理成功后才移除 marker；失败时 marker 保持并允许重试。
 - profile-scoped business writes（快照、outbox、activity，以及 claim/update/move 等业务写入）绑定当前 operation 的 `canCommit` 与可同步取消的 `AbortSignal`。request success 到 transaction complete 之间若 scope 失效或 operation 被取消，会立即 abort；这覆盖单个 microtask 内完成的 stale window，不能只依赖定时轮询。tuple-safe 的 claim release，以及用户明确触发的 `clearScope`/`clearAll` cleanup，是有意保留的显式 cleanup 例外，不宣称由该 operation signal 覆盖。
+- 切换学习者时，Growth Loop 必须返回与目标家庭、学习者和 operation 完全一致的作用域才算激活成功。若底层读取被旧操作抢先完成而返回上一份快照但没有抛错，客户端会在当前 operation 仍有效时重试一次；第二次仍不匹配则回滚 active tuple 并保持 fail-closed，不允许继续本机或云端写入。
 - “清除本机数据”会枚举并验证全部 app-owned Learning Desk keys：旧 `shadow_mate_workbench_v1`、pending、每个 profile-scoped key 和 `legacy_backup`；任一删除或删除后验证失败都会保留 marker，成功后不会重新生成 pending key。
 - outbox claim 由 `(worker_id, operation_id, lease_id)` 组成。有效 lease 期间同一 worker 的新 operation 也不能覆盖旧 claim；发送前必须从 IndexedDB 重读并验证完整 tuple 与 lease expiry，失效 claim 释放/跳过，不发送 cloud request。发送结果只能更新仍匹配该 tuple 的 outbox 行。
 
