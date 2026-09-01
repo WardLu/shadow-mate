@@ -1186,6 +1186,7 @@ test.describe("Authenticated cloud workspace", () => {
     const thirdChoice = page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`);
     await expect(firstChoice).toHaveClass(/active/);
     await expect(thirdChoice).toBeVisible();
+    await expect.poll(() => api.activityPayloads.length).toBeGreaterThan(0);
     api.rpcPayloads.length = 0;
     api.activityPayloads.length = 0;
 
