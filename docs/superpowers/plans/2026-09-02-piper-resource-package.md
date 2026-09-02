@@ -224,7 +224,7 @@
 
 **Interfaces:**
 
-- `downloadPiperResource(packageId: string, onProgress?: (received: number, total: number, details: object) => void, signal?: AbortSignal): Promise<DownloadResult>`
+- `downloadPiperResource(packageId: string, onProgress?: (received: number, total: number, details: object) => void, signal?: AbortSignal, options?: { canCommit?: () => boolean }): Promise<DownloadResult>`
 - `getPiperDownloadError(error): { code: string, message: string }`
 - Consumes `getPiperResourcePackage`, `isPiperResourceCached`, and the package store from Task 2.
 
@@ -268,7 +268,7 @@
 
   Keep hash and `Cache.put` on the same stream so JS never accumulates the complete ONNX body. After `Cache.put` resolves, compare actual bytes and hash, then write the file completion data and only after every file passes write the package completion marker. On any error, cancel the stream, delete the failed file key and package marker, and map errors to `timeout`, `network`, `http`, `integrity`, `storage` or `unsupported`.
 
-  Use a module-level same-tab single-flight map keyed by `packageId@version`; a second call returns the existing promise and does not issue another HEAD/GET. Do not add HTTP Range in this task.
+  Use a module-level same-tab single-flight map keyed by `packageId@version`; a second call returns the existing promise and does not issue another HEAD/GET. If `options.canCommit` is supplied, check it immediately before each file completion and before the package completion marker; a false result aborts/cleans up and must never leave a completed package. Do not add HTTP Range in this task.
 
 - [ ] **Step 4: Run focused tests and the dependency/security checks**
 
@@ -363,6 +363,7 @@
 
 - Create: `src/piper-resource-ui.js`
 - Create: `src/piper-resource-lock.js`
+- Modify: `src/piper-resource-download.js`
 - Modify: `src/app.js`
 - Modify: `src/app.css`
 - Modify: `tests/unit/piper-resource-ui.test.js`
@@ -372,7 +373,7 @@
 
 - `mountPiperResourceManager(container: HTMLElement): () => void`
 - `renderPiperResourceStatus(container, status): void`
-- `acquirePiperDownloadLock(key: string, task: () => Promise<unknown>): Promise<unknown>`
+- `acquirePiperDownloadLock(key: string, task: (context: { signal: AbortSignal, canCommit: () => boolean }) => Promise<unknown>): Promise<unknown>`
 
 - [ ] **Step 1: Write failing manager tests**
 
@@ -396,7 +397,7 @@
 
 - [ ] **Step 4: Add safe cross-tab locking**
 
-  Use `navigator.locks.request("shadow-mate-piper:<packageId>@<version>", ...)` when available. When unavailable, use a short `localStorage` lease with owner token, expiry and release in `finally`; if storage is unavailable or ownership is lost, fail safe by allowing only the current tab’s single-flight operation and never deleting another tab’s cache. Lock failure cannot mark a download complete.
+  Use `navigator.locks.request("shadow-mate-piper:<packageId>@<version>", ...)` when available. When unavailable, use a short `localStorage` lease with owner token, expiry and release in `finally`; expose an `AbortSignal` and `canCommit()` context to the task. Lease loss must abort the task and make `canCommit()` false; the downloader checks that guard immediately before writing file/package completion markers. If storage is unavailable or ownership is lost, fail safe by allowing only the current tab’s single-flight operation and never deleting another tab’s cache. Lock failure cannot mark a download complete.
 
 - [ ] **Step 5: Update guide copy and run UI tests**
 
