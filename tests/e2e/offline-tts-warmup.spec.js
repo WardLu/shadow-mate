@@ -32,6 +32,7 @@ test.describe("Offline voice warmup", () => {
           export const ENGINE_LOAD_TIMEOUT_MS = 60000;
           export const SYNTHESIS_TIMEOUT_MS = 30000;
           export const withTimeout = (promise) => promise;
+          export const resetLocalVoiceEngine = async () => {};
           export const askDownloadVoice = (packageId, _progress, { onDownloadStart } = {}) => new Promise((resolve) => {
             onDownloadStart?.(packageId);
             window.__releasePackageDownload = () => resolve("ok");
@@ -71,6 +72,7 @@ test.describe("Offline voice warmup", () => {
           export const ENGINE_LOAD_TIMEOUT_MS = 60000;
           export const SYNTHESIS_TIMEOUT_MS = 30000;
           export const withTimeout = (promise) => promise;
+          export const resetLocalVoiceEngine = async () => {};
           export const askDownloadVoice = async () => "ok";
           export const prepareLocalVoice = async () => {};
           export const speakLocally = async (_text, packageId) => {

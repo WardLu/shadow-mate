@@ -3,6 +3,115 @@ import { test, expect } from "@playwright/test";
 test.describe("System speech fallback", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("cancels Web Speech before entering the gated Mandarin Piper path without a usable voice", async ({ page }) => {
+    await page.route("**/src/piper-tts.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const ENGINE_LOAD_TIMEOUT_MS = 60000;
+          export const SYNTHESIS_TIMEOUT_MS = 30000;
+          export const withTimeout = (promise) => promise;
+          export const askDownloadVoice = async (packageId) => {
+            window.__speechFallbackOrder.push(["piper", packageId]);
+            return "gated";
+          };
+          export const prepareLocalVoice = async () => {};
+          export const resetLocalVoiceEngine = async () => {
+            window.__speechFallbackOrder.push(["reset"]);
+          };
+          export const speakLocally = async () => ({ url: "blob:unused", duration: 0 });
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      const order = [];
+      Object.defineProperty(window, "__speechFallbackOrder", { configurable: true, value: order });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: {
+          cancel() { order.push(["cancel"]); },
+          getVoices() { return []; },
+          speak() {},
+        },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    await page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first().click();
+
+    await expect.poll(() => page.evaluate(() => window.__speechFallbackOrder)).toEqual([
+      ["cancel"],
+      ["piper", "zh_CN-chaowen-medium"],
+    ]);
+  });
+
+  test("resets a timed-out local engine before a fresh English retry", async ({ page }) => {
+    await page.route("**/src/piper-tts.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const ENGINE_LOAD_TIMEOUT_MS = 60000;
+          export const SYNTHESIS_TIMEOUT_MS = 30000;
+          export const askDownloadVoice = async () => "ok";
+          export const prepareLocalVoice = async () => {};
+          export const withTimeout = (promise, _timeout, message) => {
+            if (message === "发音合成超时" && (window.__localEngineAttempts || 0) === 1) {
+              const error = new Error(message);
+              error.name = "TimeoutError";
+              return Promise.reject(error);
+            }
+            return promise;
+          };
+          export const speakLocally = async () => {
+            const attempt = (window.__localEngineAttempts = (window.__localEngineAttempts || 0) + 1);
+            if (attempt === 1) return new Promise(() => {});
+            return { url: "blob:fresh-engine", duration: 0 };
+          };
+          export const resetLocalVoiceEngine = async () => {
+            window.__localEngineResets = (window.__localEngineResets || 0) + 1;
+          };
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { cancel() {}, getVoices() { return []; }, speak() {} },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(HTMLMediaElement.prototype, "play", {
+        configurable: true,
+        value: async function play() {
+          window.__freshRetryPlays = (window.__freshRetryPlays || 0) + 1;
+          this.onended?.();
+        },
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="english"]');
+    const button = page.locator("[data-speak]").first();
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.__localEngineResets || 0)).toBe(1);
+
+    await button.click();
+    await expect.poll(() => page.evaluate(() => ({
+      attempts: window.__localEngineAttempts,
+      resets: window.__localEngineResets,
+      plays: window.__freshRetryPlays || 0,
+    }))).toEqual({ attempts: 2, resets: 1, plays: 1 });
+  });
+
   test("cancels a system utterance that never starts before one English Piper playback", async ({ page }) => {
     await page.route("**/src/piper-tts.js*", async (route) => {
       await route.fulfill({
@@ -11,6 +120,7 @@ test.describe("System speech fallback", () => {
           export const ENGINE_LOAD_TIMEOUT_MS = 60000;
           export const SYNTHESIS_TIMEOUT_MS = 30000;
           export const withTimeout = (promise) => promise;
+          export const resetLocalVoiceEngine = async () => {};
           export const askDownloadVoice = async (packageId) => {
             window.__piperPackages = [...(window.__piperPackages || []), ["download", packageId]];
             return "ok";
@@ -81,6 +191,7 @@ test.describe("System speech fallback", () => {
           export const ENGINE_LOAD_TIMEOUT_MS = 60000;
           export const SYNTHESIS_TIMEOUT_MS = 30000;
           export const withTimeout = (promise) => promise;
+          export const resetLocalVoiceEngine = async () => {};
           export const askDownloadVoice = (packageId) => new Promise((resolve) => {
             window.__downloadCalls = [...(window.__downloadCalls || []), packageId];
             window.__finishDownload = () => resolve("ok");
@@ -186,5 +297,57 @@ test.describe("System speech fallback", () => {
     });
 
     expect(result).toEqual({ failed: "error", engines: 2, destroys: 1, generates: 2 });
+  });
+
+  test("replaces a hung Piper engine after synthesis timeout", async ({ page }) => {
+    await page.route("**/piper-tts-web.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export class OnnxWebRuntime { constructor() {} }
+          export class PhonemizeWebRuntime { constructor() {} }
+          export class PiperWebEngine {
+            constructor() { window.__timeoutEngines = (window.__timeoutEngines || 0) + 1; }
+            async generate() {
+              const call = (window.__timeoutGenerates = (window.__timeoutGenerates || 0) + 1);
+              if (call === 1) return new Promise(() => {});
+              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
+            }
+            destroy() { window.__timeoutDestroys = (window.__timeoutDestroys || 0) + 1; }
+          }
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      const cacheStore = new Map([
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["model"]))],
+        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
+      ]);
+      Object.defineProperty(window, "caches", {
+        configurable: true,
+        value: { open: async () => ({ match: async (url) => cacheStore.get(url) }) },
+      });
+    });
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      const { resetLocalVoiceEngine, speakLocally, withTimeout } = await import("/src/piper-tts.js");
+      const timedOut = await withTimeout(
+        speakLocally("first", "en_US-ljspeech-medium"),
+        5,
+        "发音合成超时"
+      ).then(() => null, (error) => error.name);
+      await resetLocalVoiceEngine();
+      const next = await speakLocally("second", "en_US-ljspeech-medium");
+      URL.revokeObjectURL(next.url);
+      return {
+        timedOut,
+        engines: window.__timeoutEngines,
+        destroys: window.__timeoutDestroys,
+        generates: window.__timeoutGenerates,
+      };
+    });
+
+    expect(result).toEqual({ timedOut: "TimeoutError", engines: 2, destroys: 1, generates: 2 });
   });
 });

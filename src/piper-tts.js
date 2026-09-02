@@ -93,12 +93,13 @@ function normalizeDownloadArguments(packageId, onProgress, options) {
 
 let enginePromise = null;
 let activeEngineSession = null;
+let engineGeneration = 0;
 
 async function disposeEngineSession(session) {
   if (!session || session.disposed) return;
   session.disposed = true;
   try {
-    await session.engine?.destroy?.();
+    Promise.resolve(session.engine?.destroy?.()).catch(() => {});
   } catch (_) {
     // A failed engine must never prevent object URL cleanup or a fresh retry.
   }
@@ -161,33 +162,40 @@ async function loadEngine() {
 export async function resetLocalVoiceEngine() {
   const pending = enginePromise;
   const active = activeEngineSession;
+  engineGeneration += 1;
   enginePromise = null;
   activeEngineSession = null;
   await disposeEngineSession(active);
   if (pending) {
-    const resolved = await pending.catch(() => null);
-    if (resolved && resolved !== active) await disposeEngineSession(resolved);
+    void pending.then(
+      (resolved) => {
+        if (resolved !== active) void disposeEngineSession(resolved);
+      },
+      () => {}
+    );
   }
 }
 
 export async function speakLocally(text, packageId = ENGLISH_PIPER_PACKAGE_ID) {
+  const generation = engineGeneration;
   try {
     const resourcePackage = getApprovedPackage(packageId);
     const engine = await loadEngine();
     const result = await engine.generate(text, resourcePackage.baseUrl, 0);
     return { url: URL.createObjectURL(result.file), duration: result.duration };
   } catch (error) {
-    await resetLocalVoiceEngine();
+    if (engineGeneration === generation) await resetLocalVoiceEngine();
     throw asLocalVoiceError(error);
   }
 }
 
 export async function prepareLocalVoice(packageId = ENGLISH_PIPER_PACKAGE_ID) {
+  const generation = engineGeneration;
   try {
     getApprovedPackage(packageId);
     await loadEngine();
   } catch (error) {
-    await resetLocalVoiceEngine();
+    if (engineGeneration === generation) await resetLocalVoiceEngine();
     throw asLocalVoiceError(error, "engine", "本地语音引擎加载失败");
   }
 }

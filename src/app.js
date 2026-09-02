@@ -15,6 +15,7 @@ import {
   askDownloadVoice,
   ENGINE_LOAD_TIMEOUT_MS,
   prepareLocalVoice,
+  resetLocalVoiceEngine,
   speakLocally,
   SYNTHESIS_TIMEOUT_MS,
   withTimeout,
@@ -917,6 +918,7 @@ async function speak(t, button, locale = "en-US"){
       if (!playbackSettled) setBusy("播放中…");
     } catch (error) {
       clearPlaybackTimer();
+      if (error?.name === "TimeoutError" && isCurrentSpeech()) await resetLocalVoiceEngine();
       if (error?.message === "本地语音引擎加载超时") {
         fail("本地语音引擎加载超时，请重试");
       } else if (error?.code === "gated") {
@@ -939,6 +941,11 @@ async function speak(t, button, locale = "en-US"){
     ? voices.find((item) => /^en[-_]US/i.test(item.lang)) || voices.find((item) => /^en\b/i.test(item.lang))
     : null);
   if (!(synth && typeof Utterance === "function") || !systemVoice) {
+    try {
+      synth?.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling residual speech.
+    }
     await speakOffline();
     return;
   }
