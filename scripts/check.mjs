@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
 import { validateHanziWritingPack } from "../src/content/hanzi-writing/validate-pack.js";
+import { listPiperResourcePackages, validatePiperResourcePackages } from "../src/piper-resource-registry.js";
 
 const requiredFiles = [
   "index.html",
@@ -10,6 +11,10 @@ const requiredFiles = [
   "public/manifest.json",
   "public/sw.js",
   "src/cache-policy.js",
+  "src/piper-resource-registry.js",
+  "src/piper-resource-store.js",
+  "src/piper-resource-hash.js",
+  "src/piper-resource-capabilities.js",
   "src/config.js",
   "src/lib.js",
   "src/cloud.js",
@@ -39,6 +44,8 @@ const hanziWritingPackValidation = validateHanziWritingPack(activeHanziWritingPa
 if (!hanziWritingPackValidation.valid) {
   throw new Error(`Hanzi writing pack validation failed:\n- ${hanziWritingPackValidation.errors.join("\n- ")}`);
 }
+
+validatePiperResourcePackages(listPiperResourcePackages());
 
 const manifest = JSON.parse(await readFile("public/manifest.json", "utf8"));
 if (manifest.name !== "影伴" || manifest.short_name !== "影伴") {

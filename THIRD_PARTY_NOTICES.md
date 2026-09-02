@@ -14,6 +14,7 @@
 
 | 包 | 当前版本 | 许可证 | 上游 |
 | --- | --- | --- | --- |
+| `@noble/hashes` | `1.8.0` | MIT | [paulmillr/noble-hashes](https://github.com/paulmillr/noble-hashes) |
 | `@supabase/supabase-js` | `2.111.0` | MIT | [supabase-js](https://github.com/supabase/supabase-js) |
 | `@vercel/analytics` | `2.0.1` | MIT | [vercel/analytics](https://github.com/vercel/analytics) |
 | `lucide` | `1.28.0` | ISC | [lucide](https://github.com/lucide-icons/lucide) |
