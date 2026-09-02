@@ -292,8 +292,9 @@ export function validatePiperResourcePackages(packages) {
     for (const key of ["locale", "label", "kind", "version", "source", "cachePolicy"]) {
       if (!resourcePackage[key]) throw new Error(`Piper package ${resourcePackage.id} is missing ${key}`);
     }
-    if (resourcePackage.releaseApproved !== true) continue;
     const isBundled = resourcePackage.source === "bundled" && resourcePackage.cachePolicy === "app-shell";
+    if (isBundled) validateBundledRuntimeAuditMetadata(resourcePackage);
+    if (resourcePackage.releaseApproved !== true) continue;
     if (!isBundled && !isActivePiperCdnVoicePackage(resourcePackage)) {
       throw new Error(`Active Piper package ${resourcePackage.id} must be a CDN voice or bundled runtime package`);
     }
@@ -325,7 +326,6 @@ export function validatePiperResourcePackages(packages) {
     if (totalBytes !== resourcePackage.totalBytes) {
       throw new Error(`Active Piper package ${resourcePackage.id} total bytes do not match files`);
     }
-    if (isBundled) validateBundledRuntimeAuditMetadata(resourcePackage);
     if (isActivePiperCdnVoicePackage(resourcePackage)) validateApprovedCdnMetadata(resourcePackage);
   }
   return true;

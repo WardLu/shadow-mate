@@ -23,6 +23,20 @@ describe("bundled Piper runtime registry", () => {
     expect(runtime.files.map(({ url, bytes, sha256 }) => [url, bytes, sha256])).toEqual(RUNTIME_FILES);
   });
 
+  it("rejects a bundled app-shell runtime without audit when release approval is false", () => {
+    const runtime = bundledRuntimeFixture();
+    runtime.releaseApproved = false;
+    delete runtime.audit;
+
+    expect(() => validatePiperResourcePackages([runtime])).toThrow(/audit/i);
+  });
+
+  it("keeps a non-bundled gated package outside active-package validation", () => {
+    const gatedChinese = structuredClone(getPiperResourcePackage("zh_CN-chaowen-medium"));
+
+    expect(() => validatePiperResourcePackages([gatedChinese])).not.toThrow();
+  });
+
   it("rejects a bundled runtime component without a fixed source commit", () => {
     const runtime = bundledRuntimeFixture();
     delete runtime.audit?.components?.[0]?.commit;
