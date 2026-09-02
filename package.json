@@ -30,7 +30,7 @@
     "lucide": "^1.28.0"
   },
   "devDependencies": {
-    "@emnapi/core": "2.0.0-alpha.3",
+    "@emnapi/core": "2.0.0-alpha.4",
     "@emnapi/runtime": "2.0.0-alpha.3",
     "@playwright/test": "1.62.1",
     "@vitest/coverage-v8": "4.1.10",
