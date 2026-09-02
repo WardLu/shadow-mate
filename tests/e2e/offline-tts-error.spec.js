@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Offline voice download errors", () => {
   test.use({ serviceWorkers: "block" });
 
-  test("keeps a failed voice download visible to the user", async ({ page }) => {
+  test("keeps an unavailable English package resource visible to the user", async ({ page }) => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.route("**/piper-tts-web.js*", async (route) => {
@@ -40,7 +40,7 @@ test.describe("Offline voice download errors", () => {
     await button.click();
     await page.click('.voice-dialog-actions [data-action="ok"]');
 
-    await expect(button).toContainText("下载失败");
+    await expect(button).toContainText("离线英语语音资源不可用，请稍后重试");
     expect(pageErrors).toEqual([]);
   });
 });

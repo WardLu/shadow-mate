@@ -14,7 +14,6 @@ import { installRapidActionGuard } from "./action-lock.js";
 import {
   askDownloadVoice,
   ENGINE_LOAD_TIMEOUT_MS,
-  hasSystemEnglishVoice,
   prepareLocalVoice,
   speakLocally,
   SYNTHESIS_TIMEOUT_MS,
@@ -686,6 +685,8 @@ async function speak(t, button, locale = "en-US"){
   const voiceHelp = locale === "zh-CN"
     ? "请在系统设置中安装中文（普通话）语音，然后重试"
     : "请在系统设置中安装英语语音包，然后重试";
+  const piperPackageId = locale === "zh-CN" ? "zh_CN-chaowen-medium" : "en_US-ljspeech-medium";
+  const piperLanguage = locale === "zh-CN" ? "中文" : "英语";
   const showSpeechGuide = () => {
     if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
     const guideLink = document.createElement("button");
@@ -784,7 +785,7 @@ async function speak(t, button, locale = "en-US"){
     const startEngineWarmup = () => {
       if (!engineWarmup) {
         engineWarmup = withTimeout(
-          prepareLocalVoice(),
+          prepareLocalVoice(piperPackageId),
           ENGINE_LOAD_TIMEOUT_MS,
           "本地语音引擎加载超时"
         ).catch((error) => {
@@ -794,24 +795,34 @@ async function speak(t, button, locale = "en-US"){
       }
     };
     try {
-      const status = await askDownloadVoice((received, total) => {
-        if (!isCurrentSpeech() || !button) return;
-        button.innerHTML = buttonContent(
-          "volume",
-          total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
-        );
-      }, { onDownloadStart: startEngineWarmup });
+      const status = await askDownloadVoice(
+        piperPackageId,
+        (received, total) => {
+          if (!isCurrentSpeech() || !button) return;
+          button.innerHTML = buttonContent(
+            "volume",
+            total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
+          );
+        },
+        { onDownloadStart: startEngineWarmup }
+      );
       if (status === "cancel") {
         restore();
         return;
       }
       if (!isCurrentSpeech()) return;
       if (status !== "ok") {
-        const message = status === "timeout"
-          ? "离线英语语音下载超时，请检查网络或代理后重试"
-          : status === "network"
-            ? "离线英语语音下载失败，请检查网络、代理或 CDN 跨域配置后重试"
-            : "离线英语语音下载失败，请重试";
+        const message = status === "gated"
+          ? "中文离线语音尚未开放，请安装系统中文普通话语音后重试"
+          : status === "unsupported"
+            ? `当前浏览器不支持离线${piperLanguage}语音，请使用系统语音或更换浏览器`
+            : status === "timeout"
+              ? `离线${piperLanguage}语音下载超时，请检查网络或代理后重试`
+              : status === "network"
+                ? `离线${piperLanguage}语音下载失败，请检查网络、代理或 CDN 跨域配置后重试`
+                : status === "http" || status === "integrity" || status === "storage"
+                  ? `离线${piperLanguage}语音资源不可用，请稍后重试`
+                  : `离线${piperLanguage}语音下载失败，请重试`;
         fail(message);
         return;
       }
@@ -821,7 +832,7 @@ async function speak(t, button, locale = "en-US"){
       if (!isCurrentSpeech()) return;
       if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
-      const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
+      const { url, duration } = await withTimeout(speakLocally(t, piperPackageId), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       if (!isCurrentSpeech()) {
         releaseObjectUrl(url);
         return;
@@ -908,124 +919,77 @@ async function speak(t, button, locale = "en-US"){
       clearPlaybackTimer();
       if (error?.message === "本地语音引擎加载超时") {
         fail("本地语音引擎加载超时，请重试");
+      } else if (error?.code === "gated") {
+        fail("中文离线语音尚未开放，请安装系统中文普通话语音后重试");
+      } else if (error?.code === "storage") {
+        fail(`离线${piperLanguage}语音资源不可用，请稍后重试`);
       } else {
         fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
       }
     }
   };
 
-  if (locale === "zh-CN") {
-    const synth = window.speechSynthesis;
-    setBusy();
-    const voice = await waitForSystemVoice(locale, 4000);
-    if (!isCurrentSpeech()) return;
-    const Utterance = window.SpeechSynthesisUtterance;
-    const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : null;
-    if (!(synth && typeof Utterance === "function")
-      || !Array.isArray(voices)
-      || (!voice && voices.length > 0)) {
-      fail("未检测到中文普通话语音，请重试");
+  const synth = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  setBusy();
+  const requestedSystemVoice = await waitForSystemVoice(locale, 4000);
+  if (!isCurrentSpeech()) return;
+  const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : [];
+  const systemVoice = requestedSystemVoice || (locale === "en-US"
+    ? voices.find((item) => /^en[-_]US/i.test(item.lang)) || voices.find((item) => /^en\b/i.test(item.lang))
+    : null);
+  if (!(synth && typeof Utterance === "function") || !systemVoice) {
+    await speakOffline();
+    return;
+  }
+
+  let fallbackStarted = false;
+  let systemStarted = false;
+  const fallbackToLocal = () => {
+    if (fallbackStarted || !isCurrentSpeech()) return;
+    fallbackStarted = true;
+    clearSystemTimer();
+    try {
+      synth.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling a stalled utterance.
+    }
+    void speakOffline();
+  };
+  setBusy();
+  const utterance = new Utterance(t);
+  utterance.lang = locale;
+  utterance.rate = 0.9;
+  utterance.voice = systemVoice;
+  utterance.onstart = () => {
+    systemStarted = true;
+    clearSystemTimer();
+  };
+  utterance.onend = () => {
+    if (isCurrentSpeech() && !fallbackStarted) restore();
+  };
+  utterance.onerror = (event) => {
+    if (!isCurrentSpeech() || fallbackStarted) return;
+    if (event?.error === "canceled" || event?.error === "interrupted") {
+      restore();
       return;
     }
-
-    const utterance = new Utterance(t);
-    utterance.lang = locale;
-    utterance.rate = 0.9;
-    // Android 某些浏览器能调用系统 TTS，但 getVoices() 仍暂时返回空数组。
-    if (voice) utterance.voice = voice;
-    utterance.onend = () => {
-      if (isCurrentSpeech()) restore();
-    };
-    utterance.onerror = (event) => {
-      if (!isCurrentSpeech()) return;
-      if (event?.error === "canceled" || event?.error === "interrupted") {
-        restore();
-        return;
-      }
-      fail("中文发音失败，请重试");
-    };
+    fallbackToLocal();
+  };
+  try {
     try {
-      try {
-        synth.cancel();
-      } catch (_) {
-        // Some browser speech implementations throw while cancelling a prior utterance.
-      }
-      // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
-      synth.speak(utterance);
-      systemTimer = window.setTimeout(() => {
-        if (!button?.disabled) return;
-        try {
-          fail("中文发音未响应，请重试");
-          synth.cancel();
-        } catch (_) {
-          // Some browser speech implementations throw while cancelling a stalled utterance.
-        }
-      }, 4000);
+      synth.cancel();
     } catch (_) {
-      fail("中文发音失败，请重试");
+      // Some browser speech implementations throw while cancelling a prior utterance.
     }
-    return;
+    // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
+    synth.speak(utterance);
+    systemTimer = window.setTimeout(() => {
+      if (!systemStarted) fallbackToLocal();
+    }, 4000);
+  } catch (_) {
+    fallbackToLocal();
   }
-
-  // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
-  const englishVoice = await waitForSystemVoice("en-US");
-  if (!isCurrentSpeech()) return;
-  if (englishVoice || hasSystemEnglishVoice()) {
-    const synth = window.speechSynthesis;
-    const Utterance = window.SpeechSynthesisUtterance;
-    let fallbackStarted = false;
-    const fallbackToLocal = () => {
-      if (fallbackStarted || !button?.disabled) return;
-      fallbackStarted = true;
-      clearSystemTimer();
-      try {
-        synth.cancel();
-      } catch (_) {
-        // Some browser speech implementations throw while cancelling a stalled utterance.
-      }
-      void speakOffline();
-    };
-    setBusy();
-    const speakNow = () => {
-      const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
-      const utterance = new Utterance(t);
-      utterance.lang = "en-US";
-      utterance.rate = 0.9;
-      const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
-      if (voice) utterance.voice = voice;
-      utterance.onend = () => {
-        if (isCurrentSpeech() && !fallbackStarted) restore();
-      };
-      utterance.onerror = (event) => {
-        if (!isCurrentSpeech()) return;
-        if (event?.error === "canceled" || event?.error === "interrupted") {
-          restore();
-          return;
-        }
-        if (!fallbackStarted) fallbackToLocal();
-      };
-      try {
-        synth.cancel();
-        // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
-        synth.speak(utterance);
-        systemTimer = window.setTimeout(() => {
-          if (!button?.disabled) return;
-          if (synth.speaking || synth.pending) {
-            restore();
-            return;
-          }
-          fallbackToLocal();
-        }, 4000);
-      } catch (_) {
-        fallbackToLocal();
-      }
-    };
-    speakNow();
-    return;
-  }
-
-  // 无 GMS 的国产 Android 等设备：使用本地 Piper 兜底
-  await speakOffline();
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 

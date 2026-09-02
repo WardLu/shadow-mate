@@ -214,7 +214,7 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button offers local offline voice when system has no usable voice", async ({ page }) => {
+  test("speech button offers the active English Piper package when system speech is unavailable", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => {
       Object.defineProperty(window, "speechSynthesis", {
