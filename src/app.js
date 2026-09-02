@@ -918,16 +918,20 @@ async function speak(t, button, locale = "en-US"){
     const synth = window.speechSynthesis;
     const voice = await waitForSystemVoice(locale);
     if (!isCurrentSpeech()) return;
-    if (!voice) {
+    const Utterance = window.SpeechSynthesisUtterance;
+    const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : null;
+    if (!(synth && typeof Utterance === "function")
+      || !Array.isArray(voices)
+      || (!voice && voices.length > 0)) {
       fail("未检测到中文普通话语音，请重试");
       return;
     }
 
-    const Utterance = window.SpeechSynthesisUtterance;
     const utterance = new Utterance(t);
     utterance.lang = locale;
     utterance.rate = 0.9;
-    utterance.voice = voice;
+    // Android 某些浏览器能调用系统 TTS，但 getVoices() 仍暂时返回空数组。
+    if (voice) utterance.voice = voice;
     utterance.onend = () => {
       if (isCurrentSpeech()) restore();
     };
