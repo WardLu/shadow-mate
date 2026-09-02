@@ -52,7 +52,10 @@ vi.mock("../../src/piper-resource-download.js", () => ({
   downloadPiperResource: mocks.downloadPiperResource,
 }));
 vi.mock("../../src/piper-resource-lock.js", () => ({
-  acquirePiperDownloadLock: (_key, task) => task(),
+  acquirePiperDownloadLock: (_key, task) => {
+    const controller = new AbortController();
+    return task({ signal: controller.signal, canCommit: () => true });
+  },
 }));
 
 import { mountPiperResourceManager, renderPiperResourceStatus } from "../../src/piper-resource-ui.js";
@@ -91,7 +94,12 @@ describe("Piper resource manager", () => {
     await vi.waitFor(() => expect(container.querySelector('[data-piper-resource="en_US-test-medium"] button')).toBeTruthy());
 
     await container.querySelector('[data-piper-resource-action="download"]').click();
-    await vi.waitFor(() => expect(downloadPiperResource).toHaveBeenCalledWith("en_US-test-medium", expect.any(Function)));
+    await vi.waitFor(() => expect(downloadPiperResource).toHaveBeenCalledWith(
+      "en_US-test-medium",
+      expect.any(Function),
+      expect.any(AbortSignal),
+      expect.objectContaining({ canCommit: expect.any(Function) }),
+    ));
 
     await vi.waitFor(() => expect(container.querySelector('[data-piper-resource-action="delete"]')).toBeTruthy());
     renderPiperResourceStatus(container.querySelector('[data-piper-resource="en_US-test-medium"] [data-piper-resource-status]'), "completed");
@@ -121,5 +129,37 @@ describe("Piper resource manager", () => {
     await vi.waitFor(() => expect(task).toHaveBeenCalledTimes(1));
     finish("completed");
     await expect(first).resolves.toBe("completed");
+  });
+
+  it("aborts and refuses marker ownership after another tab takes over the localStorage lease", async () => {
+    const entries = new Map();
+    const storage = {
+      getItem: (key) => entries.get(key) || null,
+      setItem: (key, value) => entries.set(key, value),
+      removeItem: (key) => entries.delete(key),
+    };
+    vi.stubGlobal("localStorage", storage);
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis.navigator, "locks");
+    Object.defineProperty(globalThis.navigator, "locks", { configurable: true, value: undefined });
+    const { acquirePiperDownloadLock } = await vi.importActual("../../src/piper-resource-lock.js");
+    let releaseTask;
+    let observed;
+    const task = vi.fn(async ({ signal, canCommit }) => {
+      await new Promise((resolve) => { releaseTask = resolve; });
+      const allowed = canCommit();
+      observed = { aborted: signal.aborted, canCommit: allowed };
+    });
+
+    const downloading = acquirePiperDownloadLock("lease-takeover@1", task);
+    await vi.waitFor(() => expect(task).toHaveBeenCalledTimes(1));
+    entries.set("shadow-mate-piper-lock:lease-takeover@1", JSON.stringify({ owner: "another-tab", expiresAt: Date.now() + 15_000 }));
+    globalThis.dispatchEvent(new StorageEvent("storage", { key: "shadow-mate-piper-lock:lease-takeover@1" }));
+    await vi.waitFor(() => expect(task.mock.calls[0][0].signal.aborted).toBe(true));
+    releaseTask();
+
+    await expect(downloading).rejects.toThrow(/lease was lost/i);
+    expect(observed).toEqual({ aborted: true, canCommit: false });
+    if (descriptor) Object.defineProperty(globalThis.navigator, "locks", descriptor);
+    else delete globalThis.navigator.locks;
   });
 });

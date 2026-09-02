@@ -29,7 +29,7 @@ function createPackage({ modelHash = HASHES.model } = {}) {
   };
 }
 
-function createCacheStorage({ putError } = {}) {
+function createCacheStorage({ putError, onPut } = {}) {
   const cachesByName = new Map();
   const cacheKey = (key) => typeof key === "string" ? key : key.url;
   const putBodies = [];
@@ -49,6 +49,7 @@ function createCacheStorage({ putError } = {}) {
             const stored = response.clone();
             await response.arrayBuffer();
             entries.set(cacheKey(key), stored);
+            onPut?.(cacheKey(key));
           },
           async delete(key) {
             return entries.delete(cacheKey(key));
@@ -206,6 +207,27 @@ describe("Piper resource downloader", () => {
     const cache = await packageCache(setup);
     await expect(cache.match(setup.store.getMarkerKey(setup.resourcePackage))).resolves.toBeTruthy();
     await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(true);
+  });
+
+  it("does not write a completion marker when lease ownership is lost after files cache", async () => {
+    let ownsLease = true;
+    const cacheStorage = createCacheStorage({
+      onPut: (key) => {
+        if (key.endsWith(".onnx.json")) ownsLease = false;
+      },
+    });
+    const setup = createDownloader({ cacheStorage });
+    const controller = new AbortController();
+    const canCommit = vi.fn(() => {
+      if (!ownsLease) controller.abort(new DOMException("lease lost", "AbortError"));
+      return ownsLease;
+    });
+
+    await expect(setup.downloader.downloadPiperResource(setup.resourcePackage.id, undefined, controller.signal, { canCommit })).rejects.toMatchObject({ code: "network" });
+    const cache = await packageCache(setup);
+    await expect(cache.match(setup.store.getMarkerKey(setup.resourcePackage))).resolves.toBeUndefined();
+    await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(false);
+    expect(canCommit).toHaveBeenCalled();
   });
 
   it("deletes a file and leaves no marker when its SHA-256 is wrong", async () => {

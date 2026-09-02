@@ -116,8 +116,8 @@ export function mountPiperResourceManager(container) {
           activeStatuses.set(row.resourcePackage.id, "downloading");
           await refresh();
           try {
-            await acquirePiperDownloadLock(`${row.resourcePackage.id}@${row.resourcePackage.version}`, () =>
-              downloadPiperResource(row.resourcePackage.id, () => {}));
+            await acquirePiperDownloadLock(`${row.resourcePackage.id}@${row.resourcePackage.version}`, (context = {}) =>
+              downloadPiperResource(row.resourcePackage.id, () => {}, context.signal, { canCommit: context.canCommit }));
           } catch (_) {
             // The downloader owns error details. The manager only restores its local state;
             // cancelled dialogs and unavailable cross-tab locks must not create a toast loop.

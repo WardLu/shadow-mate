@@ -30,9 +30,13 @@ async function runWithLocalStorageLease(key, task) {
   try {
     storage = globalThis.localStorage;
   } catch (_) {
-    return task();
+    const controller = new AbortController();
+    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
   }
-  if (!storage) return task();
+  if (!storage) {
+    const controller = new AbortController();
+    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+  }
 
   const owner = createOwnerToken();
   const existing = readLease(storage, key);
@@ -46,25 +50,45 @@ async function runWithLocalStorageLease(key, task) {
   } catch (_) {
     // Storage can be blocked by browser privacy settings. Keep the same-tab single flight,
     // but never assume this tab owns another tab's cache.
-    return task();
+    const controller = new AbortController();
+    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
   }
+
+  const controller = new AbortController();
+  let leaseLost = false;
+  const loseLease = () => {
+    if (leaseLost) return;
+    leaseLost = true;
+    controller.abort(new DOMException("Piper resource download lease was lost", "AbortError"));
+  };
+  const canCommit = () => {
+    const current = readLease(storage, key);
+    const owned = current?.owner === owner && current.expiresAt > Date.now();
+    if (!owned) loseLease();
+    return owned && !controller.signal.aborted;
+  };
+  const leaseKey = `${LEASE_PREFIX}${key}`;
+  const onStorage = (event) => {
+    if (event.key === leaseKey) canCommit();
+  };
+  globalThis.addEventListener?.("storage", onStorage);
 
   const renewal = globalThis.setInterval?.(() => {
     try {
-      const current = readLease(storage, key);
-      if (current?.owner === owner) writeLease(storage, key, { owner, expiresAt: Date.now() + LEASE_MS });
+      if (!canCommit()) return;
+      if (!writeLease(storage, key, { owner, expiresAt: Date.now() + LEASE_MS })) loseLease();
     } catch (_) {
       // Completion is checked below; a failed renewal must not grant cross-tab ownership.
     }
   }, Math.floor(LEASE_MS / 2));
 
   try {
-    const result = await task();
-    const current = readLease(storage, key);
-    if (current?.owner !== owner) throw new Error("Piper resource download lease was lost before completion");
+    const result = await task({ signal: controller.signal, canCommit });
+    if (!canCommit()) throw new Error("Piper resource download lease was lost before completion");
     return result;
   } finally {
     globalThis.clearInterval?.(renewal);
+    globalThis.removeEventListener?.("storage", onStorage);
     try {
       const current = readLease(storage, key);
       if (current?.owner === owner) storage.removeItem(`${LEASE_PREFIX}${key}`);
@@ -78,7 +102,10 @@ export function acquirePiperDownloadLock(key, task) {
   if (activeTasks.has(key)) return activeTasks.get(key);
   const run = () => {
     if (typeof globalThis.navigator?.locks?.request === "function") {
-      return globalThis.navigator.locks.request(lockName(key), { mode: "exclusive" }, task);
+      return globalThis.navigator.locks.request(lockName(key), { mode: "exclusive" }, () => {
+        const controller = new AbortController();
+        return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+      });
     }
     return runWithLocalStorageLease(key, task);
   };
