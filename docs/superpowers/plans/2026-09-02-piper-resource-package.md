@@ -426,6 +426,7 @@
 - Modify: `scripts/check-build.mjs`
 - Modify: `tests/e2e/offline.spec.js`
 - Modify: `tests/e2e/piper-dev-server.spec.js`
+- Modify: `tests/unit/version-guard.test.js`
 - Modify: `THIRD_PARTY_NOTICES.md`
 - Modify: `RELEASE_NOTES.md`
 - Modify: `docs/superpowers/specs/2026-09-02-piper-resource-package-design.md`
