@@ -103,7 +103,7 @@ if (!config.includes('remote_supabase_blocked')) {
 }
 
 const serviceWorker = await readFile("public/sw.js", "utf8");
-if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-v2"')) {
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-v3"')) {
   throw new Error("Service worker cache must use the Shadow Mate namespace");
 }
 
