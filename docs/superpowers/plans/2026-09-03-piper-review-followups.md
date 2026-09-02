@@ -58,7 +58,7 @@
 **Files:**
 - Modify: `src/piper-resource-registry.js`
 - Modify: `THIRD_PARTY_NOTICES.md`
-- Test: `tests/unit/piper-resource-store.test.js` (or a focused registry test if the implementation creates one)
+- Create: `tests/unit/piper-resource-registry.test.js`
 
 **Interfaces:**
 - Keep the bundled runtime package id `piper-browser-runtime` and all four existing runtime file URLs, bytes, and SHA-256 values unchanged.
@@ -69,11 +69,11 @@
 
 - [ ] **Step 1: Add failing metadata validation tests**
 
-  Clone the bundled runtime registry fixture and assert validation rejects a bundled package with a missing source commit, a missing commit-pinned reference, or missing redistribution terms. Assert the real registry passes and still exposes the same four runtime files/fingerprints.
+  Clone the bundled runtime registry fixture and assert validation rejects a bundled package with a missing source commit, a missing commit-pinned reference, or missing redistribution terms. Assert the real registry passes and still exposes the same four runtime files/fingerprints in `tests/unit/piper-resource-registry.test.js`.
 
 - [ ] **Step 2: Run the focused registry/store tests and confirm they fail before the validator change**
 
-  Run `npm test -- tests/unit/piper-resource-store.test.js`. The current validator accepts the incomplete bundled metadata, so the new rejection assertions must fail before implementation.
+  Run `npm test -- tests/unit/piper-resource-registry.test.js`. The current validator accepts the incomplete bundled metadata, so the new rejection assertions must fail before implementation.
 
 - [ ] **Step 3: Add fixed provenance and redistribution metadata**
 
@@ -90,7 +90,7 @@
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add src/piper-resource-registry.js THIRD_PARTY_NOTICES.md tests/unit/piper-resource-store.test.js
+  git add src/piper-resource-registry.js THIRD_PARTY_NOTICES.md tests/unit/piper-resource-registry.test.js
   git commit -m "docs: make Piper runtime provenance auditable"
   ```
 
