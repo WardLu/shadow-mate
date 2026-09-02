@@ -9,6 +9,7 @@ const requiredFiles = [
   "public/privacy-policy.css",
   "public/manifest.json",
   "public/sw.js",
+  "src/cache-policy.js",
   "src/config.js",
   "src/lib.js",
   "src/cloud.js",
@@ -103,8 +104,34 @@ if (!config.includes('remote_supabase_blocked')) {
 }
 
 const serviceWorker = await readFile("public/sw.js", "utf8");
-if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-v3"')) {
-  throw new Error("Service worker cache must use the Shadow Mate namespace");
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
+  throw new Error("Service worker cache must use shadow-mate-app-v4");
+}
+if (!serviceWorker.includes("/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)")) {
+  throw new Error("Service worker must preserve voice and Piper cache names");
+}
+if (/caches\.keys\(\)\s*\.then\(\(keys\)\s*=>\s*Promise\.all\(keys\.map\(.*caches\.delete/s.test(serviceWorker)) {
+  throw new Error("Service worker must not delete every cache");
+}
+
+const cachePolicy = await readFile("src/cache-policy.js", "utf8");
+for (const marker of [
+  'APP_SHELL_CACHE_NAME = "shadow-mate-app-v4"',
+  "/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)",
+  "key !== currentName",
+]) {
+  if (!cachePolicy.includes(marker)) throw new Error(`src/cache-policy.js is missing ${marker}`);
+}
+
+const versionGuard = await readFile("src/version-guard.js", "utf8");
+if (!versionGuard.includes('from "./cache-policy.js"')) {
+  throw new Error("version guard must use the cache policy");
+}
+if (!versionGuard.includes("selectCacheNamesToDelete(keys).map((key) => caches.delete(key))")) {
+  throw new Error("version guard must delete only stale app-shell caches");
+}
+if (/caches\.keys\(\)[\s\S]*?keys\.map\(\(key\)\s*=>\s*caches\.delete/.test(versionGuard)) {
+  throw new Error("Version guard must not delete every cache");
 }
 
 const cloud = await readFile("src/cloud.js", "utf8");

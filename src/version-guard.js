@@ -10,11 +10,17 @@
  *   also broken).
  */
 
+import { APP_SHELL_CACHE_NAME, staleAppShellCacheNames } from "./cache-policy.js";
+
 const RELOAD_COOLDOWN_KEY = "shadow_mate_reload_cooldown";
 const DEFAULT_CHECK_INTERVAL_MS = 60 * 1000; // 1 min
 const DEFAULT_MAX_ERRORS = 5;
 const DEFAULT_ERROR_WINDOW_MS = 10_000;
 const RELOAD_COOLDOWN_MS = 30_000;
+
+export function selectCacheNamesToDelete(keys, currentName = APP_SHELL_CACHE_NAME) {
+  return staleAppShellCacheNames(keys, currentName);
+}
 
 /**
  * Extract all <script type="module" src="…"> paths from an HTML string.
@@ -94,7 +100,7 @@ async function reloadToLatest() {
   if ("caches" in window) {
     try {
       const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
+      await Promise.all(selectCacheNamesToDelete(keys).map((key) => caches.delete(key)));
     } catch {
       // Cache clearing is best-effort; still reload.
     }

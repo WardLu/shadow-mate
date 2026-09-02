@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractScriptSources, scriptSourcesDiffer, createErrorTracker } from "../../src/version-guard.js";
+import {
+  extractScriptSources,
+  scriptSourcesDiffer,
+  createErrorTracker,
+  selectCacheNamesToDelete,
+} from "../../src/version-guard.js";
 
 describe("extractScriptSources", () => {
   it("extracts module script src from HTML", () => {
@@ -70,5 +75,19 @@ describe("createErrorTracker", () => {
     expect(tracker.shouldReload()).toBe(true);
     await new Promise((r) => setTimeout(r, 60));
     expect(tracker.shouldReload()).toBe(false);
+  });
+});
+
+describe("selectCacheNamesToDelete", () => {
+  it("preserves voice and Piper caches during app-shell cleanup", () => {
+    expect(
+      selectCacheNamesToDelete([
+        "shadow-mate-app-v3",
+        "shadow-mate-app-v4",
+        "shadow-mate-v3",
+        "shadow-mate-voice",
+        "shadow-mate-piper-en_US-ljspeech-medium-v1",
+      ])
+    ).toEqual(["shadow-mate-app-v3", "shadow-mate-v3"]);
   });
 });
