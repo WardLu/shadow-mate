@@ -19,6 +19,23 @@ const ENGLISH_PIPER_RESOURCE = {
   cachePolicy: "user-download",
   totalBytes: 63536351,
   releaseApproved: true,
+  licenseStatus: "approved",
+  license: {
+    status: "approved",
+    model: "MIT",
+    trainingData: "public-domain",
+    reference: "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD",
+  },
+  provenance: {
+    status: "verified",
+    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium",
+    modelCard: "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD",
+  },
+  distribution: {
+    status: "approved",
+    channel: "public-cdn",
+    notice: "THIRD_PARTY_NOTICES.md#piper-cdn-资源发布门禁",
+  },
   files: [
     {
       key: "model",
@@ -48,10 +65,113 @@ const GATED_CHINESE_PIPER_RESOURCE = {
   cachePolicy: "gated",
   totalBytes: null,
   releaseApproved: false,
+  licenseStatus: "pending",
+  license: { status: "pending" },
+  provenance: {
+    status: "partial",
+    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/chaowen/medium",
+  },
+  distribution: { status: "blocked", channel: "none" },
   files: [],
 };
 
-export const PIPER_RESOURCE_PACKAGES = deepFreeze([ENGLISH_PIPER_RESOURCE, GATED_CHINESE_PIPER_RESOURCE]);
+const BUNDLED_PIPER_RUNTIME = {
+  id: "piper-browser-runtime",
+  locale: "und",
+  label: "Piper browser runtime",
+  kind: "runtime",
+  version: "1",
+  baseUrl: null,
+  source: "bundled",
+  cachePolicy: "app-shell",
+  totalBytes: 76608615,
+  releaseApproved: true,
+  licenseStatus: "reviewed",
+  license: {
+    status: "reviewed",
+    reference: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+  },
+  provenance: {
+    status: "verified",
+    source: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+  },
+  distribution: {
+    status: "bundled",
+    channel: "app-shell",
+    notice: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+  },
+  files: [
+    {
+      key: "engine",
+      url: "/piper-tts-web.js",
+      contentType: "application/javascript",
+      bytes: 46656168,
+      sha256: "c35588fad691ed023215f0194e0fb0e816b9a9766d3d2669dd49d4ea2fffd712",
+      license: "piper-tts-web and embedded ONNX Runtime notices",
+      provenance: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+    },
+    {
+      key: "onnx-runtime",
+      url: "/onnx/ort-wasm-simd-threaded.wasm",
+      contentType: "application/wasm",
+      bytes: 11246032,
+      sha256: "207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea",
+      license: "MIT",
+      provenance: "https://github.com/microsoft/onnxruntime",
+    },
+    {
+      key: "phonemize-wasm",
+      url: "/piper/piper_phonemize.wasm",
+      contentType: "application/wasm",
+      bytes: 629166,
+      sha256: "2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23",
+      license: "piper-phonemize and eSpeak NG applicable upstream licenses",
+      provenance: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+    },
+    {
+      key: "phonemize-data",
+      url: "/piper/piper_phonemize.data",
+      contentType: "application/octet-stream",
+      bytes: 18077249,
+      sha256: "a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa",
+      license: "piper-phonemize and eSpeak NG applicable upstream licenses",
+      provenance: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
+    },
+  ],
+};
+
+export const PIPER_RESOURCE_PACKAGES = deepFreeze([
+  ENGLISH_PIPER_RESOURCE,
+  GATED_CHINESE_PIPER_RESOURCE,
+  BUNDLED_PIPER_RUNTIME,
+]);
+
+export function isActivePiperCdnVoicePackage(resourcePackage) {
+  return resourcePackage?.releaseApproved === true
+    && resourcePackage.kind === "voice"
+    && resourcePackage.source === "cdn"
+    && resourcePackage.cachePolicy === "user-download";
+}
+
+function validateApprovedCdnMetadata(resourcePackage) {
+  if (resourcePackage.licenseStatus !== "approved"
+    || resourcePackage.license?.status !== "approved"
+    || !resourcePackage.license?.model
+    || !resourcePackage.license?.trainingData
+    || !resourcePackage.license?.reference) {
+    throw new Error(`Active Piper package ${resourcePackage.id} has no approved license metadata`);
+  }
+  if (resourcePackage.provenance?.status !== "verified"
+    || !resourcePackage.provenance?.source
+    || !resourcePackage.provenance?.modelCard) {
+    throw new Error(`Active Piper package ${resourcePackage.id} has no verified provenance metadata`);
+  }
+  if (resourcePackage.distribution?.status !== "approved"
+    || !resourcePackage.distribution?.channel
+    || !resourcePackage.distribution?.notice) {
+    throw new Error(`Active Piper package ${resourcePackage.id} has no approved distribution metadata`);
+  }
+}
 
 export function validatePiperResourcePackages(packages) {
   if (!Array.isArray(packages)) throw new Error("Piper resource registry must be an array");
@@ -63,10 +183,11 @@ export function validatePiperResourcePackages(packages) {
       if (!resourcePackage[key]) throw new Error(`Piper package ${resourcePackage.id} is missing ${key}`);
     }
     if (resourcePackage.releaseApproved !== true) continue;
-    if (resourcePackage.source !== "cdn" || resourcePackage.cachePolicy !== "user-download") {
-      throw new Error(`Active Piper package ${resourcePackage.id} must be a user-download CDN package`);
+    const isBundled = resourcePackage.source === "bundled" && resourcePackage.cachePolicy === "app-shell";
+    if (!isBundled && !isActivePiperCdnVoicePackage(resourcePackage)) {
+      throw new Error(`Active Piper package ${resourcePackage.id} must be a CDN voice or bundled runtime package`);
     }
-    if (!resourcePackage.baseUrl || !Number.isSafeInteger(resourcePackage.totalBytes) || resourcePackage.totalBytes <= 0) {
+    if ((!isBundled && !resourcePackage.baseUrl) || !Number.isSafeInteger(resourcePackage.totalBytes) || resourcePackage.totalBytes <= 0) {
       throw new Error(`Active Piper package ${resourcePackage.id} has invalid location or total bytes`);
     }
     if (!Array.isArray(resourcePackage.files) || resourcePackage.files.length === 0) {
@@ -75,7 +196,8 @@ export function validatePiperResourcePackages(packages) {
     let totalBytes = 0;
     const fileKeys = new Set();
     for (const file of resourcePackage.files) {
-      if (!file?.key || fileKeys.has(file.key) || !file.suffix || !file.contentType) {
+      const hasLocation = isBundled ? /^\/.+/.test(file?.url || "") : Boolean(file?.suffix);
+      if (!file?.key || fileKeys.has(file.key) || !hasLocation || !file.contentType) {
         throw new Error(`Active Piper package ${resourcePackage.id} has an invalid file entry`);
       }
       fileKeys.add(file.key);
@@ -85,11 +207,15 @@ export function validatePiperResourcePackages(packages) {
       if (!SHA_256_RE.test(file.sha256 || "")) {
         throw new Error(`Active Piper package ${resourcePackage.id} has an invalid SHA-256`);
       }
+      if (isBundled && (!file.license || !file.provenance)) {
+        throw new Error(`Bundled Piper package ${resourcePackage.id} has incomplete license or provenance metadata`);
+      }
       totalBytes += file.bytes;
     }
     if (totalBytes !== resourcePackage.totalBytes) {
       throw new Error(`Active Piper package ${resourcePackage.id} total bytes do not match files`);
     }
+    if (isActivePiperCdnVoicePackage(resourcePackage)) validateApprovedCdnMetadata(resourcePackage);
   }
   return true;
 }
@@ -102,4 +228,20 @@ export function getPiperResourcePackage(packageId) {
 
 export function listPiperResourcePackages() {
   return [...PIPER_RESOURCE_PACKAGES];
+}
+
+export function listActivePiperCdnVoicePackages() {
+  return PIPER_RESOURCE_PACKAGES.filter(isActivePiperCdnVoicePackage);
+}
+
+export function listBundledPiperRuntimePackages() {
+  return PIPER_RESOURCE_PACKAGES.filter((resourcePackage) =>
+    resourcePackage.source === "bundled" && resourcePackage.cachePolicy === "app-shell");
+}
+
+export function formatPiperResourceBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "未提供";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

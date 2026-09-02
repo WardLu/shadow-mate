@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { getPiperResourcePackage } from "../src/piper-resource-registry.js";
+import {
+  getPiperResourcePackage,
+  isActivePiperCdnVoicePackage,
+  listActivePiperCdnVoicePackages,
+} from "../src/piper-resource-registry.js";
 
 const REQUIRED_CORS_METHODS = ["GET", "HEAD", "OPTIONS"];
 const REQUIRED_CORS_EXPOSE_HEADERS = ["CONTENT-LENGTH", "CONTENT-RANGE", "ACCEPT-RANGES", "ETAG"];
@@ -25,8 +29,8 @@ function parseArgs(argv) {
   const unknown = [...values.keys()].filter((flag) => !["--base-url", "--package"].includes(flag));
   if (unknown.length) fail(`Unsupported argument: ${unknown[0]}`);
   const baseUrl = values.get("--base-url");
-  const packageId = values.get("--package");
-  if (!baseUrl || !packageId) fail("Usage: node scripts/piper-resource-smoke.mjs --base-url <url> --package <package-id>");
+  const packageId = values.get("--package") || null;
+  if (!baseUrl) fail("Usage: node scripts/piper-resource-smoke.mjs --base-url <url> [--package <package-id>]");
   return { baseUrl: baseUrl.replace(/\/+$/, ""), packageId };
 }
 
@@ -92,45 +96,71 @@ async function inspectFile(resourcePackage, file) {
   const getContentLength = assertContentLength(get, file.bytes, "GET", url);
   const getContentType = assertContentType(get, file.contentType, "GET", url);
   const getCors = assertCors(get, "GET", url);
-  const body = new Uint8Array(await get.arrayBuffer());
-  const sha256 = createHash("sha256").update(body).digest("hex");
-  if (body.byteLength !== file.bytes) fail(`GET ${url} returned ${body.byteLength} bytes, expected ${file.bytes}`);
+  if (!get.body || typeof get.body.getReader !== "function") fail(`GET ${url} did not expose a readable response stream`);
+  const hash = createHash("sha256");
+  const reader = get.body.getReader();
+  let actualBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    hash.update(value);
+    actualBytes += value.byteLength;
+  }
+  const sha256 = hash.digest("hex");
+  if (actualBytes !== file.bytes) fail(`GET ${url} returned ${actualBytes} bytes, expected ${file.bytes}`);
   if (sha256 !== file.sha256.toLowerCase()) fail(`GET ${url} SHA-256 ${sha256} does not match registry`);
 
   return {
     key: file.key,
     url,
     expectedBytes: file.bytes,
-    actualBytes: body.byteLength,
+    actualBytes,
     sha256,
     head: { contentLength: headContentLength, contentType: headContentType, cors: headCors },
     get: { contentLength: getContentLength, contentType: getContentType, cors: getCors },
   };
 }
 
-async function main() {
-  const { baseUrl, packageId } = parseArgs(process.argv.slice(2));
-  const resourcePackage = getPiperResourcePackage(packageId);
-  if (!resourcePackage) fail(`Unknown Piper resource package: ${packageId}`);
-  if (resourcePackage.locale === "zh-CN" && (resourcePackage.releaseApproved !== true || resourcePackage.licenseStatus !== "approved")) {
-    fail(`Chinese Piper package ${packageId} has no approved license status; CDN smoke is blocked`);
+export function assertApprovedCdnPackage(resourcePackage) {
+  if (!isActivePiperCdnVoicePackage(resourcePackage)) {
+    fail(`Piper package ${resourcePackage?.id || "unknown"} is not an approved CDN user-download package`);
   }
-  if (resourcePackage.releaseApproved !== true || resourcePackage.source !== "cdn" || resourcePackage.cachePolicy !== "user-download") {
-    fail(`Piper package ${packageId} is not an approved CDN user-download package`);
+  if (resourcePackage.licenseStatus !== "approved"
+    || resourcePackage.license?.status !== "approved"
+    || resourcePackage.provenance?.status !== "verified"
+    || resourcePackage.distribution?.status !== "approved") {
+    fail(`Piper package ${resourcePackage.id} has no approved license, provenance, or distribution metadata`);
   }
+}
+
+async function inspectPackage(baseUrl, resourcePackage) {
+  assertApprovedCdnPackage(resourcePackage);
   const expectedBaseUrl = expectedPackageBaseUrl(baseUrl, resourcePackage.id);
   if (resourcePackage.baseUrl !== expectedBaseUrl) {
     fail(`Registry URL ${resourcePackage.baseUrl ?? "missing"} does not match --base-url ${baseUrl}`);
   }
-  if (!resourcePackage.files.length) fail(`Piper package ${packageId} has no registered files`);
+  if (!resourcePackage.files.length) fail(`Piper package ${resourcePackage.id} has no registered files`);
 
   const files = [];
   for (const file of resourcePackage.files) files.push(await inspectFile(resourcePackage, file));
   const totalBytes = files.reduce((total, file) => total + file.actualBytes, 0);
   if (totalBytes !== resourcePackage.totalBytes) {
-    fail(`Package ${packageId} returned ${totalBytes} bytes, expected registry total ${resourcePackage.totalBytes}`);
+    fail(`Package ${resourcePackage.id} returned ${totalBytes} bytes, expected registry total ${resourcePackage.totalBytes}`);
   }
-  console.log(JSON.stringify({ package: packageId, baseUrl, totalBytes, files }, null, 2));
+  return { package: resourcePackage.id, baseUrl, totalBytes, files };
+}
+
+async function main() {
+  const { baseUrl, packageId } = parseArgs(process.argv.slice(2));
+  const packages = packageId
+    ? [getPiperResourcePackage(packageId)]
+    : listActivePiperCdnVoicePackages();
+  if (packages.some((resourcePackage) => !resourcePackage)) fail(`Unknown Piper resource package: ${packageId}`);
+  if (packages.length === 0) fail("Registry has no active Piper CDN voice packages to inspect");
+  const results = [];
+  for (const resourcePackage of packages) results.push(await inspectPackage(baseUrl, resourcePackage));
+  console.log(JSON.stringify(packageId ? results[0] : { packages: results }, null, 2));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

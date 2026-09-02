@@ -1,7 +1,11 @@
 import { downloadPiperResource } from "./piper-resource-download.js";
 import { acquirePiperDownloadLock } from "./piper-resource-lock.js";
-import { listPiperResourcePackages } from "./piper-resource-registry.js";
-import { deletePiperResource, getPiperResourceStatus } from "./piper-resource-store.js";
+import { formatPiperResourceBytes, listActivePiperCdnVoicePackages } from "./piper-resource-registry.js";
+import {
+  deletePiperResource,
+  getPiperResourceCachedBytes,
+  getPiperResourceStatus,
+} from "./piper-resource-store.js";
 
 const STATUS_LABELS = Object.freeze({
   unsupported: "unsupported（此浏览器不支持本地下载）",
@@ -13,48 +17,22 @@ const STATUS_LABELS = Object.freeze({
   invalid: "invalid（缓存校验失败）",
 });
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes < 0) return "未提供";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function getCacheName(resourcePackage) {
-  return `shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`;
-}
-
-async function getActualCachedBytes(resourcePackage) {
-  if (!resourcePackage.releaseApproved || typeof globalThis.caches?.open !== "function") return null;
-  try {
-    const cache = await globalThis.caches.open(getCacheName(resourcePackage));
-    let bytes = 0;
-    for (const file of resourcePackage.files) {
-      const response = await cache.match(`${resourcePackage.baseUrl}${file.suffix}`);
-      if (!response) continue;
-      bytes += (await response.clone().arrayBuffer()).byteLength;
-    }
-    return bytes || null;
-  } catch (_) {
-    return null;
-  }
-}
-
 export function renderPiperResourceStatus(container, status) {
   const value = typeof status === "string" ? status : status?.status;
   container.dataset.piperResourceStatus = value || "invalid";
   container.textContent = STATUS_LABELS[value] || STATUS_LABELS.invalid;
 }
 
-function actionLabel(status) {
-  if (status === "partial") return "继续下载";
-  if (status === "not-downloaded" || status === "invalid") return "下载";
-  if (status === "completed") return "删除";
-  return null;
+function actionsForStatus(status) {
+  if (status === "partial") return [{ action: "download", label: "继续下载" }, { action: "delete", label: "删除" }];
+  if (status === "invalid") return [{ action: "download", label: "重试" }, { action: "delete", label: "删除" }];
+  if (status === "not-downloaded") return [{ action: "download", label: "下载" }];
+  if (status === "completed") return [{ action: "delete", label: "删除" }];
+  return [];
 }
 
 function renderPackage(container, resourcePackage, { status, actualBytes, onAction }) {
-  const action = actionLabel(status);
+  const actions = actionsForStatus(status);
   container.className = "piper-resource-row";
   container.dataset.piperResource = resourcePackage.id;
   container.innerHTML = `
@@ -65,13 +43,13 @@ function renderPackage(container, resourcePackage, { status, actualBytes, onActi
     <dl class="piper-resource-details">
       <div><dt>当前 Origin</dt><dd>${globalThis.location?.origin || "未知"}</dd></div>
       <div><dt>当前浏览器范围</dt><dd>当前浏览器配置文件</dd></div>
-      <div><dt>清单大小</dt><dd>${formatBytes(resourcePackage.totalBytes)}</dd></div>
-      <div><dt>实际缓存大小</dt><dd>${actualBytes === null ? "暂不可用" : formatBytes(actualBytes)}</dd></div>
+      <div><dt>清单大小</dt><dd>${formatPiperResourceBytes(resourcePackage.totalBytes)}</dd></div>
+      <div><dt>实际缓存大小</dt><dd>${actualBytes === null ? "暂不可用" : formatPiperResourceBytes(actualBytes)}</dd></div>
     </dl>
-    <div class="piper-resource-actions"><span data-piper-resource-status></span>${action ? `<button type="button" data-piper-resource-action="${status === "completed" ? "delete" : "download"}">${action}</button>` : ""}</div>
+    <div class="piper-resource-actions"><span data-piper-resource-status></span>${actions.map(({ action, label }) => `<button type="button" data-piper-resource-action="${action}">${label}</button>`).join("")}</div>
   `;
   renderPiperResourceStatus(container.querySelector("[data-piper-resource-status]"), status);
-  container.querySelector("button")?.addEventListener("click", onAction);
+  for (const button of container.querySelectorAll("button")) button.addEventListener("click", onAction);
 }
 
 export function mountPiperResourceManager(container) {
@@ -82,10 +60,14 @@ export function mountPiperResourceManager(container) {
   const list = container.querySelector("[data-piper-resource-list]");
 
   async function refreshEstimate() {
+    if (typeof globalThis.navigator?.storage?.estimate !== "function") {
+      if (!disposed) container.querySelector("[data-piper-resource-estimate]").textContent = "本站存储用量：浏览器未提供估算值";
+      return;
+    }
     try {
       const estimate = await globalThis.navigator?.storage?.estimate?.();
       if (!disposed && estimate) {
-        container.querySelector("[data-piper-resource-estimate]").textContent = `本站存储用量：${formatBytes(estimate.usage)} / ${formatBytes(estimate.quota)}（不是单个语音包大小）`;
+        container.querySelector("[data-piper-resource-estimate]").textContent = `本站存储用量：${formatPiperResourceBytes(estimate.usage)} / ${formatPiperResourceBytes(estimate.quota)}（不是单个语音包大小）`;
       }
     } catch (_) {
       if (!disposed) container.querySelector("[data-piper-resource-estimate]").textContent = "本站存储用量：浏览器未提供估算值";
@@ -93,11 +75,11 @@ export function mountPiperResourceManager(container) {
   }
 
   async function refresh() {
-    const packages = listPiperResourcePackages();
+    const packages = listActivePiperCdnVoicePackages();
     const rows = await Promise.all(packages.map(async (resourcePackage) => ({
       resourcePackage,
       status: activeStatuses.get(resourcePackage.id) || await getPiperResourceStatus(resourcePackage.id),
-      actualBytes: await getActualCachedBytes(resourcePackage),
+      actualBytes: await getPiperResourceCachedBytes(resourcePackage.id),
     })));
     if (disposed) return;
     list.innerHTML = "";
@@ -106,18 +88,25 @@ export function mountPiperResourceManager(container) {
       renderPackage(element, row.resourcePackage, {
         status: row.status,
         actualBytes: row.actualBytes,
-        onAction: async () => {
-          if (row.status === "completed") {
+        onAction: async (event) => {
+          const action = event.currentTarget.dataset.piperResourceAction;
+          if (action === "delete") {
             await deletePiperResource(row.resourcePackage.id);
             await refresh();
             return;
           }
-          if (!["not-downloaded", "partial", "invalid"].includes(row.status) || !row.resourcePackage.releaseApproved) return;
+          if (action !== "download" || !["not-downloaded", "partial", "invalid"].includes(row.status)) return;
           activeStatuses.set(row.resourcePackage.id, "downloading");
           await refresh();
           try {
-            await acquirePiperDownloadLock(`${row.resourcePackage.id}@${row.resourcePackage.version}`, (context = {}) =>
-              downloadPiperResource(row.resourcePackage.id, () => {}, context.signal, { canCommit: context.canCommit }));
+            await acquirePiperDownloadLock(`${row.resourcePackage.id}@${row.resourcePackage.version}`, async (context = {}) => {
+              if ((await getPiperResourceStatus(row.resourcePackage.id)) === "completed") return;
+              return downloadPiperResource(row.resourcePackage.id, () => {}, context.signal, {
+                canCommit: context.canCommit,
+                commitId: context.ownerToken,
+                allowSharedCleanup: context.coordination !== "same-tab-only",
+              });
+            });
           } catch (_) {
             // The downloader owns error details. The manager only restores its local state;
             // cancelled dialogs and unavailable cross-tab locks must not create a toast loop.

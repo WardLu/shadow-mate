@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 
 const mocks = vi.hoisted(() => ({
   englishStatus: "not-downloaded",
   getPiperResourceStatus: vi.fn(),
+  getPiperResourceCachedBytes: vi.fn(),
   deletePiperResource: vi.fn(),
   downloadPiperResource: vi.fn(),
 }));
@@ -35,6 +37,7 @@ const packages = [
 ];
 
 const getPiperResourceStatus = mocks.getPiperResourceStatus.mockImplementation(async (packageId) => packageId === packages[0].id ? mocks.englishStatus : "gated");
+const getPiperResourceCachedBytes = mocks.getPiperResourceCachedBytes.mockResolvedValue(1024);
 const deletePiperResource = mocks.deletePiperResource.mockImplementation(async () => {});
 const downloadPiperResource = mocks.downloadPiperResource.mockImplementation(async () => {
   mocks.englishStatus = "completed";
@@ -42,10 +45,12 @@ const downloadPiperResource = mocks.downloadPiperResource.mockImplementation(asy
 });
 
 vi.mock("../../src/piper-resource-registry.js", () => ({
-  listPiperResourcePackages: () => packages,
+  listActivePiperCdnVoicePackages: () => [packages[0]],
+  formatPiperResourceBytes: (bytes) => bytes === 1024 ? "1 KB" : `${bytes} B`,
 }));
 vi.mock("../../src/piper-resource-store.js", () => ({
   getPiperResourceStatus: mocks.getPiperResourceStatus,
+  getPiperResourceCachedBytes: mocks.getPiperResourceCachedBytes,
   deletePiperResource: mocks.deletePiperResource,
 }));
 vi.mock("../../src/piper-resource-download.js", () => ({
@@ -54,7 +59,7 @@ vi.mock("../../src/piper-resource-download.js", () => ({
 vi.mock("../../src/piper-resource-lock.js", () => ({
   acquirePiperDownloadLock: (_key, task) => {
     const controller = new AbortController();
-    return task({ signal: controller.signal, canCommit: () => true });
+    return task({ signal: controller.signal, canCommit: () => true, ownerToken: "test-owner" });
   },
 }));
 
@@ -65,12 +70,13 @@ describe("Piper resource manager", () => {
     document.body.innerHTML = "";
     mocks.englishStatus = "not-downloaded";
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it("renders every registered package with scoped storage details and only safe actions", async () => {
+  it("renders only active CDN voice packages with scoped storage details", async () => {
     const container = document.body.appendChild(document.createElement("div"));
     const unmount = mountPiperResourceManager(container);
-    await vi.waitFor(() => expect(container.querySelectorAll("[data-piper-resource]")).toHaveLength(2));
+    await vi.waitFor(() => expect(container.querySelectorAll("[data-piper-resource]")).toHaveLength(1));
 
     const english = container.querySelector('[data-piper-resource="en_US-test-medium"]');
     expect(english.textContent).toContain("en-US");
@@ -81,9 +87,7 @@ describe("Piper resource manager", () => {
     expect(english.textContent).toContain("1 KB");
     expect(english.querySelector('[data-piper-resource-action="download"]')).toBeTruthy();
 
-    const chinese = container.querySelector('[data-piper-resource="zh_CN-candidate"]');
-    expect(chinese.textContent).toContain("gated");
-    expect(chinese.querySelector("button")).toBeNull();
+    expect(container.querySelector('[data-piper-resource="zh_CN-candidate"]')).toBeNull();
     expect(container.textContent).toContain("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     unmount();
   });
@@ -98,7 +102,7 @@ describe("Piper resource manager", () => {
       "en_US-test-medium",
       expect.any(Function),
       expect.any(AbortSignal),
-      expect.objectContaining({ canCommit: expect.any(Function) }),
+      expect.objectContaining({ canCommit: expect.any(Function), commitId: "test-owner" }),
     ));
 
     await vi.waitFor(() => expect(container.querySelector('[data-piper-resource-action="delete"]')).toBeTruthy());
@@ -110,6 +114,21 @@ describe("Piper resource manager", () => {
     expect(deletePiperResource).not.toHaveBeenCalledWith("zh_CN-candidate");
     expect(downloadPiperResource).toHaveBeenCalledTimes(1);
     unmount();
+  });
+
+  it("offers both retry/continue and explicit deletion for partial or invalid packages", async () => {
+    for (const status of ["partial", "invalid"]) {
+      document.body.innerHTML = "";
+      mocks.englishStatus = status;
+      const container = document.body.appendChild(document.createElement("div"));
+      const unmount = mountPiperResourceManager(container);
+      await vi.waitFor(() => expect(container.querySelectorAll('[data-piper-resource-action="delete"]')).toHaveLength(1));
+      expect(container.querySelector('[data-piper-resource-action="download"]')).toBeTruthy();
+      await container.querySelector('[data-piper-resource-action="delete"]').click();
+      await vi.waitFor(() => expect(deletePiperResource).toHaveBeenCalledWith("en_US-test-medium"));
+      unmount();
+      vi.clearAllMocks();
+    }
   });
 
   it("renders every resource state distinctly and keeps same-tab downloads single-flight", async () => {
@@ -161,5 +180,35 @@ describe("Piper resource manager", () => {
     expect(observed).toEqual({ aborted: true, canCommit: false });
     if (descriptor) Object.defineProperty(globalThis.navigator, "locks", descriptor);
     else delete globalThis.navigator.locks;
+  });
+
+  it("marks blocked localStorage coordination as same-tab-only without claiming a lease", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => { throw new Error("storage blocked"); },
+      removeItem: vi.fn(),
+    });
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis.navigator, "locks");
+    Object.defineProperty(globalThis.navigator, "locks", { configurable: true, value: undefined });
+    const { acquirePiperDownloadLock } = await vi.importActual("../../src/piper-resource-lock.js");
+    const observed = await acquirePiperDownloadLock("storage-blocked@1", async (context) => ({
+      coordination: context.coordination,
+      ownerToken: context.ownerToken,
+      canCommit: context.canCommit(),
+    }));
+
+    expect(observed).toEqual({
+      coordination: "same-tab-only",
+      ownerToken: expect.any(String),
+      canCommit: true,
+    });
+    if (descriptor) Object.defineProperty(globalThis.navigator, "locks", descriptor);
+    else delete globalThis.navigator.locks;
+  });
+
+  it("derives cached size from store metadata without reading whole cached responses", async () => {
+    const source = await readFile(`${process.cwd()}/src/piper-resource-ui.js`, "utf8");
+    expect(source).toContain("getPiperResourceCachedBytes");
+    expect(source).not.toMatch(/\.arrayBuffer\s*\(/);
   });
 });

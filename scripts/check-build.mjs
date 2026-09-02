@@ -1,4 +1,7 @@
-import { access, readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { access, readFile, readdir, stat } from "node:fs/promises";
+import { listBundledPiperRuntimePackages } from "../src/piper-resource-registry.js";
 
 const requiredBuildFiles = [
   "dist/index.html",
@@ -15,6 +18,27 @@ for (const file of requiredBuildFiles) {
   await access(file).catch(() => {
     throw new Error(`Build output is missing ${file}`);
   });
+}
+
+async function fingerprint(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+for (const resourcePackage of listBundledPiperRuntimePackages()) {
+  for (const file of resourcePackage.files) {
+    const path = `dist${file.url}`;
+    await access(path).catch(() => {
+      throw new Error(`Build output is missing bundled Piper runtime ${path}`);
+    });
+    if ((await stat(path)).size !== file.bytes) {
+      throw new Error(`Built Piper runtime ${path} byte size does not match the registry`);
+    }
+    if (await fingerprint(path) !== file.sha256) {
+      throw new Error(`Built Piper runtime ${path} SHA-256 does not match the registry`);
+    }
+  }
 }
 
 const assets = await readdir("dist/assets");

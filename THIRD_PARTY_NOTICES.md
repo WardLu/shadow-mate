@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-08-13
+更新时间：2026-09-02
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -23,16 +23,16 @@
 
 ## Vendored 浏览器语音资源
 
-| 文件或资源 | 来源和许可证 |
-| --- | --- |
-| `public/piper-tts-web.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)；文件头包含 ONNX Runtime Web 许可信息 |
-| `public/onnx/ort-wasm-simd-threaded.wasm` | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
-| `public/piper/piper_phonemize.wasm` | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
-| `public/piper/piper_phonemize.data` | 与上述 piper-tts-web 提交配套的运行时数据 |
+| 文件或资源 | 字节数 | 来源和许可证 |
+| --- | ---: | --- |
+| `public/piper-tts-web.js` | 46,656,168 | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)；文件头包含 ONNX Runtime Web 许可信息 |
+| `public/onnx/ort-wasm-simd-threaded.wasm` | 11,246,032 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
+| `public/piper/piper_phonemize.wasm` | 629,166 | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
+| `public/piper/piper_phonemize.data` | 18,077,249 | 与上述 piper-tts-web 提交配套的运行时数据 |
 
 eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
 
-此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) 的 `en_US/ljspeech/medium`，模型卡标注训练数据为 public domain。
+此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自采用 MIT 许可证的 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) `en_US/ljspeech/medium`；其 [MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD) 将训练数据标注为 public domain。注册表分别记录模型许可、来源和本项目 CDN 分发批准状态，任一项缺失都会阻止 active CDN 包通过静态与 smoke 门禁。
 
 ### Piper CDN 资源发布门禁
 

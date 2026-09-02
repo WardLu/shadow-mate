@@ -251,6 +251,110 @@ test.describe("System speech fallback", () => {
     });
   });
 
+  test("coordinates two speech dialogs so only one tab downloads the package", async ({ page, context }) => {
+    await context.route("**/src/piper-resource-store.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const getPiperResourceStatus = async () => localStorage.getItem("piper-test-completed") === "yes" ? "completed" : "not-downloaded";
+          export const getPiperResourceCachedBytes = async () => null;
+          export const deletePiperResource = async () => localStorage.removeItem("piper-test-completed");
+        `,
+      });
+    });
+    await context.route("**/src/piper-resource-download.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const downloadPiperResource = async (_packageId, onProgress) => {
+            const attempts = Number(localStorage.getItem("piper-test-attempts") || "0") + 1;
+            localStorage.setItem("piper-test-attempts", String(attempts));
+            onProgress?.(1, 2);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            localStorage.setItem("piper-test-completed", "yes");
+            return { status: "completed" };
+          };
+          export const getPiperDownloadError = (error) => ({ code: error?.code || "network", message: error?.message || "failed" });
+        `,
+      });
+    });
+    const secondPage = await context.newPage();
+    await Promise.all([page.goto("/"), secondPage.goto("/")]);
+    await Promise.all([page, secondPage].map((target) => target.evaluate(async () => {
+      const { askDownloadVoice } = await import("/src/piper-tts.js");
+      window.__speechDialogResult = askDownloadVoice("en_US-ljspeech-medium").then((status) => {
+        window.__speechDialogStatus = status;
+      });
+    })));
+    await Promise.all([page, secondPage].map((target) => target.locator('#shadow-voice-dialog [data-action="ok"]').click()));
+
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("piper-test-attempts"))).toBe("1");
+    await expect.poll(async () => Promise.all([
+      page.evaluate(() => window.__speechDialogStatus),
+      secondPage.evaluate(() => window.__speechDialogStatus),
+    ])).toEqual(["ok", "ok"]);
+    await secondPage.close();
+  });
+
+  test("reuses one validated model provider and object URL across repeated syntheses", async ({ page }) => {
+    await page.route("**/piper-tts-web.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export class OnnxWebRuntime { constructor() {} }
+          export class PhonemizeWebRuntime { constructor() {} }
+          export class PiperWebEngine {
+            constructor({ voiceProvider }) { this.voiceProvider = voiceProvider; }
+            async generate(_text, voice) {
+              const [, modelUrl] = await this.voiceProvider.fetch(voice);
+              window.__providerModelUrls = [...(window.__providerModelUrls || []), modelUrl];
+              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
+            }
+            destroy() {}
+          }
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "caches", {
+        configurable: true,
+        value: {
+          open: async () => ({
+            match: async (url) => {
+              if (url.endsWith(".onnx.json")) {
+                window.__metadataCacheReads = (window.__metadataCacheReads || 0) + 1;
+                return new Response("{}");
+              }
+              window.__modelCacheReads = (window.__modelCacheReads || 0) + 1;
+              return new Response(new Blob(["model"]));
+            },
+          }),
+        },
+      });
+    });
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      const { resetLocalVoiceEngine, speakLocally } = await import("/src/piper-tts.js");
+      const first = await speakLocally("first", "en_US-ljspeech-medium");
+      const second = await speakLocally("second", "en_US-ljspeech-medium");
+      URL.revokeObjectURL(first.url);
+      URL.revokeObjectURL(second.url);
+      const snapshot = {
+        modelReads: window.__modelCacheReads,
+        metadataReads: window.__metadataCacheReads,
+        providerUrls: window.__providerModelUrls,
+      };
+      await resetLocalVoiceEngine();
+      return snapshot;
+    });
+
+    expect(result.modelReads).toBe(1);
+    expect(result.metadataReads).toBe(1);
+    expect(result.providerUrls).toHaveLength(2);
+    expect(new Set(result.providerUrls).size).toBe(1);
+  });
+
   test("destroys a failed engine so the next local request creates a fresh one", async ({ page }) => {
     await page.route("**/piper-tts-web.js*", async (route) => {
       await route.fulfill({

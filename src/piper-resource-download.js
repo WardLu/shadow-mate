@@ -1,9 +1,8 @@
 import { createPiperResourceSha256 } from "./piper-resource-hash.js";
-import { getPiperResourcePackage } from "./piper-resource-registry.js";
+import { getPiperResourcePackage, isActivePiperCdnVoicePackage } from "./piper-resource-registry.js";
 import { createPiperResourceStore, isPiperResourceCached } from "./piper-resource-store.js";
 
 const DEFAULT_TIMEOUTS = Object.freeze({ head: 10_000, response: 20_000, read: 30_000 });
-const activeDownloads = new Map();
 
 class PiperResourceDownloadError extends Error {
   constructor(code, message, cause) {
@@ -20,6 +19,9 @@ function downloadError(code, message, cause) {
 function asDownloadError(error, fallbackCode = "network", fallbackMessage = "Piper resource download failed") {
   if (error?.code && ["timeout", "network", "http", "integrity", "storage", "unsupported"].includes(error.code)) return error;
   if (error?.name === "AbortError") return downloadError("network", "Piper resource download was cancelled", error);
+  if (/lease|another tab|already active/i.test(error?.message || "")) {
+    return downloadError("network", "Piper resource download is already active in another tab", error);
+  }
   if (/unsupported/i.test(error?.message || "")) return downloadError("unsupported", "Piper resource download is unsupported", error);
   return downloadError(fallbackCode, fallbackMessage, error);
 }
@@ -30,6 +32,12 @@ function absoluteUrl(url) {
 
 function fileUrl(resourcePackage, file) {
   return absoluteUrl(`${resourcePackage.baseUrl}${file.suffix}`);
+}
+
+function stagingUrl(url, commitId) {
+  const staged = new URL(url);
+  staged.searchParams.set("shadow-mate-download", commitId);
+  return staged.href;
 }
 
 function responseInit(response) {
@@ -62,6 +70,11 @@ function ensureCanCommit(signal, canCommit) {
   }
 }
 
+function createCommitId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function waitFor(promise, { timeout, signal, onTimeout, timeoutMessage }) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -85,7 +98,7 @@ function waitFor(promise, { timeout, signal, onTimeout, timeoutMessage }) {
     signal?.addEventListener("abort", onAbort, { once: true });
     Promise.resolve(promise).then(
       (value) => finish(resolve, value),
-      (error) => finish(reject, errorFromAbort(signal) || asDownloadError(error)),
+      (error) => finish(reject, signal?.aborted ? errorFromAbort(signal) : asDownloadError(error)),
     );
   });
 }
@@ -166,22 +179,6 @@ async function cancelGetResponse(controller, response, deadlineBody, reason) {
   ]);
 }
 
-function completionMarker(resourcePackage, verifiedFiles) {
-  return {
-    id: resourcePackage.id,
-    version: resourcePackage.version,
-    manifestVersion: resourcePackage.version,
-    files: verifiedFiles.map(({ file, actualBytes, actualSha256 }) => ({
-      key: file.key,
-      url: fileUrl(resourcePackage, file),
-      expectedBytes: file.bytes,
-      actualBytes,
-      expectedSha256: file.sha256.toLowerCase(),
-      actualSha256,
-    })),
-  };
-}
-
 export function createPiperResourceDownloader({
   fetch = globalThis.fetch?.bind(globalThis),
   getPackage = getPiperResourcePackage,
@@ -190,17 +187,26 @@ export function createPiperResourceDownloader({
   timeouts = DEFAULT_TIMEOUTS,
 } = {}) {
   const resolvedTimeouts = { ...DEFAULT_TIMEOUTS, ...timeouts };
+  const activeDownloads = new Map();
 
-  async function removeIncomplete(cache, resourcePackage, failedFile) {
+  async function removeIncomplete(cache, resourcePackage, failedFile, commitId, canCommit, stagedKey, allowSharedCleanup) {
     try {
-      if (failedFile) await cache.delete(fileUrl(resourcePackage, failedFile));
-      await cache.delete(store.getMarkerKey(resourcePackage));
+      if (stagedKey) await cache.delete(stagedKey);
+      await store.removeOwnedCompletionMarker(resourcePackage, commitId, cache);
+      if (failedFile) await store.removeOwnedFileMarker(resourcePackage, failedFile, commitId, cache);
+      if (failedFile && allowSharedCleanup && canCommit()) {
+        await store.removeInvalidFile(resourcePackage, failedFile, { cache, canCommit });
+      }
     } catch (error) {
       throw asDownloadError(error, "storage", "Piper resource cleanup failed");
     }
   }
 
-  async function download(resourcePackage, onProgress, signal, { canCommit = () => true } = {}) {
+  async function download(resourcePackage, onProgress, signal, {
+    canCommit = () => true,
+    commitId = createCommitId(),
+    allowSharedCleanup = true,
+  } = {}) {
     if (!fetch || !store?.cacheStorage?.open || typeof TransformStream !== "function" || typeof ReadableStream !== "function" || typeof AbortController !== "function") {
       throw downloadError("unsupported", "Piper resource downloads are unsupported in this browser");
     }
@@ -211,6 +217,7 @@ export function createPiperResourceDownloader({
 
     let cache;
     let failedFile;
+    let stagedKey;
     let received = 0;
     const verifiedFiles = [];
     try {
@@ -219,10 +226,34 @@ export function createPiperResourceDownloader({
       } catch (error) {
         throw asDownloadError(error, "storage", "Piper resource cache could not be opened");
       }
-      for (const file of resourcePackage.files) {
+      const inspection = await store.inspectPackageFiles(resourcePackage, {
+        cache,
+        rehashUnknown: true,
+        persistMetadata: true,
+        canCommit,
+        commitId,
+      });
+      for (const entry of inspection.results) {
+        if (!entry.valid) continue;
+        verifiedFiles.push(entry);
+        received += entry.metadata.actualBytes;
+      }
+      if (received > 0) {
+        onProgress?.(received, resourcePackage.totalBytes, {
+          packageId: resourcePackage.id,
+          version: resourcePackage.version,
+          reusedBytes: received,
+        });
+      }
+
+      for (const entry of inspection.results) {
+        if (entry.valid) continue;
+        const file = entry.file;
         ensureCanCommit(signal, canCommit);
         failedFile = file;
+        if (entry.present && allowSharedCleanup) await store.removeInvalidFile(resourcePackage, file, { cache, canCommit });
         const url = fileUrl(resourcePackage, file);
+        stagedKey = stagingUrl(url, commitId);
         const headRequest = createRequestController(signal);
         let head;
         try {
@@ -269,11 +300,22 @@ export function createPiperResourceDownloader({
           });
           deadlineBody = streamWithReadTimeout(response.body, { controller: getRequest.controller, timeout: resolvedTimeouts.read });
           ensureCanCommit(signal, canCommit);
-          await cache.put(url, new Response(deadlineBody.pipeThrough(hashingStream), responseInit(response)));
+          await cache.put(stagedKey, new Response(deadlineBody.pipeThrough(hashingStream), responseInit(response)));
           const actualSha256 = hasher.digestHex();
           if (actualBytes !== file.bytes) throw downloadError("integrity", "Piper resource actual bytes do not match the manifest");
           if (actualSha256 !== file.sha256.toLowerCase()) throw downloadError("integrity", "Piper resource SHA-256 does not match the manifest");
-          verifiedFiles.push({ file, actualBytes, actualSha256 });
+          ensureCanCommit(signal, canCommit);
+          const stagedResponse = await cache.match(stagedKey);
+          if (!stagedResponse) throw downloadError("storage", "Piper resource staging response is unavailable");
+          await cache.put(url, stagedResponse);
+          await cache.delete(stagedKey);
+          stagedKey = null;
+          ensureCanCommit(signal, canCommit);
+          const metadata = await store.writeFileCompletionMarker(resourcePackage, file, {
+            bytes: actualBytes,
+            sha256: actualSha256,
+          }, { cache, canCommit, commitId });
+          verifiedFiles.push({ file, valid: true, metadata });
           failedFile = null;
         } catch (error) {
           await cancelGetResponse(getRequest.controller, response, deadlineBody, error);
@@ -282,20 +324,35 @@ export function createPiperResourceDownloader({
           getRequest.dispose();
         }
       }
-      const marker = completionMarker(resourcePackage, verifiedFiles);
       ensureCanCommit(signal, canCommit);
-      await cache.put(store.getMarkerKey(resourcePackage), new Response(JSON.stringify(marker), { headers: { "content-type": "application/json" } }));
+      let marker;
+      try {
+        marker = await store.writeCompletionMarker(resourcePackage, verifiedFiles, { cache, canCommit, commitId });
+      } catch (error) {
+        throw asDownloadError(error, "storage", "Piper resource completion marker could not be stored");
+      }
+      await store.cleanupSupersededPiperResourceCaches(resourcePackage.id, { skipCurrentValidation: true }).catch(() => {});
       return { status: "completed", packageId: resourcePackage.id, version: resourcePackage.version, files: marker.files };
     } catch (error) {
       const mapped = asDownloadError(error, "network", "Piper resource download failed");
-      if (cache && canCommit()) await removeIncomplete(cache, resourcePackage, failedFile);
+      if (cache) {
+        await removeIncomplete(
+          cache,
+          resourcePackage,
+          failedFile,
+          commitId,
+          canCommit,
+          stagedKey,
+          allowSharedCleanup,
+        ).catch(() => {});
+      }
       throw mapped;
     }
   }
 
   function downloadPiperResource(packageId, onProgress, signal, options) {
     const resourcePackage = getPackage(packageId);
-    if (!resourcePackage?.releaseApproved || resourcePackage.source !== "cdn" || resourcePackage.cachePolicy !== "user-download") {
+    if (!isActivePiperCdnVoicePackage(resourcePackage)) {
       return Promise.reject(downloadError("unsupported", "Piper resource downloads are unsupported for this package"));
     }
     const key = `${resourcePackage.id}@${resourcePackage.version}`;

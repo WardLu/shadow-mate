@@ -669,7 +669,7 @@
   .piper-resource-row{padding:11px;border:1px solid var(--line);border-radius:14px;background:#f7fbf8;}
   .piper-resource-summary{display:grid;gap:2px;}.piper-resource-summary strong{font-size:13px;}.piper-resource-summary span{color:var(--ink-soft);font-size:11px;}
   .piper-resource-details{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:9px 0;}.piper-resource-details div{min-width:0;}.piper-resource-details dt{color:var(--ink-soft);font-size:10px;}.piper-resource-details dd{overflow-wrap:anywhere;margin:1px 0 0;color:var(--ink);font-size:11px;}
-  .piper-resource-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:700;color:var(--green-deep);}.piper-resource-actions button{border:0;border-radius:999px;padding:6px 10px;background:var(--green);color:#fff;font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
+  .piper-resource-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;font-size:11px;font-weight:700;color:var(--green-deep);}.piper-resource-actions [data-piper-resource-status]{margin-right:auto;}.piper-resource-actions button{border:0;border-radius:999px;padding:6px 10px;background:var(--green);color:#fff;font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
   .guide-facts,.guide-install-grid{display:grid;gap:8px;}
   .guide-facts>div,.guide-install-grid>div{display:grid;gap:2px;padding:10px 11px;border-left:3px solid var(--green);background:#f7fbf8;border-radius:0 12px 12px 0;}
   .guide-facts strong,.guide-install-grid strong{font-size:12px;color:var(--green-deep);}
@@ -717,6 +717,7 @@
 .voice-dialog-actions{display:flex;justify-content:flex-end;gap:10px;}
 .voice-dialog-actions button{border:none;border-radius:999px;padding:9px 18px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}
 .voice-dialog-cancel{background:var(--green-light);color:var(--ink-soft);}
+.voice-dialog-delete{background:#fff1f1;color:#a33;}
 .voice-dialog-ok{background:var(--green);color:#fff;}
 .voice-dialog-actions button:disabled{opacity:.6;cursor:default;}
 .guide-device-tip{font-size:12.5px;color:var(--green-deep);background:var(--green-light);border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.6;}

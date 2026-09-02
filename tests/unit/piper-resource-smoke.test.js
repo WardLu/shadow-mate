@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assertCors } from "../../scripts/piper-resource-smoke.mjs";
+import { getPiperResourcePackage } from "../../src/piper-resource-registry.js";
+import { assertApprovedCdnPackage, assertCors } from "../../scripts/piper-resource-smoke.mjs";
 
 const VALID_CORS_HEADERS = {
   "access-control-allow-origin": "https://preview-sm.shadow.wang",
@@ -12,6 +13,15 @@ function response(headers) {
 }
 
 describe("Piper CDN CORS gate", () => {
+  it("requires approved license, provenance, and distribution metadata for every active CDN package", () => {
+    const approved = getPiperResourcePackage("en_US-ljspeech-medium");
+    expect(() => assertApprovedCdnPackage(approved)).not.toThrow();
+    expect(() => assertApprovedCdnPackage({ ...approved, licenseStatus: "pending" })).toThrow(/license/i);
+    expect(() => assertApprovedCdnPackage({ ...approved, provenance: { status: "partial" } })).toThrow(/provenance/i);
+    expect(() => assertApprovedCdnPackage({ ...approved, distribution: { status: "blocked" } })).toThrow(/distribution/i);
+    expect(() => assertApprovedCdnPackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toThrow(/not an approved CDN/i);
+  });
+
   it("accepts an expected Preview origin with all required methods and exposed headers", () => {
     expect(() => assertCors(response(VALID_CORS_HEADERS), "GET", "https://voice.example.test/model.onnx")).not.toThrow();
   });

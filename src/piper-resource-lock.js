@@ -26,19 +26,26 @@ function writeLease(storage, key, lease) {
 }
 
 async function runWithLocalStorageLease(key, task) {
+  const owner = createOwnerToken();
+  const fallback = () => {
+    const controller = new AbortController();
+    return task({
+      signal: controller.signal,
+      canCommit: () => !controller.signal.aborted,
+      ownerToken: owner,
+      coordination: "same-tab-only",
+    });
+  };
   let storage;
   try {
     storage = globalThis.localStorage;
   } catch (_) {
-    const controller = new AbortController();
-    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+    return fallback();
   }
   if (!storage) {
-    const controller = new AbortController();
-    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+    return fallback();
   }
 
-  const owner = createOwnerToken();
   const existing = readLease(storage, key);
   if (existing?.owner && existing.expiresAt > Date.now()) {
     throw new Error("Piper resource download is already active in another tab");
@@ -50,8 +57,7 @@ async function runWithLocalStorageLease(key, task) {
   } catch (_) {
     // Storage can be blocked by browser privacy settings. Keep the same-tab single flight,
     // but never assume this tab owns another tab's cache.
-    const controller = new AbortController();
-    return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+    return fallback();
   }
 
   const controller = new AbortController();
@@ -83,7 +89,7 @@ async function runWithLocalStorageLease(key, task) {
   }, Math.floor(LEASE_MS / 2));
 
   try {
-    const result = await task({ signal: controller.signal, canCommit });
+    const result = await task({ signal: controller.signal, canCommit, ownerToken: owner, coordination: "lease" });
     if (!canCommit()) throw new Error("Piper resource download lease was lost before completion");
     return result;
   } finally {
@@ -104,7 +110,12 @@ export function acquirePiperDownloadLock(key, task) {
     if (typeof globalThis.navigator?.locks?.request === "function") {
       return globalThis.navigator.locks.request(lockName(key), { mode: "exclusive" }, () => {
         const controller = new AbortController();
-        return task({ signal: controller.signal, canCommit: () => !controller.signal.aborted });
+        return task({
+          signal: controller.signal,
+          canCommit: () => !controller.signal.aborted,
+          ownerToken: createOwnerToken(),
+          coordination: "web-lock",
+        });
       });
     }
     return runWithLocalStorageLease(key, task);

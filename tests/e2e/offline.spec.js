@@ -107,12 +107,22 @@ test.describe("Offline mode (no login)", () => {
       const marker = await store.writeCompletionMarker(resourcePackage);
       const completed = await store.isPiperResourceCached(resourcePackage.id);
       await caches.open("shadow-mate-app-v3");
-      const registration = await Promise.race([
+      await Promise.race([
         navigator.serviceWorker.ready,
         new Promise((_, reject) => setTimeout(() => reject(new Error("service worker did not become ready")), 10_000)),
       ]);
+      const lifecycleToken = Date.now();
+      const registration = await navigator.serviceWorker.register(`/sw.js?lifecycle=${lifecycleToken}`, { scope: "/" });
       await registration.update();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve, reject) => {
+        const deadline = Date.now() + 10_000;
+        const check = () => {
+          if (registration.active?.scriptURL.includes(`lifecycle=${lifecycleToken}`) && registration.active.state === "activated") resolve();
+          else if (Date.now() >= deadline) reject(new Error("updated service worker did not activate"));
+          else setTimeout(check, 25);
+        };
+        check();
+      });
       return {
         supported: true,
         cacheNames: await caches.keys(),
@@ -147,10 +157,10 @@ test.describe("Offline mode (no login)", () => {
       const offlinePackage = await page.evaluate(async (fixture) => {
         const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
         const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
-        const markerKey = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
-        const marker = await cache.match(markerKey);
+        const markerRoot = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
+        const marker = (await cache.keys()).some((request) => request.url === markerRoot || request.url.startsWith(`${markerRoot}?owner=`));
         const files = await Promise.all(resourcePackage.files.map((file) => cache.match(`${resourcePackage.baseUrl}${file.suffix}`)));
-        return { marker: Boolean(marker), files: files.map(Boolean) };
+        return { marker, files: files.map(Boolean) };
       }, PIPER_LIFECYCLE_FIXTURE);
       expect(offlinePackage).toEqual({ marker: true, files: [true, true] });
     } finally {
@@ -296,7 +306,8 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("gated");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("60.6 MB");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toHaveCount(0);
     await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
@@ -327,6 +338,7 @@ test.describe("Offline mode (no login)", () => {
 
   test("speech button offers the active English Piper package when system speech is unavailable", async ({ page }) => {
     await page.goto("/");
+    const origin = new URL(page.url()).origin;
     await page.evaluate(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
@@ -339,6 +351,10 @@ test.describe("Offline mode (no login)", () => {
     await button.click();
     await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
     await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线英语语音");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("English (LJSpeech, medium)");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("版本 1");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("60.6 MB");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText(origin);
     await page.click('.voice-dialog-actions [data-action="cancel"]');
     await expect(page.locator("#shadow-voice-dialog")).toBeHidden();
   });

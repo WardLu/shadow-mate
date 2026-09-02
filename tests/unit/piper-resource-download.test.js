@@ -10,14 +10,18 @@ const HASHES = {
   metadata: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
 };
 
-function createPackage({ modelHash = HASHES.model } = {}) {
+function createPackage({
+  modelHash = HASHES.model,
+  id = "test-voice",
+  baseUrl = "https://voice.example.test/test-voice",
+} = {}) {
   return {
-    id: "test-voice",
+    id,
     locale: "en-US",
     label: "Test voice",
     kind: "voice",
     version: "1",
-    baseUrl: "https://voice.example.test/test-voice",
+    baseUrl,
     source: "cdn",
     cachePolicy: "user-download",
     releaseApproved: true,
@@ -49,7 +53,7 @@ function createCacheStorage({ putError, onPut } = {}) {
             const stored = response.clone();
             await response.arrayBuffer();
             entries.set(cacheKey(key), stored);
-            onPut?.(cacheKey(key));
+            await onPut?.(cacheKey(key), { entries, response: stored.clone() });
           },
           async delete(key) {
             return entries.delete(cacheKey(key));
@@ -124,6 +128,11 @@ async function packageCache({ store, resourcePackage }) {
   return store.cacheStorage.open(store.getCacheName(resourcePackage));
 }
 
+async function completionMarkers(setup) {
+  const cache = await packageCache(setup);
+  return setup.store.getCompletionMarkers(setup.resourcePackage, cache);
+}
+
 describe("Piper resource downloader", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -184,7 +193,7 @@ describe("Piper resource downloader", () => {
     await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).rejects.toMatchObject({ code: "integrity" });
     const cache = await packageCache(setup);
     await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeUndefined();
-    await expect(cache.match(setup.store.getMarkerKey(resourcePackage))).resolves.toBeUndefined();
+    await expect(completionMarkers(setup)).resolves.toHaveLength(0);
 
     const actualSetup = createDownloader({
       resourcePackage,
@@ -196,7 +205,7 @@ describe("Piper resource downloader", () => {
     });
     const actualCache = await packageCache(actualSetup);
     await expect(actualCache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeUndefined();
-    await expect(actualCache.match(actualSetup.store.getMarkerKey(resourcePackage))).resolves.toBeUndefined();
+    await expect(completionMarkers(actualSetup)).resolves.toHaveLength(0);
   });
 
   it("passes Cache.put a streaming Response and completes verified files before the marker", async () => {
@@ -205,7 +214,25 @@ describe("Piper resource downloader", () => {
     await expect(setup.downloader.downloadPiperResource(setup.resourcePackage.id)).resolves.toMatchObject({ status: "completed" });
     expect(setup.cacheStorage.putBodies[0]).toBeInstanceOf(ReadableStream);
     const cache = await packageCache(setup);
-    await expect(cache.match(setup.store.getMarkerKey(setup.resourcePackage))).resolves.toBeTruthy();
+    await expect(completionMarkers(setup)).resolves.toHaveLength(1);
+    await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(true);
+  });
+
+  it("requests only a missing metadata file when the verified model is already cached", async () => {
+    const setup = createDownloader();
+    const cache = await packageCache(setup);
+    await cache.put(`${setup.resourcePackage.baseUrl}.onnx`, new Response("abc"));
+    await cache.put(`${setup.resourcePackage.baseUrl}.onnx.json`, new Response("{}"));
+    const marker = await setup.store.writeCompletionMarker(setup.resourcePackage);
+    await cache.delete(`${setup.resourcePackage.baseUrl}.onnx.json`);
+    for (const entry of await setup.store.getFileCompletionMarkers(setup.resourcePackage, setup.resourcePackage.files[1], cache)) {
+      await cache.delete(entry.key);
+    }
+    await cache.delete(setup.store.getMarkerKey(setup.resourcePackage, marker.commitId));
+
+    await expect(setup.downloader.downloadPiperResource(setup.resourcePackage.id)).resolves.toMatchObject({ status: "completed" });
+    expect(setup.fetch).toHaveBeenCalledTimes(2);
+    expect(setup.fetch.mock.calls.every(([url]) => url.endsWith(".onnx.json"))).toBe(true);
     await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(true);
   });
 
@@ -225,9 +252,35 @@ describe("Piper resource downloader", () => {
 
     await expect(setup.downloader.downloadPiperResource(setup.resourcePackage.id, undefined, controller.signal, { canCommit })).rejects.toMatchObject({ code: "network" });
     const cache = await packageCache(setup);
-    await expect(cache.match(setup.store.getMarkerKey(setup.resourcePackage))).resolves.toBeUndefined();
+    await expect(completionMarkers(setup)).resolves.toHaveLength(0);
     await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(false);
     expect(canCommit).toHaveBeenCalled();
+  });
+
+  it("does not remove another owner's marker when the lease is lost during marker put", async () => {
+    let ownsLease = true;
+    let markerKey;
+    const cacheStorage = createCacheStorage({
+      onPut: async (key, { entries, response }) => {
+        if (!key.includes("/__shadow-mate-piper-package__/")) return;
+        const winner = await response.json();
+        winner.commitId = "winner-tab";
+        markerKey = key.replace("owner=losing-tab", "owner=winner-tab");
+        entries.set(markerKey, new Response(JSON.stringify(winner), { headers: { "content-type": "application/json" } }));
+        ownsLease = false;
+      },
+    });
+    const setup = createDownloader({ cacheStorage });
+
+    await expect(setup.downloader.downloadPiperResource(
+      setup.resourcePackage.id,
+      undefined,
+      undefined,
+      { canCommit: () => ownsLease, commitId: "losing-tab" },
+    )).rejects.toMatchObject({ code: "network" });
+
+    const cache = await packageCache(setup);
+    await expect((await cache.match(markerKey)).json()).resolves.toMatchObject({ commitId: "winner-tab" });
   });
 
   it("deletes a file and leaves no marker when its SHA-256 is wrong", async () => {
@@ -237,7 +290,28 @@ describe("Piper resource downloader", () => {
     await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).rejects.toMatchObject({ code: "integrity" });
     const cache = await packageCache(setup);
     await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeUndefined();
-    await expect(cache.match(setup.store.getMarkerKey(resourcePackage))).resolves.toBeUndefined();
+    await expect(completionMarkers(setup)).resolves.toHaveLength(0);
+  });
+
+  it("does not delete a shared cache response when cross-tab storage coordination is unavailable", async () => {
+    const resourcePackage = createPackage();
+    const setup = createDownloader({
+      resourcePackage,
+      fetch: createFetch({ package: resourcePackage, contents: { model: ["ab"] } }),
+    });
+    const cache = await packageCache(setup);
+    await cache.put(`${resourcePackage.baseUrl}.onnx`, new Response("old"));
+
+    await expect(setup.downloader.downloadPiperResource(
+      resourcePackage.id,
+      undefined,
+      undefined,
+      { allowSharedCleanup: false, commitId: "storage-unavailable-tab" },
+    )).rejects.toMatchObject({ code: "integrity" });
+
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(completionMarkers(setup)).resolves.toHaveLength(0);
+    expect((await cache.keys()).some((request) => request.url.includes("shadow-mate-download="))).toBe(false);
   });
 
   it("cancels a stalled reader and leaves no completed package when aborted", async () => {
@@ -288,7 +362,7 @@ describe("Piper resource downloader", () => {
       return Promise.resolve(new Response(modelStream.body, { status: 200, headers: headers(file.bytes) }));
     });
     const cacheStorage = createCacheStorage({
-      putError: (key) => key.endsWith(".onnx") ? new Error("Cache Storage write failed") : null,
+      putError: (key) => new URL(key).pathname.endsWith(".onnx") ? new Error("Cache Storage write failed") : null,
     });
     const setup = createDownloader({ resourcePackage, fetch, cacheStorage });
 

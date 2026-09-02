@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
   createPiperResourceStore,
   getPiperResourceStatus,
@@ -61,6 +62,10 @@ function createPackage({ version = "1", id = "test-voice", baseUrl = "https://vo
     source: "cdn",
     cachePolicy: "user-download",
     releaseApproved: true,
+    licenseStatus: "approved",
+    license: { status: "approved", model: "MIT", trainingData: "public-domain", reference: "https://example.test/model-card" },
+    provenance: { status: "verified", source: "https://example.test/source", modelCard: "https://example.test/model-card" },
+    distribution: { status: "approved", channel: "public-cdn", notice: "THIRD_PARTY_NOTICES.md" },
     totalBytes: 5,
     files: [
       { key: "model", suffix: ".onnx", contentType: "application/octet-stream", bytes: 3, sha256: HASHES.model },
@@ -73,7 +78,7 @@ async function seedCompletePackage(store, resourcePackage) {
   const cache = await store.cacheStorage.open(store.getCacheName(resourcePackage));
   await cache.put(`${resourcePackage.baseUrl}.onnx`, new Response("abc"));
   await cache.put(`${resourcePackage.baseUrl}.onnx.json`, new Response("{}"));
-  await store.writeCompletionMarker(resourcePackage);
+  return store.writeCompletionMarker(resourcePackage);
 }
 
 describe("Piper resource registry", () => {
@@ -88,11 +93,25 @@ describe("Piper resource registry", () => {
       id: "zh_CN-chaowen-medium",
       releaseApproved: false,
     });
+    expect(listPiperResourcePackages().find((entry) => entry.id === "piper-browser-runtime")).toMatchObject({
+      source: "bundled",
+      cachePolicy: "app-shell",
+      totalBytes: 76608615,
+      files: expect.arrayContaining([
+        expect.objectContaining({ url: "/piper-tts-web.js", bytes: 46656168, license: expect.any(String) }),
+        expect.objectContaining({ url: "/onnx/ort-wasm-simd-threaded.wasm", bytes: 11246032 }),
+        expect.objectContaining({ url: "/piper/piper_phonemize.wasm", bytes: 629166 }),
+        expect.objectContaining({ url: "/piper/piper_phonemize.data", bytes: 18077249 }),
+      ]),
+    });
   });
 
   it("rejects invalid active manifests at validation time", () => {
     expect(() => validatePiperResourcePackages([{ ...createPackage(), files: [] }])).toThrow(/files/i);
     expect(() => validatePiperResourcePackages([{ ...createPackage(), files: [{ ...createPackage().files[0], sha256: "" }] }])).toThrow(/sha-256/i);
+    expect(() => validatePiperResourcePackages([{ ...createPackage(), licenseStatus: "pending" }])).toThrow(/license/i);
+    expect(() => validatePiperResourcePackages([{ ...createPackage(), provenance: { status: "partial" } }])).toThrow(/provenance/i);
+    expect(() => validatePiperResourcePackages([{ ...createPackage(), distribution: { status: "blocked" } }])).toThrow(/distribution/i);
   });
 
   it("reports each local-download capability independently", () => {
@@ -144,31 +163,33 @@ describe("versioned Piper resource store", () => {
     await expect(store.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("partial");
   });
 
-  it("invalidates URL, version, and hash marker mismatches instead of trusting cached responses", async () => {
+  it("invalidates a package marker without deleting independently verified files", async () => {
     const resourcePackage = createPackage();
     const store = createStore([resourcePackage]);
-    await seedCompletePackage(store, resourcePackage);
+    const seeded = await seedCompletePackage(store, resourcePackage);
     const cache = await cacheStorage.open(store.getCacheName(resourcePackage));
-    const markerKey = store.getMarkerKey(resourcePackage);
+    const markerKey = store.getMarkerKey(resourcePackage, seeded.commitId);
     const marker = await (await cache.match(markerKey)).json();
     marker.files[0].actualSha256 = "0".repeat(64);
     await cache.put(markerKey, new Response(JSON.stringify(marker)));
 
     await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
-    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeUndefined();
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(store.getFileCompletionMarkers(resourcePackage, resourcePackage.files[0], cache)).resolves.toHaveLength(1);
     await expect(cache.match(markerKey)).resolves.toBeUndefined();
+    await expect(store.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("partial");
 
     const v2 = createPackage({ version: "2" });
     const v2Store = createStore([v2]);
     await expect(v2Store.isPiperResourceCached(v2.id)).resolves.toBe(false);
   });
 
-  it("clears every package key when a marker is malformed or references an untrusted URL", async () => {
+  it("removes malformed or untrusted marker data while preserving verified manifest files", async () => {
     const resourcePackage = createPackage();
     const store = createStore([resourcePackage]);
-    await seedCompletePackage(store, resourcePackage);
+    const seeded = await seedCompletePackage(store, resourcePackage);
     const cache = await cacheStorage.open(store.getCacheName(resourcePackage));
-    const markerKey = store.getMarkerKey(resourcePackage);
+    const markerKey = store.getMarkerKey(resourcePackage, seeded.commitId);
     const marker = await (await cache.match(markerKey)).json();
     const untrustedUrl = "https://untrusted.example.test/model.onnx";
     marker.files[0].url = untrustedUrl;
@@ -176,24 +197,35 @@ describe("versioned Piper resource store", () => {
     await cache.put(markerKey, new Response(JSON.stringify(marker)));
 
     await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
-    await expect(cache.keys()).resolves.toEqual([]);
+    await expect(cache.match(untrustedUrl)).resolves.toBeUndefined();
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx.json`)).resolves.toBeTruthy();
+    await expect(cache.match(markerKey)).resolves.toBeUndefined();
 
-    await seedCompletePackage(store, resourcePackage);
-    await cache.put(markerKey, new Response("not json"));
+    const secondSeeded = await seedCompletePackage(store, resourcePackage);
+    const secondMarkerKey = store.getMarkerKey(resourcePackage, secondSeeded.commitId);
+    await cache.put(secondMarkerKey, new Response("not json"));
     await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
-    await expect(cache.keys()).resolves.toEqual([]);
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(cache.match(secondMarkerKey)).resolves.toBeUndefined();
   });
 
   it("keeps cache and status queries stable when invalid-marker cleanup fails", async () => {
     const resourcePackage = createPackage();
     const store = createStore([resourcePackage]);
-    await seedCompletePackage(store, resourcePackage);
+    const seeded = await seedCompletePackage(store, resourcePackage);
     const cache = await cacheStorage.open(store.getCacheName(resourcePackage));
     const cleanupFailure = new Error("Cache Storage delete failed");
-    cache.keys = vi.fn().mockRejectedValue(cleanupFailure);
-    await cache.put(store.getMarkerKey(resourcePackage), new Response("not json"));
+    const ownedMarkerKey = store.getMarkerKey(resourcePackage, seeded.commitId);
+    const originalDelete = cache.delete.bind(cache);
+    cache.delete = vi.fn((key) => {
+      const normalized = typeof key === "string" ? key : key.url;
+      if (normalized === ownedMarkerKey) return Promise.reject(cleanupFailure);
+      return originalDelete(key);
+    });
+    await cache.put(ownedMarkerKey, new Response("not json"));
 
-    await expect(store.invalidate(cache)).rejects.toMatchObject({
+    await expect(store.cleanupInvalidPackageMarker(cache, resourcePackage, null, ownedMarkerKey)).rejects.toMatchObject({
       name: "PiperResourceStorageError",
       code: "storage",
       cause: cleanupFailure,
@@ -204,7 +236,7 @@ describe("versioned Piper resource store", () => {
     await expect(store.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("invalid");
   });
 
-  it("migrates only a complete, verified legacy English voice cache", async () => {
+  it("automatically migrates verified legacy files and preserves a valid partial model", async () => {
     const english = {
       ...createPackage({ id: "en_US-ljspeech-medium", baseUrl: "https://voice.shadow.wang/piper/en_US-ljspeech-medium" }),
     };
@@ -213,12 +245,16 @@ describe("versioned Piper resource store", () => {
     await legacy.put(`${english.baseUrl}.onnx`, new Response("abc"));
     await legacy.put(`${english.baseUrl}.onnx.json`, new Response("{}"));
 
-    await expect(store.migrateLegacyEnglishVoice()).resolves.toMatchObject({ status: "migrated" });
+    await expect(store.getPiperResourceStatus(english.id)).resolves.toBe("completed");
     await expect(store.isPiperResourceCached(english.id)).resolves.toBe(true);
 
     const partialStore = createStore([english]);
     await (await cacheStorage.open("shadow-mate-voice")).put(`${english.baseUrl}.onnx`, new Response("abc"));
-    await expect(partialStore.migrateLegacyEnglishVoice()).resolves.toMatchObject({ status: "not-downloaded" });
+    await expect(partialStore.getPiperResourceStatus(english.id)).resolves.toBe("partial");
+    const target = await cacheStorage.open(partialStore.getCacheName(english));
+    await expect(target.match(`${english.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(partialStore.getFileCompletionMarkers(english, english.files[0], target)).resolves.toHaveLength(1);
+    await expect(partialStore.getPiperResourceCachedBytes(english.id)).resolves.toBe(3);
   });
 
   it("deletes only the selected package and removes only usable superseded versions", async () => {
@@ -232,11 +268,21 @@ describe("versioned Piper resource store", () => {
 
     await store.cleanupSupersededPiperResourceCaches(current.id, { inUseCacheNames: [store.getCacheName(old)] });
     await expect(cacheStorage.keys()).resolves.toContain(store.getCacheName(old));
-    await store.cleanupSupersededPiperResourceCaches(current.id);
+    await expect(store.getPiperResourceStatus(current.id)).resolves.toBe("completed");
     await expect(cacheStorage.keys()).resolves.not.toContain(store.getCacheName(old));
     await store.deletePiperResource(current.id);
     await expect(cacheStorage.keys()).resolves.not.toContain(store.getCacheName(current));
     await expect(cacheStorage.keys()).resolves.toContain(store.getCacheName(other));
+  });
+
+  it("keeps a verified current package usable when superseded cleanup is unavailable", async () => {
+    const resourcePackage = createPackage();
+    const store = createStore([resourcePackage]);
+    await seedCompletePackage(store, resourcePackage);
+    cacheStorage.keys = vi.fn().mockRejectedValue(new Error("cache listing failed"));
+
+    await expect(store.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("completed");
+    await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(true);
   });
 
   it("reports unsupported cache APIs and browser eviction without claiming a completed download", async () => {
@@ -251,5 +297,10 @@ describe("versioned Piper resource store", () => {
     await seedCompletePackage(evictedStore, resourcePackage);
     await cacheStorage.delete(evictedStore.getCacheName(resourcePackage));
     await expect(evictedStore.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("not-downloaded");
+  });
+
+  it("never materializes a cached model with Response.arrayBuffer", async () => {
+    const source = await readFile(`${process.cwd()}/src/piper-resource-store.js`, "utf8");
+    expect(source).not.toMatch(/\.arrayBuffer\s*\(/);
   });
 });

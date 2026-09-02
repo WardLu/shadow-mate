@@ -5,8 +5,14 @@
  */
 
 import { getPiperDownloadError, downloadPiperResource } from "./piper-resource-download.js";
-import { getPiperResourcePackage, listPiperResourcePackages } from "./piper-resource-registry.js";
-import { getPiperResourceStatus } from "./piper-resource-store.js";
+import { acquirePiperDownloadLock } from "./piper-resource-lock.js";
+import {
+  formatPiperResourceBytes,
+  getPiperResourcePackage,
+  isActivePiperCdnVoicePackage,
+  listPiperResourcePackages,
+} from "./piper-resource-registry.js";
+import { deletePiperResource, getPiperResourceStatus } from "./piper-resource-store.js";
 
 export const ENGLISH_PIPER_PACKAGE_ID = "en_US-ljspeech-medium";
 const ENGINE_URL = "/piper-tts-web.js";
@@ -61,7 +67,7 @@ function packageCacheName(resourcePackage) {
 function getApprovedPackage(packageId) {
   const resourcePackage = getPiperResourcePackage(packageId);
   if (!resourcePackage) throw new PiperLocalVoiceError("invalid", "Unknown Piper voice package");
-  if (!resourcePackage.releaseApproved || !resourcePackage.baseUrl) {
+  if (!isActivePiperCdnVoicePackage(resourcePackage) || !resourcePackage.baseUrl) {
     throw new PiperLocalVoiceError("gated", "This Piper voice package is not approved for download");
   }
   return resourcePackage;
@@ -69,7 +75,7 @@ function getApprovedPackage(packageId) {
 
 function packageForVoice(voice) {
   for (const resourcePackage of listPiperResourcePackages()) {
-    if (resourcePackage?.releaseApproved && normalizedUrl(resourcePackage.baseUrl) === normalizedUrl(voice)) return resourcePackage;
+    if (isActivePiperCdnVoicePackage(resourcePackage) && normalizedUrl(resourcePackage.baseUrl) === normalizedUrl(voice)) return resourcePackage;
   }
   throw new PiperLocalVoiceError("invalid", "Piper requested an unregistered voice URL");
 }
@@ -105,6 +111,7 @@ async function disposeEngineSession(session) {
   }
   for (const url of session.modelObjectUrls) URL.revokeObjectURL(url);
   session.modelObjectUrls.clear();
+  session.voiceProviders.clear();
 }
 
 async function readVoiceFile(session, resourcePackage, suffix) {
@@ -118,18 +125,31 @@ async function readVoiceFile(session, resourcePackage, suffix) {
 }
 
 async function createEngineSession() {
-  const session = { engine: null, modelObjectUrls: new Set(), disposed: false };
+  const session = { engine: null, modelObjectUrls: new Set(), voiceProviders: new Map(), disposed: false };
   const mod = await import(/* @vite-ignore */ ENGINE_URL);
   const voiceProvider = {
     async fetch(voice) {
       const resourcePackage = packageForVoice(voice);
-      const [metadata, model] = await Promise.all([
-        readVoiceFile(session, resourcePackage, ".onnx.json"),
-        readVoiceFile(session, resourcePackage, ".onnx"),
-      ]);
-      const modelUrl = URL.createObjectURL(await model.blob());
-      session.modelObjectUrls.add(modelUrl);
-      return [await metadata.json(), modelUrl];
+      const key = `${resourcePackage.id}@${resourcePackage.version}`;
+      if (!session.voiceProviders.has(key)) {
+        const pending = Promise.all([
+          readVoiceFile(session, resourcePackage, ".onnx.json"),
+          readVoiceFile(session, resourcePackage, ".onnx"),
+        ]).then(async ([metadata, model]) => {
+          const modelUrl = URL.createObjectURL(await model.blob());
+          if (session.disposed) {
+            URL.revokeObjectURL(modelUrl);
+            throw new PiperLocalVoiceError("engine", "Piper voice engine was reset while loading its model");
+          }
+          session.modelObjectUrls.add(modelUrl);
+          return [await metadata.json(), modelUrl];
+        }).catch((error) => {
+          session.voiceProviders.delete(key);
+          throw error;
+        });
+        session.voiceProviders.set(key, pending);
+      }
+      return session.voiceProviders.get(key);
     },
   };
   session.engine = new mod.PiperWebEngine({
@@ -208,21 +228,59 @@ export async function downloadVoice(onProgress, signal) {
   return downloadPiperResource(ENGLISH_PIPER_PACKAGE_ID, onProgress, signal);
 }
 
-function buildDialog(resourcePackage) {
-  let dlg = document.getElementById("shadow-voice-dialog");
-  if (dlg) return dlg;
+function combineAbortSignals(signals) {
+  const controller = new AbortController();
+  const forward = (signal) => {
+    if (controller.signal.aborted) return;
+    controller.abort(signal.reason);
+  };
+  const listeners = [];
+  for (const signal of signals.filter(Boolean)) {
+    if (signal.aborted) {
+      forward(signal);
+      break;
+    }
+    const listener = () => forward(signal);
+    signal.addEventListener("abort", listener, { once: true });
+    listeners.push([signal, listener]);
+  }
+  return {
+    signal: controller.signal,
+    dispose() {
+      for (const [signal, listener] of listeners) signal.removeEventListener("abort", listener);
+    },
+  };
+}
+
+function dialogDescription(resourcePackage, resourceStatus) {
+  const scope = globalThis.location?.origin || "当前域名";
+  const statusHint = resourceStatus === "partial"
+    ? "检测到部分已校验文件，可继续下载缺失文件，或先删除现有缓存。"
+    : resourceStatus === "invalid"
+      ? "现有缓存未通过校验，可重试修复，或先删除现有缓存。"
+      : "";
+  return `当前设备没有可用的系统发音。可下载 ${resourcePackage.label}（版本 ${resourcePackage.version}，清单大小 ${formatPiperResourceBytes(resourcePackage.totalBytes)}）。下载仅保存在当前浏览器配置文件和 ${scope}，完成后可离线使用；不会上传录音。${statusHint}`;
+}
+
+function buildDialog(resourcePackage, resourceStatus) {
+  document.getElementById("shadow-voice-dialog")?.remove();
   const language = resourcePackage.locale === "zh-CN" ? "中文" : "英语";
-  dlg = document.createElement("dialog");
+  const dlg = document.createElement("dialog");
   dlg.id = "shadow-voice-dialog";
   dlg.className = "voice-dialog";
   dlg.innerHTML =
-    `<div class="voice-dialog-title">离线${language}语音</div>` +
-    `<div class="voice-dialog-desc">当前设备没有可用的${language}发音。影伴可下载离线${language}语音包（一次性下载，之后可离线使用，不上传录音）。是否现在下载？</div>` +
+    '<div class="voice-dialog-title"></div>' +
+    '<div class="voice-dialog-desc"></div>' +
     '<div class="voice-dialog-progress" hidden><div class="voice-dialog-bar"><i></i></div><span class="voice-dialog-pct">0%</span></div>' +
     '<div class="voice-dialog-actions">' +
     '<button type="button" class="voice-dialog-cancel" data-action="cancel">取消</button>' +
+    '<button type="button" class="voice-dialog-delete" data-action="delete">删除现有缓存</button>' +
     '<button type="button" class="voice-dialog-ok" data-action="ok">下载</button>' +
     "</div>";
+  dlg.querySelector(".voice-dialog-title").textContent = `离线${language}语音 · ${resourcePackage.label}`;
+  dlg.querySelector(".voice-dialog-desc").textContent = dialogDescription(resourcePackage, resourceStatus);
+  dlg.querySelector('[data-action="delete"]').hidden = !["partial", "invalid"].includes(resourceStatus);
+  dlg.querySelector('[data-action="ok"]').textContent = resourceStatus === "partial" ? "继续下载" : "下载";
   document.body.appendChild(dlg);
   return dlg;
 }
@@ -240,10 +298,9 @@ export async function askDownloadVoice(packageId, onProgress, options) {
   if (resourceStatus === "gated") return "gated";
   if (resourceStatus === "unsupported") return "unsupported";
   if (resourceStatus === "completed") return "ok";
-  if (resourceStatus === "invalid") return "storage";
 
   return new Promise((resolve) => {
-    const dlg = buildDialog(resourcePackage);
+    const dlg = buildDialog(resourcePackage, resourceStatus);
     const title = dlg.querySelector(".voice-dialog-title");
     const desc = dlg.querySelector(".voice-dialog-desc");
     const progress = dlg.querySelector(".voice-dialog-progress");
@@ -252,6 +309,7 @@ export async function askDownloadVoice(packageId, onProgress, options) {
     const actions = dlg.querySelector(".voice-dialog-actions");
     const okButton = actions.querySelector('[data-action="ok"]');
     const cancelButton = actions.querySelector('[data-action="cancel"]');
+    const deleteButton = actions.querySelector('[data-action="delete"]');
     const controller = new AbortController();
     let settled = false;
     const finish = (status) => {
@@ -265,26 +323,47 @@ export async function askDownloadVoice(packageId, onProgress, options) {
     const run = async () => {
       title.textContent = `正在下载离线${resourcePackage.locale === "zh-CN" ? "中文" : "英语"}语音`;
       desc.hidden = true;
+      deleteButton.disabled = true;
       progress.hidden = false;
       bar.classList.add("indeterminate");
       bar.style.width = "35%";
       pct.textContent = "下载中…";
-      normalized.onProgress?.(0, 0);
-      normalized.options.onDownloadStart?.(resourcePackage.id);
+      normalized.onProgress?.(0, resourcePackage.totalBytes);
       try {
-        await downloadPiperResource(resourcePackage.id, (received, total) => {
-          if (total > 0) {
-            const percent = Math.min(100, Math.round((received / total) * 100));
-            bar.classList.remove("indeterminate");
-            bar.style.width = `${percent}%`;
-            pct.textContent = `${percent}%`;
+        await acquirePiperDownloadLock(`${resourcePackage.id}@${resourcePackage.version}`, async (context = {}) => {
+          if (controller.signal.aborted) throw controller.signal.reason || new DOMException("Download cancelled", "AbortError");
+          const currentStatus = await getPiperResourceStatus(resourcePackage.id);
+          if (currentStatus === "completed") return;
+          if (currentStatus === "gated" || currentStatus === "unsupported") {
+            throw new PiperLocalVoiceError(currentStatus, `Piper package became ${currentStatus}`);
           }
-          normalized.onProgress?.(received, total);
-        }, controller.signal);
+          normalized.options.onDownloadStart?.(resourcePackage.id);
+          const combined = combineAbortSignals([controller.signal, context.signal]);
+          const canCommit = () => !controller.signal.aborted
+            && !combined.signal.aborted
+            && (typeof context.canCommit !== "function" || context.canCommit());
+          try {
+            await downloadPiperResource(resourcePackage.id, (received, total) => {
+              if (total > 0) {
+                const percent = Math.min(100, Math.round((received / total) * 100));
+                bar.classList.remove("indeterminate");
+                bar.style.width = `${percent}%`;
+                pct.textContent = `${percent}%`;
+              }
+              normalized.onProgress?.(received, total);
+            }, combined.signal, {
+              canCommit,
+              commitId: context.ownerToken,
+              allowSharedCleanup: context.coordination !== "same-tab-only",
+            });
+          } finally {
+            combined.dispose();
+          }
+        });
         finish("ok");
       } catch (error) {
         if (controller.signal.aborted || error?.name === "AbortError") return;
-        finish(getPiperDownloadError(error).code);
+        finish(error?.code === "gated" || error?.code === "unsupported" ? error.code : getPiperDownloadError(error).code);
       }
     };
     okButton.onclick = () => {
@@ -292,6 +371,20 @@ export async function askDownloadVoice(packageId, onProgress, options) {
       run();
     };
     cancelButton.onclick = () => finish("cancel");
+    deleteButton.onclick = async () => {
+      deleteButton.disabled = true;
+      try {
+        await deletePiperResource(resourcePackage.id);
+        desc.hidden = false;
+        desc.textContent = dialogDescription(resourcePackage, "not-downloaded");
+        deleteButton.hidden = true;
+        okButton.textContent = "下载";
+      } catch (_) {
+        finish("storage");
+      } finally {
+        deleteButton.disabled = false;
+      }
+    };
     dlg.oncancel = () => finish("cancel");
     dlg.showModal?.();
   });
