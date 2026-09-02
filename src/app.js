@@ -20,6 +20,7 @@ import {
   SYNTHESIS_TIMEOUT_MS,
   withTimeout,
 } from "./piper-tts.js";
+import { mountPiperResourceManager } from "./piper-resource-ui.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   createLearningState,
@@ -2008,14 +2009,15 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音前，先准备系统语音</h3><p>影伴使用设备自带的语音服务，不额外上传录音。第一次使用或按钮无声音时，按设备下载英语语音。</p></div></div>
+        <div class="guide-section-heading"><span>02</span><div><h3>听发音与离线资源</h3><p>影伴优先使用设备自带的语音服务；没有合适系统语音时，可按需下载已开放的本地语音资源。不会上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的高质量离线语音包（约 115MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
+          <p class="guide-device-tip">系统语音不可用时，可在下方查看已开放的本地语音资源；下载完成后可离线使用，不上传录音。</p>
         </div>
+        <div data-piper-resource-manager></div>
         <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
       </section>
 
@@ -2035,6 +2037,7 @@ function renderGuide(){
       </section>
     </div>
   `));
+  mountPiperResourceManager(main.querySelector("[data-piper-resource-manager]"));
 }
 
 /* =========================================================

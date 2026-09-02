@@ -1,0 +1,125 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  englishStatus: "not-downloaded",
+  getPiperResourceStatus: vi.fn(),
+  deletePiperResource: vi.fn(),
+  downloadPiperResource: vi.fn(),
+}));
+
+const packages = [
+  {
+    id: "en_US-test-medium",
+    locale: "en-US",
+    label: "English (Test, medium)",
+    version: "7",
+    baseUrl: "https://voice.example.test/piper/en_US-test-medium",
+    source: "cdn",
+    cachePolicy: "user-download",
+    totalBytes: 1024,
+    releaseApproved: true,
+    files: [{ suffix: ".onnx" }],
+  },
+  {
+    id: "zh_CN-candidate",
+    locale: "zh-CN",
+    label: "Chinese (Candidate, medium)",
+    version: "candidate",
+    baseUrl: null,
+    source: "gated",
+    cachePolicy: "gated",
+    totalBytes: null,
+    releaseApproved: false,
+    files: [],
+  },
+];
+
+const getPiperResourceStatus = mocks.getPiperResourceStatus.mockImplementation(async (packageId) => packageId === packages[0].id ? mocks.englishStatus : "gated");
+const deletePiperResource = mocks.deletePiperResource.mockImplementation(async () => {});
+const downloadPiperResource = mocks.downloadPiperResource.mockImplementation(async () => {
+  mocks.englishStatus = "completed";
+  return { status: "completed" };
+});
+
+vi.mock("../../src/piper-resource-registry.js", () => ({
+  listPiperResourcePackages: () => packages,
+}));
+vi.mock("../../src/piper-resource-store.js", () => ({
+  getPiperResourceStatus: mocks.getPiperResourceStatus,
+  deletePiperResource: mocks.deletePiperResource,
+}));
+vi.mock("../../src/piper-resource-download.js", () => ({
+  downloadPiperResource: mocks.downloadPiperResource,
+}));
+vi.mock("../../src/piper-resource-lock.js", () => ({
+  acquirePiperDownloadLock: (_key, task) => task(),
+}));
+
+import { mountPiperResourceManager, renderPiperResourceStatus } from "../../src/piper-resource-ui.js";
+
+describe("Piper resource manager", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    mocks.englishStatus = "not-downloaded";
+    vi.clearAllMocks();
+  });
+
+  it("renders every registered package with scoped storage details and only safe actions", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const unmount = mountPiperResourceManager(container);
+    await vi.waitFor(() => expect(container.querySelectorAll("[data-piper-resource]")).toHaveLength(2));
+
+    const english = container.querySelector('[data-piper-resource="en_US-test-medium"]');
+    expect(english.textContent).toContain("en-US");
+    expect(english.textContent).toContain("English (Test, medium)");
+    expect(english.textContent).toContain("版本 7");
+    expect(english.textContent).toContain(window.location.origin);
+    expect(english.textContent).toContain("当前浏览器范围");
+    expect(english.textContent).toContain("1 KB");
+    expect(english.querySelector('[data-piper-resource-action="download"]')).toBeTruthy();
+
+    const chinese = container.querySelector('[data-piper-resource="zh_CN-candidate"]');
+    expect(chinese.textContent).toContain("gated");
+    expect(chinese.querySelector("button")).toBeNull();
+    expect(container.textContent).toContain("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
+    unmount();
+  });
+
+  it("does not start gated or unsupported downloads and keeps deletion package-specific", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const unmount = mountPiperResourceManager(container);
+    await vi.waitFor(() => expect(container.querySelector('[data-piper-resource="en_US-test-medium"] button')).toBeTruthy());
+
+    await container.querySelector('[data-piper-resource-action="download"]').click();
+    await vi.waitFor(() => expect(downloadPiperResource).toHaveBeenCalledWith("en_US-test-medium", expect.any(Function)));
+
+    await vi.waitFor(() => expect(container.querySelector('[data-piper-resource-action="delete"]')).toBeTruthy());
+    renderPiperResourceStatus(container.querySelector('[data-piper-resource="en_US-test-medium"] [data-piper-resource-status]'), "completed");
+    expect(container.textContent).toContain("completed（已下载并校验）");
+
+    await container.querySelector('[data-piper-resource-action="delete"]').click();
+    await vi.waitFor(() => expect(deletePiperResource).toHaveBeenCalledWith("en_US-test-medium"));
+    expect(deletePiperResource).not.toHaveBeenCalledWith("zh_CN-candidate");
+    expect(downloadPiperResource).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("renders every resource state distinctly and keeps same-tab downloads single-flight", async () => {
+    const status = document.body.appendChild(document.createElement("span"));
+    for (const value of ["unsupported", "gated", "not-downloaded", "partial", "downloading", "completed", "invalid"]) {
+      renderPiperResourceStatus(status, value);
+      expect(status.dataset.piperResourceStatus).toBe(value);
+      expect(status.textContent).toContain(value);
+    }
+
+    const { acquirePiperDownloadLock } = await vi.importActual("../../src/piper-resource-lock.js");
+    let finish;
+    const task = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    const first = acquirePiperDownloadLock("test-package@7", task);
+    const second = acquirePiperDownloadLock("test-package@7", task);
+    expect(second).toBe(first);
+    await vi.waitFor(() => expect(task).toHaveBeenCalledTimes(1));
+    finish("completed");
+    await expect(first).resolves.toBe("completed");
+  });
+});

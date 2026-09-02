@@ -181,13 +181,15 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
-  test("usage guide explains setup and speech downloads", async ({ page }) => {
+  test("usage guide explains setup and manages browser-scoped speech resources", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="guide"]');
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("约 115MB");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("gated");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
