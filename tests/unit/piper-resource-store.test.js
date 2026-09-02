@@ -18,19 +18,20 @@ const HASHES = {
 
 function createCacheStorage() {
   const cachesByName = new Map();
+  const cacheKey = (key) => typeof key === "string" ? key : key.url;
   return {
     async open(name) {
       if (!cachesByName.has(name)) {
         const entries = new Map();
         cachesByName.set(name, {
           async match(key) {
-            return entries.get(String(key))?.clone();
+            return entries.get(cacheKey(key))?.clone();
           },
           async put(key, response) {
-            entries.set(String(key), response.clone());
+            entries.set(cacheKey(key), response.clone());
           },
           async delete(key) {
-            return entries.delete(String(key));
+            return entries.delete(cacheKey(key));
           },
           async keys() {
             return [...entries.keys()].map((url) => new Request(url));
@@ -152,6 +153,27 @@ describe("versioned Piper resource store", () => {
     const v2 = createPackage({ version: "2" });
     const v2Store = createStore([v2]);
     await expect(v2Store.isPiperResourceCached(v2.id)).resolves.toBe(false);
+  });
+
+  it("clears every package key when a marker is malformed or references an untrusted URL", async () => {
+    const resourcePackage = createPackage();
+    const store = createStore([resourcePackage]);
+    await seedCompletePackage(store, resourcePackage);
+    const cache = await cacheStorage.open(store.getCacheName(resourcePackage));
+    const markerKey = store.getMarkerKey(resourcePackage);
+    const marker = await (await cache.match(markerKey)).json();
+    const untrustedUrl = "https://untrusted.example.test/model.onnx";
+    marker.files[0].url = untrustedUrl;
+    await cache.put(untrustedUrl, new Response("untrusted"));
+    await cache.put(markerKey, new Response(JSON.stringify(marker)));
+
+    await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
+    await expect(cache.keys()).resolves.toEqual([]);
+
+    await seedCompletePackage(store, resourcePackage);
+    await cache.put(markerKey, new Response("not json"));
+    await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
+    await expect(cache.keys()).resolves.toEqual([]);
   });
 
   it("migrates only a complete, verified legacy English voice cache", async () => {

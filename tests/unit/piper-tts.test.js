@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { askDownloadVoice, downloadVoice, VOICE, VOICE_FILES, withTimeout } from "../../src/piper-tts.js";
+import { getPiperCapabilities } from "../../src/piper-resource-capabilities.js";
 
 const originalDialogDescriptors = new Map(
   ["showModal", "close"].map((name) => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)])
@@ -47,7 +48,7 @@ describe("offline Piper voice download", () => {
       match: vi.fn().mockResolvedValue(undefined),
       put: vi.fn().mockResolvedValue(undefined),
     };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache), delete: vi.fn() });
     vi.stubGlobal(
       "fetch",
       vi.fn((url, options) => {
@@ -131,6 +132,25 @@ describe("offline Piper voice download", () => {
     await expect(withTimeout(new Promise(() => {}), 5, "发音合成超时")).rejects.toThrow("发音合成超时");
   });
 
+  test("does not open or start an offline download when required browser capabilities are unavailable", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true,
+      value() {
+        this.open = false;
+      },
+    });
+    vi.stubGlobal("caches", undefined);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const onDownloadStart = vi.fn();
+
+    await expect(askDownloadVoice(undefined, { onDownloadStart })).resolves.toBe("unsupported");
+
+    expect(onDownloadStart).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(document.querySelector("#shadow-voice-dialog[open]")).toBeNull();
+  }, 200);
+
   test("keeps cancellation available and aborts an in-flight download", async () => {
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
       configurable: true,
@@ -144,12 +164,16 @@ describe("offline Piper voice download", () => {
         this.open = false;
       },
     });
-
+    Object.defineProperty(HTMLAudioElement.prototype, "play", {
+      configurable: true,
+      value: vi.fn(),
+    });
     const cache = {
       match: vi.fn().mockResolvedValue(undefined),
       put: vi.fn().mockResolvedValue(undefined),
     };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
+    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache), delete: vi.fn() });
+    expect(getPiperCapabilities().canDownload).toBe(true);
     let resolveFetchStarted;
     const fetchStarted = new Promise((resolve) => {
       resolveFetchStarted = resolve;

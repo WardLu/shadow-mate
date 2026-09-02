@@ -65,8 +65,9 @@ export function createPiperResourceStore({
       await cache.put(markerKey(resourcePackage), new Response(JSON.stringify(marker), { headers: { "content-type": "application/json" } }));
       return marker;
     },
-    async invalidate(cache, resourcePackage, urls = resourcePackage.files.map((file) => fileUrl(resourcePackage, file))) {
-      await Promise.all([...urls.map((url) => cache.delete(url)), cache.delete(markerKey(resourcePackage))]);
+    async invalidate(cache) {
+      const keys = await cache.keys();
+      await Promise.all(keys.map((key) => cache.delete(key)));
     },
     async isPiperResourceCached(packageId) {
       const resourcePackage = store.getPackage(packageId);
@@ -78,14 +79,14 @@ export function createPiperResourceStore({
         if (!markerResponse) return false;
         const marker = await markerResponse.json();
         if (marker.id !== resourcePackage.id || marker.version !== resourcePackage.version || marker.manifestVersion !== resourcePackage.version || !Array.isArray(marker.files) || marker.files.length !== resourcePackage.files.length) {
-          await store.invalidate(cache, resourcePackage);
+          await store.invalidate(cache);
           return false;
         }
         for (const file of resourcePackage.files) {
           const expectedUrl = fileUrl(resourcePackage, file);
           const markerFile = marker.files.find((entry) => entry.key === file.key);
           if (!markerFile || markerFile.url !== expectedUrl || markerFile.expectedBytes !== file.bytes || markerFile.expectedSha256 !== file.sha256.toLowerCase()) {
-            await store.invalidate(cache, resourcePackage);
+            await store.invalidate(cache);
             return false;
           }
           const response = await cache.match(expectedUrl);
@@ -95,12 +96,13 @@ export function createPiperResourceStore({
           }
           const actual = await responseIntegrity(response);
           if (actual.bytes !== file.bytes || actual.sha256 !== file.sha256.toLowerCase() || markerFile.actualBytes !== actual.bytes || markerFile.actualSha256 !== actual.sha256) {
-            await store.invalidate(cache, resourcePackage);
+            await store.invalidate(cache);
             return false;
           }
         }
         return true;
       } catch (_) {
+        if (cache) await store.invalidate(cache);
         return false;
       }
     },

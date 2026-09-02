@@ -10,6 +10,8 @@
  *  - ONNX Runtime Web（MIT）
  */
 
+import { getPiperCapabilities } from "./piper-resource-capabilities.js";
+
 export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium";
 const VOICE_CACHE = "shadow-mate-voice";
 const ENGINE_URL = "/piper-tts-web.js";
@@ -254,6 +256,10 @@ export function askDownloadVoice(onProgress, { onDownloadStart } = {}) {
     };
 
     const run = async () => {
+      if (!getPiperCapabilities().canDownload) {
+        finish("unsupported");
+        return;
+      }
       if (await isVoiceCached()) {
         finish("ok");
         return;
@@ -295,6 +301,10 @@ export function askDownloadVoice(onProgress, { onDownloadStart } = {}) {
     cancelButton.onclick = () => finish("cancel");
     dlg.oncancel = () => finish("cancel");
     (async () => {
+      if (!getPiperCapabilities().canDownload) {
+        finish("unsupported");
+        return;
+      }
       if (await isVoiceCached()) {
         finish("ok");
         return;
