@@ -324,6 +324,26 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).not.toContainText("没有中文");
   });
 
+  test("shows Chinese speech as busy while waiting for Android voices", async ({ page }) => {
+    await installSpeechMock(page, { voices: [{ lang: "en-US" }], voiceChanges: true });
+    await openChineseAtFixedTime(page);
+
+    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute("aria-busy", "true");
+    await expect(button).toContainText("播放中");
+
+    await page.evaluate(() => {
+      window.__speechVoices = [{ lang: "en-US" }, { lang: "zh-CN" }];
+      window.__emitSpeechVoicesChanged();
+    });
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: "火", lang: "zh-CN" },
+    ]);
+  });
+
   test("does not report an active English system utterance as a false failure", async ({ page }) => {
     await installSpeechMock(page, { mode: "active" });
     await openChineseAtFixedTime(page);

@@ -916,6 +916,7 @@ async function speak(t, button, locale = "en-US"){
 
   if (locale === "zh-CN") {
     const synth = window.speechSynthesis;
+    setBusy();
     const voice = await waitForSystemVoice(locale, 4000);
     if (!isCurrentSpeech()) return;
     const Utterance = window.SpeechSynthesisUtterance;
@@ -943,7 +944,6 @@ async function speak(t, button, locale = "en-US"){
       }
       fail("中文发音失败，请重试");
     };
-    setBusy();
     try {
       try {
         synth.cancel();
