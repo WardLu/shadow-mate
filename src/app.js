@@ -916,7 +916,7 @@ async function speak(t, button, locale = "en-US"){
 
   if (locale === "zh-CN") {
     const synth = window.speechSynthesis;
-    const voice = await waitForSystemVoice(locale);
+    const voice = await waitForSystemVoice(locale, 4000);
     if (!isCurrentSpeech()) return;
     const Utterance = window.SpeechSynthesisUtterance;
     const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : null;
