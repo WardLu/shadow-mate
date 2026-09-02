@@ -3,6 +3,7 @@ import {
   createPiperResourceStore,
   getPiperResourceStatus,
   isPiperResourceCached,
+  PiperResourceStorageError,
 } from "../../src/piper-resource-store.js";
 import {
   getPiperResourcePackage,
@@ -174,6 +175,26 @@ describe("versioned Piper resource store", () => {
     await cache.put(markerKey, new Response("not json"));
     await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
     await expect(cache.keys()).resolves.toEqual([]);
+  });
+
+  it("keeps cache and status queries stable when invalid-marker cleanup fails", async () => {
+    const resourcePackage = createPackage();
+    const store = createStore([resourcePackage]);
+    await seedCompletePackage(store, resourcePackage);
+    const cache = await cacheStorage.open(store.getCacheName(resourcePackage));
+    const cleanupFailure = new Error("Cache Storage delete failed");
+    cache.keys = vi.fn().mockRejectedValue(cleanupFailure);
+    await cache.put(store.getMarkerKey(resourcePackage), new Response("not json"));
+
+    await expect(store.invalidate(cache)).rejects.toMatchObject({
+      name: "PiperResourceStorageError",
+      code: "storage",
+      cause: cleanupFailure,
+    });
+    await expect(store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
+    expect(store.lastStorageError).toBeInstanceOf(PiperResourceStorageError);
+    expect(store.lastStorageError.cause).toBe(cleanupFailure);
+    await expect(store.getPiperResourceStatus(resourcePackage.id)).resolves.toBe("invalid");
   });
 
   it("migrates only a complete, verified legacy English voice cache", async () => {

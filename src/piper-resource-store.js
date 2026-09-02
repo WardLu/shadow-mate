@@ -4,6 +4,14 @@ import { getPiperResourcePackage, listPiperResourcePackages } from "./piper-reso
 
 const LEGACY_ENGLISH_CACHE = "shadow-mate-voice";
 
+export class PiperResourceStorageError extends Error {
+  constructor(message, cause) {
+    super(message, { cause });
+    this.name = "PiperResourceStorageError";
+    this.code = "storage";
+  }
+}
+
 function normalizedUrl(url) {
   return new URL(url, globalThis.location?.href || "https://shadow-mate.invalid/").href;
 }
@@ -36,6 +44,7 @@ export function createPiperResourceStore({
   const store = {
     cacheStorage,
     getCapabilities,
+    lastStorageError: null,
     getCacheName: cacheName,
     getMarkerKey: markerKey,
     getPackage(packageId) {
@@ -66,12 +75,25 @@ export function createPiperResourceStore({
       return marker;
     },
     async invalidate(cache) {
-      const keys = await cache.keys();
-      await Promise.all(keys.map((key) => cache.delete(key)));
+      try {
+        const keys = await cache.keys();
+        await Promise.all(keys.map((key) => cache.delete(key)));
+      } catch (cause) {
+        throw new PiperResourceStorageError("Piper resource cache cleanup failed", cause);
+      }
+    },
+    async failInvalidMarker(cache) {
+      try {
+        await store.invalidate(cache);
+      } catch (error) {
+        store.lastStorageError = error;
+      }
+      return false;
     },
     async isPiperResourceCached(packageId) {
       const resourcePackage = store.getPackage(packageId);
       if (!resourcePackage?.releaseApproved || !cacheStorage?.open) return false;
+      store.lastStorageError = null;
       let cache;
       try {
         cache = await cacheStorage.open(cacheName(resourcePackage));
@@ -79,15 +101,13 @@ export function createPiperResourceStore({
         if (!markerResponse) return false;
         const marker = await markerResponse.json();
         if (marker.id !== resourcePackage.id || marker.version !== resourcePackage.version || marker.manifestVersion !== resourcePackage.version || !Array.isArray(marker.files) || marker.files.length !== resourcePackage.files.length) {
-          await store.invalidate(cache);
-          return false;
+          return store.failInvalidMarker(cache);
         }
         for (const file of resourcePackage.files) {
           const expectedUrl = fileUrl(resourcePackage, file);
           const markerFile = marker.files.find((entry) => entry.key === file.key);
           if (!markerFile || markerFile.url !== expectedUrl || markerFile.expectedBytes !== file.bytes || markerFile.expectedSha256 !== file.sha256.toLowerCase()) {
-            await store.invalidate(cache);
-            return false;
+            return store.failInvalidMarker(cache);
           }
           const response = await cache.match(expectedUrl);
           if (!response) {
@@ -96,13 +116,12 @@ export function createPiperResourceStore({
           }
           const actual = await responseIntegrity(response);
           if (actual.bytes !== file.bytes || actual.sha256 !== file.sha256.toLowerCase() || markerFile.actualBytes !== actual.bytes || markerFile.actualSha256 !== actual.sha256) {
-            await store.invalidate(cache);
-            return false;
+            return store.failInvalidMarker(cache);
           }
         }
         return true;
       } catch (_) {
-        if (cache) await store.invalidate(cache);
+        if (cache) return store.failInvalidMarker(cache);
         return false;
       }
     },
@@ -112,6 +131,7 @@ export function createPiperResourceStore({
       if (!resourcePackage.releaseApproved) return "gated";
       if (!store.getCapabilities().canDownload) return "unsupported";
       if (await store.isPiperResourceCached(packageId)) return "completed";
+      if (store.lastStorageError) return "invalid";
       if (!cacheStorage?.open) return "unsupported";
       try {
         const cache = await cacheStorage.open(cacheName(resourcePackage));
