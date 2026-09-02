@@ -45,4 +45,47 @@ describe("bundled Piper runtime registry", () => {
 
     expect(() => validatePiperResourcePackages([runtime])).toThrow(/redistribution/i);
   });
+
+  it("rejects an audit that omits or adds a required component", () => {
+    const missing = bundledRuntimeFixture();
+    missing.audit.components = missing.audit.components.slice(0, 1);
+    expect(() => validatePiperResourcePackages([missing])).toThrow(/component set/i);
+
+    const extra = bundledRuntimeFixture();
+    extra.audit.components.push({ ...extra.audit.components[0], name: "unreviewed-runtime" });
+    expect(() => validatePiperResourcePackages([extra])).toThrow(/component set/i);
+  });
+
+  it("rejects mutable versions and arbitrary commits instead of accepting their shape", () => {
+    const latest = bundledRuntimeFixture();
+    latest.audit.components[0].version = "latest";
+    expect(() => validatePiperResourcePackages([latest])).toThrow(/version/i);
+
+    const wrongCommit = bundledRuntimeFixture();
+    wrongCommit.audit.components[0].commit = "a".repeat(40);
+    expect(() => validatePiperResourcePackages([wrongCommit])).toThrow(/commit/i);
+  });
+
+  it("rejects unexpected source and license URLs even when they contain a commit", () => {
+    const runtime = bundledRuntimeFixture();
+    const component = runtime.audit.components[0];
+    component.source = `https://example.test/${component.commit}`;
+    component.licenseUrl = `https://example.test/${component.commit}/LICENSE`;
+
+    expect(() => validatePiperResourcePackages([runtime])).toThrow(/reference/i);
+  });
+
+  it("rejects an unapproved license, missing local license text, and trivial terms", () => {
+    const unapproved = bundledRuntimeFixture();
+    unapproved.audit.components[0].license = { status: "pending", name: "MIT" };
+    expect(() => validatePiperResourcePackages([unapproved])).toThrow(/license/i);
+
+    const missingText = bundledRuntimeFixture();
+    missingText.audit.components[0].licenseTextPaths = [];
+    expect(() => validatePiperResourcePackages([missingText])).toThrow(/license text/i);
+
+    const trivialTerms = bundledRuntimeFixture();
+    trivialTerms.audit.components[0].redistributionTerms = "x";
+    expect(() => validatePiperResourcePackages([trivialTerms])).toThrow(/redistribution/i);
+  });
 });

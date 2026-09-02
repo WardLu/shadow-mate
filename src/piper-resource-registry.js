@@ -1,6 +1,74 @@
 const SHA_256_RE = /^[a-f0-9]{64}$/i;
 const GIT_COMMIT_RE = /^[a-f0-9]{40}$/i;
 
+const MIT_REDISTRIBUTION_TERMS = "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.";
+const ESPEAK_REDISTRIBUTION_TERMS = "Retain the four tracked eSpeak NG license texts and apply the text attached to each incorporated material: GPL-3.0-or-later material requires the corresponding source and GPL notices when conveying object code; Apache-2.0 material retains its license and required notices; BSD-2-Clause material retains copyright, conditions, and disclaimer; Unicode text retains its copyright, permission notice, and disclaimer.";
+
+const BUNDLED_RUNTIME_AUDIT_COMPONENTS = [
+  {
+    name: "piper-tts-web",
+    version: "1.1.2",
+    versionSource: "package.json at this commit; not the separately tagged v1.1.2",
+    commit: "950f1f5c8278296a6698cc11e8b976594dad6687",
+    source: "https://github.com/Poket-Jony/piper-tts-web/tree/950f1f5c8278296a6698cc11e8b976594dad6687",
+    license: { status: "approved", name: "MIT" },
+    licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/950f1f5c8278296a6698cc11e8b976594dad6687/LICENSE",
+    licenseTextPaths: ["third_party/licenses/piper-tts-web-MIT.txt"],
+    redistributionTerms: MIT_REDISTRIBUTION_TERMS,
+  },
+  {
+    name: "ONNX Runtime Web",
+    version: "1.20.1",
+    versionSource: "upstream release version at this commit",
+    commit: "5c1b7ccbff7e5141c1da7a9d963d660e5741c319",
+    source: "https://github.com/microsoft/onnxruntime/tree/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/js/web",
+    license: { status: "approved", name: "MIT" },
+    licenseUrl: "https://github.com/microsoft/onnxruntime/blob/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/LICENSE",
+    licenseTextPaths: ["third_party/licenses/onnxruntime-MIT.txt"],
+    redistributionTerms: MIT_REDISTRIBUTION_TERMS,
+  },
+  {
+    name: "piper-phonemize",
+    version: "1.2.0",
+    versionSource: "upstream release version at this commit",
+    commit: "cfff8e52ebaea37c7e953ae2d06b174acb827ac4",
+    source: "https://github.com/rhasspy/piper-phonemize/tree/cfff8e52ebaea37c7e953ae2d06b174acb827ac4",
+    license: { status: "approved", name: "MIT" },
+    licenseUrl: "https://github.com/rhasspy/piper-phonemize/blob/cfff8e52ebaea37c7e953ae2d06b174acb827ac4/LICENSE.md",
+    licenseTextPaths: ["third_party/licenses/piper-phonemize-MIT.txt"],
+    redistributionTerms: MIT_REDISTRIBUTION_TERMS,
+    artifactOrigin: {
+      package: "piper-tts-web",
+      packageVersion: "1.0.0",
+      commit: "7cec5cb4861f9322cd094b1b8b41a5b173e314db",
+      source: "https://github.com/Poket-Jony/piper-tts-web/tree/7cec5cb4861f9322cd094b1b8b41a5b173e314db/dist/piper",
+      licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/7cec5cb4861f9322cd094b1b8b41a5b173e314db/LICENSE",
+    },
+    dependency: "eSpeak NG",
+  },
+  {
+    name: "eSpeak NG",
+    version: "1.52.0.1",
+    versionSource: "piper-phonemize CMake build metadata",
+    commit: "0f65aa301e0d6bae5e172cc74197d32a6182200f",
+    source: "https://github.com/espeak-ng/espeak-ng/tree/0f65aa301e0d6bae5e172cc74197d32a6182200f",
+    license: { status: "approved", name: "GPL-3.0-or-later; Apache-2.0; BSD-2-Clause; Unicode-DFS-2016" },
+    licenseUrl: "https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING",
+    additionalLicenseUrls: [
+      "https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.APACHE",
+      "https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.BSD2",
+      "https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.UCD",
+    ],
+    licenseTextPaths: [
+      "third_party/licenses/espeak-ng-COPYING.txt",
+      "third_party/licenses/espeak-ng-COPYING.APACHE.txt",
+      "third_party/licenses/espeak-ng-COPYING.BSD2.txt",
+      "third_party/licenses/espeak-ng-COPYING.UCD.txt",
+    ],
+    redistributionTerms: ESPEAK_REDISTRIBUTION_TERMS,
+  },
+];
+
 function deepFreeze(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) deepFreeze(child);
@@ -98,39 +166,7 @@ const BUNDLED_PIPER_RUNTIME = {
   },
   audit: {
     status: "approved",
-    components: [
-      {
-        name: "piper-tts-web",
-        version: "1.1.2",
-        commit: "950f1f5c8278296a6698cc11e8b976594dad6687",
-        source: "https://github.com/Poket-Jony/piper-tts-web/tree/950f1f5c8278296a6698cc11e8b976594dad6687",
-        license: "MIT",
-        licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/950f1f5c8278296a6698cc11e8b976594dad6687/LICENSE",
-        redistributionTerms: "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.",
-      },
-      {
-        name: "ONNX Runtime Web",
-        version: "1.20.1",
-        commit: "5c1b7ccbff7e5141c1da7a9d963d660e5741c319",
-        source: "https://github.com/microsoft/onnxruntime/tree/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/js/web",
-        license: "MIT",
-        licenseUrl: "https://github.com/microsoft/onnxruntime/blob/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/LICENSE",
-        redistributionTerms: "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.",
-      },
-      {
-        name: "piper-tts-web phonemize artifacts",
-        version: "1.0.0",
-        commit: "7cec5cb4861f9322cd094b1b8b41a5b173e314db",
-        source: "https://github.com/Poket-Jony/piper-tts-web/tree/7cec5cb4861f9322cd094b1b8b41a5b173e314db/dist/piper",
-        license: "piper-tts-web MIT wrapper; retain applicable piper-phonemize and eSpeak NG notices for the WASM and data artifacts",
-        licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/7cec5cb4861f9322cd094b1b8b41a5b173e314db/LICENSE",
-        notices: [
-          "https://github.com/rhasspy/piper-phonemize",
-          "https://github.com/espeak-ng/espeak-ng/blob/master/COPYING",
-        ],
-        redistributionTerms: "For the piper-tts-web MIT-covered wrapper, use, copy, modify, merge, publish, distribute, sublicense, and sell are permitted when copyright and permission notices are retained; the software is provided without warranty. Retain all applicable piper-phonemize and eSpeak NG notices and license texts with these artifacts before redistribution.",
-      },
-    ],
+    components: BUNDLED_RUNTIME_AUDIT_COMPONENTS,
   },
   distribution: {
     status: "bundled",
@@ -214,16 +250,35 @@ function validateBundledRuntimeAuditMetadata(resourcePackage) {
   if (resourcePackage.audit?.status !== "approved" || !Array.isArray(resourcePackage.audit?.components) || resourcePackage.audit.components.length === 0) {
     throw new Error(`Bundled Piper package ${resourcePackage.id} has no approved audit metadata`);
   }
-  for (const component of resourcePackage.audit.components) {
-    if (!component?.name || !component.version || !GIT_COMMIT_RE.test(component.commit || "")) {
-      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without a fixed version or commit`);
+  const componentsByName = new Map(resourcePackage.audit.components.map((component) => [component?.name, component]));
+  const expectedNames = new Set(BUNDLED_RUNTIME_AUDIT_COMPONENTS.map((component) => component.name));
+  if (componentsByName.size !== expectedNames.size || resourcePackage.audit.components.length !== expectedNames.size
+    || [...componentsByName.keys()].some((name) => !expectedNames.has(name))) {
+    throw new Error(`Bundled Piper package ${resourcePackage.id} has an unexpected audit component set`);
+  }
+  for (const expected of BUNDLED_RUNTIME_AUDIT_COMPONENTS) {
+    const component = componentsByName.get(expected.name);
+    if (component.version !== expected.version || component.versionSource !== expected.versionSource) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with an unexpected version`);
     }
-    if (typeof component.source !== "string" || !component.source.includes(component.commit)
-      || typeof component.licenseUrl !== "string" || !component.licenseUrl.includes(component.commit)) {
-      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without commit-pinned source or license reference`);
+    if (!GIT_COMMIT_RE.test(component.commit || "") || component.commit !== expected.commit) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with an unexpected commit`);
     }
-    if (!component.license || typeof component.redistributionTerms !== "string" || !component.redistributionTerms.trim()) {
-      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without license or redistribution terms`);
+    if (component.source !== expected.source || component.licenseUrl !== expected.licenseUrl
+      || JSON.stringify(component.additionalLicenseUrls || []) !== JSON.stringify(expected.additionalLicenseUrls || [])) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with an unexpected source or license reference`);
+    }
+    if (component.license?.status !== "approved" || component.license?.name !== expected.license.name) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with an unapproved license`);
+    }
+    if (JSON.stringify(component.licenseTextPaths) !== JSON.stringify(expected.licenseTextPaths)) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with missing or unexpected local license text`);
+    }
+    if (component.redistributionTerms !== expected.redistributionTerms) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component with unexpected redistribution terms`);
+    }
+    if (JSON.stringify(component) !== JSON.stringify(expected)) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has unexpected component audit metadata`);
     }
   }
 }
