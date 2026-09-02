@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
   APP_SHELL_CACHE_NAME,
   isAppShellCacheName,
@@ -27,5 +28,16 @@ describe("cache policy", () => {
         "shadow-mate-piper-en_US-ljspeech-medium-v1",
       ])
     ).toEqual(["shadow-mate-app-v3", "shadow-mate-v3"]);
+  });
+
+  it("constrains Service Worker activation cleanup to app-shell caches", async () => {
+    const serviceWorker = await readFile("public/sw.js", "utf8");
+    const activationStart = serviceWorker.indexOf('self.addEventListener("activate"');
+    const fetchStart = serviceWorker.indexOf('self.addEventListener("fetch"');
+    const activation = serviceWorker.slice(activationStart, fetchStart);
+
+    expect(activation).toContain(
+      "keys.filter((key) => isAppShellCacheName(key) && key !== CACHE_NAME).map((key) => caches.delete(key))"
+    );
   });
 });

@@ -108,7 +108,12 @@ if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
   throw new Error("Service worker cache must use shadow-mate-app-v4");
 }
 if (!serviceWorker.includes("/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)")) {
-  throw new Error("Service worker must preserve voice and Piper cache names");
+  throw new Error("Service worker must define the app-shell preservation predicate");
+}
+if (!serviceWorker.includes(
+  "keys.filter((key) => isAppShellCacheName(key) && key !== CACHE_NAME).map((key) => caches.delete(key))"
+)) {
+  throw new Error("Service worker activation cleanup must be constrained to app-shell caches");
 }
 if (/caches\.keys\(\)\s*\.then\(\(keys\)\s*=>\s*Promise\.all\(keys\.map\(.*caches\.delete/s.test(serviceWorker)) {
   throw new Error("Service worker must not delete every cache");
