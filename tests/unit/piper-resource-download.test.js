@@ -29,7 +29,7 @@ function createPackage({ modelHash = HASHES.model } = {}) {
   };
 }
 
-function createCacheStorage() {
+function createCacheStorage({ putError } = {}) {
   const cachesByName = new Map();
   const cacheKey = (key) => typeof key === "string" ? key : key.url;
   const putBodies = [];
@@ -44,6 +44,8 @@ function createCacheStorage() {
           },
           async put(key, response) {
             putBodies.push(response.body);
+            const error = putError?.(cacheKey(key), response);
+            if (error) throw error;
             const stored = response.clone();
             await response.arrayBuffer();
             entries.set(cacheKey(key), stored);
@@ -234,6 +236,43 @@ describe("Piper resource downloader", () => {
     await expect(downloading).rejects.toMatchObject({ code: "network" });
     expect(modelStream.onCancel).toHaveBeenCalled();
     await expect(setup.store.isPiperResourceCached(resourcePackage.id)).resolves.toBe(false);
+  });
+
+  it("cancels the GET body when post-response validation fails", async () => {
+    const resourcePackage = createPackage();
+    const modelStream = bodyFromChunks([], { stall: true });
+    let getSignal;
+    const fetch = vi.fn((url, options = {}) => {
+      const file = resourcePackage.files.find((entry) => url.endsWith(entry.suffix));
+      if (options.method === "HEAD") return Promise.resolve(new Response(null, { status: 200, headers: headers(file.bytes) }));
+      getSignal = options.signal;
+      return Promise.resolve(new Response(modelStream.body, { status: 200, headers: headers(file.bytes + 1) }));
+    });
+    const setup = createDownloader({ resourcePackage, fetch });
+
+    await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).rejects.toMatchObject({ code: "integrity" });
+    expect(getSignal.aborted).toBe(true);
+    expect(modelStream.onCancel).toHaveBeenCalled();
+  });
+
+  it("cancels the GET body when Cache.put fails after a response", async () => {
+    const resourcePackage = createPackage();
+    const modelStream = bodyFromChunks([], { stall: true });
+    let getSignal;
+    const fetch = vi.fn((url, options = {}) => {
+      const file = resourcePackage.files.find((entry) => url.endsWith(entry.suffix));
+      if (options.method === "HEAD") return Promise.resolve(new Response(null, { status: 200, headers: headers(file.bytes) }));
+      getSignal = options.signal;
+      return Promise.resolve(new Response(modelStream.body, { status: 200, headers: headers(file.bytes) }));
+    });
+    const cacheStorage = createCacheStorage({
+      putError: (key) => key.endsWith(".onnx") ? new Error("Cache Storage write failed") : null,
+    });
+    const setup = createDownloader({ resourcePackage, fetch, cacheStorage });
+
+    await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).rejects.toMatchObject({ code: "storage" });
+    expect(getSignal.aborted).toBe(true);
+    expect(modelStream.onCancel).toHaveBeenCalled();
   });
 
   it("shares one same-tab download sequence for concurrent callers", async () => {

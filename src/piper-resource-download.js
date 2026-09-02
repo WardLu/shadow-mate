@@ -151,6 +151,14 @@ function streamWithReadTimeout(body, { controller: requestController, timeout })
   });
 }
 
+async function cancelGetResponse(controller, response, deadlineBody, reason) {
+  controller.abort(reason);
+  await Promise.allSettled([
+    response?.body?.cancel(reason),
+    deadlineBody?.cancel(reason),
+  ]);
+}
+
 function completionMarker(resourcePackage, verifiedFiles) {
   return {
     id: resourcePackage.id,
@@ -222,8 +230,10 @@ export function createPiperResourceDownloader({
         requireContentLength(head, file.bytes, "HEAD");
 
         const getRequest = createRequestController(signal);
+        let response;
+        let deadlineBody;
         try {
-          const response = await fetchWithTimeout(fetch, url, { method: "GET" }, {
+          response = await fetchWithTimeout(fetch, url, { method: "GET" }, {
             controller: getRequest.controller,
             timeout: resolvedTimeouts.response,
             timeoutMessage: "Piper resource GET response timed out",
@@ -249,7 +259,7 @@ export function createPiperResourceDownloader({
               controller.enqueue(chunk);
             },
           });
-          const deadlineBody = streamWithReadTimeout(response.body, { controller: getRequest.controller, timeout: resolvedTimeouts.read });
+          deadlineBody = streamWithReadTimeout(response.body, { controller: getRequest.controller, timeout: resolvedTimeouts.read });
           await cache.put(url, new Response(deadlineBody.pipeThrough(hashingStream), responseInit(response)));
           const actualSha256 = hasher.digestHex();
           if (actualBytes !== file.bytes) throw downloadError("integrity", "Piper resource actual bytes do not match the manifest");
@@ -257,6 +267,7 @@ export function createPiperResourceDownloader({
           verifiedFiles.push({ file, actualBytes, actualSha256 });
           failedFile = null;
         } catch (error) {
+          await cancelGetResponse(getRequest.controller, response, deadlineBody, error);
           throw asDownloadError(error, "storage", "Piper resource cache write failed");
         } finally {
           getRequest.dispose();
