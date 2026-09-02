@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   extractScriptSources,
   scriptSourcesDiffer,
   createErrorTracker,
+  reloadToLatest,
   selectCacheNamesToDelete,
 } from "../../src/version-guard.js";
+import { getPiperResourcePackage } from "../../src/piper-resource-registry.js";
 
 describe("extractScriptSources", () => {
   it("extracts module script src from HTML", () => {
@@ -89,5 +91,57 @@ describe("selectCacheNamesToDelete", () => {
         "shadow-mate-piper-en_US-ljspeech-medium-v1",
       ])
     ).toEqual(["shadow-mate-app-v3", "shadow-mate-v3"]);
+  });
+});
+
+describe("reloadToLatest", () => {
+  it("deletes only stale app-shell caches, preserves a completed Piper cache, and reloads", async () => {
+    const resourcePackage = getPiperResourcePackage("en_US-ljspeech-medium");
+    const piperCacheName = `shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`;
+    const completedPiperCache = {
+      marker: {
+        id: resourcePackage.id,
+        version: resourcePackage.version,
+        manifestVersion: resourcePackage.version,
+        files: resourcePackage.files.map((file) => ({
+          key: file.key,
+          expectedBytes: file.bytes,
+          actualBytes: file.bytes,
+          expectedSha256: file.sha256,
+          actualSha256: file.sha256,
+        })),
+      },
+    };
+    const cachesByName = new Map([
+      ["shadow-mate-app-v3", {}],
+      ["shadow-mate-app-v4", {}],
+      ["shadow-mate-v3", {}],
+      [piperCacheName, completedPiperCache],
+    ]);
+    const cacheStorage = {
+      keys: vi.fn(async () => [...cachesByName.keys()]),
+      delete: vi.fn(async (name) => cachesByName.delete(name)),
+    };
+    const markReload = vi.fn();
+    const reload = vi.fn();
+
+    await reloadToLatest({ cacheStorage, markReload, reload });
+
+    expect(cacheStorage.delete).toHaveBeenCalledTimes(2);
+    expect(new Set(cachesByName.keys())).toEqual(new Set([
+      "shadow-mate-app-v4",
+      piperCacheName,
+    ]));
+    expect(cachesByName.get(piperCacheName)).toBe(completedPiperCache);
+    expect(markReload).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mask a reload error after app-shell cleanup", async () => {
+    const expected = new Error("reload failed");
+    const cacheStorage = { keys: vi.fn(async () => ["shadow-mate-app-v3"]), delete: vi.fn(async () => true) };
+
+    await expect(reloadToLatest({ cacheStorage, markReload: vi.fn(), reload: () => { throw expected; } })).rejects.toBe(expected);
+    expect(cacheStorage.delete).toHaveBeenCalledWith("shadow-mate-app-v3");
   });
 });

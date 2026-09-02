@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { getPiperResourcePackage } from "../../src/piper-resource-registry.js";
+
+const ENGLISH_PIPER_PACKAGE = getPiperResourcePackage("en_US-ljspeech-medium");
 
 async function openModule(page, mod) {
   await page.click('[data-mod="learning"]');
@@ -51,7 +54,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page).toHaveTitle("影伴");
   });
 
-  test("service-worker activation retains the Piper cache namespace without a model GET", async ({ page }) => {
+  test("service-worker activation retains a completed Piper package without a model GET", async ({ page, context }) => {
     let modelGetRequests = 0;
     await page.route("**/piper/en_US-ljspeech-medium.onnx", async (route) => {
       if (route.request().method() === "GET") modelGetRequests += 1;
@@ -59,13 +62,28 @@ test.describe("Offline mode (no login)", () => {
     });
     await page.goto("/");
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async (resourcePackage) => {
       if (!("serviceWorker" in navigator) || !("caches" in window)) return { supported: false };
-      const packageId = "en_US-ljspeech-medium";
-      const cacheName = `shadow-mate-piper-${packageId}-1`;
+      const cacheName = `shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`;
       const cache = await caches.open(cacheName);
-      await cache.put("https://voice.shadow.wang/piper/en_US-ljspeech-medium/__shadow-mate-piper-package__/en_US-ljspeech-medium%401", new Response(JSON.stringify({ id: packageId, version: "1" })));
-      await cache.put("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response("cached-model"));
+      const markerKey = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
+      const marker = {
+        id: resourcePackage.id,
+        version: resourcePackage.version,
+        manifestVersion: resourcePackage.version,
+        files: resourcePackage.files.map((file) => ({
+          key: file.key,
+          url: `${resourcePackage.baseUrl}${file.suffix}`,
+          expectedBytes: file.bytes,
+          actualBytes: file.bytes,
+          expectedSha256: file.sha256.toLowerCase(),
+          actualSha256: file.sha256.toLowerCase(),
+        })),
+      };
+      for (const file of resourcePackage.files) {
+        await cache.put(`${resourcePackage.baseUrl}${file.suffix}`, new Response(`cached-${file.key}`, { headers: { "content-type": file.contentType } }));
+      }
+      await cache.put(markerKey, new Response(JSON.stringify(marker), { headers: { "content-type": "application/json" } }));
       await caches.open("shadow-mate-app-v3");
       const registration = await Promise.race([
         navigator.serviceWorker.ready,
@@ -73,13 +91,41 @@ test.describe("Offline mode (no login)", () => {
       ]);
       await registration.update();
       await new Promise((resolve) => setTimeout(resolve, 100));
-      return { supported: true, cacheNames: await caches.keys(), scriptUrl: registration.active?.scriptURL || null };
-    });
+      return {
+        supported: true,
+        cacheNames: await caches.keys(),
+        scriptUrl: registration.active?.scriptURL || null,
+        marker: await (await cache.match(markerKey)).json(),
+      };
+    }, ENGLISH_PIPER_PACKAGE);
 
     expect(result.supported).toBe(true);
     expect(result.scriptUrl).toContain("/sw.js");
-    expect(result.cacheNames).toContain("shadow-mate-piper-en_US-ljspeech-medium-1");
+    expect(result.cacheNames).toContain(`shadow-mate-piper-${ENGLISH_PIPER_PACKAGE.id}-${ENGLISH_PIPER_PACKAGE.version}`);
     expect(result.cacheNames).not.toContain("shadow-mate-app-v3");
+    expect(result.marker).toEqual({
+      id: ENGLISH_PIPER_PACKAGE.id,
+      version: ENGLISH_PIPER_PACKAGE.version,
+      manifestVersion: ENGLISH_PIPER_PACKAGE.version,
+      files: ENGLISH_PIPER_PACKAGE.files.map((file) => ({
+        key: file.key,
+        url: `${ENGLISH_PIPER_PACKAGE.baseUrl}${file.suffix}`,
+        expectedBytes: file.bytes,
+        actualBytes: file.bytes,
+        expectedSha256: file.sha256,
+        actualSha256: file.sha256,
+      })),
+    });
+    await context.setOffline(true);
+    const offlineCache = await page.evaluate(async (resourcePackage) => {
+      const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
+      const markerKey = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
+      const marker = await cache.match(markerKey);
+      const files = await Promise.all(resourcePackage.files.map((file) => cache.match(`${resourcePackage.baseUrl}${file.suffix}`)));
+      return { marker: Boolean(marker), files: files.map(Boolean) };
+    }, ENGLISH_PIPER_PACKAGE);
+    await context.setOffline(false);
+    expect(offlineCache).toEqual({ marker: true, files: [true, true] });
     expect(modelGetRequests).toBe(0);
   });
 

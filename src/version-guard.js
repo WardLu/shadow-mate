@@ -96,17 +96,21 @@ function markReload() {
  * Force a reload to the newest build. Deletes service-worker caches first so
  * the stale index.html / assets can never pin an old client after a deploy.
  */
-async function reloadToLatest() {
-  if ("caches" in window) {
+export async function reloadToLatest({
+  cacheStorage = globalThis.caches,
+  markReload: markReloadForTest = markReload,
+  reload = () => window.location.reload(),
+} = {}) {
+  if (cacheStorage?.keys && cacheStorage?.delete) {
     try {
-      const keys = await caches.keys();
-      await Promise.all(selectCacheNamesToDelete(keys).map((key) => caches.delete(key)));
+      const keys = await cacheStorage.keys();
+      await Promise.all(selectCacheNamesToDelete(keys).map((key) => cacheStorage.delete(key)));
     } catch {
       // Cache clearing is best-effort; still reload.
     }
   }
-  markReload();
-  window.location.reload();
+  markReloadForTest();
+  reload();
 }
 
 /**

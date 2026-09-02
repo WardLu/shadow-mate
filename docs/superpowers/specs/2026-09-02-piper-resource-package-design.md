@@ -297,7 +297,7 @@ Piper 引擎的单例只在成功且 idle 时复用。`generate()`、音素转�
 
 模型上传和 CDN 配置由有权限的维护者完成；本仓库只提交资源注册表、许可证记录和测试，不提交模型二进制或秘密凭据。
 
-`node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/piper --package <package-id>` 是只读 CDN 门禁：逐文件发出 `HEAD` 与 `GET`，核对 2xx、`Content-Length`、注册表声明的 `Content-Type`、CORS 响应头、实际字节数和 SHA-256。中文包缺少 `releaseApproved` 或 `licenseStatus: "approved"` 时必须在网络请求前失败；命令不会上传模型或改变 CDN 配置。
+`node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/piper --package <package-id>` 是只读 CDN 门禁：逐文件发出 `HEAD` 与 `GET`，核对 2xx、`Content-Length`、注册表声明的 `Content-Type`、实际字节数和 SHA-256；CORS 只接受 `*`、`https://preview-sm.shadow.wang` 或 `https://sm.shadow.wang`，且必须明确允许 `GET`、`HEAD`、`OPTIONS` 并暴露 `Content-Length`、`Content-Range`、`Accept-Ranges` 和 `ETag`。中文包缺少 `releaseApproved` 或 `licenseStatus: "approved"` 时必须在网络请求前失败；命令不会上传模型或改变 CDN 配置。
 
 ## 12. 实施阶段
 

@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { getPiperResourcePackage } from "../src/piper-resource-registry.js";
 
 const REQUIRED_CORS_METHODS = ["GET", "HEAD", "OPTIONS"];
+const REQUIRED_CORS_EXPOSE_HEADERS = ["CONTENT-LENGTH", "CONTENT-RANGE", "ACCEPT-RANGES", "ETAG"];
+const ALLOWED_CORS_ORIGINS = new Set(["*", "https://preview-sm.shadow.wang", "https://sm.shadow.wang"]);
 
 function fail(message) {
   throw new Error(message);
@@ -50,9 +54,11 @@ function assertContentType(response, expected, phase, url) {
   return actual;
 }
 
-function assertCors(response, phase, url) {
-  const allowedOrigin = response.headers.get("access-control-allow-origin");
-  if (!allowedOrigin) fail(`${phase} ${url} is missing Access-Control-Allow-Origin`);
+export function assertCors(response, phase, url) {
+  const allowedOrigin = (response.headers.get("access-control-allow-origin") || "").trim();
+  if (!ALLOWED_CORS_ORIGINS.has(allowedOrigin)) {
+    fail(`${phase} ${url} Access-Control-Allow-Origin ${allowedOrigin || "missing"} is not an allowed Preview/product origin`);
+  }
   const methods = (response.headers.get("access-control-allow-methods") || "")
     .split(",")
     .map((method) => method.trim().toUpperCase())
@@ -61,7 +67,15 @@ function assertCors(response, phase, url) {
   if (missing.length) {
     fail(`${phase} ${url} Access-Control-Allow-Methods is missing ${missing.join(", ")}`);
   }
-  return { allowedOrigin, allowedMethods: methods };
+  const exposedHeaders = (response.headers.get("access-control-expose-headers") || "")
+    .split(",")
+    .map((header) => header.trim().toUpperCase())
+    .filter(Boolean);
+  const missingExposedHeaders = REQUIRED_CORS_EXPOSE_HEADERS.filter((header) => !exposedHeaders.includes(header));
+  if (missingExposedHeaders.length) {
+    fail(`${phase} ${url} Access-Control-Expose-Headers is missing ${missingExposedHeaders.join(", ")}`);
+  }
+  return { allowedOrigin, allowedMethods: methods, exposedHeaders };
 }
 
 async function inspectFile(resourcePackage, file) {
@@ -119,7 +133,9 @@ async function main() {
   console.log(JSON.stringify({ package: packageId, baseUrl, totalBytes, files }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(`Piper resource smoke failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((error) => {
+    console.error(`Piper resource smoke failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

@@ -141,7 +141,7 @@ const versionGuard = await readFile("src/version-guard.js", "utf8");
 if (!versionGuard.includes('from "./cache-policy.js"')) {
   throw new Error("version guard must use the cache policy");
 }
-if (!versionGuard.includes("selectCacheNamesToDelete(keys).map((key) => caches.delete(key))")) {
+if (!versionGuard.includes("selectCacheNamesToDelete(keys).map((key) => cacheStorage.delete(key))")) {
   throw new Error("version guard must delete only stale app-shell caches");
 }
 if (/caches\.keys\(\)[\s\S]*?keys\.map\(\(key\)\s*=>\s*caches\.delete/.test(versionGuard)) {
