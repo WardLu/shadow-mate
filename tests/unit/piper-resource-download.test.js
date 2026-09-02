@@ -14,13 +14,14 @@ function createPackage({
   modelHash = HASHES.model,
   id = "test-voice",
   baseUrl = "https://voice.example.test/test-voice",
+  version = "1",
 } = {}) {
   return {
     id,
     locale: "en-US",
     label: "Test voice",
     kind: "voice",
-    version: "1",
+    version,
     baseUrl,
     source: "cdn",
     cachePolicy: "user-download",
@@ -216,6 +217,20 @@ describe("Piper resource downloader", () => {
     const cache = await packageCache(setup);
     await expect(completionMarkers(setup)).resolves.toHaveLength(1);
     await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(true);
+  });
+
+  it("does not remove a verified superseded cache when download completion has no active-use snapshot", async () => {
+    const current = createPackage({ version: "2" });
+    const setup = createDownloader({ resourcePackage: current });
+    const old = createPackage({ version: "1" });
+    const oldCacheName = setup.store.getCacheName(old);
+    const oldCache = await setup.cacheStorage.open(oldCacheName);
+    await oldCache.put(`${old.baseUrl}.onnx`, new Response("abc"));
+    await oldCache.put(`${old.baseUrl}.onnx.json`, new Response("{}"));
+    await setup.store.writeCompletionMarker(old);
+
+    await expect(setup.downloader.downloadPiperResource(current.id)).resolves.toMatchObject({ status: "completed" });
+    await expect(setup.cacheStorage.keys()).resolves.toContain(oldCacheName);
   });
 
   it("requests only a missing metadata file when the verified model is already cached", async () => {

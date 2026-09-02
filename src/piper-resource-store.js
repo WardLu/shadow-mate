@@ -457,14 +457,18 @@ export function createPiperResourceStore({
       return { status: migratedFiles.length ? "partial" : "not-downloaded", files: migratedFiles };
     },
     async cleanupSupersededPiperResourceCaches(packageId, {
-      inUseCacheNames = [],
+      inUseCacheNames,
       skipCurrentValidation = false,
     } = {}) {
       const resourcePackage = store.getPackage(packageId);
       if (!isActivePiperCdnVoicePackage(resourcePackage) || !cacheStorage?.keys) return;
+      if (!Array.isArray(inUseCacheNames)) {
+        return { status: "skipped", reason: "active-use-unknown", deleted: [] };
+      }
       if (!skipCurrentValidation && !(await store.checkCurrentPackage(resourcePackage))) return;
       const protectedNames = new Set(inUseCacheNames);
       const prefix = `shadow-mate-piper-${resourcePackage.id}-`;
+      const deleted = [];
       for (const name of await cacheStorage.keys()) {
         if (!name.startsWith(prefix) || name === cacheName(resourcePackage) || protectedNames.has(name)) continue;
         const oldCache = await cacheStorage.open(name);
@@ -502,8 +506,9 @@ export function createPiperResourceStore({
           }
           if (verified) break;
         }
-        if (verified) await cacheStorage.delete(name);
+        if (verified && await cacheStorage.delete(name)) deleted.push(name);
       }
+      return { status: "cleaned", deleted };
     },
   };
   return store;

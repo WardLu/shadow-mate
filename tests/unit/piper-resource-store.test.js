@@ -257,7 +257,7 @@ describe("versioned Piper resource store", () => {
     await expect(partialStore.getPiperResourceCachedBytes(english.id)).resolves.toBe(3);
   });
 
-  it("deletes only the selected package and removes only usable superseded versions", async () => {
+  it("keeps superseded caches during automatic checks, but cleans only with an explicit unused snapshot", async () => {
     const current = createPackage({ id: "voice-a", version: "2" });
     const other = createPackage({ id: "voice-b" });
     const store = createStore([current, other]);
@@ -265,11 +265,24 @@ describe("versioned Piper resource store", () => {
     await seedCompletePackage(store, other);
     const old = createPackage({ id: "voice-a", version: "1" });
     await seedCompletePackage(store, old);
+    const oldCacheName = store.getCacheName(old);
 
-    await store.cleanupSupersededPiperResourceCaches(current.id, { inUseCacheNames: [store.getCacheName(old)] });
-    await expect(cacheStorage.keys()).resolves.toContain(store.getCacheName(old));
+    await store.cleanupSupersededPiperResourceCaches(current.id, { inUseCacheNames: [oldCacheName] });
+    await expect(cacheStorage.keys()).resolves.toContain(oldCacheName);
     await expect(store.getPiperResourceStatus(current.id)).resolves.toBe("completed");
-    await expect(cacheStorage.keys()).resolves.not.toContain(store.getCacheName(old));
+    await expect(cacheStorage.keys()).resolves.toContain(oldCacheName);
+    await expect(store.isPiperResourceCached(current.id)).resolves.toBe(true);
+    await expect(cacheStorage.keys()).resolves.toContain(oldCacheName);
+    await expect(store.cleanupSupersededPiperResourceCaches(current.id, { skipCurrentValidation: true })).resolves.toEqual({
+      status: "skipped",
+      reason: "active-use-unknown",
+      deleted: [],
+    });
+    await expect(store.cleanupSupersededPiperResourceCaches(current.id, { inUseCacheNames: [] })).resolves.toMatchObject({
+      status: "cleaned",
+      deleted: [oldCacheName],
+    });
+    await expect(cacheStorage.keys()).resolves.not.toContain(oldCacheName);
     await store.deletePiperResource(current.id);
     await expect(cacheStorage.keys()).resolves.not.toContain(store.getCacheName(current));
     await expect(cacheStorage.keys()).resolves.toContain(store.getCacheName(other));
