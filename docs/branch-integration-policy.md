@@ -7,8 +7,18 @@ Shadow Mate 允许功能开发、生产 hotfix、线上排障和文档维护并�
 ## 分支职责
 
 - `main` 是唯一开发集成主线，也是普通 Pull Request 的默认目标。
+- `preview` 是长期预发布与真实设备验收线，对应 Vercel 的 Preview 环境和 `preview-sm.shadow.wang`；它不是生产分支，也不承载正式 Release tag。
 - `production` 只表示已部署或待发布的生产版本线，不作为日常开发主线。
 - `codex/*`、`feature/*` 和 hotfix 分支承载独立工作，创建时应以最新 `main` 为基线。
+
+Preview 验收流程：
+
+1. 功能分支完成开发与针对性验证后，合并或同步到 `preview`。
+2. 推送 `preview` 会触发 Vercel Preview 部署，并由 CI 执行构建、测试、安全与共享数据库策略检查。
+3. 使用 `preview-sm.shadow.wang` 完成桌面、移动端和真实设备验收。
+4. 验收通过后，再按普通 PR 与 Release 流程进入 `main`；tag、`production` 分支和正式部署仍使用独立门禁。
+
+`preview` 只允许作为预发布验收边界使用。它不会自动创建 GitHub Release、版本 tag 或生产部署。
 
 生产 hotfix 完成后，必须同时完成两件事：
 

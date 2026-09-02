@@ -2,10 +2,10 @@ name: Shared Supabase Policy
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, preview]
     types: [opened, synchronize, reopened]
   push:
-    branches: [main]
+    branches: [main, preview]
 
 permissions:
   contents: read

@@ -2,7 +2,7 @@ name: Integration freshness
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, preview]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
