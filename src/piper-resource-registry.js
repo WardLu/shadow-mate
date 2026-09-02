@@ -1,4 +1,5 @@
 const SHA_256_RE = /^[a-f0-9]{64}$/i;
+const GIT_COMMIT_RE = /^[a-f0-9]{40}$/i;
 
 function deepFreeze(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -95,6 +96,42 @@ const BUNDLED_PIPER_RUNTIME = {
     status: "verified",
     source: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
   },
+  audit: {
+    status: "approved",
+    components: [
+      {
+        name: "piper-tts-web",
+        version: "1.1.2",
+        commit: "950f1f5c8278296a6698cc11e8b976594dad6687",
+        source: "https://github.com/Poket-Jony/piper-tts-web/tree/950f1f5c8278296a6698cc11e8b976594dad6687",
+        license: "MIT",
+        licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/950f1f5c8278296a6698cc11e8b976594dad6687/LICENSE",
+        redistributionTerms: "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.",
+      },
+      {
+        name: "ONNX Runtime Web",
+        version: "1.20.1",
+        commit: "5c1b7ccbff7e5141c1da7a9d963d660e5741c319",
+        source: "https://github.com/microsoft/onnxruntime/tree/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/js/web",
+        license: "MIT",
+        licenseUrl: "https://github.com/microsoft/onnxruntime/blob/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/LICENSE",
+        redistributionTerms: "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.",
+      },
+      {
+        name: "piper-tts-web phonemize artifacts",
+        version: "1.0.0",
+        commit: "7cec5cb4861f9322cd094b1b8b41a5b173e314db",
+        source: "https://github.com/Poket-Jony/piper-tts-web/tree/7cec5cb4861f9322cd094b1b8b41a5b173e314db/dist/piper",
+        license: "piper-tts-web MIT wrapper; retain applicable piper-phonemize and eSpeak NG notices for the WASM and data artifacts",
+        licenseUrl: "https://github.com/Poket-Jony/piper-tts-web/blob/7cec5cb4861f9322cd094b1b8b41a5b173e314db/LICENSE",
+        notices: [
+          "https://github.com/rhasspy/piper-phonemize",
+          "https://github.com/espeak-ng/espeak-ng/blob/master/COPYING",
+        ],
+        redistributionTerms: "For the piper-tts-web MIT-covered wrapper, use, copy, modify, merge, publish, distribute, sublicense, and sell are permitted when copyright and permission notices are retained; the software is provided without warranty. Retain all applicable piper-phonemize and eSpeak NG notices and license texts with these artifacts before redistribution.",
+      },
+    ],
+  },
   distribution: {
     status: "bundled",
     channel: "app-shell",
@@ -173,6 +210,24 @@ function validateApprovedCdnMetadata(resourcePackage) {
   }
 }
 
+function validateBundledRuntimeAuditMetadata(resourcePackage) {
+  if (resourcePackage.audit?.status !== "approved" || !Array.isArray(resourcePackage.audit?.components) || resourcePackage.audit.components.length === 0) {
+    throw new Error(`Bundled Piper package ${resourcePackage.id} has no approved audit metadata`);
+  }
+  for (const component of resourcePackage.audit.components) {
+    if (!component?.name || !component.version || !GIT_COMMIT_RE.test(component.commit || "")) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without a fixed version or commit`);
+    }
+    if (typeof component.source !== "string" || !component.source.includes(component.commit)
+      || typeof component.licenseUrl !== "string" || !component.licenseUrl.includes(component.commit)) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without commit-pinned source or license reference`);
+    }
+    if (!component.license || typeof component.redistributionTerms !== "string" || !component.redistributionTerms.trim()) {
+      throw new Error(`Bundled Piper package ${resourcePackage.id} has a component without license or redistribution terms`);
+    }
+  }
+}
+
 export function validatePiperResourcePackages(packages) {
   if (!Array.isArray(packages)) throw new Error("Piper resource registry must be an array");
   const ids = new Set();
@@ -215,6 +270,7 @@ export function validatePiperResourcePackages(packages) {
     if (totalBytes !== resourcePackage.totalBytes) {
       throw new Error(`Active Piper package ${resourcePackage.id} total bytes do not match files`);
     }
+    if (isBundled) validateBundledRuntimeAuditMetadata(resourcePackage);
     if (isActivePiperCdnVoicePackage(resourcePackage)) validateApprovedCdnMetadata(resourcePackage);
   }
   return true;
