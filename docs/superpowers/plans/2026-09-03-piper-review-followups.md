@@ -59,17 +59,25 @@
 - Modify: `src/piper-resource-registry.js`
 - Modify: `THIRD_PARTY_NOTICES.md`
 - Create: `tests/unit/piper-resource-registry.test.js`
+- Create: `third_party/licenses/piper-tts-web-MIT.txt`
+- Create: `third_party/licenses/onnxruntime-MIT.txt`
+- Create: `third_party/licenses/piper-phonemize-MIT.txt`
+- Create: `third_party/licenses/espeak-ng-COPYING.txt`
+- Create: `third_party/licenses/espeak-ng-COPYING.APACHE.txt`
+- Create: `third_party/licenses/espeak-ng-COPYING.BSD2.txt`
+- Create: `third_party/licenses/espeak-ng-COPYING.UCD.txt`
 
 **Interfaces:**
 - Keep the bundled runtime package id `piper-browser-runtime` and all four existing runtime file URLs, bytes, and SHA-256 values unchanged.
-- Record `piper-tts-web` as version `1.1.2` at commit `950f1f5c8278296a6698cc11e8b976594dad6687`, with a commit-pinned source URL and commit-pinned LICENSE URL.
+- Record `piper-tts-web` as package version `1.1.2` (the commit's `package.json` version, not the separately tagged `v1.1.2`) at commit `950f1f5c8278296a6698cc11e8b976594dad6687`, with a commit-pinned source URL and commit-pinned LICENSE URL.
 - Record ONNX Runtime Web as version `1.20.1` at commit `5c1b7ccbff7e5141c1da7a9d963d660e5741c319`, and keep its MIT license record tied to the vendored runtime header/source.
-- Record the phonemize WASM/data artifacts as originating from `piper-tts-web` v1.0.0 commit `7cec5cb4861f9322cd094b1b8b41a5b173e314db`, with the applicable piper-phonemize/eSpeak NG notices and license obligations retained.
-- Bundled package validation must require approved audit metadata: fixed component version/commit, commit-pinned source/reference, and non-empty concrete redistribution terms. Active CDN validation remains unchanged and Chinese remains gated.
+- Record `piper-phonemize` as version `1.2.0` at commit `cfff8e52ebaea37c7e953ae2d06b174acb827ac4`, and record its pinned eSpeak NG dependency as version `1.52.0.1` at commit `0f65aa301e0d6bae5e172cc74197d32a6182200f` as declared by the piper-phonemize build metadata.
+- Record the phonemize WASM/data artifacts as originating from `piper-tts-web` package version `1.0.0` commit `7cec5cb4861f9322cd094b1b8b41a5b173e314db`, with the piper-phonemize MIT text and eSpeak NG GPL/Apache/BSD/Unicode texts retained in the repository.
+- Bundled package validation must require exactly the known audited component set, fixed expected versions/commits, commit-pinned source/license references, approved license names/statuses, linked local license text files, and concrete redistribution terms. Active CDN validation remains unchanged and Chinese remains gated.
 
 - [ ] **Step 1: Add failing metadata validation tests**
 
-  Clone the bundled runtime registry fixture and assert validation rejects a bundled package with a missing source commit, a missing commit-pinned reference, or missing redistribution terms. Assert the real registry passes and still exposes the same four runtime files/fingerprints in `tests/unit/piper-resource-registry.test.js`.
+  Clone the bundled runtime registry fixture and assert validation rejects a bundled package with a missing/extra component, `latest` or a wrong 40-character commit, a non-pinned source/license URL, an unapproved license, missing local license text, or trivial redistribution terms. Assert the real registry passes and still exposes the same four runtime files/fingerprints in `tests/unit/piper-resource-registry.test.js`.
 
 - [ ] **Step 2: Run the focused registry/store tests and confirm they fail before the validator change**
 
@@ -81,7 +89,7 @@
 
 - [ ] **Step 4: Synchronize public notices and run focused checks**
 
-  Update `THIRD_PARTY_NOTICES.md` with the pinned upstream records, component relationships, license names, source/license links, and concrete redistribution obligations. Run `npm test -- tests/unit/piper-resource-store.test.js tests/unit/piper-resource-smoke.test.js` and `npm run check`.
+  Update `THIRD_PARTY_NOTICES.md` with the pinned upstream records, component relationships, license names, source/license links, local license-text paths, and concrete redistribution obligations. Add the exact upstream license texts under `third_party/licenses/`. Run `npm test -- tests/unit/piper-resource-registry.test.js tests/unit/piper-resource-smoke.test.js` and `npm run check`.
 
 - [ ] **Step 5: Run build fingerprint verification**
 
@@ -90,7 +98,7 @@
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add src/piper-resource-registry.js THIRD_PARTY_NOTICES.md tests/unit/piper-resource-registry.test.js
+  git add src/piper-resource-registry.js THIRD_PARTY_NOTICES.md tests/unit/piper-resource-registry.test.js third_party/licenses/
   git commit -m "docs: make Piper runtime provenance auditable"
   ```
 
