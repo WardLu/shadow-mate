@@ -38,6 +38,20 @@ if (
   throw new Error("Built privacy HTML is missing its charset, title, or stylesheet");
 }
 
+const serviceWorker = await readFile("dist/sw.js", "utf8");
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
+  throw new Error("Built service worker must use shadow-mate-app-v4");
+}
+if (!serviceWorker.includes("keys.filter((key) => isAppShellCacheName(key) && key !== CACHE_NAME).map((key) => caches.delete(key))")) {
+  throw new Error("Built service worker must delete only stale app-shell caches");
+}
+if (/caches\.keys\(\)\s*\.then\(\(keys\)\s*=>\s*Promise\.all\(keys\.map\(.*caches\.delete/s.test(serviceWorker)) {
+  throw new Error("Built service worker must not unconditionally delete every cache");
+}
+if (!serviceWorker.includes("/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)")) {
+  throw new Error("Built service worker cache deletion must exclude shadow-mate-piper-* caches");
+}
+
 for (const asset of jsAssets) {
   const source = await readFile(`dist/assets/${asset}`, "utf8");
   if (/https:\/\/esm\.sh/i.test(source)) {

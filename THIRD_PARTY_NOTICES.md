@@ -34,6 +34,12 @@ eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明
 
 此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) 的 `en_US/ljspeech/medium`，模型卡标注训练数据为 public domain。
 
+### Piper CDN 资源发布门禁
+
+英语包 `en_US-ljspeech-medium` 的已批准清单版本为 `1`，基础 URL 为 `https://voice.shadow.wang/piper/en_US-ljspeech-medium`：`.onnx` 为 63,531,379 bytes（SHA-256 `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22`），`.onnx.json` 为 4,972 bytes（SHA-256 `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860`）。发布前以 `scripts/piper-resource-smoke.mjs` 对清单 URL、响应类型、CORS、字节数与 SHA-256 做只读核验。
+
+中文候选包 `zh_CN-chaowen-medium` 仍为 `gated`：尚未记录可公开分发的最终文件、来源与模型/训练数据许可证、分发授权或真实小米浏览器证据。因此它不在公开 CDN 或应用下载清单中；不得把候选状态解释为中文离线语音已获准发布。
+
 ## 字帖字体资源
 
 | 文件或资源 | 来源和许可证 |

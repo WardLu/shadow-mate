@@ -276,6 +276,7 @@ Piper 引擎的单例只在成功且 idle 时复用。`generate()`、音素转�
 - Service Worker 升级后 Piper 包缓存仍保留；应用壳升级不触发模型重下载。
 - 版本守卫触发页面更新后，当前版本的 Piper 包仍可离线播放；该验收从新版本客户端开始，旧客户端首次升级的尽力迁移另行记录。
 - 真实 CDN 资源 Smoke Test：两个语言包的 `HEAD`、`GET`、大小、CORS、hash 和至少一次浏览器合成；结果必须关联资源发布清单和许可状态。
+- Preview 浏览器 Smoke 仅在 `PIPER_PREVIEW_SMOKE=1` 且目标为 `https://preview-sm.shadow.wang` 时运行，记录 Service Worker script URL、包状态、一次下载、离线重开及后续无模型 GET；它是 Preview 证据，不是本地测试或小米验收。
 
 ### 真实设备验收
 
@@ -295,6 +296,8 @@ Piper 引擎的单例只在成功且 idle 时复用。`generate()`、音素转�
 - `Access-Control-Allow-Origin`、`GET, HEAD, OPTIONS` 和必要的暴露头。
 
 模型上传和 CDN 配置由有权限的维护者完成；本仓库只提交资源注册表、许可证记录和测试，不提交模型二进制或秘密凭据。
+
+`node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/piper --package <package-id>` 是只读 CDN 门禁：逐文件发出 `HEAD` 与 `GET`，核对 2xx、`Content-Length`、注册表声明的 `Content-Type`、CORS 响应头、实际字节数和 SHA-256。中文包缺少 `releaseApproved` 或 `licenseStatus: "approved"` 时必须在网络请求前失败；命令不会上传模型或改变 CDN 配置。
 
 ## 12. 实施阶段
 

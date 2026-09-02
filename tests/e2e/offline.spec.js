@@ -51,6 +51,38 @@ test.describe("Offline mode (no login)", () => {
     await expect(page).toHaveTitle("影伴");
   });
 
+  test("service-worker activation retains the Piper cache namespace without a model GET", async ({ page }) => {
+    let modelGetRequests = 0;
+    await page.route("**/piper/en_US-ljspeech-medium.onnx", async (route) => {
+      if (route.request().method() === "GET") modelGetRequests += 1;
+      await route.continue();
+    });
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      if (!("serviceWorker" in navigator) || !("caches" in window)) return { supported: false };
+      const packageId = "en_US-ljspeech-medium";
+      const cacheName = `shadow-mate-piper-${packageId}-1`;
+      const cache = await caches.open(cacheName);
+      await cache.put("https://voice.shadow.wang/piper/en_US-ljspeech-medium/__shadow-mate-piper-package__/en_US-ljspeech-medium%401", new Response(JSON.stringify({ id: packageId, version: "1" })));
+      await cache.put("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response("cached-model"));
+      await caches.open("shadow-mate-app-v3");
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker did not become ready")), 10_000)),
+      ]);
+      await registration.update();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return { supported: true, cacheNames: await caches.keys(), scriptUrl: registration.active?.scriptURL || null };
+    });
+
+    expect(result.supported).toBe(true);
+    expect(result.scriptUrl).toContain("/sw.js");
+    expect(result.cacheNames).toContain("shadow-mate-piper-en_US-ljspeech-medium-1");
+    expect(result.cacheNames).not.toContain("shadow-mate-app-v3");
+    expect(modelGetRequests).toBe(0);
+  });
+
   test("home page shows banner and stats", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".banner")).toBeVisible();
@@ -189,6 +221,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("gated");
+    await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();

@@ -126,6 +126,13 @@ describe("versioned Piper resource store", () => {
     });
   }
 
+  it("uses an HTTP(S) completion marker key accepted by browser Cache Storage", () => {
+    const resourcePackage = createPackage();
+    const store = createStore([resourcePackage]);
+
+    expect(store.getMarkerKey(resourcePackage)).toBe("https://voice.example.test/test-voice/__shadow-mate-piper-package__/test-voice%401");
+  });
+
   it("requires both complete files and an exact completion marker", async () => {
     const resourcePackage = createPackage();
     const store = createStore([resourcePackage]);

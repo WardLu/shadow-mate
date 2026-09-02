@@ -21,7 +21,7 @@ function cacheName(resourcePackage) {
 }
 
 function markerKey(resourcePackage) {
-  return `package:${resourcePackage.id}@${resourcePackage.version}`;
+  return `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
 }
 
 function fileUrl(resourcePackage, file) {
@@ -172,11 +172,12 @@ export function createPiperResourceStore({
       for (const name of await cacheStorage.keys()) {
         if (!name.startsWith(prefix) || name === cacheName(resourcePackage) || protectedNames.has(name)) continue;
         const oldCache = await cacheStorage.open(name);
-        const oldMarker = await oldCache.match(`package:${resourcePackage.id}@${name.slice(prefix.length)}`);
+        const oldVersion = name.slice(prefix.length);
+        const oldMarker = await oldCache.match(markerKey({ ...resourcePackage, version: oldVersion }));
         if (!oldMarker) continue;
         try {
           const marker = await oldMarker.json();
-          if (marker.id === resourcePackage.id && marker.version === name.slice(prefix.length) && Array.isArray(marker.files) && marker.files.length > 0) {
+          if (marker.id === resourcePackage.id && marker.version === oldVersion && Array.isArray(marker.files) && marker.files.length > 0) {
             const responses = await Promise.all(marker.files.map((file) => oldCache.match(file.url)));
             if (responses.every(Boolean)) await cacheStorage.delete(name);
           }

@@ -15,6 +15,8 @@ const requiredFiles = [
   "src/piper-resource-store.js",
   "src/piper-resource-hash.js",
   "src/piper-resource-capabilities.js",
+  "src/piper-resource-ui.js",
+  "scripts/piper-resource-smoke.mjs",
   "src/config.js",
   "src/lib.js",
   "src/cloud.js",
@@ -144,6 +146,17 @@ if (!versionGuard.includes("selectCacheNamesToDelete(keys).map((key) => caches.d
 }
 if (/caches\.keys\(\)[\s\S]*?keys\.map\(\(key\)\s*=>\s*caches\.delete/.test(versionGuard)) {
   throw new Error("Version guard must not delete every cache");
+}
+
+const piperResourceUi = await readFile("src/piper-resource-ui.js", "utf8");
+if (!piperResourceUi.includes('from "./piper-resource-registry.js"')) {
+  throw new Error("Piper resource UI must source package metadata from the registry");
+}
+if (!piperResourceUi.includes("resourcePackage.totalBytes")) {
+  throw new Error("Piper resource UI must render voice sizes from registered package bytes");
+}
+if (/\b(?:90|115)\s*MB\b/i.test(piperResourceUi)) {
+  throw new Error("Piper resource UI must not contain fixed voice-size copy");
 }
 
 const cloud = await readFile("src/cloud.js", "utf8");

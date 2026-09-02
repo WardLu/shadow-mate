@@ -2,6 +2,12 @@
 
 > This file lists user-visible product changes for each published version.
 
+## Unreleased — Piper resource release gates
+
+- Added local release checks for versioned app-shell cache ownership and browser lifecycle coverage so an app-shell update must retain Piper package cache namespaces and must not trigger a model GET by itself.
+- Added a read-only CDN smoke command for approved package manifests. Its result is external CDN evidence, not a local test or a deployment action.
+- `zh_CN-chaowen-medium` remains gated: no license-approved final artifact, public distribution manifest, or real Xiaomi browser acceptance has been recorded. Desktop Playwright Preview coverage is not Xiaomi acceptance.
+
 ## v1.3.12 - 2026-09-01
 
 - Fixed a learner switch that could remain incomplete after signing in again and creating a new family space.
