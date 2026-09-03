@@ -381,6 +381,10 @@ test.describe("Offline mode (no login)", () => {
   });
 
   test("keeps the V2 Pilot learning-card snapshot stable for local users, including printing", async ({ page }) => {
+    await page.context().addInitScript(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await page.goto("/");
     await openModule(page, "chinese");
@@ -419,15 +423,13 @@ test.describe("Offline mode (no login)", () => {
     expect(beforePrint.screen.rows).toHaveLength(4);
     expect(beforePrint.print).toEqual(beforePrint.screen);
 
-    await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => {
-        window.__printCalls += 1;
-      };
-    });
+    const popupPromise = page.waitForEvent("popup");
     await page.locator("[data-print]").click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("load");
+    await expect.poll(() => popup.evaluate(() => window.__printCalls), { timeout: 15000 }).toBe(1);
     expect(await readWorksheetSnapshot()).toEqual(beforePrint);
+    await popup.close();
 
     await page.locator('[data-cmod="chinese-writing"]').click();
     await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveClass(/done/);
