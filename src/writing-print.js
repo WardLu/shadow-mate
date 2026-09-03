@@ -73,6 +73,30 @@ async function waitForDocumentLoad(printWindow) {
   await new Promise((resolve) => printWindow.setTimeout(resolve, 0));
 }
 
+export async function waitForStylesheets(printWindow) {
+  const stylesheets = [...printWindow.document.querySelectorAll('link[rel="stylesheet"]')];
+  await withTimeout(Promise.all(stylesheets.map((stylesheet) => new Promise((resolve, reject) => {
+    const cleanup = () => {
+      stylesheet.removeEventListener("load", onLoad);
+      stylesheet.removeEventListener("error", onError);
+    };
+    const onLoad = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      const error = new Error("打印样式加载失败，请检查网络后重试。");
+      error.code = "print_stylesheet_error";
+      reject(error);
+    };
+
+    stylesheet.addEventListener("load", onLoad, { once: true });
+    stylesheet.addEventListener("error", onError, { once: true });
+    if (stylesheet.sheet) onLoad();
+  }))), "打印样式加载超时，请检查网络后重试。", PRINT_READY_TIMEOUT_MS, printWindow);
+}
+
 async function waitForPrintFont(printWindow, fontUrl) {
   const fonts = printWindow.document.fonts;
   if (!fonts?.add || !printWindow.FontFace) return;
@@ -120,6 +144,7 @@ async function preparePrintWindow(printWindow, worksheet, sourceDocument, source
   printDocument.close();
 
   await waitForDocumentLoad(printWindow);
+  await waitForStylesheets(printWindow);
   await waitForPrintFont(printWindow, writingFontUrl(sourceLocation));
   if (printWindow.closed) {
     const error = new Error("打印窗口已关闭，请重试。");

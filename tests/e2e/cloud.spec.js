@@ -750,6 +750,7 @@ test.describe("Authenticated cloud workspace", () => {
     const afterCheckin = await readWritingSnapshot(page);
     expect(afterCheckin.screen).toEqual(beforeCheckin.screen);
 
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     const popupPromise = page.waitForEvent("popup");
     await page.locator("[data-print]").click();
     const popup = await popupPromise;
