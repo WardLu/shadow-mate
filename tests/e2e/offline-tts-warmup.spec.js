@@ -110,4 +110,64 @@ test.describe("Offline voice warmup", () => {
     await page.locator("audio").evaluate((audio) => audio.dispatchEvent(new Event("ended")));
     await expect(page.locator("audio")).toHaveCount(0);
   });
+
+  test("primes a suspended WebAudio context from the speech button gesture", async ({ page }) => {
+    await page.route("**/src/piper-tts.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const ENGINE_LOAD_TIMEOUT_MS = 120000;
+          export const SYNTHESIS_TIMEOUT_MS = 30000;
+          export const withTimeout = (promise) => promise;
+          export const resetLocalVoiceEngine = async () => {};
+          export const askDownloadVoice = async () => "ok";
+          export const prepareLocalVoice = async () => {};
+          export const speakLocally = async () => ({
+            url: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=",
+            duration: 0,
+          });
+        `,
+      });
+    });
+    await installNoSystemSpeech(page);
+    await page.addInitScript(() => {
+      window.__audioGesture = false;
+      window.__audioResumeCalls = 0;
+      window.__audioSourceStarts = 0;
+      class GestureAudioContext {
+        constructor() { this.state = "suspended"; }
+        resume() {
+          window.__audioResumeCalls += 1;
+          if (!window.__audioGesture) return Promise.reject(new DOMException("Not allowed", "NotAllowedError"));
+          this.state = "running";
+          return Promise.resolve();
+        }
+        decodeAudioData() { return Promise.resolve({ duration: 0 }); }
+        createBufferSource() {
+          return {
+            buffer: null,
+            connect() {},
+            disconnect() {},
+            start() { window.__audioSourceStarts += 1; this.onended?.(); },
+            stop() {},
+            onended: null,
+          };
+        }
+      }
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: GestureAudioContext });
+      Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
+      window.localStorage.setItem("shadow-mate-piper-cache-hints-v1", JSON.stringify(["en_US-ljspeech-medium"]));
+    });
+    await openEnglish(page);
+    const button = page.locator("[data-speak]").first();
+    await page.evaluate(() => { window.__audioGesture = true; });
+    await button.dispatchEvent("pointerdown");
+    await page.evaluate(() => { window.__audioGesture = false; });
+    await button.click();
+
+    await expect.poll(() => page.evaluate(() => ({
+      resumeCalls: window.__audioResumeCalls,
+      sourceStarts: window.__audioSourceStarts,
+    }))).toEqual({ resumeCalls: 1, sourceStarts: 1 });
+  });
 });
