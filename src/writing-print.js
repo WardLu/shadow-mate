@@ -30,14 +30,14 @@ function writingFontUrl(sourceLocation) {
   return new URL(PRINT_FONT_PATH, sourceLocation.href).href;
 }
 
-function printDocumentMarkup(worksheet, sourceDocument, sourceLocation) {
+export function printDocumentMarkup(worksheet, sourceDocument, sourceLocation) {
   const stylesheets = sameOriginStylesheetHrefs(sourceDocument, sourceLocation)
     .map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}">`)
     .join("");
   const sheet = renderWritingPrintSheetHtml(worksheet);
 
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" hidden>
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -151,6 +151,9 @@ async function preparePrintWindow(printWindow, worksheet, sourceDocument, source
     error.code = "print_window_closed";
     throw error;
   }
+
+  printDocument.documentElement.hidden = false;
+  void printDocument.documentElement.offsetHeight;
 
   printWindow.addEventListener("afterprint", () => {
     if (!printWindow.closed) printWindow.close();

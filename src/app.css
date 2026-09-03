@@ -427,7 +427,7 @@
     #writingPrintRoot .writing-print-paper::before{content:"";position:absolute;top:0;right:0;left:0;height:1.3mm;background:linear-gradient(90deg,#5c56cf 0 36%,#60bfa8 36% 68%,#efad4e 68% 86%,#e96d9d 86%);}
     #writingPrintRoot .writing-print-header{display:grid;grid-template-columns:1fr auto;grid-template-rows:7mm 12mm 10mm;column-gap:5mm;align-items:start;}
     #writingPrintRoot .writing-print-eyebrow{display:flex;align-items:center;gap:2mm;color:#95a1b5;font-size:8pt;letter-spacing:.1em;font-weight:700;}
-    #writingPrintRoot .writing-print-brand-logo{display:block;width:6mm;height:6mm;flex:0 0 auto;border-radius:2mm;background:url('/brand_assets/shadow-mate.svg') center/cover no-repeat;}
+    #writingPrintRoot .writing-print-brand-logo{display:block;width:6mm;height:6mm;flex:0 0 auto;border-radius:2mm;background:none;overflow:hidden;}
     #writingPrintRoot .writing-print-divider{color:#c0c9d6;}
     #writingPrintRoot .writing-print-badge{display:grid;grid-template-columns:10mm auto;align-items:center;min-width:34mm;height:10mm;padding:1mm 3mm 1mm 1.2mm;border:0.3mm solid #d4d1ff;border-radius:4mm;background:#f4f3ff;}
     #writingPrintRoot .writing-print-badge strong{display:grid;width:8mm;height:8mm;place-items:center;color:#fff;font-size:14pt;border-radius:2.5mm;background:#5c56cf;}

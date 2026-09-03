@@ -155,7 +155,10 @@ describe("Hanzi writing snapshot renderers", () => {
     expect(firstPrintCard.querySelectorAll(".writing-cell.trace")).toHaveLength(4);
     expect(firstPrintCard.querySelectorAll(".writing-cell.empty")).toHaveLength(4);
     expect(firstPrintCard.querySelectorAll(".writing-print-rice-line")).toHaveLength(36);
-    expect(print.querySelector(".writing-print-brand-logo").getAttribute("aria-label")).toBe("Shadow Mate");
+    const printLogo = print.querySelector(".writing-print-brand-logo");
+    expect(printLogo.tagName).toBe("svg");
+    expect(printLogo.getAttribute("aria-label")).toBe("Shadow Mate");
+    expect(printLogo.querySelectorAll("path, circle, rect").length).toBeGreaterThan(0);
     expect(print.querySelectorAll("[data-hanzi-speak]")).toHaveLength(0);
 
     const speechButtons = firstCard.querySelectorAll("[data-hanzi-speak]");

@@ -136,6 +136,18 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
         pinyin: row.querySelector("[data-writing-pinyin]")?.textContent,
       })),
       glyphsVisible: [...document.querySelectorAll("[data-writing-glyph]")].every((glyph) => glyph.getBoundingClientRect().height > 0),
+      documentElementHidden: document.documentElement.hidden,
+      logo: (() => {
+        const element = document.querySelector(".writing-print-brand-logo");
+        const style = element ? getComputedStyle(element) : null;
+        const rect = element?.getBoundingClientRect();
+        return {
+          tagName: element?.tagName || null,
+          backgroundImage: style?.backgroundImage || null,
+          width: rect?.width || 0,
+          height: rect?.height || 0,
+        };
+      })(),
       inlineStyles: document.querySelectorAll("style").length,
       extensionHosts: document.querySelectorAll("#yd-mg-icon-host, yd-mg-icon, #yd-mg-block-icon-host, yd-mg-block-icon, #yd-mg-huaci-host, yd-mg-huaci").length,
     }));
@@ -144,6 +156,11 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
     expect(popupSnapshot.rows.map((row) => row.glyph)).toEqual(before.print.rows.map((row) => row.glyph));
     expect(popupSnapshot.rows.every((row) => row.pinyin)).toBe(true);
     expect(popupSnapshot.glyphsVisible).toBe(true);
+    expect(popupSnapshot.documentElementHidden).toBe(false);
+    expect(popupSnapshot.logo.tagName).toBe("svg");
+    expect(popupSnapshot.logo.backgroundImage).toBe("none");
+    expect(popupSnapshot.logo.width).toBeGreaterThan(0);
+    expect(popupSnapshot.logo.height).toBeGreaterThan(0);
     expect(popupSnapshot.inlineStyles).toBe(0);
     expect(popupSnapshot.extensionHosts).toBe(0);
 

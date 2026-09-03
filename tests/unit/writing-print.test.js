@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { waitForStylesheets } from "../../src/writing-print.js";
+import { printDocumentMarkup, waitForStylesheets } from "../../src/writing-print.js";
 
 function printWindowFor(document) {
   return {
@@ -31,6 +31,23 @@ function pendingStylesheet(document, href = "https://example.test/print.css") {
 }
 
 describe("writing print resource preparation", () => {
+  it("keeps the popup hidden until its print resources are ready", () => {
+    const sourceDocument = document.implementation.createHTMLDocument("源页面");
+    const stylesheet = sourceDocument.createElement("link");
+    stylesheet.rel = "stylesheet";
+    stylesheet.href = "/assets/index.css";
+    sourceDocument.head.appendChild(stylesheet);
+
+    const markup = printDocumentMarkup(
+      { rows: [] },
+      sourceDocument,
+      new URL("https://example.test/"),
+    );
+
+    expect(markup).toContain('<html lang="zh-CN" hidden>');
+    expect(markup).toContain('class="writing-print-brand-logo"');
+  });
+
   it("waits for every stylesheet before allowing printing", async () => {
     const printDocument = document.implementation.createHTMLDocument("打印字帖");
     const delayed = pendingStylesheet(printDocument);
