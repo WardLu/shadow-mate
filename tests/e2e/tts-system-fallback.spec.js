@@ -412,9 +412,10 @@ test.describe("System speech fallback", () => {
           export class PhonemizeWebRuntime { constructor() {} }
           export class PiperWebEngine {
             constructor() { window.__timeoutEngines = (window.__timeoutEngines || 0) + 1; }
-            async generate() {
+            async generate(text) {
               const call = (window.__timeoutGenerates = (window.__timeoutGenerates || 0) + 1);
-              if (call === 1) return new Promise(() => {});
+              window.__timeoutGenerateStarted = (window.__timeoutGenerateStarted || 0) + 1;
+              if (text === "first") return new Promise(() => {});
               return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
             }
             destroy() { window.__timeoutDestroys = (window.__timeoutDestroys || 0) + 1; }
@@ -434,10 +435,17 @@ test.describe("System speech fallback", () => {
     });
     await page.goto("/");
 
-    const result = await page.evaluate(async () => {
+    await page.evaluate(async () => {
       const { resetLocalVoiceEngine, speakLocally, withTimeout } = await import("/src/piper-tts.js");
+      window.__timeoutSpeech = speakLocally("first", "en_US-ljspeech-medium");
+      window.__timeoutSpeechHelpers = { resetLocalVoiceEngine, speakLocally, withTimeout };
+    });
+    await expect.poll(() => page.evaluate(() => window.__timeoutGenerateStarted || 0)).toBe(1);
+
+    const result = await page.evaluate(async () => {
+      const { resetLocalVoiceEngine, speakLocally, withTimeout } = window.__timeoutSpeechHelpers;
       const timedOut = await withTimeout(
-        speakLocally("first", "en_US-ljspeech-medium"),
+        window.__timeoutSpeech,
         5,
         "发音合成超时"
       ).then(() => null, (error) => error.name);
