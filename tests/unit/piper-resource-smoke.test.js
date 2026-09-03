@@ -19,7 +19,7 @@ describe("Piper CDN CORS gate", () => {
     expect(() => assertApprovedCdnPackage({ ...approved, licenseStatus: "pending" })).toThrow(/license/i);
     expect(() => assertApprovedCdnPackage({ ...approved, provenance: { status: "partial" } })).toThrow(/provenance/i);
     expect(() => assertApprovedCdnPackage({ ...approved, distribution: { status: "blocked" } })).toThrow(/distribution/i);
-    expect(() => assertApprovedCdnPackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toThrow(/not an approved CDN/i);
+    expect(() => assertApprovedCdnPackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).not.toThrow();
   });
 
   it("accepts an expected Preview origin with all required methods and exposed headers", () => {

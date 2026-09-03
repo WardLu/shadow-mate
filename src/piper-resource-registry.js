@@ -123,25 +123,51 @@ const ENGLISH_PIPER_RESOURCE = {
   ],
 };
 
-const GATED_CHINESE_PIPER_RESOURCE = {
+const CHINESE_PIPER_RESOURCE = {
   id: "zh_CN-chaowen-medium",
   locale: "zh-CN",
   label: "Chinese (Chaowen, medium)",
   kind: "voice",
-  version: "candidate",
-  baseUrl: null,
-  source: "gated",
-  cachePolicy: "gated",
-  totalBytes: null,
-  releaseApproved: false,
-  licenseStatus: "pending",
-  license: { status: "pending" },
-  provenance: {
-    status: "partial",
-    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/chaowen/medium",
+  version: "1",
+  phonemizeVoice: "cmn",
+  baseUrl: "https://voice.shadow.wang/piper/zh_CN-chaowen-medium",
+  source: "cdn",
+  cachePolicy: "user-download",
+  totalBytes: 63224911,
+  releaseApproved: true,
+  licenseStatus: "approved",
+  license: {
+    status: "approved",
+    model: "CC0 (model card)",
+    trainingData: "CC0",
+    reference: "https://huggingface.co/rhasspy/piper-voices/blob/main/zh/zh_CN/chaowen/medium/MODEL_CARD",
   },
-  distribution: { status: "blocked", channel: "none" },
-  files: [],
+  provenance: {
+    status: "verified",
+    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/zh/zh_CN/chaowen/medium",
+    modelCard: "https://huggingface.co/rhasspy/piper-voices/blob/main/zh/zh_CN/chaowen/medium/MODEL_CARD",
+  },
+  distribution: {
+    status: "approved",
+    channel: "public-cdn",
+    notice: "THIRD_PARTY_NOTICES.md#piper-cdn-资源发布门禁",
+  },
+  files: [
+    {
+      key: "model",
+      suffix: ".onnx",
+      contentType: "application/octet-stream",
+      bytes: 63221984,
+      sha256: "820d64ac16048fbcf38dd0823d37fab5f5e0c2bd71b01ca5a50f553fac19e746",
+    },
+    {
+      key: "metadata",
+      suffix: ".onnx.json",
+      contentType: "application/json",
+      bytes: 2927,
+      sha256: "a6bb2caafa0645642f13cbf7e2f6fbbb16fded66e51109fc26d622f6472fa16f",
+    },
+  ],
 };
 
 const BUNDLED_PIPER_RUNTIME = {
@@ -215,7 +241,7 @@ const BUNDLED_PIPER_RUNTIME = {
 
 export const PIPER_RESOURCE_PACKAGES = deepFreeze([
   ENGLISH_PIPER_RESOURCE,
-  GATED_CHINESE_PIPER_RESOURCE,
+  CHINESE_PIPER_RESOURCE,
   BUNDLED_PIPER_RUNTIME,
 ]);
 

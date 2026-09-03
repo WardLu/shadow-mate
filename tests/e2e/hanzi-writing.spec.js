@@ -291,18 +291,24 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).not.toContainText("没有中文");
   });
 
-  test("uses the explicit Chinese Piper gate when Android exposes no voice list", async ({ page }) => {
+  test("opens the Chinese Piper download dialog when Android exposes no voice list", async ({ page }) => {
     await installSpeechMock(page, { voices: [] });
     await openChineseAtFixedTime(page);
 
     const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await button.click();
 
-    await expect(button).toContainText("中文离线语音尚未开放");
-    await expect(page.locator("#shadow-voice-dialog")).toHaveCount(0);
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中文语音");
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("Chinese (Chaowen, medium)");
+    await expect(dialog.locator(".voice-dialog-desc")).toContainText("60.3 MB");
+    await expect(dialog.locator(".voice-dialog-desc")).toContainText(new URL(page.url()).origin);
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
+    await dialog.locator('[data-action="cancel"]').click();
+    await expect(dialog).toHaveCount(0);
     await expect(button).toBeEnabled();
-    await expect(button).not.toContainText("没有中文");
+    await expect(button).toContainText("中文发音");
   });
 
   test("waits for a late Mandarin voice after Android exposes a partial voice list", async ({ page }) => {
@@ -357,7 +363,7 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).not.toContainText("失败");
   });
 
-  test("uses the explicit Chinese Piper gate when no Mandarin system voice is available", async ({ page }) => {
+  test("offers Chinese Piper after no Mandarin system voice is available", async ({ page }) => {
     let piperEngineRequests = 0;
     await page.route("**/piper-tts-web.js*", async (route) => {
       piperEngineRequests += 1;
@@ -373,14 +379,16 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).toHaveAccessibleName("播放“火”的中文发音");
     await button.click();
 
-    await expect(button).toContainText("中文离线语音尚未开放");
-    await expect(button).toHaveAccessibleName("中文离线语音尚未开放，请安装系统中文普通话语音后重试");
-    await expect(button).toHaveAttribute("aria-live", "polite");
-    await expect(button).toBeFocused();
-    await expect(button).toHaveAttribute("data-speech-failure", "true");
-    expect(await page.locator("[data-speech-guide]").count()).toBe(0);
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中文语音");
+    await expect(dialog.locator(".voice-dialog-desc")).toContainText("60.3 MB");
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
     expect(piperEngineRequests).toBe(0);
+
+    await dialog.locator('[data-action="cancel"]').click();
+    await expect(dialog).toHaveCount(0);
+    await expect(button).toBeEnabled();
 
     const afterFailure = await readWorksheetSnapshot(page);
     expect(afterFailure.screen).toEqual(before.screen);
@@ -440,7 +448,7 @@ test.describe("Hanzi writing worksheet", () => {
     });
   }
 
-  test("falls back to the explicit Chinese Piper gate after a system speech error and allows a retry", async ({ page }) => {
+  test("offers Chinese Piper after a system speech error and allows a retry", async ({ page }) => {
     await installSpeechMock(page, { mode: "error" });
     await openChineseAtFixedTime(page);
 
@@ -448,12 +456,11 @@ test.describe("Hanzi writing worksheet", () => {
     const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await expect(button).toHaveAccessibleName("播放“火”的中文发音");
     await button.click();
-    await expect(button).toContainText("中文离线语音尚未开放");
-    await expect(button).toHaveAccessibleName("中文离线语音尚未开放，请安装系统中文普通话语音后重试");
-    await expect(button).toHaveAttribute("aria-live", "polite");
-    await expect(button).toBeFocused();
-    await expect(button).not.toBeDisabled();
-    await expect(button).toHaveAttribute("data-speech-failure", "true");
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-action="cancel"]').click();
+    await expect(dialog).toHaveCount(0);
+    await expect(button).toBeEnabled();
 
     const afterError = await readWorksheetSnapshot(page);
     expect(afterError.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
@@ -479,7 +486,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(afterRetry.state.checkins).toEqual(before.state.checkins);
   });
 
-  test("falls back to the explicit Chinese Piper gate after the 4-second system-start timeout and allows a retry", async ({ page }) => {
+  test("offers Chinese Piper after the 4-second system-start timeout and allows a retry", async ({ page }) => {
     await installSpeechMock(page, { mode: "pending" });
     await openChineseAtFixedTime(page);
 
@@ -489,7 +496,10 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).toBeDisabled();
 
     await page.clock.fastForward(4000);
-    await expect(button).toContainText("中文离线语音尚未开放");
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-action="cancel"]').click();
+    await expect(dialog).toHaveCount(0);
     await expect(button).not.toBeDisabled();
 
     await page.evaluate(() => { window.__speechMode = "end"; });
@@ -512,7 +522,10 @@ test.describe("Hanzi writing worksheet", () => {
 
     const oldButton = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await oldButton.click();
-    await expect(oldButton).toContainText("中文离线语音尚未开放");
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-action="cancel"]').click();
+    await expect(dialog).toHaveCount(0);
 
     await openLearningModule(page, "english");
     await openLearningModule(page, "chinese");

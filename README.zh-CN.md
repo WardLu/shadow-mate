@@ -210,6 +210,10 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 “听发音”优先使用设备提供的英语系统语音。MacBook 等通常有可用系统语音的设备，听到的是系统 TTS；没有英语系统语音的国产 Android（尤其是无 GMS 设备）会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 63.5MB 的 `en_US-ljspeech-medium` 离线语音包并缓存到浏览器。缓存只属于当前浏览器配置文件和当前域名；切换浏览器、配置文件、域名或环境后需要分别下载，同一环境会复用已校验文件，并可在应用内指南查看状态和大小。两类设备使用的引擎不同，因此音色和听感可能不同；Piper 下载完成后可离线合成，且不会上传录音。
 
+### 中文发音
+
+“听发音”优先使用设备提供的中文普通话系统语音。没有可用普通话语音的 Android 浏览器会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 60.3MB 的 `zh_CN-chaowen-medium` 离线语音包并缓存到当前浏览器配置文件和当前域名；下载完成后可离线合成，不上传录音。英语和中文语音包使用同一套下载、校验、缓存、删除和错误处理机制；切换浏览器、配置文件、域名或环境后仍需分别下载。
+
 ## 致谢
 
 影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
@@ -217,7 +221,7 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语语音模型 `en_US-ljspeech-medium`（经 `voice.shadow.wang` CDN 分发）
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语 `en_US-ljspeech-medium` 和中文 `zh_CN-chaowen-medium` 语音模型（经 `voice.shadow.wang` CDN 分发）
 
 第三方资源的来源、版本指纹和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
