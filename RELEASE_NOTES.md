@@ -4,6 +4,10 @@
 
 ## Unreleased — Piper resource release gates
 
+- Unified active Piper CDN voice packages behind the resource registry: verified files are reused within the same browser profile and origin, while the guide reports package status and verified storage size. Switching browsers, profiles, domains, or environments has an independent cache by design.
+- Added conservative cross-tab coordination and cache cleanup: concurrent downloads for one package are mutually exclusive, and automatic superseded-version cleanup is skipped unless active use can be established; otherwise old caches remain available until explicitly deleted.
+- Added fail-closed CDN download checks for bounded `HEAD` and `GET` requests, manifest `Content-Length`, expected response types, CORS, actual byte count, and SHA-256. Timeouts and validation failures leave the package incomplete and retryable.
+- Pinned the bundled Piper runtime audit to upstream commits and local license texts, with the audit required before release checks can approve the app-shell runtime.
 - Added local release checks for versioned app-shell cache ownership and browser lifecycle coverage so an app-shell update must retain Piper package cache namespaces and must not trigger a model GET by itself.
 - Added a read-only CDN smoke command for approved package manifests. Its result is external CDN evidence, not a local test or a deployment action.
 - `zh_CN-chaowen-medium` remains gated: no license-approved final artifact, public distribution manifest, or real Xiaomi browser acceptance has been recorded. Desktop Playwright Preview coverage is not Xiaomi acceptance.
