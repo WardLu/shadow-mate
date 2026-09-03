@@ -77,7 +77,7 @@ test.describe("Offline voice warmup", () => {
           export const prepareLocalVoice = async () => {};
           export const speakLocally = async (_text, packageId) => {
             window.__audioPackage = packageId;
-            return { url: "blob:attached", duration: 500 };
+            return { url: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=", duration: 60_000 };
           };
         `,
       });
@@ -92,6 +92,10 @@ test.describe("Offline voice warmup", () => {
           window.__audioPlayCalls = (window.__audioPlayCalls || 0) + 1;
           return Promise.resolve();
         },
+      });
+      Object.defineProperty(HTMLMediaElement.prototype, "load", {
+        configurable: true,
+        value() {},
       });
     });
     await openEnglish(page);
