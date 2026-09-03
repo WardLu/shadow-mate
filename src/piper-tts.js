@@ -16,7 +16,7 @@ import { deletePiperResource, getPiperResourceStatus } from "./piper-resource-st
 
 export const ENGLISH_PIPER_PACKAGE_ID = "en_US-ljspeech-medium";
 const ENGINE_URL = "/piper-tts-web.js";
-export const ENGINE_LOAD_TIMEOUT_MS = 60_000;
+export const ENGINE_LOAD_TIMEOUT_MS = 120_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 const englishPackage = getPiperResourcePackage(ENGLISH_PIPER_PACKAGE_ID);
@@ -225,8 +225,12 @@ export async function prepareLocalVoice(packageId = ENGLISH_PIPER_PACKAGE_ID) {
   }
 }
 
+export async function isPiperVoiceCached(packageId = ENGLISH_PIPER_PACKAGE_ID) {
+  return (await getPiperResourceStatus(packageId)) === "completed";
+}
+
 export async function isVoiceCached() {
-  return (await getPiperResourceStatus(ENGLISH_PIPER_PACKAGE_ID)) === "completed";
+  return isPiperVoiceCached(ENGLISH_PIPER_PACKAGE_ID);
 }
 
 export async function downloadVoice(onProgress, signal) {

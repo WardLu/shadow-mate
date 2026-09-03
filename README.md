@@ -176,7 +176,7 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-“Listen” prefers a matching system voice when one is available. Devices without a usable system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the matching English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+“Listen” uses a completed local Piper package first, so a downloaded English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` voice remains consistent across browsers that support the local runtime. Before a package is downloaded, it prefers a matching system voice; devices without a usable system voice, especially Android devices without GMS, are offered the matching local package. The first use downloads and caches the package from `voice.shadow.wang`; after that, synthesis works offline. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
 
 ## Acknowledgements
 

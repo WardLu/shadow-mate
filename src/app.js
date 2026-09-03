@@ -651,6 +651,52 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
+const PIPER_CACHE_HINT_KEY = "shadow-mate-piper-cache-hints-v1";
+const piperCacheHints = new Set((() => {
+  try {
+    const stored = JSON.parse(window.localStorage?.getItem(PIPER_CACHE_HINT_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((packageId) => typeof packageId === "string") : [];
+  } catch (_) {
+    return [];
+  }
+})());
+
+function persistPiperCacheHints() {
+  try {
+    window.localStorage?.setItem(PIPER_CACHE_HINT_KEY, JSON.stringify([...piperCacheHints]));
+  } catch (_) {
+    // Cache hints are an optimization; speech must continue if storage is unavailable.
+  }
+}
+
+function rememberPiperCacheHint(packageId) {
+  if (piperCacheHints.has(packageId)) return;
+  piperCacheHints.add(packageId);
+  persistPiperCacheHints();
+}
+
+function forgetPiperCacheHint(packageId) {
+  if (!piperCacheHints.delete(packageId)) return;
+  persistPiperCacheHints();
+}
+
+async function isCachedPiperPackage(packageId) {
+  try {
+    const piperTts = await import("./piper-tts.js");
+    return typeof piperTts.isPiperVoiceCached === "function"
+      && await piperTts.isPiperVoiceCached(packageId);
+  } catch (_) {
+    return false;
+  }
+}
+
+function refreshPiperCacheHint(packageId) {
+  void isCachedPiperPackage(packageId).then((cached) => {
+    if (cached) rememberPiperCacheHint(packageId);
+    else forgetPiperCacheHint(packageId);
+  });
+}
+
 async function speak(t, button, locale = "en-US"){
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
@@ -783,20 +829,6 @@ async function speak(t, button, locale = "en-US"){
         playbackTimer = null;
       }
     };
-    let engineWarmup;
-    let engineWarmupError;
-    const startEngineWarmup = () => {
-      if (!engineWarmup) {
-        engineWarmup = withTimeout(
-          prepareLocalVoice(piperPackageId),
-          ENGINE_LOAD_TIMEOUT_MS,
-          "本地语音引擎加载超时"
-        ).catch((error) => {
-          engineWarmupError = error;
-          return null;
-        });
-      }
-    };
     try {
       const status = await askDownloadVoice(
         piperPackageId,
@@ -806,8 +838,7 @@ async function speak(t, button, locale = "en-US"){
             "volume",
             total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
           );
-        },
-        { onDownloadStart: startEngineWarmup }
+        }
       );
       if (status === "cancel") {
         restore();
@@ -815,6 +846,7 @@ async function speak(t, button, locale = "en-US"){
       }
       if (!isCurrentSpeech()) return;
       if (status !== "ok") {
+        forgetPiperCacheHint(piperPackageId);
         const message = status === "gated"
           ? "中文离线语音尚未开放，请安装系统中文普通话语音后重试"
           : status === "unsupported"
@@ -829,11 +861,14 @@ async function speak(t, button, locale = "en-US"){
         fail(message);
         return;
       }
-      startEngineWarmup();
+      rememberPiperCacheHint(piperPackageId);
       setBusy("加载语音引擎…");
-      await engineWarmup;
+      await withTimeout(
+        prepareLocalVoice(piperPackageId),
+        ENGINE_LOAD_TIMEOUT_MS,
+        "本地语音引擎加载超时"
+      );
       if (!isCurrentSpeech()) return;
-      if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t, piperPackageId), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       if (!isCurrentSpeech()) {
@@ -936,6 +971,16 @@ async function speak(t, button, locale = "en-US"){
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   setBusy();
+  refreshPiperCacheHint(piperPackageId);
+  if (piperCacheHints.has(piperPackageId)) {
+    try {
+      synth?.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling residual speech.
+    }
+    await speakOffline();
+    return;
+  }
   const requestedSystemVoice = await waitForSystemVoice(locale, 4000);
   if (!isCurrentSpeech()) return;
   const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : [];
