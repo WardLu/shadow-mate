@@ -7,6 +7,7 @@
 | 场景 | 使用版本 | 主文件 | 说明 |
 | --- | --- | --- | --- |
 | Shadow Mate 应用、PWA、README、产品截图 | 绿色适配版 05「陪伴轨道」 | [`public/brand_assets/shadow-mate.svg`](../public/brand_assets/shadow-mate.svg) | 默认版本，适配浅色绿色产品界面 |
+| Shadow Mate A4 打印字帖 | 绿色适配版 05「陪伴轨道」 | [`src/hanzi-writing-view.js`](../src/hanzi-writing-view.js) | 打印快照内联 SVG，避免打印预览依赖外部背景图加载；图形与主文件保持一致 |
 | Shadow Mate 应用图标 PNG | 绿色适配版 05「陪伴轨道」 | [`public/icons/icon-512.png`](../public/icons/icon-512.png) | 用于 PWA、Apple Touch Icon 和兼容性场景 |
 | Shadow Nexus Portal、深色品牌页、产品矩阵 | Shadow Nexus 门户 Logo | 由 Shadow Portal 仓库维护 | 不从本仓库复制或引用 |
 
@@ -34,4 +35,5 @@
 - PWA 和系统图标继续提供 PNG：`192x192`、`512x512` 与 `maskable`。
 - 绿色版使用浅色不透明画布，避免透明角在深色预览器中显示成黑色。
 - 轨道虚线必须声明 `fill="none"`，避免 SVG 默认填充开放路径产生黑色楔形。
+- 打印字帖使用内联 SVG，不要改回依赖外部背景图的打印 Logo；打印窗口可能在图片资源完成前进入预览。
 - 不要把霓虹版复制到 `public/icons/` 或替换 Shadow Mate 的应用图标。
