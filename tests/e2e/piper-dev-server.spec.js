@@ -31,6 +31,10 @@ test.describe("Preview-only Piper resource smoke", () => {
       Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
     });
     await page.goto("/");
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    await page.reload();
     const serviceWorkerVersion = await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.ready;
       return registration.active?.scriptURL || null;
