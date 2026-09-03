@@ -62,50 +62,75 @@ test.describe("Preview-only Piper resource smoke", () => {
   });
 
   test("synthesizes a Chinese sample from the approved CDN package", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
     if (process.env.E2E_BASE_URL !== PREVIEW_ORIGIN) {
       throw new Error(`Preview smoke must target ${PREVIEW_ORIGIN}, received ${process.env.E2E_BASE_URL || "missing"}`);
     }
-    await page.goto("/");
-    const evidence = await page.evaluate(async () => {
-      const packageId = "zh_CN-chaowen-medium";
-      const { getPiperResourcePackage } = await import("/src/piper-resource-registry.js");
-      const resourcePackage = getPiperResourcePackage(packageId);
-      const { createPiperResourceStore } = await import("/src/piper-resource-store.js");
-      const store = createPiperResourceStore({
-        packages: [resourcePackage],
-        cacheStorage: caches,
-        getCapabilities: () => ({ canDownload: true }),
-      });
-      const cache = await caches.open(store.getCacheName(resourcePackage));
-      for (const file of resourcePackage.files) {
-        const response = await fetch(`${resourcePackage.baseUrl}${file.suffix}`);
-        if (!response.ok) throw new Error(`Chinese ${file.key} fetch failed with HTTP ${response.status}`);
-        await cache.put(`${resourcePackage.baseUrl}${file.suffix}`, response.clone());
-      }
-      const marker = await store.writeCompletionMarker(resourcePackage);
-      const { speakLocally } = await import("/src/piper-tts.js");
-      const synthesis = await speakLocally("火", packageId);
-      const audioResponse = await fetch(synthesis.url);
-      const audioBytes = (await audioResponse.arrayBuffer()).byteLength;
-      URL.revokeObjectURL(synthesis.url);
-      return {
-        packageId,
-        packageStatus: await store.getPiperResourceStatus(packageId),
-        markerVersion: marker.version,
-        duration: synthesis.duration,
-        audioContentType: audioResponse.headers.get("content-type"),
-        audioBytes,
-      };
+    let modelGetRequests = 0;
+    let metadataGetRequests = 0;
+    await page.route("**/piper/zh_CN-chaowen-medium.onnx", async (route) => {
+      if (route.request().method() === "GET") modelGetRequests += 1;
+      await route.continue();
     });
+    await page.route("**/piper/zh_CN-chaowen-medium.onnx.json", async (route) => {
+      if (route.request().method() === "GET") metadataGetRequests += 1;
+      await route.continue();
+    });
+    await page.addInitScript(() => {
+      window.__chinesePiperPlays = 0;
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: { cancel() {}, getVoices() { return []; }, speak() {} },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(HTMLMediaElement.prototype, "play", {
+        configurable: true,
+        value: async function play() {
+          window.__chinesePiperPlays += 1;
+          this.onended?.();
+        },
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    const dialog = page.locator("#shadow-voice-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("中文");
+    await dialog.getByRole("button", { name: "下载" }).click();
+    await expect(dialog).toBeHidden({ timeout: 180_000 });
+    await expect(button).not.toHaveAttribute("aria-busy", "true", { timeout: 180_000 });
+    const evidence = await page.evaluate(async ({ modelGetRequests, metadataGetRequests }) => {
+      const cache = await caches.open("shadow-mate-piper-zh_CN-chaowen-medium-1");
+      const model = await cache.match("https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx");
+      const metadata = await cache.match("https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx.json");
+      return {
+        packageId: "zh_CN-chaowen-medium",
+        packageStatus: model?.ok && metadata?.ok ? "completed" : "incomplete",
+        modelBytes: model ? (await model.arrayBuffer()).byteLength : 0,
+        metadataBytes: metadata ? (await metadata.arrayBuffer()).byteLength : 0,
+        modelGetRequests,
+        metadataGetRequests,
+        plays: window.__chinesePiperPlays || 0,
+      };
+    }, { modelGetRequests, metadataGetRequests });
 
     expect(evidence).toMatchObject({
       packageId: "zh_CN-chaowen-medium",
       packageStatus: "completed",
-      markerVersion: "1",
-      audioContentType: expect.stringMatching(/^audio\/(?:x-)?wav/i),
+      modelBytes: 63221984,
+      metadataBytes: 2927,
     });
-    expect(evidence.duration).toBeGreaterThan(0);
-    expect(evidence.audioBytes).toBeGreaterThan(1000);
+    expect(evidence.modelGetRequests).toBeGreaterThan(0);
+    expect(evidence.metadataGetRequests).toBeGreaterThan(0);
+    expect(evidence.plays).toBe(1);
     testInfo.annotations.push({ type: "preview-chinese-piper-synthesis", description: JSON.stringify(evidence) });
     console.log(`[preview-chinese-piper-synthesis] ${JSON.stringify(evidence)}`);
   });
