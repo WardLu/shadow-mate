@@ -651,6 +651,35 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
+const PIPER_CACHE_HINT_KEY = "shadow-mate-piper-cache-hints-v1";
+const piperCacheHints = new Set((() => {
+  try {
+    const stored = JSON.parse(window.localStorage?.getItem(PIPER_CACHE_HINT_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((packageId) => typeof packageId === "string") : [];
+  } catch (_) {
+    return [];
+  }
+})());
+
+function persistPiperCacheHints() {
+  try {
+    window.localStorage?.setItem(PIPER_CACHE_HINT_KEY, JSON.stringify([...piperCacheHints]));
+  } catch (_) {
+    // Cache hints are an optimization; speech must continue if storage is unavailable.
+  }
+}
+
+function rememberPiperCacheHint(packageId) {
+  if (piperCacheHints.has(packageId)) return;
+  piperCacheHints.add(packageId);
+  persistPiperCacheHints();
+}
+
+function forgetPiperCacheHint(packageId) {
+  if (!piperCacheHints.delete(packageId)) return;
+  persistPiperCacheHints();
+}
+
 async function isCachedPiperPackage(packageId) {
   try {
     const piperTts = await import("./piper-tts.js");
@@ -659,6 +688,13 @@ async function isCachedPiperPackage(packageId) {
   } catch (_) {
     return false;
   }
+}
+
+function refreshPiperCacheHint(packageId) {
+  void isCachedPiperPackage(packageId).then((cached) => {
+    if (cached) rememberPiperCacheHint(packageId);
+    else forgetPiperCacheHint(packageId);
+  });
 }
 
 async function speak(t, button, locale = "en-US"){
@@ -810,6 +846,7 @@ async function speak(t, button, locale = "en-US"){
       }
       if (!isCurrentSpeech()) return;
       if (status !== "ok") {
+        forgetPiperCacheHint(piperPackageId);
         const message = status === "gated"
           ? "中文离线语音尚未开放，请安装系统中文普通话语音后重试"
           : status === "unsupported"
@@ -824,6 +861,7 @@ async function speak(t, button, locale = "en-US"){
         fail(message);
         return;
       }
+      rememberPiperCacheHint(piperPackageId);
       setBusy("加载语音引擎…");
       await withTimeout(
         prepareLocalVoice(piperPackageId),
@@ -933,7 +971,8 @@ async function speak(t, button, locale = "en-US"){
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   setBusy();
-  if (await isCachedPiperPackage(piperPackageId)) {
+  refreshPiperCacheHint(piperPackageId);
+  if (piperCacheHints.has(piperPackageId)) {
     try {
       synth?.cancel();
     } catch (_) {

@@ -45,6 +45,10 @@ test.describe("System speech fallback", () => {
         configurable: true,
         value: function SpeechSynthesisUtterance() {},
       });
+      window.localStorage.setItem(
+        "shadow-mate-piper-cache-hints-v1",
+        JSON.stringify(["zh_CN-chaowen-medium"]),
+      );
       Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
       Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
       Object.defineProperty(HTMLMediaElement.prototype, "play", {
