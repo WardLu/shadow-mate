@@ -3,6 +3,76 @@ import { test, expect } from "@playwright/test";
 test.describe("System speech fallback", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("uses a completed Chinese Piper package before a browser-reported system voice", async ({ page }) => {
+    await page.route("**/src/piper-tts.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export const ENGINE_LOAD_TIMEOUT_MS = 120000;
+          export const SYNTHESIS_TIMEOUT_MS = 30000;
+          export const isPiperVoiceCached = async (packageId) => {
+            window.__cachedPackage = packageId;
+            return true;
+          };
+          export const withTimeout = (promise) => promise;
+          export const askDownloadVoice = async (packageId) => {
+            window.__piperCalls = [...(window.__piperCalls || []), ["download", packageId]];
+            return "ok";
+          };
+          export const prepareLocalVoice = async (packageId) => {
+            window.__piperCalls = [...(window.__piperCalls || []), ["prepare", packageId]];
+          };
+          export const resetLocalVoiceEngine = async () => {};
+          export const speakLocally = async (_text, packageId) => {
+            window.__piperCalls = [...(window.__piperCalls || []), ["speak", packageId]];
+            return { url: "blob:cached-chinese", duration: 0 };
+          };
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      const order = [];
+      Object.defineProperty(window, "__systemSpeechOrder", { configurable: true, value: order });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: {
+          cancel() {},
+          getVoices() { return [{ lang: "zh", name: "Quark default voice" }]; },
+          speak() { order.push("system"); },
+        },
+      });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: function SpeechSynthesisUtterance() {},
+      });
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
+      Object.defineProperty(HTMLMediaElement.prototype, "play", {
+        configurable: true,
+        value: async function play() { this.onended?.(); },
+      });
+    });
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+
+    await expect.poll(() => page.evaluate(() => ({
+      cached: window.__cachedPackage,
+      piper: window.__piperCalls || [],
+      system: window.__systemSpeechOrder,
+    }))).toEqual({
+      cached: "zh_CN-chaowen-medium",
+      piper: [
+        ["download", "zh_CN-chaowen-medium"],
+        ["prepare", "zh_CN-chaowen-medium"],
+        ["speak", "zh_CN-chaowen-medium"],
+      ],
+      system: [],
+    });
+  });
+
   test("cancels Web Speech before entering the gated Mandarin Piper path without a usable voice", async ({ page }) => {
     await page.route("**/src/piper-tts.js*", async (route) => {
       await route.fulfill({

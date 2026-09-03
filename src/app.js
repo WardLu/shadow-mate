@@ -651,6 +651,16 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
+async function isCachedPiperPackage(packageId) {
+  try {
+    const piperTts = await import("./piper-tts.js");
+    return typeof piperTts.isPiperVoiceCached === "function"
+      && await piperTts.isPiperVoiceCached(packageId);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function speak(t, button, locale = "en-US"){
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
@@ -783,20 +793,6 @@ async function speak(t, button, locale = "en-US"){
         playbackTimer = null;
       }
     };
-    let engineWarmup;
-    let engineWarmupError;
-    const startEngineWarmup = () => {
-      if (!engineWarmup) {
-        engineWarmup = withTimeout(
-          prepareLocalVoice(piperPackageId),
-          ENGINE_LOAD_TIMEOUT_MS,
-          "本地语音引擎加载超时"
-        ).catch((error) => {
-          engineWarmupError = error;
-          return null;
-        });
-      }
-    };
     try {
       const status = await askDownloadVoice(
         piperPackageId,
@@ -806,8 +802,7 @@ async function speak(t, button, locale = "en-US"){
             "volume",
             total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
           );
-        },
-        { onDownloadStart: startEngineWarmup }
+        }
       );
       if (status === "cancel") {
         restore();
@@ -829,11 +824,13 @@ async function speak(t, button, locale = "en-US"){
         fail(message);
         return;
       }
-      startEngineWarmup();
       setBusy("加载语音引擎…");
-      await engineWarmup;
+      await withTimeout(
+        prepareLocalVoice(piperPackageId),
+        ENGINE_LOAD_TIMEOUT_MS,
+        "本地语音引擎加载超时"
+      );
       if (!isCurrentSpeech()) return;
-      if (engineWarmupError) throw engineWarmupError;
       setBusy("合成中…");
       const { url, duration } = await withTimeout(speakLocally(t, piperPackageId), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
       if (!isCurrentSpeech()) {
@@ -936,6 +933,15 @@ async function speak(t, button, locale = "en-US"){
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   setBusy();
+  if (await isCachedPiperPackage(piperPackageId)) {
+    try {
+      synth?.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling residual speech.
+    }
+    await speakOffline();
+    return;
+  }
   const requestedSystemVoice = await waitForSystemVoice(locale, 4000);
   if (!isCurrentSpeech()) return;
   const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : [];

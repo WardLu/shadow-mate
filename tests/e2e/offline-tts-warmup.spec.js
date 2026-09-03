@@ -24,7 +24,7 @@ async function openEnglish(page) {
 test.describe("Offline voice warmup", () => {
   test.use({ serviceWorkers: "block" });
 
-  test("starts the named package engine while its download is still pending", async ({ page }) => {
+  test("starts the named package engine after its download completes", async ({ page }) => {
     await page.route("**/src/piper-tts.js*", async (route) => {
       await route.fulfill({
         contentType: "application/javascript",
@@ -33,8 +33,7 @@ test.describe("Offline voice warmup", () => {
           export const SYNTHESIS_TIMEOUT_MS = 30000;
           export const withTimeout = (promise) => promise;
           export const resetLocalVoiceEngine = async () => {};
-          export const askDownloadVoice = (packageId, _progress, { onDownloadStart } = {}) => new Promise((resolve) => {
-            onDownloadStart?.(packageId);
+          export const askDownloadVoice = (packageId) => new Promise((resolve) => {
             window.__releasePackageDownload = () => resolve("ok");
           });
           export const prepareLocalVoice = async (packageId) => {
@@ -59,8 +58,10 @@ test.describe("Offline voice warmup", () => {
     await openEnglish(page);
     await page.locator("[data-speak]").first().click();
 
-    await expect.poll(() => page.evaluate(() => window.__warmupPackages || [])).toEqual([ENGLISH_PACKAGE]);
+    await expect.poll(() => page.evaluate(() => typeof window.__releasePackageDownload)).toBe("function");
+    await expect.poll(() => page.evaluate(() => window.__warmupPackages || [])).toEqual([]);
     await page.evaluate(() => window.__releasePackageDownload());
+    await expect.poll(() => page.evaluate(() => window.__warmupPackages || [])).toEqual([ENGLISH_PACKAGE]);
     await expect.poll(() => page.evaluate(() => window.__synthesisPackages || [])).toEqual([ENGLISH_PACKAGE]);
   });
 
