@@ -561,6 +561,12 @@ function getAudioContext() {
   return sharedAudioContext;
 }
 
+function primeSpeechAudio() {
+  const audioContext = getAudioContext();
+  if (!audioContext || audioContext.state !== "suspended") return;
+  void audioContext.resume().catch(() => {});
+}
+
 function releaseObjectUrl(url) {
   if (!url?.startsWith("blob:")) return;
   window.setTimeout(() => URL.revokeObjectURL(url), 500);
@@ -820,7 +826,7 @@ async function speak(t, button, locale = "en-US"){
     setBusy("准备中…");
     const audioContext = getAudioContext();
     const audioContextReady = audioContext
-      ? Promise.resolve().then(() => audioContext.resume()).catch(() => {})
+      ? Promise.resolve().then(() => audioContext.state === "suspended" ? audioContext.resume() : undefined).catch(() => {})
       : null;
     let playbackTimer = null;
     const clearPlaybackTimer = () => {
@@ -1252,6 +1258,7 @@ function renderChinese(){
     button.dataset.speechOriginalLabel = button.textContent?.trim() || "听发音";
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
+    button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     button.onclick = () => speak(
       button.dataset.speechText || "",
       button,
@@ -1412,6 +1419,7 @@ function renderEnglish(){
   main.appendChild(card1);
   const spokenWords = [w1[0], w2[0]];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
+    button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     button.onclick = () => speak(spokenWords[Number(button.dataset.speak)], button);
   });
 
