@@ -2,6 +2,11 @@
 
 > This file lists user-visible product changes for each published version.
 
+## Unreleased — Print preview
+
+- Fixed the A4 worksheet print preview briefly showing unstyled content while its print resources were loading.
+- Kept the Shadow Mate logo visible in browser print previews and exported PDFs by embedding it in the print snapshot.
+
 ## Unreleased — Piper resource release gates
 
 - Unified active Piper CDN voice packages behind the resource registry: verified files are reused within the same browser profile and origin, while the guide reports package status and verified storage size. Switching browsers, profiles, domains, or environments has an independent cache by design.
