@@ -94,7 +94,11 @@ async function readPrintSnapshot(page) {
 }
 
 test.describe("Snapshot-only Hanzi print sheet", () => {
-  test("mocks window.print without changing state or creating completion", async ({ page }) => {
+  test("opens an isolated print document without changing state or creating completion", async ({ page }) => {
+    await page.context().addInitScript(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
     await openChineseAtFixedTime(page);
     await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
     await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
@@ -106,20 +110,49 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
     });
     expect(before.screen.rows).toHaveLength(4);
     expect(before.print).toEqual(before.screen);
+
     await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => { window.__printCalls += 1; };
+      const host = document.createElement("yd-mg-icon");
+      host.id = "yd-mg-icon-host";
+      host.attachShadow({ mode: "open" });
+      document.body.appendChild(host);
     });
 
     await page.clock.setFixedTime(new Date("2026-09-02T02:00:00.000Z"));
+    const popupPromise = page.waitForEvent("popup");
     await page.locator("[data-print]").click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("load");
+    await expect.poll(() => popup.evaluate(() => window.__printCalls), { timeout: 15000 }).toBe(1);
+    await popup.emulateMedia({ media: "print" });
+
+    const popupUrl = popup.url();
+    const popupSnapshot = await popup.evaluate(() => ({
+      visibleBodyChildren: [...document.body.children]
+        .filter((element) => getComputedStyle(element).display !== "none")
+        .map((element) => element.id || element.className),
+      rows: [...document.querySelectorAll("[data-writing-row]")].map((row) => ({
+        glyph: row.querySelector("[data-writing-glyph]")?.textContent,
+        pinyin: row.querySelector("[data-writing-pinyin]")?.textContent,
+      })),
+      glyphsVisible: [...document.querySelectorAll("[data-writing-glyph]")].every((glyph) => glyph.getBoundingClientRect().height > 0),
+      inlineStyles: document.querySelectorAll("style").length,
+      extensionHosts: document.querySelectorAll("#yd-mg-icon-host, yd-mg-icon, #yd-mg-block-icon-host, yd-mg-block-icon, #yd-mg-huaci-host, yd-mg-huaci").length,
+    }));
+    expect(popupUrl).toBe("about:blank");
+    expect(popupSnapshot.visibleBodyChildren).toEqual(["writingPrintRoot"]);
+    expect(popupSnapshot.rows.map((row) => row.glyph)).toEqual(before.print.rows.map((row) => row.glyph));
+    expect(popupSnapshot.rows.every((row) => row.pinyin)).toBe(true);
+    expect(popupSnapshot.glyphsVisible).toBe(true);
+    expect(popupSnapshot.inlineStyles).toBe(0);
+    expect(popupSnapshot.extensionHosts).toBe(0);
 
     const after = await readPrintSnapshot(page);
     expect(after).toEqual(before);
     expect(after.print).toEqual(after.screen);
     const assignment = after.state.extra.hanziWorksheetRotationV1.assignments[after.screen.dayKey];
     expect(assignment.completions).toEqual({});
+    await popup.close();
   });
 
   test("shows only the print sheet in print media", async ({ page }) => {

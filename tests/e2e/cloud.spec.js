@@ -730,6 +730,10 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("keeps the same daily writing workbook and isolates its print sheet for a logged-in user", async ({ page }) => {
+    await page.context().addInitScript(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
@@ -746,13 +750,13 @@ test.describe("Authenticated cloud workspace", () => {
     const afterCheckin = await readWritingSnapshot(page);
     expect(afterCheckin.screen).toEqual(beforeCheckin.screen);
 
-    await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => { window.__printCalls += 1; };
-    });
+    const popupPromise = page.waitForEvent("popup");
     await page.locator("[data-print]").click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("load");
+    await expect.poll(() => popup.evaluate(() => window.__printCalls), { timeout: 15000 }).toBe(1);
     expect(await readWritingSnapshot(page)).toEqual(afterCheckin);
+    await popup.close();
 
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();

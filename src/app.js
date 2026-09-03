@@ -4,6 +4,7 @@ import {
   renderWritingPrintSheetHtml,
   renderWritingWorksheetHtml,
 } from "./hanzi-writing-view.js";
+import { openWritingPrintWindow } from "./writing-print.js";
 import {
   recordWorksheetCompletion,
   resolveDailyWorksheet,
@@ -1174,7 +1175,34 @@ function renderChinese(){
     </div>
   `);
   main.appendChild(card3);
-  card3.querySelector("[data-print]").onclick = () => window.print();
+  const printButton = card3.querySelector("[data-print]");
+  const printButtonLabel = printButton.innerHTML;
+  let printErrorTimer = null;
+  const restorePrintButton = () => {
+    if (!printButton.isConnected) return;
+    printButton.disabled = false;
+    printButton.removeAttribute("aria-busy");
+    printButton.removeAttribute("title");
+    printButton.innerHTML = printButtonLabel;
+  };
+  printButton.onclick = () => {
+    if (printButton.disabled) return;
+    if (printErrorTimer !== null) window.clearTimeout(printErrorTimer);
+    printButton.disabled = true;
+    printButton.setAttribute("aria-busy", "true");
+    printButton.textContent = "准备打印…";
+    void openWritingPrintWindow(activeWorksheetSnapshot || worksheet)
+      .then(restorePrintButton)
+      .catch((error) => {
+        console.error("Writing worksheet print failed:", error);
+        if (!printButton.isConnected) return;
+        printButton.disabled = false;
+        printButton.removeAttribute("aria-busy");
+        printButton.title = error?.message || "打印准备失败，请重试。";
+        printButton.textContent = "打印准备失败，请重试";
+        printErrorTimer = window.setTimeout(restorePrintButton, 5000);
+      });
+  };
   card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak], [data-hanzi-meaning-speak]").forEach((button) => {
     button.dataset.speechOriginalLabel = button.textContent?.trim() || "听发音";
     button.setAttribute("aria-live", "polite");
