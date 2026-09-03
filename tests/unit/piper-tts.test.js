@@ -1,40 +1,21 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { askDownloadVoice, downloadVoice, VOICE, VOICE_FILES, withTimeout } from "../../src/piper-tts.js";
-
-const originalDialogDescriptors = new Map(
-  ["showModal", "close"].map((name) => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)])
-);
-
-function responseWithChunks(chunks, headers = {}) {
-  let index = 0;
-  return {
-    ok: true,
-    headers: new Headers({ "content-type": "application/octet-stream", ...headers }),
-    body: {
-      getReader() {
-        return {
-          async read() {
-            if (index >= chunks.length) return { done: true };
-            return { done: false, value: chunks[index++] };
-          },
-        };
-      },
-    },
-  };
-}
+import {
+  askDownloadVoice,
+  ENGLISH_PIPER_PACKAGE_ID,
+  VOICE,
+  VOICE_FILES,
+  withTimeout,
+} from "../../src/piper-tts.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  for (const [name, descriptor] of originalDialogDescriptors) {
-    if (descriptor) Object.defineProperty(HTMLDialogElement.prototype, name, descriptor);
-    else delete HTMLDialogElement.prototype[name];
-  }
   document.body.innerHTML = "";
 });
 
-describe("offline Piper voice download", () => {
-  test("uses the commercially reviewed replacement voice path", () => {
+describe("offline Piper voice packages", () => {
+  test("keeps the legacy English exports delegated to the active English package", () => {
+    expect(ENGLISH_PIPER_PACKAGE_ID).toBe("en_US-ljspeech-medium");
     expect(VOICE).toBe("https://voice.shadow.wang/piper/en_US-ljspeech-medium");
     expect(VOICE_FILES).toEqual([
       "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx",
@@ -42,144 +23,71 @@ describe("offline Piper voice download", () => {
     ]);
   });
 
-  test("reports received bytes when the response omits Content-Length", async () => {
-    const cache = {
-      match: vi.fn().mockResolvedValue(undefined),
-      put: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url, options) => {
-        if (options?.method === "HEAD") return Promise.resolve(responseWithChunks([]));
-        return Promise.resolve(
-          url.endsWith(".onnx")
-            ? responseWithChunks([Uint8Array.from([1, 2]), Uint8Array.from([3, 4, 5])])
-            : responseWithChunks([Uint8Array.from([6])])
-        );
-      })
-    );
-    const progress = [];
-
-    await downloadVoice((received, total) => progress.push([received, total]));
-
-    expect(progress).toContainEqual([5, 0]);
-    expect(progress.some(([received]) => received > 0)).toBe(true);
+  test("returns the explicit registry gate for an unavailable Chinese package", async () => {
+    await expect(askDownloadVoice("zh_CN-chaowen-medium")).resolves.toBe("gated");
+    expect(document.querySelector("#shadow-voice-dialog")).toBeNull();
   });
 
-  test("reports aggregate bytes across the model and config files", async () => {
-    const cache = {
-      match: vi.fn().mockResolvedValue(undefined),
-      put: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url) => {
-        const isModel = url.endsWith(".onnx");
-        return Promise.resolve(
-          responseWithChunks(
-            isModel ? [Uint8Array.from([1, 2, 3]), Uint8Array.from([4, 5])] : [Uint8Array.from([6])],
-            { "content-length": isModel ? "5" : "1" }
-          )
-        );
-      })
-    );
-    const progress = [];
-
-    await downloadVoice((received, total) => progress.push([received, total]));
-
-    expect(progress).toContainEqual([3, 6]);
-    expect(progress).toContainEqual([5, 6]);
-    expect(progress.at(-1)).toEqual([6, 6]);
-  });
-
-  test("times out a stalled HEAD request", async () => {
-    const cache = {
-      match: vi.fn().mockResolvedValue(undefined),
-      put: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
-    vi.stubGlobal("fetch", vi.fn((_url, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-    })));
-
-    await expect(downloadVoice(undefined, undefined, { headTimeoutMs: 5 }))
-      .rejects.toMatchObject({ name: "TimeoutError", message: "语音包请求超时" });
-  });
-
-  test("times out a stalled GET response", async () => {
-    const cache = {
-      match: vi.fn().mockResolvedValue(undefined),
-      put: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
-    vi.stubGlobal("fetch", vi.fn((url, options) => {
-      if (options?.method === "HEAD") {
-        return Promise.resolve(responseWithChunks([], { "content-length": url.endsWith(".onnx") ? "5" : "1" }));
-      }
-      return new Promise((_resolve, reject) => {
-        options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-      });
-    }));
-
-    await expect(downloadVoice(undefined, undefined, { responseTimeoutMs: 5 }))
-      .rejects.toMatchObject({ name: "TimeoutError", message: "语音包下载超时，请检查网络或代理后重试" });
-  });
-
-  test("rejects when speech synthesis never settles", async () => {
+  test("reports a synthesis timeout", async () => {
     await expect(withTimeout(new Promise(() => {}), 5, "发音合成超时")).rejects.toThrow("发音合成超时");
   });
 
-  test("keeps cancellation available and aborts an in-flight download", async () => {
-    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-      configurable: true,
-      value() {
-        this.open = true;
-      },
-    });
-    Object.defineProperty(HTMLDialogElement.prototype, "close", {
-      configurable: true,
-      value() {
-        this.open = false;
-      },
-    });
-
-    const cache = {
-      match: vi.fn().mockResolvedValue(undefined),
-      put: vi.fn().mockResolvedValue(undefined),
+  test("uses registry copy and exposes deletion for an invalid speech-dialog package", async () => {
+    vi.resetModules();
+    const resourcePackage = {
+      id: "test-dialog-voice",
+      locale: "en-US",
+      label: "English (Dialog Test)",
+      kind: "voice",
+      version: "7",
+      baseUrl: "https://voice.example.test/test-dialog-voice",
+      source: "cdn",
+      cachePolicy: "user-download",
+      releaseApproved: true,
+      totalBytes: 1048576,
+      files: [],
     };
-    vi.stubGlobal("caches", { open: vi.fn().mockResolvedValue(cache) });
-    let resolveFetchStarted;
-    const fetchStarted = new Promise((resolve) => {
-      resolveFetchStarted = resolve;
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((_url, options) => {
-        resolveFetchStarted(options);
-        return new Promise((_resolve, reject) => {
-          options?.signal?.addEventListener("abort", () => {
-            reject(new DOMException("The operation was aborted.", "AbortError"));
-          });
-        });
-      })
-    );
+    const englishPackage = {
+      ...resourcePackage,
+      id: "en_US-ljspeech-medium",
+      baseUrl: "https://voice.shadow.wang/piper/en_US-ljspeech-medium",
+      files: [{ suffix: ".onnx" }, { suffix: ".onnx.json" }],
+    };
+    const deletePackage = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("../../src/piper-resource-registry.js", () => ({
+      getPiperResourcePackage: (packageId) => packageId === englishPackage.id ? englishPackage : resourcePackage,
+      listPiperResourcePackages: () => [englishPackage, resourcePackage],
+      isActivePiperCdnVoicePackage: () => true,
+      formatPiperResourceBytes: () => "1.0 MB",
+    }));
+    vi.doMock("../../src/piper-resource-store.js", () => ({
+      getPiperResourceStatus: vi.fn().mockResolvedValue("invalid"),
+      deletePiperResource: deletePackage,
+    }));
+    vi.doMock("../../src/piper-resource-download.js", () => ({
+      downloadPiperResource: vi.fn(),
+      getPiperDownloadError: () => ({ code: "network" }),
+    }));
+    vi.doMock("../../src/piper-resource-lock.js", () => ({ acquirePiperDownloadLock: vi.fn() }));
+    const { askDownloadVoice: askWithInvalidPackage } = await import("../../src/piper-tts.js");
 
-    const result = askDownloadVoice();
+    const pending = askWithInvalidPackage(resourcePackage.id);
+    await vi.waitFor(() => expect(document.querySelector("#shadow-voice-dialog")).toBeTruthy());
     const dialog = document.querySelector("#shadow-voice-dialog");
-    dialog.querySelector('[data-action="ok"]').click();
-    const fetchOptions = await fetchStarted;
-    const cancel = dialog.querySelector('[data-action="cancel"]');
+    expect(dialog.querySelector(".voice-dialog-title").textContent).toContain(resourcePackage.label);
+    expect(dialog.querySelector(".voice-dialog-desc").textContent).toContain("版本 7");
+    expect(dialog.querySelector(".voice-dialog-desc").textContent).toContain("1.0 MB");
+    expect(dialog.querySelector(".voice-dialog-desc").textContent).toContain(window.location.origin);
+    expect(dialog.querySelector('[data-action="delete"]').hidden).toBe(false);
+    dialog.querySelector('[data-action="delete"]').click();
+    await vi.waitFor(() => expect(deletePackage).toHaveBeenCalledWith(resourcePackage.id));
+    dialog.querySelector('[data-action="cancel"]').click();
+    await expect(pending).resolves.toBe("cancel");
 
-    expect(dialog.querySelector(".voice-dialog-actions").hidden).toBe(false);
-    expect(dialog.querySelector(".voice-dialog-pct").textContent).toBe("下载中…");
-    expect(dialog.querySelector(".voice-dialog-bar i").classList.contains("indeterminate")).toBe(true);
-    expect(cancel.hidden).toBe(false);
-    expect(cancel.disabled).toBe(false);
-    cancel.click();
-
-    expect(fetchOptions.signal.aborted).toBe(true);
-    await expect(result).resolves.toBe("cancel");
+    vi.doUnmock("../../src/piper-resource-registry.js");
+    vi.doUnmock("../../src/piper-resource-store.js");
+    vi.doUnmock("../../src/piper-resource-download.js");
+    vi.doUnmock("../../src/piper-resource-lock.js");
+    vi.resetModules();
   });
 });

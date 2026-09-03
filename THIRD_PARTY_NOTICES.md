@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-08-13
+更新时间：2026-09-03
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -14,6 +14,7 @@
 
 | 包 | 当前版本 | 许可证 | 上游 |
 | --- | --- | --- | --- |
+| `@noble/hashes` | `1.8.0` | MIT | [paulmillr/noble-hashes](https://github.com/paulmillr/noble-hashes) |
 | `@supabase/supabase-js` | `2.111.0` | MIT | [supabase-js](https://github.com/supabase/supabase-js) |
 | `@vercel/analytics` | `2.0.1` | MIT | [vercel/analytics](https://github.com/vercel/analytics) |
 | `lucide` | `1.28.0` | ISC | [lucide](https://github.com/lucide-icons/lucide) |
@@ -22,16 +23,24 @@
 
 ## Vendored 浏览器语音资源
 
-| 文件或资源 | 来源和许可证 |
-| --- | --- |
-| `public/piper-tts-web.js` | [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)；文件头包含 ONNX Runtime Web 许可信息 |
-| `public/onnx/ort-wasm-simd-threaded.wasm` | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)，上游许可证为 MIT |
-| `public/piper/piper_phonemize.wasm` | 来源于 [piper-tts-web 初始提交](https://github.com/Poket-Jony/piper-tts-web/commit/7cec5cb4861f9322cd094b1b8b41a5b173e314db)；对应构建链包含 [piper-phonemize](https://github.com/rhasspy/piper-phonemize) 和 [eSpeak NG](https://github.com/espeak-ng/espeak-ng) |
-| `public/piper/piper_phonemize.data` | 与上述 piper-tts-web 提交配套的运行时数据 |
+这些 app-shell runtime 文件不是 CDN 语音包；`src/piper-resource-registry.js` 仅对其四组件精确 allowlist 要求审计记录。文件字节数和 SHA-256 仍以“资源指纹”表以及 registry 中的四个固定条目为准。
 
-eSpeak NG 项目包含 GPL-3.0-or-later 许可内容及其他版权/许可声明。分发这些资源时应同时遵守适用的许可证义务，并保留对应上游许可证文本。
+| 组件及关联文件 | 固定上游来源 | 许可证、固定链接与仓库副本 | 组件级再分发记录 |
+| --- | --- | --- | --- |
+| `piper-tts-web` — `public/piper-tts-web.js` | package.json version `1.1.2` at [commit `950f1f5c8278296a6698cc11e8b976594dad6687`](https://github.com/Poket-Jony/piper-tts-web/tree/950f1f5c8278296a6698cc11e8b976594dad6687)，该 version 是此 commit 的 package version，不称为公开 `v1.1.2` tag。 | [MIT](https://github.com/Poket-Jony/piper-tts-web/blob/950f1f5c8278296a6698cc11e8b976594dad6687/LICENSE)；[`third_party/licenses/piper-tts-web-MIT.txt`](./third_party/licenses/piper-tts-web-MIT.txt) | MIT 文本允许 use、copy、modify、merge、publish、distribute、sublicense 和 sell；复制或实质部分须保留版权和许可声明，软件按无担保条款提供。 |
+| `ONNX Runtime Web` — `public/onnx/ort-wasm-simd-threaded.wasm` | version `1.20.1` at [commit `5c1b7ccbff7e5141c1da7a9d963d660e5741c319`](https://github.com/microsoft/onnxruntime/tree/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/js/web)。vendored runtime header/source 也保留此组件记录。 | [MIT](https://github.com/microsoft/onnxruntime/blob/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/LICENSE)；[`third_party/licenses/onnxruntime-MIT.txt`](./third_party/licenses/onnxruntime-MIT.txt) | MIT 文本允许 use、copy、modify、merge、publish、distribute、sublicense 和 sell；复制或实质部分须保留版权和许可声明，软件按无担保条款提供。 |
+| `piper-phonemize` — `public/piper/piper_phonemize.wasm`、`public/piper/piper_phonemize.data` | version `1.2.0` at [commit `cfff8e52ebaea37c7e953ae2d06b174acb827ac4`](https://github.com/rhasspy/piper-phonemize/tree/cfff8e52ebaea37c7e953ae2d06b174acb827ac4)。当前 WASM/data 是由 [piper-tts-web package version `1.0.0`, commit `7cec5cb4861f9322cd094b1b8b41a5b173e314db`](https://github.com/Poket-Jony/piper-tts-web/tree/7cec5cb4861f9322cd094b1b8b41a5b173e314db/dist/piper) 提供的构件。 | [MIT](https://github.com/rhasspy/piper-phonemize/blob/cfff8e52ebaea37c7e953ae2d06b174acb827ac4/LICENSE.md)；[`third_party/licenses/piper-phonemize-MIT.txt`](./third_party/licenses/piper-phonemize-MIT.txt) | MIT 文本允许 use、copy、modify、merge、publish、distribute、sublicense 和 sell；复制或实质部分须保留版权和许可声明，软件按无担保条款提供。 |
+| `eSpeak NG` — piper-phonemize CMake 依赖 | piper-phonemize build metadata 固定 version `1.52.0.1` at [commit `0f65aa301e0d6bae5e172cc74197d32a6182200f`](https://github.com/espeak-ng/espeak-ng/tree/0f65aa301e0d6bae5e172cc74197d32a6182200f)。 | [GPL-3.0-or-later COPYING](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING)、[Apache-2.0](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.APACHE)、[BSD-2-Clause](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.BSD2)、[Unicode](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.UCD)；仓库保留 [`COPYING`](./third_party/licenses/espeak-ng-COPYING.txt)、[`COPYING.APACHE`](./third_party/licenses/espeak-ng-COPYING.APACHE.txt)、[`COPYING.BSD2`](./third_party/licenses/espeak-ng-COPYING.BSD2.txt)、[`COPYING.UCD`](./third_party/licenses/espeak-ng-COPYING.UCD.txt)。 | 随构件保留四份文本，并按所纳入材料对应的文本处理：GPL-3.0-or-later 受覆盖 object code 的 conveyance 需提供 Corresponding Source 并保留 GPL notices；Apache-2.0 保留 license/required notices；BSD-2-Clause 保留版权、条件和 disclaimer；Unicode 保留 copyright、permission notice 和 disclaimer。 |
 
-此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) 的 `en_US/ljspeech/medium`，模型卡标注训练数据为 public domain。
+该 allowlist 的 `approved` 是本项目对来源记录和所列上游文本已齐备的内部审计状态，不是对构件全部版权归属、许可适用范围或某一再分发方案合规性的法律结论。涉及新构建、修改或新的公开再分发时，仍须对实际纳入的材料和相应上游文本进行许可/法律审查。
+
+此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自采用 MIT 许可证的 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) `en_US/ljspeech/medium`；其 [MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD) 将训练数据标注为 public domain。注册表分别记录模型许可、来源和本项目 CDN 分发批准状态，任一项缺失都会阻止 active CDN 包通过静态与 smoke 门禁。
+
+### Piper CDN 资源发布门禁
+
+英语包 `en_US-ljspeech-medium` 的已批准清单版本为 `1`，基础 URL 为 `https://voice.shadow.wang/piper/en_US-ljspeech-medium`：`.onnx` 为 63,531,379 bytes（SHA-256 `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22`），`.onnx.json` 为 4,972 bytes（SHA-256 `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860`）。发布前以 `scripts/piper-resource-smoke.mjs` 对清单 URL、响应类型、CORS、字节数与 SHA-256 做只读核验。
+
+中文候选包 `zh_CN-chaowen-medium` 仍为 `gated`：尚未记录可公开分发的最终文件、来源与模型/训练数据许可证、分发授权或真实小米浏览器证据。因此它不在公开 CDN 或应用下载清单中；不得把候选状态解释为中文离线语音已获准发布。
 
 ## 字帖字体资源
 

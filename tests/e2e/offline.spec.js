@@ -1,5 +1,35 @@
 import { test, expect } from "@playwright/test";
 
+const PIPER_LIFECYCLE_FIXTURE = {
+  id: "test-piper-lifecycle",
+  locale: "en-US",
+  label: "Piper lifecycle fixture",
+  kind: "voice",
+  version: "1",
+  source: "cdn",
+  cachePolicy: "user-download",
+  releaseApproved: true,
+  files: [
+    {
+      key: "model",
+      suffix: ".onnx",
+      contentType: "application/octet-stream",
+      content: "abc",
+      bytes: 3,
+      sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    },
+    {
+      key: "metadata",
+      suffix: ".onnx.json",
+      contentType: "application/json",
+      content: "{}",
+      bytes: 2,
+      sha256: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    },
+  ],
+  totalBytes: 5,
+};
+
 async function openModule(page, mod) {
   await page.click('[data-mod="learning"]');
   await page.click(`[data-go="${mod}"]`);
@@ -49,6 +79,94 @@ test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle("影伴");
+  });
+
+  test("service-worker activation retains a completed Piper package without a second resource GET", async ({ page, context }) => {
+    const resourceGetRequests = { model: 0, metadata: 0 };
+    for (const file of PIPER_LIFECYCLE_FIXTURE.files) {
+      await page.route(`**/piper-lifecycle-fixture${file.suffix}`, async (route) => {
+        if (route.request().method() === "GET") resourceGetRequests[file.key] += 1;
+        await route.continue();
+      });
+    }
+    await page.goto("/");
+
+    const seeded = await page.evaluate(async (fixture) => {
+      if (!("serviceWorker" in navigator) || !("caches" in window)) return { supported: false };
+      const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
+      const { createPiperResourceStore } = await import("/src/piper-resource-store.js");
+      const store = createPiperResourceStore({
+        packages: [resourcePackage],
+        cacheStorage: caches,
+        getCapabilities: () => ({ canDownload: true }),
+      });
+      const cache = await caches.open(store.getCacheName(resourcePackage));
+      for (const file of resourcePackage.files) {
+        await cache.put(`${resourcePackage.baseUrl}${file.suffix}`, new Response(file.content, { headers: { "content-type": file.contentType } }));
+      }
+      const marker = await store.writeCompletionMarker(resourcePackage);
+      const completed = await store.isPiperResourceCached(resourcePackage.id);
+      await caches.open("shadow-mate-app-v3");
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker did not become ready")), 10_000)),
+      ]);
+      const lifecycleToken = Date.now();
+      const registration = await navigator.serviceWorker.register(`/sw.js?lifecycle=${lifecycleToken}`, { scope: "/" });
+      await registration.update();
+      await new Promise((resolve, reject) => {
+        const deadline = Date.now() + 10_000;
+        const check = () => {
+          if (registration.active?.scriptURL.includes(`lifecycle=${lifecycleToken}`) && registration.active.state === "activated") resolve();
+          else if (Date.now() >= deadline) reject(new Error("updated service worker did not activate"));
+          else setTimeout(check, 25);
+        };
+        check();
+      });
+      return {
+        supported: true,
+        cacheNames: await caches.keys(),
+        scriptUrl: registration.active?.scriptURL || null,
+        completed,
+        marker,
+      };
+    }, PIPER_LIFECYCLE_FIXTURE);
+
+    expect(seeded.supported).toBe(true);
+    expect(seeded.scriptUrl).toContain("/sw.js");
+    expect(seeded.completed).toBe(true);
+    expect(seeded.cacheNames).toContain(`shadow-mate-piper-${PIPER_LIFECYCLE_FIXTURE.id}-${PIPER_LIFECYCLE_FIXTURE.version}`);
+    expect(seeded.cacheNames).not.toContain("shadow-mate-app-v3");
+    expect(seeded.marker).toMatchObject({
+      id: PIPER_LIFECYCLE_FIXTURE.id,
+      version: PIPER_LIFECYCLE_FIXTURE.version,
+      manifestVersion: PIPER_LIFECYCLE_FIXTURE.version,
+      files: PIPER_LIFECYCLE_FIXTURE.files.map((file) => ({
+        key: file.key,
+        expectedBytes: file.bytes,
+        actualBytes: file.bytes,
+        expectedSha256: file.sha256,
+        actualSha256: file.sha256,
+      })),
+    });
+
+    await context.setOffline(true);
+    try {
+      await page.reload();
+      await expect(page).toHaveTitle("影伴");
+      const offlinePackage = await page.evaluate(async (fixture) => {
+        const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
+        const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
+        const markerRoot = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
+        const marker = (await cache.keys()).some((request) => request.url === markerRoot || request.url.startsWith(`${markerRoot}?owner=`));
+        const files = await Promise.all(resourcePackage.files.map((file) => cache.match(`${resourcePackage.baseUrl}${file.suffix}`)));
+        return { marker, files: files.map(Boolean) };
+      }, PIPER_LIFECYCLE_FIXTURE);
+      expect(offlinePackage).toEqual({ marker: true, files: [true, true] });
+    } finally {
+      await context.setOffline(false);
+    }
+    expect(resourceGetRequests).toEqual({ model: 0, metadata: 0 });
   });
 
   test("home page shows banner and stats", async ({ page }) => {
@@ -181,13 +299,17 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
-  test("usage guide explains setup and speech downloads", async ({ page }) => {
+  test("usage guide explains setup and manages browser-scoped speech resources", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="guide"]');
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("约 115MB");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("60.6 MB");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toHaveCount(0);
+    await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
@@ -214,8 +336,9 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button offers local offline voice when system has no usable voice", async ({ page }) => {
+  test("speech button offers the active English Piper package when system speech is unavailable", async ({ page }) => {
     await page.goto("/");
+    const origin = new URL(page.url()).origin;
     await page.evaluate(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
@@ -228,6 +351,10 @@ test.describe("Offline mode (no login)", () => {
     await button.click();
     await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
     await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线英语语音");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("English (LJSpeech, medium)");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("版本 1");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("60.6 MB");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText(origin);
     await page.click('.voice-dialog-actions [data-action="cancel"]');
     await expect(page.locator("#shadow-voice-dialog")).toBeHidden();
   });

@@ -1,7 +1,15 @@
-import { readFile, readdir } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
 import { validateHanziWritingPack } from "../src/content/hanzi-writing/validate-pack.js";
+import {
+  listActivePiperCdnVoicePackages,
+  listBundledPiperRuntimePackages,
+  listPiperResourcePackages,
+  validatePiperResourcePackages,
+} from "../src/piper-resource-registry.js";
 
 const requiredFiles = [
   "index.html",
@@ -9,6 +17,17 @@ const requiredFiles = [
   "public/privacy-policy.css",
   "public/manifest.json",
   "public/sw.js",
+  "public/piper-tts-web.js",
+  "public/onnx/ort-wasm-simd-threaded.wasm",
+  "public/piper/piper_phonemize.wasm",
+  "public/piper/piper_phonemize.data",
+  "src/cache-policy.js",
+  "src/piper-resource-registry.js",
+  "src/piper-resource-store.js",
+  "src/piper-resource-hash.js",
+  "src/piper-resource-capabilities.js",
+  "src/piper-resource-ui.js",
+  "scripts/piper-resource-smoke.mjs",
   "src/config.js",
   "src/lib.js",
   "src/cloud.js",
@@ -22,6 +41,13 @@ const requiredFiles = [
   "CONTRIBUTING.md",
   "TRADEMARKS.md",
   "THIRD_PARTY_NOTICES.md",
+  "third_party/licenses/piper-tts-web-MIT.txt",
+  "third_party/licenses/onnxruntime-MIT.txt",
+  "third_party/licenses/piper-phonemize-MIT.txt",
+  "third_party/licenses/espeak-ng-COPYING.txt",
+  "third_party/licenses/espeak-ng-COPYING.APACHE.txt",
+  "third_party/licenses/espeak-ng-COPYING.BSD2.txt",
+  "third_party/licenses/espeak-ng-COPYING.UCD.txt",
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
   "supabase/migrations/20260811202411_child_privacy_consent.sql",
@@ -37,6 +63,33 @@ const activeHanziWritingPack = getActiveHanziWritingPack();
 const hanziWritingPackValidation = validateHanziWritingPack(activeHanziWritingPack);
 if (!hanziWritingPackValidation.valid) {
   throw new Error(`Hanzi writing pack validation failed:\n- ${hanziWritingPackValidation.errors.join("\n- ")}`);
+}
+
+validatePiperResourcePackages(listPiperResourcePackages());
+
+const activePiperCdnPackages = listActivePiperCdnVoicePackages();
+if (activePiperCdnPackages.length === 0) throw new Error("At least one approved Piper CDN voice package is required");
+for (const resourcePackage of activePiperCdnPackages) {
+  if (resourcePackage.license?.status !== "approved"
+    || resourcePackage.provenance?.status !== "verified"
+    || resourcePackage.distribution?.status !== "approved") {
+    throw new Error(`Active Piper CDN package ${resourcePackage.id} is missing approved license, provenance, or distribution metadata`);
+  }
+}
+
+async function fingerprint(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+for (const resourcePackage of listBundledPiperRuntimePackages()) {
+  for (const file of resourcePackage.files) {
+    const path = `public${file.url}`;
+    const actual = await stat(path);
+    if (actual.size !== file.bytes) throw new Error(`Bundled Piper runtime ${path} byte size does not match the registry`);
+    if (await fingerprint(path) !== file.sha256) throw new Error(`Bundled Piper runtime ${path} SHA-256 does not match the registry`);
+  }
 }
 
 const manifest = JSON.parse(await readFile("public/manifest.json", "utf8"));
@@ -103,8 +156,61 @@ if (!config.includes('remote_supabase_blocked')) {
 }
 
 const serviceWorker = await readFile("public/sw.js", "utf8");
-if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-v3"')) {
-  throw new Error("Service worker cache must use the Shadow Mate namespace");
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
+  throw new Error("Service worker cache must use shadow-mate-app-v4");
+}
+if (!serviceWorker.includes("/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)")) {
+  throw new Error("Service worker must define the app-shell preservation predicate");
+}
+if (!serviceWorker.includes(
+  "keys.filter((key) => isAppShellCacheName(key) && key !== CACHE_NAME).map((key) => caches.delete(key))"
+)) {
+  throw new Error("Service worker activation cleanup must be constrained to app-shell caches");
+}
+if (/caches\.keys\(\)\s*\.then\(\(keys\)\s*=>\s*Promise\.all\(keys\.map\(.*caches\.delete/s.test(serviceWorker)) {
+  throw new Error("Service worker must not delete every cache");
+}
+
+const cachePolicy = await readFile("src/cache-policy.js", "utf8");
+for (const marker of [
+  'APP_SHELL_CACHE_NAME = "shadow-mate-app-v4"',
+  "/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)",
+  "key !== currentName",
+]) {
+  if (!cachePolicy.includes(marker)) throw new Error(`src/cache-policy.js is missing ${marker}`);
+}
+
+const versionGuard = await readFile("src/version-guard.js", "utf8");
+if (!versionGuard.includes('from "./cache-policy.js"')) {
+  throw new Error("version guard must use the cache policy");
+}
+if (!versionGuard.includes("selectCacheNamesToDelete(keys).map((key) => cacheStorage.delete(key))")) {
+  throw new Error("version guard must delete only stale app-shell caches");
+}
+if (/caches\.keys\(\)[\s\S]*?keys\.map\(\(key\)\s*=>\s*caches\.delete/.test(versionGuard)) {
+  throw new Error("Version guard must not delete every cache");
+}
+
+const piperResourceUi = await readFile("src/piper-resource-ui.js", "utf8");
+if (!piperResourceUi.includes('from "./piper-resource-registry.js"')) {
+  throw new Error("Piper resource UI must source package metadata from the registry");
+}
+if (!piperResourceUi.includes("listActivePiperCdnVoicePackages")) {
+  throw new Error("Piper resource UI must present only active CDN voice packages");
+}
+if (!piperResourceUi.includes("resourcePackage.totalBytes")) {
+  throw new Error("Piper resource UI must render voice sizes from registered package bytes");
+}
+if (/\b(?:90|115)\s*MB\b/i.test(piperResourceUi)) {
+  throw new Error("Piper resource UI must not contain fixed voice-size copy");
+}
+if (/\.arrayBuffer\s*\(/.test(piperResourceUi)) {
+  throw new Error("Piper resource UI must use verified marker bytes instead of materializing cached files");
+}
+
+const piperResourceStore = await readFile("src/piper-resource-store.js", "utf8");
+if (/\.arrayBuffer\s*\(/.test(piperResourceStore)) {
+  throw new Error("Piper resource store must validate cached files incrementally");
 }
 
 const cloud = await readFile("src/cloud.js", "utf8");
@@ -133,6 +239,13 @@ for (const marker of [
 ]) {
   if (!piper.includes(marker)) throw new Error(`piper-tts.js is missing ${marker}`);
 }
+for (const marker of ["resourcePackage.label", "resourcePackage.version", "formatPiperResourceBytes(resourcePackage.totalBytes)", "location?.origin"]) {
+  if (!piper.includes(marker)) throw new Error(`Piper speech dialog is missing registry-driven copy: ${marker}`);
+}
+if (/\b(?:90|115)\s*MB\b/i.test(piper)) throw new Error("Piper speech dialog must not contain fixed voice-size copy");
+
+const userGuide = await readFile("docs/user-guide.md", "utf8");
+if (/\b(?:90|115)\s*MB\b/i.test(userGuide)) throw new Error("User guide must not contain fixed Piper package-size copy");
 
 const migrationDir = "supabase/migrations";
 const migrations = (await readdir(migrationDir)).filter((name) => name.endsWith(".sql")).sort();
