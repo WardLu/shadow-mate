@@ -15,7 +15,7 @@
 - Pinned the bundled Piper runtime audit to upstream commits and local license texts, with the audit required before release checks can approve the app-shell runtime.
 - Added local release checks for versioned app-shell cache ownership and browser lifecycle coverage so an app-shell update must retain Piper package cache namespaces and must not trigger a model GET by itself.
 - Added a read-only CDN smoke command for approved package manifests. Its result is external CDN evidence, not a local test or a deployment action.
-- `zh_CN-chaowen-medium` remains gated: no license-approved final artifact, public distribution manifest, or real Xiaomi browser acceptance has been recorded. Desktop Playwright Preview coverage is not Xiaomi acceptance.
+- Opened the approved `zh_CN-chaowen-medium` Chinese Piper package through the same versioned CDN download, integrity, cache, and engine fallback path as English. Its final CDN bytes, hashes, model-card provenance, and CORS smoke evidence must remain attached to the release record; desktop Playwright Preview coverage is not Xiaomi acceptance.
 
 ## v1.3.12 - 2026-09-01
 

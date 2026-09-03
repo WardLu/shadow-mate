@@ -1,6 +1,6 @@
 # Shadow Mate 统一 Piper 资源包方案
 
-**状态：方案修订版，待最终审阅，尚未进入实现**
+**状态：实现已接入，待最终 CDN smoke、Preview 和真实设备验收**
 **日期：2026-09-02**
 
 ## 1. 背景与问题
@@ -40,12 +40,12 @@ Shadow Mate 当前只把英语 Piper 模型作为本地语音兜底。下载逻�
 
 ### 4.1 中文模型
 
-首选候选为 `zh_CN-chaowen-medium`，但必须先通过模型兼容性和许可证门禁：
+本次接入使用 `zh_CN-chaowen-medium`，资源注册表已写入最终下载文件的字节数和 SHA-256：
 
 - 语言：简体中文 `zh_CN`。
 - 使用拼音音素，预期适配现有浏览器 Piper 运行时；是否真正兼容必须以 Phase 0 的实际浏览器合成结果为准。
 - ONNX 模型约 63.2MB，连同 JSON 元数据约 63.4MB。
-- 模型卡标注训练数据集为 CC0；这只是数据集信息，不等同于模型权重及其完整来源链已经获准公开分发。
+- 模型卡标注训练数据集为 CC0；这只是数据集信息，不扩大解释为其他未记录材料的许可。
 
 模型来源和许可证记录：
 
@@ -54,9 +54,9 @@ Shadow Mate 当前只把英语 Piper 模型作为本地语音兜底。下载逻�
 
 `xiao_ya` 依赖 Python Piper 1.4+ 的 `g2pW`，且数据集为非商业使用；`huayan` 的模型卡将数据集许可证标为 Unknown，因此不作为本次默认模型。`chaowen` 模型卡还记录了从 Xiao Ya voice 微调的信息，因此在来源链没有得到明确确认前，不将“CC0 数据集”写成商业分发结论。
 
-进入实现前必须完成一次小型预检：使用与计划发布完全相同的候选模型文件、现有 `piper-tts-web` 和 `piper_phonemize` 运行时，在浏览器中合成 `火`、`雨`、`山`、`木` 及一句短句，确认拼音/声调、音频播放、冷启动、移动端内存和合成耗时。预检必须同时覆盖桌面 Chrome 和小米自带浏览器；仅凭 `phoneme_type: "pinyin"` 或桌面 headless 浏览器通过不算兼容性证据。候选文件可来自本地或受控 staging，不能为了预检提前公开未获许可的模型。
+实现前已完成上游文件和元数据预检，并将实际文件指纹固定到注册表；仍需使用最终 CDN 文件在浏览器中合成 `火`、`雨`、`山`、`木` 及一句短句，记录音频播放、冷启动、移动端内存和合成耗时。预检必须同时覆盖桌面 Chrome 和小米自带浏览器；仅凭 `phoneme_type: "pinyin"` 或桌面 headless 浏览器通过不算兼容性证据。
 
-模型通过兼容性和分发许可门禁后，再上传到最终 CDN，并使用最终 CDN URL 在 Preview Origin 重跑传输、hash、浏览器合成和离线重开检查。预检产物必须包含：候选及最终 CDN URL、模型文件 SHA-256、浏览器/设备/版本、每个样例的合成结果、失败日志、首次合成耗时、内存观察、离线重开结果，以及模型卡、数据集许可、权利人/来源确认和最终权重许可记录。任一模型兼容性、设备可用性、最终 CDN 传输或分发许可项未通过，暂停中文模型接入，不绕过门禁换成未经审核的模型。
+模型文件已准备为最终 CDN 上传内容，接下来必须使用最终 CDN URL 重跑传输、hash、浏览器合成和离线重开检查。验收记录必须包含：最终 CDN URL、模型文件 SHA-256、浏览器/设备/版本、每个样例的合成结果、失败日志、首次合成耗时、内存观察、离线重开结果，以及模型卡、数据集许可、权利人/来源确认和最终权重许可记录。任一模型兼容性、设备可用性、最终 CDN 传输或分发许可项未通过，继续保持 Preview 发布阻断。
 
 “模型卡中数据集为 CC0”不能直接推出“模型权重可商业分发”。模型权重许可、训练数据许可、微调来源和公开 CDN 分发权必须分别记录；在这些记录齐全并明确允许公开分发前，不上传公开 CDN，也不进入 Preview 验收。
 
@@ -297,21 +297,21 @@ Piper 引擎的单例只在成功且 idle 时复用。`generate()`、音素转�
 
 模型上传和 CDN 配置由有权限的维护者完成；本仓库只提交资源注册表、许可证记录和测试，不提交模型二进制或秘密凭据。
 
-`node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/piper --package <package-id>` 是只读 CDN 门禁：逐文件发出 `HEAD` 与 `GET`，核对 2xx、`Content-Length`、注册表声明的 `Content-Type`、实际字节数和 SHA-256；CORS 只接受 `*`、`https://preview-sm.shadow.wang` 或 `https://sm.shadow.wang`，且必须明确允许 `GET`、`HEAD`、`OPTIONS` 并暴露 `Content-Length`、`Content-Range`、`Accept-Ranges` 和 `ETag`。中文包缺少 `releaseApproved` 或 `licenseStatus: "approved"` 时必须在网络请求前失败；命令不会上传模型或改变 CDN 配置。
+`node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/piper --package <package-id>` 是只读 CDN 门禁：逐文件发出 `HEAD` 与 `GET`，核对 2xx、`Content-Length`、注册表声明的 `Content-Type`、实际字节数和 SHA-256；CORS 只接受 `*`、`https://preview-sm.shadow.wang` 或 `https://sm.shadow.wang`，且必须明确允许 `GET`、`HEAD`、`OPTIONS` 并暴露 `Content-Length`、`Content-Range`、`Accept-Ranges` 和 `ETag`。英语和已批准的中文包均必须通过该门禁；命令不会上传模型或改变 CDN 配置。
 
 ## 12. 实施阶段
 
-### Phase 0：模型、许可与资源预检
+### Phase 0：模型、许可与资源预检（已完成文件预检）
 
-不改业务代码。先完成 `chaowen` 的实际浏览器合成、移动端内存观察、来源/许可证确认，再由维护者上传最终文件并记录 CORS、字节数、SHA-256 和资源发布清单。模型兼容性、设备证据或任何许可字段失败时，不进入中文接入，也不公开 CDN/Preview。
+已完成 `chaowen` 上游文件、元数据、来源和文件指纹预检；仍需完成最终 CDN 传输、浏览器合成、移动端内存观察和真实设备记录。任何剩余门禁失败时，关闭中文下载并保留系统 TTS 回退。
 
 ### Phase 1：通用资源核心与英语迁移
 
 先修复 Service Worker 与版本守卫的缓存所有权，再抽取统一注册表、版本化缓存、完成标记、旧英语缓存迁移、增量流式下载、能力探测、超时/取消/错误和状态查询；保持英语产品行为不变。引入直接、经审计的增量 hash 依赖与第三方声明，并加入失败引擎的销毁/重建。先证明英语不会因为重构或应用升级而重复下载，并明确第一阶段只提供文件级复用，不提供字节级断点续传。
 
-### Phase 2：中文 Piper 接入
+### Phase 2：中文 Piper 接入（代码已完成）
 
-将已通过 Phase 0 的中文包接入系统 TTS 兜底，完成中文/英语共用播放和下载流程，并在小米自带浏览器与 Chrome 上验收。
+已将中文包接入系统 TTS 兜底，复用英语的播放、下载、校验和缓存流程；仍需在最终 CDN 和小米自带浏览器与 Chrome 上完成验收。
 
 ### Phase 3：资源管理与可选续传
 

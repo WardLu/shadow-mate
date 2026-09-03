@@ -464,9 +464,9 @@
 
   Expected: all local checks pass; the smoke command records final CDN evidence or reports the exact external blocker. Do not call the external smoke or manual Xiaomi acceptance a local test.
 
-- [ ] **Step 5: Record the gated Chinese status**
+- [ ] **Step 5: Record and verify the approved Chinese manifest**
 
-  If Phase 0 has not produced an approved final Chinese artifact, keep `zh_CN-chaowen-medium` gated, record the missing artifact/license/device evidence in the release notes, and do not claim Chinese offline acceptance. If the maintainer supplies the approved manifest, add only its actual URL/bytes/SHA-256/license values and rerun the smoke and browser checks.
+  The implementation now records the approved `zh_CN-chaowen-medium` URL, bytes, SHA-256, model-card provenance, and CC0 training-data note. Run the CDN smoke command against the final files, then run the Preview browser download/offline smoke and record real Xiaomi Chrome/browser evidence separately. If any final CDN, compatibility, or device check fails, set the package back to `gated` and do not claim Chinese offline acceptance.
 
 - [ ] **Step 6: Commit**
 

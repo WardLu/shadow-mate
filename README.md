@@ -176,7 +176,7 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-“Listen” prefers an English system voice when one is available. Devices without a usable English system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the `en_US-ljspeech-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+“Listen” prefers a matching system voice when one is available. Devices without a usable system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the matching English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
 
 ## Acknowledgements
 
@@ -185,7 +185,7 @@ The speech fallback uses these open-source projects:
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
 - [rhasspy/piper](https://github.com/rhasspy/piper) (MIT): lightweight neural speech synthesis
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT): browser inference runtime
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` voice model distributed through `voice.shadow.wang`
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` and `zh_CN-chaowen-medium` voice models distributed through `voice.shadow.wang`
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and license details.
 

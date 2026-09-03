@@ -142,7 +142,12 @@ async function createEngineSession() {
             throw new PiperLocalVoiceError("engine", "Piper voice engine was reset while loading its model");
           }
           session.modelObjectUrls.add(modelUrl);
-          return [await metadata.json(), modelUrl];
+          const metadataJson = await metadata.json();
+          const phonemizeVoice = resourcePackage.phonemizeVoice;
+          const normalizedMetadata = phonemizeVoice && metadataJson?.espeak?.voice !== phonemizeVoice
+            ? { ...metadataJson, espeak: { ...metadataJson.espeak, voice: phonemizeVoice } }
+            : metadataJson;
+          return [normalizedMetadata, modelUrl];
         }).catch((error) => {
           session.voiceProviders.delete(key);
           throw error;

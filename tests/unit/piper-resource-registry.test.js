@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getPiperResourcePackage,
+  isActivePiperCdnVoicePackage,
   validatePiperResourcePackages,
 } from "../../src/piper-resource-registry.js";
 
@@ -31,10 +32,27 @@ describe("bundled Piper runtime registry", () => {
     expect(() => validatePiperResourcePackages([runtime])).toThrow(/audit/i);
   });
 
-  it("keeps a non-bundled gated package outside active-package validation", () => {
-    const gatedChinese = structuredClone(getPiperResourcePackage("zh_CN-chaowen-medium"));
+  it("accepts the approved Chinese CDN package with its exact resource fingerprints", () => {
+    const chinese = structuredClone(getPiperResourcePackage("zh_CN-chaowen-medium"));
 
-    expect(() => validatePiperResourcePackages([gatedChinese])).not.toThrow();
+    expect(() => validatePiperResourcePackages([chinese])).not.toThrow();
+    expect(isActivePiperCdnVoicePackage(chinese)).toBe(true);
+    expect(chinese).toMatchObject({
+      id: "zh_CN-chaowen-medium",
+      locale: "zh-CN",
+      version: "1",
+      phonemizeVoice: "cmn",
+      baseUrl: "https://voice.shadow.wang/piper/zh_CN-chaowen-medium",
+      totalBytes: 63224911,
+      releaseApproved: true,
+      licenseStatus: "approved",
+      provenance: { status: "verified" },
+      distribution: { status: "approved", channel: "public-cdn" },
+    });
+    expect(chinese.files.map(({ suffix, bytes, sha256 }) => [suffix, bytes, sha256])).toEqual([
+      [".onnx", 63221984, "820d64ac16048fbcf38dd0823d37fab5f5e0c2bd71b01ca5a50f553fac19e746"],
+      [".onnx.json", 2927, "a6bb2caafa0645642f13cbf7e2f6fbbb16fded66e51109fc26d622f6472fa16f"],
+    ]);
   });
 
   it("rejects a bundled runtime component without a fixed source commit", () => {

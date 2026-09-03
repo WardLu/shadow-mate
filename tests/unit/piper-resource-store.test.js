@@ -82,7 +82,7 @@ async function seedCompletePackage(store, resourcePackage) {
 }
 
 describe("Piper resource registry", () => {
-  it("exposes the approved English package and keeps Chinese gated", () => {
+  it("exposes approved English and Chinese packages", () => {
     expect(getPiperResourcePackage("en_US-ljspeech-medium")).toMatchObject({
       id: "en_US-ljspeech-medium",
       locale: "en-US",
@@ -91,7 +91,10 @@ describe("Piper resource registry", () => {
     });
     expect(listPiperResourcePackages().find((entry) => entry.id === "zh_CN-chaowen-medium")).toMatchObject({
       id: "zh_CN-chaowen-medium",
-      releaseApproved: false,
+      releaseApproved: true,
+      source: "cdn",
+      cachePolicy: "user-download",
+      totalBytes: 63224911,
     });
     expect(listPiperResourcePackages().find((entry) => entry.id === "piper-browser-runtime")).toMatchObject({
       source: "bundled",

@@ -307,7 +307,8 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("60.6 MB");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toHaveCount(0);
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("清单大小");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("60.3 MB");
     await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();

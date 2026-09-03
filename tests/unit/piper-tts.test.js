@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
-  askDownloadVoice,
   ENGLISH_PIPER_PACKAGE_ID,
   VOICE,
   VOICE_FILES,
@@ -21,11 +20,6 @@ describe("offline Piper voice packages", () => {
       "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx",
       "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json",
     ]);
-  });
-
-  test("returns the explicit registry gate for an unavailable Chinese package", async () => {
-    await expect(askDownloadVoice("zh_CN-chaowen-medium")).resolves.toBe("gated");
-    expect(document.querySelector("#shadow-voice-dialog")).toBeNull();
   });
 
   test("reports a synthesis timeout", async () => {

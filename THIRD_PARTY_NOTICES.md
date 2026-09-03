@@ -40,7 +40,9 @@
 
 英语包 `en_US-ljspeech-medium` 的已批准清单版本为 `1`，基础 URL 为 `https://voice.shadow.wang/piper/en_US-ljspeech-medium`：`.onnx` 为 63,531,379 bytes（SHA-256 `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22`），`.onnx.json` 为 4,972 bytes（SHA-256 `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860`）。发布前以 `scripts/piper-resource-smoke.mjs` 对清单 URL、响应类型、CORS、字节数与 SHA-256 做只读核验。
 
-中文候选包 `zh_CN-chaowen-medium` 仍为 `gated`：尚未记录可公开分发的最终文件、来源与模型/训练数据许可证、分发授权或真实小米浏览器证据。因此它不在公开 CDN 或应用下载清单中；不得把候选状态解释为中文离线语音已获准发布。
+中文离线语音包 `zh_CN-chaowen-medium` 使用 Piper Voices 的 Chaowen medium 文件，经 `voice.shadow.wang` CDN 分发，清单版本为 `1`：`.onnx` 为 63,221,984 bytes（SHA-256 `820d64ac16048fbcf38dd0823d37fab5f5e0c2bd71b01ca5a50f553fac19e746`），`.onnx.json` 为 2,927 bytes（SHA-256 `a6bb2caafa0645642f13cbf7e2f6fbbb16fded66e51109fc26d622f6472fa16f`）。模型卡将训练数据集标为 CC0，并记录该模型从 Xiao Ya voice 微调；本项目保留模型卡、来源、文件指纹和 CDN 分发记录，不能将数据集许可扩大解释为其他未记录材料的许可。
+
+中文包基础 URL 为 `https://voice.shadow.wang/piper/zh_CN-chaowen-medium`。发布前和资源变更后使用 `scripts/piper-resource-smoke.mjs` 对最终 CDN URL 的响应类型、CORS、字节数与 SHA-256 做只读核验；任一项不匹配都必须保持下载未完成状态。
 
 ## 字帖字体资源
 
