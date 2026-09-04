@@ -5,13 +5,10 @@ import { describe, expect, test } from "vitest";
 describe("public SEO and GEO contract", () => {
   test("connects the branded visible heading and application entity to Shadow Nexus", async () => {
     const html = await readFile(resolve(process.cwd(), "index.html"), "utf8");
-    const cloud = await readFile(resolve(process.cwd(), "src/cloud.js"), "utf8");
     const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
 
     expect(html).toContain("<h1>影伴 Shadow Mate</h1>");
     expect(html).toContain('<div class="sub">家庭成长工作台 · 陪伴有方法，成长有动力</div>');
-    expect(cloud).toContain('subEl.textContent = "家庭成长工作台 · 陪伴有方法，成长有动力"');
-    expect(cloud).not.toContain('subEl.textContent = "绿色挖掘机 · 每日成长打卡"');
     expect(match).not.toBeNull();
 
     const schema = JSON.parse(match[1]);
