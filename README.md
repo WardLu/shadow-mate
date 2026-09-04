@@ -176,13 +176,14 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-“Listen” uses a completed local Piper package first, so a downloaded English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` voice remains consistent across browsers that support the local runtime. Before a package is downloaded, it prefers a matching system voice; devices without a usable system voice, especially Android devices without GMS, are offered the matching local package. The first use downloads and caches the package from `voice.shadow.wang`; after that, synthesis works offline. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+“Listen” uses a completed local Piper package first, so a downloaded English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` voice remains consistent across browsers that support the local runtime. Before a package is downloaded, it prefers a matching system voice; devices without a usable system voice, especially Android devices without GMS, are offered the matching local package. The first use downloads and caches the package from `voice.shadow.wang`; after that, synthesis works offline. Chinese text is converted to the Chaowen model's Pinyin initial/final/tone phonemes in the browser, while English continues to use the bundled eSpeak phonemizer. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
 
 ## Acknowledgements
 
 The speech fallback uses these open-source projects:
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro) (MIT): Chinese Pinyin phoneme conversion for the Chaowen voice
 - [rhasspy/piper](https://github.com/rhasspy/piper) (MIT): lightweight neural speech synthesis
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT): browser inference runtime
 - [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` and `zh_CN-chaowen-medium` voice models distributed through `voice.shadow.wang`

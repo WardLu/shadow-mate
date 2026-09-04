@@ -370,6 +370,75 @@ test.describe("System speech fallback", () => {
     await secondPage.close();
   });
 
+  test("sends Chinese text through Pinyin phonemes instead of the eSpeak runtime", async ({ page }) => {
+    await page.route("**/piper-tts-web.js*", async (route) => {
+      await route.fulfill({
+        contentType: "application/javascript",
+        body: `
+          export class OnnxWebRuntime { constructor() {} }
+          export class PhonemizeWebRuntime {
+            constructor() {}
+            async phonemize() {
+              window.__espeakPhonemizeCalls = (window.__espeakPhonemizeCalls || 0) + 1;
+              return { text: "花", phonemes: [null, "en", null, "uo", null], phoneme_ids: [127, 35, 120, 51, 135] };
+            }
+            destroy() {}
+          }
+          export class PiperWebEngine {
+            constructor({ phonemizeRuntime, voiceProvider }) {
+              this.phonemizeRuntime = phonemizeRuntime;
+              this.voiceProvider = voiceProvider;
+            }
+            async generate(text, voice) {
+              const voiceFiles = await this.voiceProvider.fetch(voice);
+              const phonemeData = await this.phonemizeRuntime.phonemize(text, voiceFiles);
+              window.__generatedChinesePhonemes = phonemeData;
+              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1, phonemeData };
+            }
+            destroy() { this.phonemizeRuntime.destroy?.(); }
+          }
+        `,
+      });
+    });
+    await page.addInitScript(() => {
+      const metadata = {
+        phoneme_type: "pinyin",
+        phoneme_id_map: {
+          _: [0], "^": [1], $: [2], "Ø": [3], h: [14], ua: [50], "1": [64],
+        },
+        espeak: { voice: "zh" },
+      };
+      const cacheStore = new Map([
+        ["https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx", new Response(new Blob(["model"]))],
+        ["https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx.json", new Response(JSON.stringify(metadata))],
+      ]);
+      Object.defineProperty(window, "caches", {
+        configurable: true,
+        value: { open: async () => ({ match: async (url) => cacheStore.get(url) }) },
+      });
+    });
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      const { resetLocalVoiceEngine, speakLocally } = await import("/src/piper-tts.js");
+      const speech = await speakLocally("花", "zh_CN-chaowen-medium");
+      URL.revokeObjectURL(speech.url);
+      const snapshot = {
+        phonemes: speech.phonemes,
+        phonemeIds: speech.phonemeIds,
+        espeakCalls: window.__espeakPhonemizeCalls || 0,
+      };
+      await resetLocalVoiceEngine();
+      return snapshot;
+    });
+
+    expect(result).toEqual({
+      phonemes: ["h", "ua", "1"],
+      phonemeIds: [1, 14, 50, 64, 0, 2],
+      espeakCalls: 0,
+    });
+  });
+
   test("reuses one validated model provider and object URL across repeated syntheses", async ({ page }) => {
     await page.route("**/piper-tts-web.js*", async (route) => {
       await route.fulfill({
