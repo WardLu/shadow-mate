@@ -1,6 +1,8 @@
+import { normalizeRotationState } from "./hanzi-worksheet-rotation.js";
 import { normalizeContentConfig } from "./learning-content-package.js";
 
 const STATE_KEYS = ["checkins", "extra", "points", "bookShelf", "peanutLog", "peanutRead"];
+const HANZI_ROTATION_STATE_KEY = "hanziWorksheetRotationV1";
 
 export const CHECKIN_GROUPS = {
   chinese: ["chinese-literacy", "chinese-poem", "chinese-writing"],
@@ -21,17 +23,67 @@ function cloneRecord(value) {
   return isRecord(value) ? structuredClone(value) : {};
 }
 
+function normalizeExtra(value) {
+  const extra = cloneRecord(value);
+  if (Object.hasOwn(extra, HANZI_ROTATION_STATE_KEY)) {
+    extra[HANZI_ROTATION_STATE_KEY] = normalizeRotationState(extra[HANZI_ROTATION_STATE_KEY]);
+  }
+  return extra;
+}
+
 export function createLearningState(initial = {}) {
   const source = isRecord(initial) ? initial : {};
   return {
     checkins: cloneRecord(source.checkins),
-    extra: cloneRecord(source.extra),
+    extra: normalizeExtra(source.extra),
     points: cloneRecord(source.points),
     bookShelf: cloneRecord(source.bookShelf),
     peanutLog: Array.isArray(source.peanutLog) ? structuredClone(source.peanutLog) : [],
     peanutRead: cloneRecord(source.peanutRead),
     content_config: normalizeContentConfig(source.content_config),
   };
+}
+
+export function getHanziRotationState(state) {
+  return state?.extra?.[HANZI_ROTATION_STATE_KEY] || null;
+}
+
+export function hasCompatibleHanziRotationScope(state, learnerScope) {
+  const rotationState = getHanziRotationState(state);
+  if (!rotationState) return true;
+  return typeof learnerScope === "string" && learnerScope.trim().length > 0 &&
+    rotationState.learnerScope === learnerScope;
+}
+
+/**
+ * Keeps an incompatible rotation scope visible to callers. Hydration and
+ * activation must reject that state explicitly rather than silently dropping
+ * a learner's worksheet history.
+ */
+export function normalizeLearningStateForScope(state, _learnerScope) {
+  return normalizeLearningState(state);
+}
+
+export function dropIncompatibleHanziRotation(state, learnerScope) {
+  const normalized = normalizeLearningStateForScope(state, learnerScope);
+  return hasCompatibleHanziRotationScope(normalized, learnerScope)
+    ? normalized
+    : replaceHanziRotationState(normalized, null);
+}
+
+export function replaceHanziRotationState(state, rotationState) {
+  const next = createLearningState(state);
+  if (rotationState === null || rotationState === undefined) {
+    delete next.extra[HANZI_ROTATION_STATE_KEY];
+  } else {
+    const currentRotation = getHanziRotationState(next);
+    const expectedLearnerScope = currentRotation?.learnerScope;
+    next.extra[HANZI_ROTATION_STATE_KEY] = normalizeRotationState(
+      rotationState,
+      expectedLearnerScope ? { learnerScope: expectedLearnerScope } : {},
+    );
+  }
+  return next;
 }
 
 export function hasCheckin(day, key) {
@@ -96,6 +148,8 @@ export function transitionLearningState(current, action = {}) {
     case "PEANUT_READ_TOGGLED":
       toggleFlag(state.peanutRead, action.bookIndex);
       return state;
+    case "HANZI_ROTATION_REPLACED":
+      return replaceHanziRotationState(state, action.rotationState);
     case "READING_LOG_ADDED":
       if (isRecord(action.record)) state.peanutLog.push(structuredClone(action.record));
       return state;

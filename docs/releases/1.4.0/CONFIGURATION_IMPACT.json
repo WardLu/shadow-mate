@@ -1,0 +1,42 @@
+{
+  "release": "shadow-mate-v1.4.0",
+  "updated_at": "2026-09-05",
+  "reason": "Publish the mobile-accepted writing worksheet and replace unstable browser-local speech synthesis with immutable shared curriculum audio.",
+  "changes": [
+    {
+      "id": "tencent-fixed-curriculum-speech",
+      "type": "production_impact_external_service",
+      "test": {
+        "status": "preview_accepted",
+        "origin": "https://preview-sm.shadow.wang",
+        "accepted_on": "real_mobile_device",
+        "voices": {
+          "zh-CN": "101030",
+          "en-US": "101050"
+        },
+        "catalog_entries": 96,
+        "verified_bytes": 495648,
+        "cos_prefix": "tts/tencent/v1/",
+        "cdn_origin": "https://voice.shadow.wang"
+      },
+      "live": {
+        "status": "authorized_pending_deployment",
+        "origin": "https://sm.shadow.wang",
+        "runtime_credentials": "none",
+        "runtime_paid_synthesis": "none"
+      },
+      "validation": "Run RELEASE_REQUIRE_TTS_CDN=1 RELEASE_TTS_ORIGIN=https://sm.shadow.wang npm run release:check after deployment, then verify Chinese, English, and meaning playback on the production page.",
+      "rollback": "Move production back to v1.3.12; immutable content-addressed COS objects may remain unused.",
+      "accepted_exception": {
+        "status": "documented_todo_allowed_for_mvp",
+        "decision": "The product owner explicitly allowed the unresolved Tencent shared-distribution terms follow-up to remain open for this MVP release.",
+        "constraint": "Do not describe written redistribution permission as obtained; resolve the terms before expanding this audio library or offering it as a public asset service."
+      }
+    }
+  ],
+  "database": {
+    "migration_class": "none",
+    "status": "N/A",
+    "reason": "No schema, data, RLS, function, view, or shared control-plane change."
+  }
+}

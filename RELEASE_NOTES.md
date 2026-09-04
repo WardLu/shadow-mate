@@ -1,5 +1,36 @@
 # Release Notes
 
+> This file lists user-visible product changes for each published version.
+
+## v1.4.0 - 2026-09-05
+
+### Print preview
+
+- Fixed the A4 worksheet print preview briefly showing unstyled content while its print resources were loading.
+- Kept the Shadow Mate logo visible in browser print previews and exported PDFs by embedding it in the print snapshot.
+
+### Shared curriculum speech
+
+- Fixed curriculum speech is generated before release with Tencent Cloud TTS, using Zhike (`101030`) for Mandarin and WeJack (`101050`) for English, then reused from the shared CDN.
+- Browsers no longer download the 154.6 MB Matcha model. If a published clip fails, Shadow Mate tries only a matching system-language voice.
+- Matcha is retired after repeated Android browser runtime failures; existing cached copies remain explicitly removable from the guide.
+
+### Retired browser-local voice path
+
+- Fixed the unified package downloading successfully but failing to speak on mobile browsers: the upstream WASM build eagerly reserved a 512 MB shared heap, which could terminate an Android worker after the 149 MB model was unpacked. The mobile-compatible runtime starts at 256 MB and retains memory growth.
+- Existing browsers reuse the verified 149 MB model data and fetch only the replacement 12 MB mobile WASM, avoiding a full package download.
+- Replaced separate English and Chinese Piper downloads with one 154.6 MB `matcha-icefall-zh-en` offline package powered by the pinned sherpa-onnx v1.13.2 WebAssembly worker.
+- Recorded the migration reason: the previous Chinese model mispronounced isolated characters even in native inference, while Matcha passed listening checks for Chinese and English words and sentences. Its mechanical timbre is an accepted current limitation.
+- One download serves both languages in the same browser profile and origin; browser security prevents sharing the package across Chrome, Quark, Xiaomi Browser, private profiles, or different domains.
+- Unified active Piper CDN voice packages behind the resource registry: verified files are reused within the same browser profile and origin, while the guide reports package status and verified storage size. Switching browsers, profiles, domains, or environments has an independent cache by design.
+- Added conservative cross-tab coordination and cache cleanup: concurrent downloads for one package are mutually exclusive, and automatic superseded-version cleanup is skipped unless active use can be established; otherwise old caches remain available until explicitly deleted.
+- Added fail-closed CDN download checks for bounded `HEAD` and `GET` requests, manifest `Content-Length`, expected response types, CORS, actual byte count, and SHA-256. Timeouts and validation failures leave the package incomplete and retryable.
+- Pinned the bundled Piper runtime audit to upstream commits and local license texts, with the audit required before release checks can approve the app-shell runtime.
+- Added local release checks for versioned app-shell cache ownership and browser lifecycle coverage so an app-shell update must retain Piper package cache namespaces and must not trigger a model GET by itself.
+- Added a read-only CDN smoke command for approved package manifests. Its result is external CDN evidence, not a local test or a deployment action.
+- Opened the approved `zh_CN-chaowen-medium` Chinese Piper package through the same versioned CDN download, integrity, cache, and engine fallback path as English. Its final CDN bytes, hashes, model-card provenance, and CORS smoke evidence must remain attached to the release record; desktop Playwright Preview coverage is not Xiaomi acceptance.
+- Fixed Chinese local synthesis so the Pinyin-based Chaowen model receives initial, final, and tone phonemes instead of eSpeak output. English voices continue to use the existing eSpeak runtime; real Xiaomi playback remains a separate Preview acceptance gate.
+
 ## v1.3.14 - 2026-09-05
 
 Reconciles the production ancestry required by the protected deployment workflow.
@@ -9,286 +40,114 @@ Reconciles the production ancestry required by the protected deployment workflow
 
 ## v1.3.13 - 2026-09-05
 
-统一影伴首页可见品牌与结构化数据。
+Aligns the visible Shadow Mate brand and structured application data.
 
-- 首页标题与未登录副标题使用最新家庭成长工作台定位。
-- 结构化数据补充版本、稳定实体 ID 与 Shadow Nexus 发布方关系。
-- 增加静态与浏览器回归，避免运行时回退旧文案。
+- Shows “影伴 Shadow Mate” and the family growth workspace positioning on the signed-out page.
+- Adds stable application and publisher entities plus release-version metadata for search systems.
+- Adds static and browser regressions that prevent the old signed-out subtitle from returning.
 
 ## v1.3.12 - 2026-09-01
 
-修复重新登录后学习者切换异常与家庭注销后重新登录边界问题。
+- Fixed a learner switch that could remain incomplete after signing in again and creating a new family space.
+- Hardened local and Preview environment boundaries so development does not silently connect to production services.
+- Fixed product identification in local Auth emails so they no longer fall back to the Shadow Nexus brand.
 
-- 修复 `signOut()` 后的过期租约与学习者上下文残留。
-- 修复已删除家庭再次登录时的 Profile 自动恢复。
-- 单元测试与 E2E 回归全部通过。
+## v1.3.11 - 2026-09-01
 
-## v1.3.11 - 2026-08-31
-
-每日书写练习纸专用打印排版与云端档案激活性能优化。
-
-- 引入每日书写练习轮转纸专用打印模板（支持分页与打印样式优化）。
-- 优化云端档案激活流程，减少多子女生效时的往返延迟。
+- Unified product identification for sign-in verification, email changes, invitations, two-factor verification, and password recovery emails.
+- Kept the shared SMTP sender as `Shadow Nexus` while showing the correct product brand in the email content.
+- Fixed re-login with the same authentication account after deleting family data; users can return to the signed-in state and create a new family learning space.
 
 ## v1.3.10 - 2026-08-23
 
-多儿童学习者档案隔离与并发租约锁加固（SHA-17）。
-
-- 引入不可变租约锁机制，彻底消除切换不同儿童档案时的本地缓存竞态条件与漂移。
-- 完善 fail-closed 本地写入与离线恢复逻辑。
+- Fixed daily writing points selecting the wrong workbook across month and year boundaries.
+- Fixed concurrency issues during learner switching so records are not written or synced to the wrong learner.
 
 ## v1.3.9 - 2026-08-19
 
-Growth Loop 积分闭环与期初积分自动导入（SHA-12 事故闭环）。
-
-- 自动导入旧积分每日明细，恢复学习者历史余额与激励闭环。
-- 修复连续打卡记录同步与离线快照重试退避机制。
+- Added Growth Loop points, including a points ledger, custom point items, growth projects, rewards, and redemption.
+- Added opening-balance recovery so a parent or guardian can restore previous points once.
+- Unified the brand templates for email changes, invitations, two-factor verification, and password recovery.
+- Improved the local Supabase test environment connection path.
 
 ## v1.3.8 - 2026-08-15
 
-语音体验与 CDN 加速。
+- Moved the offline English speech model for Android devices without GMS to the `voice.shadow.wang` CDN; it is downloaded once, cached, and then available offline.
+- Simplified local speech inference by removing local model shards and Worker runtime resources.
+- Updated the user guide, third-party notices, and network security policy.
 
-- 将离线 Piper 英语语音模型迁移至 `voice.shadow.wang` 专用 CDN。
-- 清理废弃的旧版本语音包静态文件，降低安装包体积。
+## v1.3.7 - 2026-08-13
 
-## v1.3.7 - 2026-08-12
-
-- 优化 Android 端离线英语语音合成与发音稳定性。
+- Updated the English speech fallback for Android devices without GMS to `en_US-lessac-high`, improving short or incomplete word output.
+- Devices with a usable English system voice continue to prefer system TTS; other devices use local Piper in the browser.
 
 ## v1.3.6 - 2026-08-12
 
-修复生产环境隐私政策页面显示 HTML 源代码的问题。
-
-### 本次更新
-
-- `/privacy` 和 `/privacy/` 改为 Vercel 静态 HTML 页面。
-- 隐私页样式拆分为独立 CSS 文件。
-- 增加构建产物、路由和 `Content-Type` 校验。
-
-### 验证结果
-
-- `npm run verify` 通过。
-- Release 校验和生产环境回归验证通过。
-- 生产 `/privacy` 返回 `text/html; charset=utf-8`。
-
-### 发布包
-
-文件：`shadow-mate-v1.3.6.zip`
-
-SHA-256：`7cc7ccf6b7eee0a866521d3e01aef9315d9faccadaa46c1f22ed51d4d32e387a`
-
-### 部署清单（已完成）
-
-- PR #33 已合并到 `main`，合并提交为 `2836a7c`。
-- Git tag `v1.3.6` 和 GitHub Release 已发布。
-- 生产 `/privacy` 和 `/privacy/` 均已验证为正常 HTML 页面。
+- Fixed the privacy policy page displaying raw HTML source.
+- Served `/privacy` and `/privacy/` as normal static HTML pages.
+- Improved privacy page styling and production compatibility.
 
 ## v1.3.5 - 2026-08-12
 
-影伴商业化准备与隐私/安全边界修订版本，面向 Dogfooding 和小规模内测。
-
-- 增加家长/监护人同意审计、学习者隐私访问边界和双语隐私说明页面。
-- 隐私页源文件会随 Vercel 构建输出为静态页面，避免 Supabase Storage 将 HTML 按纯文本返回。
-- 隐私页增加影伴品牌首屏、成长轨道视觉、数据最小化原则卡片和移动端布局；本地 `/privacy` 与 `/privacy/` 路由已和生产入口保持一致。
-- 隐私页品牌标识和返回应用入口使用当前站点相对路径，确保本地、Preview 和生产环境不会跨环境跳转。
-- 应用页脚首位增加 Shadow Nexus 产品主页链接，社交媒体和隐私政策入口保持不变。
-- 增加公开仓库 Git/Release 防线，检查公开范围、密钥、最终产物、第三方资源哈希与部署响应头。
-- 将 Piper 英语声音模型切换为 `en_US-ljspeech-medium`，并同步第三方来源与许可证记录。
-- 新增迁移 `20260812081305_learning_has_password_anon_safe_error.sql`：避免本地 PostgreSQL 在匿名调用密码状态 RPC 时因权限拒绝触发后端崩溃。
-- `learning_has_password()` 改为 `SECURITY DEFINER` 并保留内部 `auth.uid()` 检查；匿名调用仍返回 `42501`，不暴露密码状态。
-
-### 验证结果
-
-- `npm run build` 通过。
-- `npm run test:unit`：72/72 通过。
-- 离线 Chromium E2E：25/25 通过，包含本地隐私页路由、品牌页渲染和主应用回归。
-- `npm run test:db`：58/58 通过。
-- `npm run public:check`、`npm run security:check`、`npm run release:check` 通过。
-
-### 部署清单
-
-1. 合并 PR #31 到 `main`，由 Vercel 部署包含静态 `/privacy` 页面和品牌化页面的应用版本。
-2. 按 [`docs/privacy-policy-publishing.md`](docs/privacy-policy-publishing.md) 完成构建产物和响应头验收。
-3. 验证 `https://sm.shadow.wang/privacy` 显示品牌首屏、中英文内容、语言锚点和移动端布局。
+- Added parent or guardian consent records and learner privacy data boundaries.
+- Added a bilingual privacy page and Shadow Mate branded landing content.
+- Improved the privacy page growth-track presentation, data-minimization explanation, and mobile layout.
+- Improved English speech fallback on domestic Android devices.
 
 ## v1.3.4 - 2026-08-10
 
-离线英语发音、CSP 和开发环境兼容性修复版本。
-
-- 下载过程中按已接收字节动态显示百分比；服务端没有返回总大小时显示动态下载状态，并支持随时取消。
-- 下载期间提前预热 Piper 引擎，减少下载完成后停在“合成中…”或短暂显示“发音未响应”的情况。
-- 收口下载、引擎加载和合成失败状态，按钮不再停留在“合成中…”或“发音未响应”。
-- 补充 `media-src 'self' blob:`，允许播放浏览器本地生成的音频；CSP 仍不允许 `unsafe-eval`。
-- 修复 Vite 开发环境加载 `/piper-tts-web.js?import` 返回 500 的问题。
-- 本地 `npm run verify` 通过，单元测试 66/66；Piper 开发资源、下载失败、引擎预热和系统语音回退 E2E 均通过。
-
-### 部署清单
-
-1. 合并 PR #30 到 `main`，由 Vercel 自动部署前端。
-2. 在生产响应头确认 `script-src 'self' 'wasm-unsafe-eval'`，并确认 `connect-src` 与 `media-src` 均包含 `blob:`。
-3. 在已下载语音包的设备点击“听发音”，验证系统语音无响应时能自动切换 Piper；同时回归无 GMS Android 首次下载、百分比/动态进度、取消和离线发音。
-4. 本地开发重启 `npm run dev` 后，确认 `/piper-tts-web.js?import` 返回 200，再验证本地 Piper 发音。
-
----
+- Improved offline speech download progress, cancellation, and failure messages.
+- Warmed up the speech engine to reduce the wait after downloading a model.
+- Fixed incorrect state after local Piper speech failures.
+- Improved speech resource loading in development environments.
 
 ## v1.3.3 - 2026-08-09
 
-离线英语发音稳定性修复版本。
-
-- 系统语音列表可用但实际播放无响应时，自动取消卡住的系统语音并回退到本地 Piper。
-- 系统语音报错或抛异常时同样进入本地回退。
-- 已缓存离线语音包时直接开始合成，不再重复停留在下载弹窗。
-- 本地 `npm run verify` 通过，单元测试 65/65。
-
-### 部署清单
-
-1. 合并 PR #26 到 `main`，由 Vercel 自动部署前端。
-2. 在已下载语音包的设备点击“听发音”，验证系统语音无响应时能自动切换 Piper；同时回归无 GMS Android 首次下载和离线发音。
-
----
+- Automatically fall back to local Piper when system speech is unresponsive or fails.
+- Start synthesis directly when an offline speech package is already cached.
 
 ## v1.3.2 - 2026-08-09
 
-离线英语发音下载与 macOS CSP 兼容性修复版本。
-
-- 修复 macOS Chrome 中 Piper 离线发音被 CSP 阻断的问题：允许 `blob:` 和 `wasm-unsafe-eval`，继续禁止 `unsafe-eval`。
-- 下载语音包时按流式读取动态更新进度；没有 `Content-Length` 时显示动态下载状态，并可随时取消。
-- 下载失败、CSP 阻断或合成超时会结束“合成中…”状态并给出可重试提示。
-- 补充标准 `mobile-web-app-capable` 元标签。
-- 发布前验证：`npm run verify` 通过，单元测试 65/65，离线语音失败路径 E2E 1/1 通过。
-
-### 部署清单
-
-1. 合并本分支 PR 到 `main`，由 Vercel 自动部署前端。
-2. 在生产响应头确认 `script-src 'self' 'wasm-unsafe-eval'`，并确认 `connect-src` 包含 `blob:`。
-3. 在 MacBook Chrome 验证取消弹窗后再次“听发音”、刷新页面后首次合成，以及无 GMS Android 的下载进度、取消和离线发音。
-
----
+- Fixed offline speech being blocked by the security policy in macOS Chrome.
+- Improved streaming download progress, cancellation, and failure messages.
+- Added mobile Web App compatibility metadata.
 
 ## v1.3.1 - 2026-08-09
 
-夜间模式可读性修复版本。
-
-- 增加系统暗色主题和浏览器 `color-scheme` 声明，修复 Android/Chrome 夜间强制着色导致的页面发灰、卡片过暗和文字对比不足。
-- 统一首页、学习控件、指南、语音弹窗和账户弹窗的深色表面与强调色。
-- 新增 3 条夜间模式 Chromium E2E 测试；本地离线 E2E 23/23、云端 mock E2E 24/24 通过。
-- 固定构建链间接依赖 `nanoid` 到 `3.3.18`，消除高危审计告警。
-
-### 部署清单
-
-1. 合并 `codex/fix/dark-mode` 到 `main`，Vercel 自动部署前端。
-2. 在暗色系统/Android Chrome 验证首页、学习模块和账户弹窗的文字对比度。
-
----
+- Added system dark-theme support and improved readability in Android and Chrome night modes.
+- Unified dark surfaces and accent colors across the home page, learning controls, guides, speech dialog, and account dialog.
 
 ## v1.3.0 - 2026-08-05
 
-国产 Android（无 GMS）英语发音兜底版本。
-
-- 新增本地 Piper 语音合成兜底：系统没有英语语音时，首次点“听发音”会提示下载影伴内置的离线语音包（约 90MB，一次性，可离线使用，不上传录音），在浏览器本地合成发音。
-- 系统有英语语音时仍优先走系统 TTS，其他设备不受影响。
-- 移除 `README.preview.html` 的 git 跟踪（本地文件保留）。
-- 修复：审计清理迁移兼容无 pg_cron 环境；修正 pgTAP 数据库测试 `plan` 数（47→48）。
-- 依赖致谢：`piper-tts-web` / `rhasspy/piper` / `ONNX Runtime Web` / `rhasspy/piper-voices`（均 MIT）。
-
-### 部署清单
-
-1. 合并 `codex/piper-tts` 到 `main`，Vercel 自动部署前端。
-2. 在国产 Android 设备验证首次点“听发音”的下载确认、进度与本地发音；确认后模型已缓存可离线使用。
-
----
+- Added a local Piper speech fallback for devices without an English system voice; the model can be downloaded once and used offline in the browser.
+- Devices with an English system voice continue to prefer system TTS.
 
 ## v1.1.1 - 2026-08-04
 
-冲突风暴热修复版本。
+- Added sync conflict circuit breaking with manual recovery.
+- Fixed point-limit usage being consumed incorrectly during conflict handling.
+- Improved conflict recovery and scheduled saves.
 
-- 冲突熔断：版本冲突达到重试上限后设置 `cloudSyncBlocked`，暂停自动同步，阻止多标签页/旧客户端持续制造冲突请求；用户手动点击同步按钮可清除熔断并重试。
-- 频控位置修正：将 `learning_save_state` 中频控计数从冲突检查之前移到之后，使冲突异常不再回滚频控预算；频控只在实际写入时消耗。
-- `scheduleSave` 熔断时清除旧 timer，避免无意义触发。
-- E2E 新增熔断阻止和手动恢复两个用例；数据库测试新增频控位置验证。
-- 本地 Supabase Postgres 17.6.1.106 在匿名密码状态权限断言时发生 SIGSEGV（已知问题，CI pgTAP 42/42 通过）。
+## v1.1.0 - 2026-08-03
 
-### 部署清单
+- Added static-resource version detection and self-healing refreshes for stale or broken pages.
+- Added per-user and per-operation request rate limits to protect sync stability.
+- Fixed new-user password state detection, password-reset redirects, and family-space initialization.
 
-1. 合并到 `main`，Vercel 自动部署前端。
-2. 在生产 Supabase 执行第 13 条迁移 `20260804120000_learning_save_state_rate_limit_position.sql`。
-3. 观察生产 `learning_state_conflict` 是否在 5-10 分钟内停止增长。
-4. 提醒用户刷新页面以加载含熔断逻辑的新版。
+## v1.0.1 - 2026-08-02
 
----
+- Unified learning-module check-in statistics, growth calendar legends, and points calendar states.
+- Added verification codes, in-app verification links, and multi-product branding to sign-in emails.
+- Improved family deletion and in-app error recovery.
 
-## v1.1.0 — 2026-08-03
+## v1.0.0 - 2026-08-01
 
-影伴 Shadow Mate 第二个生产修订版本。
+- Added the learning check-in PWA with Chinese, mathematics, English, and picture-book modules.
+- Added points check-ins and growth records.
+- Added passwordless parent email sign-in with multiple learners per family.
+- Added cross-device cloud sync and offline use.
+- Added responsive layouts and optional desktop installation.
+- Added family-level data isolation, content security policy, and an ad-free experience.
+- Added Chinese sign-in verification emails and magic links.
 
-- 前端检测静态模块资源版本变化并自动刷新；连续 JavaScript 异常达到阈值时自动自愈刷新，并带冷却保护避免刷新循环。
-- 新增按用户和 RPC key 的数据库滑动窗口频控；`learning_save_state` 默认限制为每用户 60 秒 30 次，超限显示中文提示并保护 Postgres 日志。
-- 修复 OTP 新用户被 GoTrue 自动生成密码哈希后误判为已设置密码的问题，密码状态改由用户主动设置的元数据标记判断。
-- 修复密码重设邮件跳转到错误本地端口导致 `otp_expired` 的问题。
-- 修复真实本地 Supabase E2E 在新用户自动打开家庭空间窗口后的测试同步问题。
-
-### 发布验收
-
-- PR #12 已合并到 `main`，CI、CodeQL 和 JavaScript/TypeScript 分析全部通过。
-- 本地 `npm run verify` 通过；单元测试 60/60，完整 Playwright E2E 为 42 通过、1 个按环境跳过；CI pgTAP 数据库测试 42/42 通过。
-- 生产 Supabase 已执行 3 个新增迁移，迁移记录已包含密码状态 RPC、OTP 状态修复和 RPC 频控。
-- Vercel 生产部署已完成，部署 commit 为合并后的 `main` 提交 `e6ef77e`，生产域名为 [sm.shadow.wang](https://sm.shadow.wang/)。
-- Confirm signup、Magic Link 和 Reset password 三套生产 Supabase Auth 邮件模板已通过 CLI 配置推送并完成幂等核验。
-
-### 回归环境备注
-
-- 本机 `npm run test:db` 在执行匿名用户密码状态权限断言时触发本地 Postgres `SIGSEGV`，导致连接中断；该问题只发生在本地 Docker 数据库，CI 的同套 42 条 pgTAP 测试已通过，生产数据库未受影响。
-
-## v1.0.1 历史变更摘要
-
-- 支持邮箱验证码和共享邮箱密码两种登录方式，并提供设置、修改和找回密码。
-- 注册、登录、找回密码邮件统一按请求域名显示 Shadow Mate、Shadow Card 或 Shadow Size 品牌。
-- 全局防重复点击与异步操作锁避免重复创建孩子、重复同步或重复删除。
-- 云端版本冲突最多自动重试 2 次并逐次退避，超过上限停止请求并提示刷新，避免客户端死循环。
-- 新增密码状态最小权限迁移；发布前需完成本地数据库测试并增量同步生产迁移和 Recovery 模板。
-- 本地发布前验证已覆盖 60 个单元测试、42 个 mock E2E 测试、真实本地 Supabase 生命周期 E2E，以及 42 个数据库测试。
-
-## v1.0.1 — 2026-08-02
-
-影伴 Shadow Mate 发布首个生产修订版本。
-
-### 修复与改进
-
-- 统一四个学习模块的打卡统计、成长日历图例和积分日历状态说明。
-- Confirm signup 与 Magic Link/OTP 支持验证码输入、应用内验证链接和多项目品牌识别。
-- 修复家庭删除函数在 CI 启动阶段的预热问题，并保留共享项目身份隔离保护。
-- CI 不再输出完整 `supabase status` 或敏感状态字段，只注入测试所需的环境变量。
-- 升级 jsdom 依赖并通过主分支 CI、CodeQL、数据库测试和 E2E 验证。
-
-### 发布验收
-
-- 生产 Supabase 与仓库中的 8 个迁移版本一致，无待执行迁移。
-- Vercel Preview 已验收并提升到 Production。
-- 生产地址：[sm.shadow.wang](https://sm.shadow.wang/)
-
-## v1.0.0 — 2026-08-01
-
-影伴 Shadow Mate 首个开源版本。
-
-### 新功能
-
-- 学习打卡 PWA：四个学习模块（语文、数学、英语、绘本），以及积分打卡、成长记录
-- 家长邮箱免密码登录，一个家庭管理多个孩子
-- 云端跨设备同步，离线也能用
-- 平板/电脑/手机自适应，可安装到桌面
-
-### 安全
-
-- CSP 无 unsafe-inline，所有样式和脚本外置
-- 家庭级数据隔离（Supabase RLS）
-- 无第三方追踪或广告脚本
-
-### 登录邮件
-
-- 中文模板，标题「影伴 Shadow Mate 登录验证」
-- 发件人「Shadow Nexus」
-- 邮箱魔法链接，无需密码
-
----
-
-详细变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+See [CHANGELOG.md](CHANGELOG.md) for detailed technical changes.

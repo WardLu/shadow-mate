@@ -1,4 +1,4 @@
-// 启蒙学习包 v1 —— 轻量代码注册表。
+// 启蒙学习包 V2 / P2 —— 轻量代码注册表。
 // 这是唯一的内容包/模块定义来源：稳定 ID、名称、图标、既有内容入口与记录类型。
 // 孩子级启停配置保存在学习状态 envelope 的 learning.content_config 中，
 // 不新增内容包数据库表；本模块不产生积分流水。
@@ -6,9 +6,9 @@
 export const CONTENT_CONFIG_SCHEMA_VERSION = 1;
 
 export const FOUNDATION_PACKAGE = Object.freeze({
-  id: "foundation-v1",
-  version: 1,
-  name: "启蒙学习包 v1",
+  id: "foundation-v2",
+  version: 2,
+  name: "启蒙学习包 V2",
   suggested_age: "4-5",
   goals: ["识字与阅读", "数感启蒙", "英语启蒙", "亲子共读"],
   modules: Object.freeze([

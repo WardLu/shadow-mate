@@ -13,7 +13,7 @@
 
 当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。Vercel 文档说明页面访问数据可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
 
-当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。
+固定课程文字会在发布准备阶段发送给腾讯云语音合成，生成后的 MP3 保存在项目自己的 COS/CDN 中供所有用户复用。用户点击播放时不会把文字、学习记录、账号信息或儿童资料发送给腾讯云，也不会触发新的付费合成。浏览器可能按标准 HTTP 规则缓存这些音频。影伴不采集麦克风录音。
 
 ## 家长同意和学习者档案
 

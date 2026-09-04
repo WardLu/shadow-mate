@@ -1,0 +1,325 @@
+import { describe, expect, it } from "vitest";
+import {
+  createScopedStateStorage,
+  rebindStateScope,
+} from "../../src/local-state.js";
+import {
+  mergeState,
+} from "../../src/lib.js";
+import {
+  recordWorksheetCompletion,
+  resolveDailyWorksheet,
+} from "../../src/hanzi-worksheet-rotation.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
+
+const LEGACY_KEY = "shadow_mate_workbench_v1";
+const SCOPED_KEY = "shadow_mate_workbench_scoped_v1";
+
+class MemoryStorage {
+  constructor(entries = {}) {
+    this.entries = new Map(Object.entries(entries));
+    this.setCalls = 0;
+    this.failWrites = false;
+    this.failRemoves = new Set();
+    this.onGet = null;
+  }
+
+  getItem(key) {
+    const value = this.entries.has(key) ? this.entries.get(key) : null;
+    const hook = this.onGet;
+    this.onGet = null;
+    if (hook && hook(key, value) === false) this.onGet = hook;
+    return value;
+  }
+
+  setItem(key, value) {
+    this.setCalls += 1;
+    if (this.failWrites) throw new Error("storage write failed");
+    this.entries.set(key, String(value));
+  }
+
+  removeItem(key) {
+    if (this.failRemoves.has(key)) throw new Error("storage remove failed");
+    this.entries.delete(key);
+  }
+}
+
+function createAdapter(storage) {
+  return createScopedStateStorage({
+    storage,
+    legacyKey: LEGACY_KEY,
+    scopedKey: SCOPED_KEY,
+    normalize: (state) => structuredClone(state && typeof state === "object" ? state : {}),
+  });
+}
+
+function stateWith(marker) {
+  return {
+    checkins: { "2026-09-01": { [marker]: true } },
+    extra: { hanziWorksheetRotationV1: { marker } },
+    points: {},
+    bookShelf: {},
+    peanutLog: [],
+    peanutRead: {},
+  };
+}
+
+describe("scoped local state storage", () => {
+  it("copies the legacy state to anonymous once and does not overwrite it", () => {
+    const legacyState = stateWith("legacy");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    const scoped = createAdapter(storage);
+
+    scoped.migrateLegacyToAnonymous();
+
+    expect(scoped.load("anonymous")).toEqual(legacyState);
+    expect(JSON.parse(storage.getItem(SCOPED_KEY))).toEqual({
+      schemaVersion: 1,
+      scopes: { anonymous: legacyState },
+    });
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+
+    const writesAfterMigration = storage.setCalls;
+    storage.entries.set(LEGACY_KEY, JSON.stringify(stateWith("should-not-win")));
+    scoped.migrateLegacyToAnonymous();
+
+    expect(storage.setCalls).toBe(writesAfterMigration);
+    expect(scoped.load("anonymous")).toEqual(legacyState);
+  });
+
+  it("keeps the legacy key when copying fails", () => {
+    const legacyState = stateWith("preserved");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    storage.failWrites = true;
+    const scoped = createAdapter(storage);
+
+    expect(() => scoped.migrateLegacyToAnonymous()).not.toThrow();
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(legacyState));
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(scoped.load("anonymous")).toEqual(legacyState);
+  });
+
+  it("degrades corrupt legacy JSON to an empty anonymous state", () => {
+    const storage = new MemoryStorage({ [LEGACY_KEY]: "{not-json" });
+    const scoped = createAdapter(storage);
+
+    scoped.migrateLegacyToAnonymous();
+
+    expect(scoped.load("anonymous")).toEqual({});
+    expect(JSON.parse(storage.getItem(SCOPED_KEY))).toEqual({
+      schemaVersion: 1,
+      scopes: { anonymous: {} },
+    });
+  });
+
+  it("keeps profile scopes isolated and removes only the requested scope", () => {
+    const storage = new MemoryStorage();
+    const scoped = createAdapter(storage);
+    const profileA = stateWith("profile-a");
+    const profileB = stateWith("profile-b");
+
+    scoped.save("profile:a", profileA);
+    scoped.save("profile:b", profileB);
+
+    expect(scoped.listScopes()).toEqual(["profile:a", "profile:b"]);
+    expect(scoped.load("profile:a")).toEqual(profileA);
+    expect(scoped.load("profile:b")).toEqual(profileB);
+
+    scoped.remove("profile:a");
+
+    expect(scoped.load("profile:a")).toEqual({});
+    expect(scoped.load("profile:b")).toEqual(profileB);
+    expect(scoped.listScopes()).toEqual(["profile:b"]);
+  });
+
+  it("retries a stale envelope read so concurrent scope saves do not overwrite each other", () => {
+    const storage = new MemoryStorage();
+    const firstTab = createAdapter(storage);
+    const secondTab = createAdapter(storage);
+    const stateA = stateWith("profile-a");
+    const stateB = stateWith("profile-b");
+
+    let scopedReads = 0;
+    storage.onGet = (key) => {
+      if (key !== SCOPED_KEY) return false;
+      scopedReads += 1;
+      if (scopedReads !== 4) return false;
+      secondTab.save("profile:b", stateB);
+    };
+
+    expect(firstTab.save("profile:a", stateA)).toBe(true);
+    expect(scopedReads).toBeGreaterThanOrEqual(4);
+    expect(firstTab.load("profile:a")).toEqual(stateA);
+    expect(firstTab.load("profile:b")).toEqual(stateB);
+  });
+
+  it("normalizes every state read and write without mutating the envelope", () => {
+    const storage = new MemoryStorage();
+    let normalizeCalls = 0;
+    const normalize = (state) => {
+      normalizeCalls += 1;
+      return { value: state?.value || 0, normalized: true };
+    };
+    const scoped = createScopedStateStorage({ storage, normalize });
+    const input = { value: 7, ignored: "input-only" };
+
+    scoped.save("profile:a", input);
+    input.value = 99;
+    const storedBeforeRead = JSON.parse(storage.getItem("shadow_mate_workbench_scoped_v1"));
+    const loaded = scoped.load("profile:a");
+    loaded.value = 42;
+
+    expect(storedBeforeRead.scopes["profile:a"]).toEqual({ value: 7, normalized: true });
+    expect(loaded).toEqual({ value: 42, normalized: true });
+    expect(JSON.parse(storage.getItem("shadow_mate_workbench_scoped_v1"))).toEqual(storedBeforeRead);
+    expect(normalizeCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  it("clears the legacy key and every scoped state", () => {
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("anonymous", stateWith("anonymous"));
+    scoped.save("profile:a", stateWith("profile-a"));
+
+    scoped.clear();
+
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(scoped.listScopes()).toEqual([]);
+  });
+
+  it("returns failure for remove and clear without hiding storage errors", () => {
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", stateWith("profile-a"));
+
+    storage.failRemoves.add(SCOPED_KEY);
+    expect(scoped.remove("profile:a")).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(stateWith("profile-a"));
+
+    storage.failRemoves.add(LEGACY_KEY);
+    expect(scoped.clear()).toBe(false);
+    expect(storage.getItem(LEGACY_KEY)).not.toBeNull();
+  });
+
+  it("restores scoped data when legacy cleanup fails after scoped cleanup", () => {
+    const legacyState = stateWith("legacy");
+    const profileState = stateWith("profile-a");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", profileState);
+    storage.failRemoves.add(LEGACY_KEY);
+
+    expect(scoped.clear()).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(profileState);
+    expect(storage.getItem(SCOPED_KEY)).not.toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(legacyState));
+
+    storage.failRemoves.delete(LEGACY_KEY);
+    expect(scoped.clear()).toBe(true);
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+  });
+
+  it("keeps legacy and scoped data recoverable when scoped cleanup fails", () => {
+    const profileState = stateWith("profile-a");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("profile:a", profileState);
+    storage.failRemoves.add(SCOPED_KEY);
+
+    expect(scoped.clear()).toBe(false);
+    expect(scoped.load("profile:a")).toEqual(profileState);
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("legacy")));
+
+    storage.failRemoves.delete(SCOPED_KEY);
+    expect(scoped.clear()).toBe(true);
+    expect(storage.getItem(SCOPED_KEY)).toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBeNull();
+  });
+
+  it("does not report anonymous removal when legacy cleanup fails", () => {
+    const anonymousState = stateWith("anonymous");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(stateWith("legacy")) });
+    const scoped = createAdapter(storage);
+    scoped.save("anonymous", anonymousState);
+    storage.failRemoves.add(LEGACY_KEY);
+
+    expect(scoped.remove("anonymous")).toBe(false);
+    expect(scoped.load("anonymous")).toEqual(anonymousState);
+    expect(storage.getItem(SCOPED_KEY)).not.toBeNull();
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("legacy")));
+  });
+
+  it("does not repeat or overwrite migration when legacy cleanup fails", () => {
+    const legacyState = stateWith("legacy");
+    const storage = new MemoryStorage({ [LEGACY_KEY]: JSON.stringify(legacyState) });
+    storage.failRemoves.add(LEGACY_KEY);
+    const scoped = createAdapter(storage);
+
+    expect(scoped.migrateLegacyToAnonymous()).toBe(true);
+    const writesAfterFirstMigration = storage.setCalls;
+    storage.entries.set(LEGACY_KEY, JSON.stringify(stateWith("should-not-win")));
+
+    expect(scoped.migrateLegacyToAnonymous()).toBe(false);
+    expect(storage.setCalls).toBe(writesAfterFirstMigration);
+    expect(scoped.load("anonymous")).toEqual(legacyState);
+    expect(storage.getItem(LEGACY_KEY)).toBe(JSON.stringify(stateWith("should-not-win")));
+  });
+
+  it("rebinds rotation assignments and completions only for explicit migration", () => {
+    const pack = getActiveHanziWritingPack();
+    const anonymousScope = "anonymous";
+    const profileScope = "profile:learner-b";
+    const first = resolveDailyWorksheet({
+      rotationState: {},
+      pack,
+      learnerScope: anonymousScope,
+      now: new Date("2026-09-01T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+    const completed = recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: "2026-09-01T01:00:00.000Z",
+    });
+    const second = resolveDailyWorksheet({
+      rotationState: completed,
+      pack,
+      learnerScope: anonymousScope,
+      now: new Date("2026-09-02T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+    const sourceState = {
+      checkins: {},
+      extra: { hanziWorksheetRotationV1: second.rotationState },
+      points: {},
+      bookShelf: {},
+      peanutLog: [],
+      peanutRead: {},
+    };
+
+    const reboundState = rebindStateScope(sourceState, profileScope);
+    const reboundRotation = reboundState.extra.hanziWorksheetRotationV1;
+    expect(reboundRotation.learnerScope).toBe(profileScope);
+    expect(Object.keys(reboundRotation.assignments)).toEqual(["2026-09-01", "2026-09-02"]);
+
+    for (const assignment of Object.values(reboundRotation.assignments)) {
+      for (const [assignmentId, worksheet] of Object.entries(assignment.candidates)) {
+        expect(assignmentId).toBe(worksheet.assignmentId);
+        expect(assignmentId).not.toBe(first.worksheet.assignmentId);
+      }
+    }
+    const completionIds = Object.keys(reboundRotation.assignments["2026-09-01"].completions);
+    expect(completionIds).toHaveLength(1);
+    expect(reboundRotation.assignments["2026-09-01"].candidates[completionIds[0]]).toBeDefined();
+    expect(reboundRotation.assignments["2026-09-01"].completions[completionIds[0]]).toEqual({
+      completedAt: "2026-09-01T01:00:00.000Z",
+    });
+
+    expect(() => mergeState(
+      sourceState,
+      reboundState,
+    )).toThrow(/learnerScope/);
+  });
+});

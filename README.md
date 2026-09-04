@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.3.14</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.4.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -33,6 +33,7 @@ Shadow Mate is designed around a family's daily learning routine: what was learn
 ## What it does
 
 - **Four learning modules**: Chinese, mathematics, English, and picture books; tasks can be checked in or cancelled independently.
+- **One learning entry**: open “学习” (Learning) in the left navigation first, then choose Chinese, mathematics, English, or picture books; Points, Growth, and Guide remain separate top-level pages.
 - **Growth records**: completion is summarized by learning module over the last 30 days, with daily progress shown as `completed/4`.
 - **Points calendar**: behavior points are recorded separately from learning modules and can be reviewed or backfilled by date.
 - **Family space**: one parent manages multiple learners, with records loaded for the active learner.
@@ -175,16 +176,20 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-“Listen” prefers an English system voice when one is available. Devices without a usable English system voice, especially Android devices without GMS, use local Piper in the browser. The first use downloads and caches the `en_US-ljspeech-medium` model from `voice.shadow.wang`; after that, synthesis works offline. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+Fixed curriculum speech is generated during release preparation with Tencent Cloud TTS and served as immutable MP3 files from `voice.shadow.wang`. Mandarin uses the audition-approved Zhike voice (`101030`) and English uses WeJack (`101050`). All users reuse the same published clips, while normal browser HTTP caching reduces repeat transfers; users no longer download a 154.6 MB browser model. If a published clip cannot play, Shadow Mate tries only a matching system-language voice. Runtime playback never calls Tencent's paid synthesis API and Shadow Mate does not collect microphone recordings.
 
 ## Acknowledgements
 
-The speech fallback uses these open-source projects:
+The active fixed-content speech path uses Tencent Cloud TTS at release time. The repository temporarily retains the following deprecated local speech assets only for rollback history and explicit browser-cache cleanup:
+
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0): retired audited WebAssembly TTS runtime
+- [matcha-icefall-zh-en](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html): retired Chinese-English model
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro) (MIT): Chinese Pinyin phoneme conversion for the Chaowen voice
 - [rhasspy/piper](https://github.com/rhasspy/piper) (MIT): lightweight neural speech synthesis
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT): browser inference runtime
-- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` voice model distributed through `voice.shadow.wang`
+- [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices): the `en_US-ljspeech-medium` and `zh_CN-chaowen-medium` voice models distributed through `voice.shadow.wang`
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and license details.
 

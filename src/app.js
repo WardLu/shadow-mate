@@ -1,20 +1,26 @@
 import { inject } from "@vercel/analytics";
-import { buildMissingSequence, escapeHtml, selectDailyWritingGroups } from "./lib.js";
+import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
+import {
+  renderWritingPrintSheetHtml,
+  renderWritingWorksheetHtml,
+} from "./hanzi-writing-view.js";
+import { openWritingPrintWindow } from "./writing-print.js";
+import {
+  recordWorksheetCompletion,
+  resolveDailyWorksheet,
+} from "./hanzi-worksheet-rotation.js";
+import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
-import {
-  askDownloadVoice,
-  ENGINE_LOAD_TIMEOUT_MS,
-  hasSystemEnglishVoice,
-  prepareLocalVoice,
-  speakLocally,
-  SYNTHESIS_TIMEOUT_MS,
-  withTimeout,
-} from "./piper-tts.js";
+import { mountPiperResourceManager } from "./piper-resource-ui.js";
+import { createPublishedSpeechPlayer } from "./tencent-tts-player.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   createLearningState,
+  getHanziRotationState,
+  hasCompatibleHanziRotationScope,
   hasCheckin,
+  replaceHanziRotationState,
   transitionLearningState,
 } from "./learning-state.js";
 import { getLearningStateStorageKey, migrateLegacyLearningState } from "./learning-state-envelope.js";
@@ -39,6 +45,7 @@ import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPer
 inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
+const publishedSpeechPlayer = createPublishedSpeechPlayer();
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -86,7 +93,20 @@ const POEMS = [
 ];
 
 const STROKES = ["点","横","竖","撇","捺","提","折","钩"];
-const WRITE_WORDS = ["一二三人","上下大","口手日","月水火","木山中","田土石","天王马","牛羊鸟"];
+const STROKE_GLYPHS = Object.freeze({
+  点: "丶",
+  横: "一",
+  竖: "丨",
+  撇: "丿",
+  捺: "㇏",
+  提: "㇀",
+  折: "㇕",
+  钩: "亅",
+});
+
+function renderStrokeChip(stroke) {
+  return `<span class="stroke-chip" aria-label="基础笔画：${escapeHtml(stroke)}"><span class="stroke-glyph" aria-hidden="true">${escapeHtml(STROKE_GLYPHS[stroke] || "")}</span><span>${escapeHtml(stroke)}</span></span>`;
+}
 
 const ENGLISH = [
   ["apple","/ˈæp.əl/","苹果","水果"],["banana","/bəˈnɑː.nə/","香蕉","水果"],["orange","/ˈɒr.ɪndʒ/","橙子","水果"],
@@ -216,6 +236,84 @@ if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已�
 
 let learningEnvelope = loadLearningStateEnvelope(learningStateReadStorage(), {});
 
+const WRITING_PRINT_ROOT_ID = "writingPrintRoot";
+let activeWorksheetSnapshot = null;
+
+function getLearningTimeZone() {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof timeZone === "string" && timeZone.length > 0 ? timeZone : "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function getHanziLearnerScope() {
+  const profileId = learningEnvelope?.scope?.profile_id;
+  return typeof profileId === "string" && profileId.length > 0
+    ? `profile:${profileId}`
+    : "anonymous";
+}
+
+function removeWritingPrintRoot() {
+  document.getElementById(WRITING_PRINT_ROOT_ID)?.remove();
+  activeWorksheetSnapshot = null;
+}
+
+function createWritingPrintRoot(worksheet) {
+  removeWritingPrintRoot();
+  activeWorksheetSnapshot = structuredClone(worksheet);
+  const root = document.createElement("div");
+  root.id = WRITING_PRINT_ROOT_ID;
+  root.className = "writing-print-root";
+  root.innerHTML = renderWritingPrintSheetHtml(activeWorksheetSnapshot);
+  document.body.appendChild(root);
+}
+
+function resolveWritingWorksheet() {
+  const learnerScope = getHanziLearnerScope();
+  if (!hasCompatibleHanziRotationScope(store, learnerScope)) return null;
+  const resolved = resolveDailyWorksheet({
+    rotationState: getHanziRotationState(store),
+    pack: getActiveHanziWritingPack(),
+    learnerScope,
+    now: new Date(),
+    timeZone: getLearningTimeZone(),
+  });
+  const nextStore = transitionLearningState(store, {
+    type: "STATE_REPLACED",
+    state: replaceHanziRotationState(store, resolved.rotationState),
+  });
+  if (JSON.stringify(nextStore) !== JSON.stringify(store)) {
+    store = nextStore;
+    save();
+  }
+  return structuredClone(resolved.worksheet);
+}
+
+function hasActiveWorksheetCompletion() {
+  if (!activeWorksheetSnapshot) return false;
+  const rotationState = getHanziRotationState(store);
+  return Boolean(
+    rotationState?.assignments?.[activeWorksheetSnapshot.dayKey]
+      ?.completions?.[activeWorksheetSnapshot.assignmentId]
+  );
+}
+
+function recordActiveWorksheetCompletion() {
+  if (!activeWorksheetSnapshot) return;
+  const rotationState = getHanziRotationState(store);
+  if (!rotationState) return;
+  store = transitionLearningState(store, {
+    type: "STATE_REPLACED",
+    state: replaceHanziRotationState(store, recordWorksheetCompletion({
+      rotationState,
+      worksheet: activeWorksheetSnapshot,
+      completedAt: new Date().toISOString(),
+    })),
+  });
+}
+
 function canWriteLearningState({ allowScopeTransition = false } = {}) {
   const cloudWriteCheck = allowScopeTransition
     ? window.cloudSync?.canWriteScopeTransition?.()
@@ -309,11 +407,23 @@ function contentModuleLabel(moduleId){
 
 function toggleCheckin(mod){
   if (!canWriteLearningState()) return;
+  let checkinDate = todayKey();
+  if (mod === "chinese-writing" && activeWorksheetSnapshot?.dayKey !== checkinDate) {
+    switchMod("chinese");
+    checkinDate = todayKey();
+  }
+  if (mod === "chinese-writing" && activeWorksheetSnapshot?.dayKey !== checkinDate) return;
+
+  const wasChecked = hasCheckin(store.checkins[checkinDate], mod);
+  const shouldRecordWorksheet = mod === "chinese-writing" &&
+    !wasChecked &&
+    !hasActiveWorksheetCompletion();
   store = transitionLearningState(store, {
     type: "CHECKIN_TOGGLED",
-    date: todayKey(),
+    date: checkinDate,
     key: mod,
   });
+  if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   save();
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
@@ -424,17 +534,12 @@ function dayTotal(day){
    ========================================================= */
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
-function buttonContent(iconName, text){ return `${icon(iconName)}<span>${text}</span>`; }
-function writingGroupsHtml(groups){
-  return groups.map((word) => `<div class="write-grid">${[...word].map((character) => `<div class="tian">${character}</div>`).join("")}</div>`).join('<div class="spacer-8"></div>');
-}
-function writingDateLabel(date){
-  return `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日`;
-}
+function buttonContent(iconName, text){ return `${icon(iconName)}<span>${escapeHtml(text)}</span>`; }
 let activeAudio = null;
 let activeAudioSource = null;
 let activeAudioSourceUrl = null;
 let sharedAudioContext = null;
+let activeSpeechRequest = null;
 
 function getAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -447,6 +552,12 @@ function getAudioContext() {
     }
   }
   return sharedAudioContext;
+}
+
+function primeSpeechAudio() {
+  const audioContext = getAudioContext();
+  if (!audioContext || audioContext.state !== "suspended") return;
+  void audioContext.resume().catch(() => {});
 }
 
 function releaseObjectUrl(url) {
@@ -487,51 +598,147 @@ function stopActivePlayback() {
   }
 }
 
-async function speak(t, button){
-  const originalLabel = button?.dataset.label || "听发音";
-  const voiceHelp = "请在系统设置中安装英语语音包，然后重试";
-  const showSpeechGuide = () => {
-    if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
-    const guideLink = document.createElement("button");
-    guideLink.type = "button";
-    guideLink.className = "speech-guide-link";
-    guideLink.dataset.speechGuide = "true";
-    guideLink.textContent = "查看发音设置指引";
-    guideLink.onclick = () => {
-      switchMod("guide");
-      document.querySelector('[data-guide-section="speech"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+function isMandarinChineseVoiceLocale(locale) {
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
+  if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
+  if (normalizedLocale === "zh") return true;
+  if (!/^zh-/.test(normalizedLocale)) return false;
+
+  const subtags = normalizedLocale.split("-").slice(1);
+  return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg");
+}
+
+function findSystemVoice(locale) {
+  const synth = window.speechSynthesis;
+  if (!(synth && typeof window.SpeechSynthesisUtterance === "function")) return null;
+  const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+  if (!Array.isArray(voices)) return null;
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  const language = normalizedLocale.split("-")[0];
+  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
+  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
+    || voices.find((voice) => locale === "zh-CN"
+      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
+      : normalizeVoiceLocale(voice) === language)
+    || null;
+}
+
+function waitForSystemVoice(locale, timeoutMs = 1200) {
+  const immediateVoice = findSystemVoice(locale);
+  if (immediateVoice) return Promise.resolve(immediateVoice);
+
+  const synth = window.speechSynthesis;
+  if (!synth || typeof synth.addEventListener !== "function") return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    let timer = null;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      synth.removeEventListener?.("voiceschanged", check);
+      resolve(findSystemVoice(locale));
     };
-    button.after(guideLink);
+    const check = () => {
+      if (findSystemVoice(locale)) finish();
+    };
+    synth.addEventListener?.("voiceschanged", check);
+    timer = window.setTimeout(finish, timeoutMs);
+    check();
+  });
+}
+
+async function speak(t, button, locale = "en-US", contentId = ""){
+  if (button?.dataset.speechInFlight === "true") return;
+  if (activeSpeechRequest) {
+    if (activeSpeechRequest.button?.isConnected) return;
+    activeSpeechRequest.cancelled = true;
+    activeSpeechRequest = null;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch (_) {
+      // Some browser speech implementations throw while cancelling a stale utterance.
+    }
+    stopActivePlayback();
+  }
+  const speechRequest = { button, cancelled: false };
+  activeSpeechRequest = speechRequest;
+  const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
+  if (button) button.dataset.speechInFlight = "true";
+  const initialVisibleLabel = button?.textContent?.trim() || button?.dataset.label || "听发音";
+  if (button && button.dataset.speechOriginalLabel === undefined) {
+    button.dataset.speechOriginalLabel = initialVisibleLabel;
+  }
+  const originalLabel = button?.dataset.speechOriginalLabel || initialVisibleLabel;
+  if (button && button.dataset.speechOriginalAriaLabel === undefined) {
+    button.dataset.speechOriginalAriaLabel = button.getAttribute("aria-label") || originalLabel;
+  }
+  if (button && button.dataset.speechOriginalTitle === undefined) {
+    button.dataset.speechOriginalTitle = button.getAttribute("title") || "";
+  }
+  const originalAriaLabel = button?.dataset.speechOriginalAriaLabel || originalLabel;
+  const originalTitle = button?.dataset.speechOriginalTitle || "";
+  if (button) {
+    button.setAttribute("aria-live", "polite");
+    button.setAttribute("aria-atomic", "true");
+  }
+  let shouldRestoreButtonFocus = false;
+  const restoreButtonFocus = () => {
+    if (!button || !shouldRestoreButtonFocus) return;
+    const activeElement = document.activeElement;
+    if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
+      button.focus({ preventScroll: true });
+    }
+    shouldRestoreButtonFocus = false;
   };
   const restore = () => {
     clearSystemTimer();
-    if (!button) return;
+    if (!isCurrentSpeech()) return;
+    if (!button) {
+      activeSpeechRequest = null;
+      return;
+    }
     button.innerHTML = buttonContent("volume", originalLabel);
+    button.setAttribute("aria-label", originalAriaLabel);
+    if (originalTitle) button.title = originalTitle;
+    else button.removeAttribute("title");
     button.disabled = false;
     button.removeAttribute("aria-busy");
     button.removeAttribute("data-speech-failure");
+    button.removeAttribute("data-published-speech-error");
+    button.removeAttribute("data-speech-in-flight");
+    activeSpeechRequest = null;
+    restoreButtonFocus();
   };
   const fail = (message) => {
+    if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
-    button.title = message.startsWith("未检测到系统语音") ? voiceHelp : message;
+    button.setAttribute("aria-label", message);
+    button.title = message;
     button.dataset.speechFailure = "true";
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
-      source: "offline_tts",
+      source: "published_tts",
       error_code: errorCode,
       retryable: true,
     }, `${errorCode}:${Date.now()}`);
-    showSpeechGuide();
     window.setTimeout(() => {
       if (button.dataset.speechFailure === "true") restore();
     }, 5000);
   };
   const setBusy = (label = "播放中…") => {
     if (!button) return;
+    if (document.activeElement === button) shouldRestoreButtonFocus = true;
     button.dataset.label = originalLabel;
     button.innerHTML = buttonContent("volume", label);
+    button.setAttribute("aria-label", originalAriaLabel);
+    if (originalTitle) button.title = originalTitle;
+    else button.removeAttribute("title");
+    button.removeAttribute("data-speech-failure");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
   };
@@ -544,190 +751,52 @@ async function speak(t, button){
     }
   };
 
-  const speakOffline = async () => {
-    setBusy("准备中…");
-    const audioContext = getAudioContext();
-    const audioContextReady = audioContext
-      ? Promise.resolve().then(() => audioContext.resume()).catch(() => {})
-      : null;
-    let playbackTimer = null;
-    const clearPlaybackTimer = () => {
-      if (playbackTimer !== null) {
-        window.clearTimeout(playbackTimer);
-        playbackTimer = null;
-      }
-    };
-    let engineWarmup;
-    let engineWarmupError;
-    const startEngineWarmup = () => {
-      if (!engineWarmup) {
-        engineWarmup = withTimeout(
-          prepareLocalVoice(),
-          ENGINE_LOAD_TIMEOUT_MS,
-          "本地语音引擎加载超时"
-        ).catch((error) => {
-          engineWarmupError = error;
-          return null;
-        });
-      }
-    };
-    try {
-      const status = await askDownloadVoice((received, total) => {
-        if (!button) return;
-        button.innerHTML = buttonContent(
-          "volume",
-          total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
-        );
-      }, { onDownloadStart: startEngineWarmup });
-      if (status === "cancel") {
-        restore();
-        return;
-      }
-      if (status !== "ok") {
-        fail("离线语音下载失败，请检查网络后重试");
-        return;
-      }
-      startEngineWarmup();
-      setBusy("加载语音引擎…");
-      await engineWarmup;
-      if (engineWarmupError) throw engineWarmupError;
-      setBusy("合成中…");
-      const { url, duration } = await withTimeout(speakLocally(t), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-      stopActivePlayback();
-
-      if (audioContext) {
-        try {
-          const response = await fetch(url);
-          if (!response.ok) throw new Error("生成的音频读取失败");
-          const audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
-          await audioContextReady;
-          if (audioContext.state === "suspended") await audioContext.resume();
-          const source = audioContext.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(audioContext.destination);
-          activeAudioSource = source;
-          activeAudioSourceUrl = url;
-          let playbackSettled = false;
-          const finishPlayback = () => {
-            if (playbackSettled) return;
-            playbackSettled = true;
-            clearPlaybackTimer();
-            if (activeAudioSource === source) activeAudioSource = null;
-            if (activeAudioSourceUrl === url) activeAudioSourceUrl = null;
-            try {
-              source.disconnect();
-            } catch (_) {
-              // Some lightweight browser implementations do not expose disconnect().
-            }
-            restore();
-            releaseObjectUrl(url);
-          };
-          source.onended = finishPlayback;
-          const reportedDurationMs = Number.isFinite(duration) && duration > 0 ? duration : 0;
-          const decodedDurationMs = Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
-            ? audioBuffer.duration * 1000
-            : 0;
-          const playbackFallbackMs = Math.max(reportedDurationMs, decodedDurationMs) + 750;
-          playbackTimer = window.setTimeout(finishPlayback, Math.max(1000, playbackFallbackMs));
-          source.start();
-          if (!playbackSettled) setBusy("播放中…");
-          return;
-        } catch (_) {
-          if (activeAudioSourceUrl === url) {
-            activeAudioSource = null;
-            activeAudioSourceUrl = null;
-          }
-        }
-      }
-
-      const audio = document.createElement("audio");
-      audio.preload = "auto";
-      audio.setAttribute("aria-hidden", "true");
-      audio.src = url;
-      document.body.appendChild(audio);
-      activeAudio = audio;
-      let playbackSettled = false;
-      const finishPlayback = () => {
-        if (playbackSettled) return;
-        playbackSettled = true;
-        clearPlaybackTimer();
-        restore();
-        releaseAudio(audio, url);
-      };
-      audio.onended = () => {
-        finishPlayback();
-      };
-      audio.onerror = () => {
-        if (playbackSettled) return;
-        playbackSettled = true;
-        clearPlaybackTimer();
-        fail("发音失败，请重试");
-        releaseAudio(audio, url);
-      };
-      const playbackFallbackMs = Number.isFinite(duration) && duration > 0
-        ? Math.max(1000, Math.ceil(duration) + 750)
-        : 5000;
-      playbackTimer = window.setTimeout(finishPlayback, playbackFallbackMs);
-      audio.load();
-      await audio.play();
-      if (!playbackSettled) setBusy("播放中…");
-    } catch (error) {
-      clearPlaybackTimer();
-      if (error?.message === "本地语音引擎加载超时") {
-        fail("本地语音引擎加载超时，请重试");
-      } else {
-        fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
-      }
+  const synth = window.speechSynthesis;
+  const Utterance = window.SpeechSynthesisUtterance;
+  setBusy();
+  try {
+    await publishedSpeechPlayer.play(contentId);
+    restore();
+    return;
+  } catch (publishedError) {
+    if (!isCurrentSpeech()) return;
+    if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
+    const systemVoice = await waitForSystemVoice(locale, 1200);
+    if (!isCurrentSpeech()) return;
+    if (!(synth && typeof Utterance === "function") || !systemVoice) {
+      const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
+      fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
+      return;
     }
-  };
-
-  // 系统语音可用（Google 原生 / 已装英语语音包）时优先使用
-  if (hasSystemEnglishVoice()) {
-    const synth = window.speechSynthesis;
-    const Utterance = window.SpeechSynthesisUtterance;
-    let fallbackStarted = false;
-    const fallbackToLocal = () => {
-      if (fallbackStarted || !button?.disabled) return;
-      fallbackStarted = true;
-      clearSystemTimer();
-      try {
-        synth.cancel();
-      } catch (_) {
-        // Some browser speech implementations throw while cancelling a stalled utterance.
-      }
-      void speakOffline();
-    };
-    setBusy();
-    const speakNow = () => {
-      const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+    await new Promise((resolve) => {
       const utterance = new Utterance(t);
-      utterance.lang = "en-US";
+      let started = false;
+      utterance.lang = locale;
       utterance.rate = 0.9;
-      const voice = voices?.find((item) => /^en[-_]US/i.test(item.lang)) || voices?.find((item) => /^en/i.test(item.lang));
-      if (voice) utterance.voice = voice;
-      utterance.onend = () => {
-        if (!fallbackStarted) restore();
-      };
-      utterance.onerror = () => {
-        if (!fallbackStarted) fallbackToLocal();
+      utterance.voice = systemVoice;
+      utterance.onstart = () => { started = true; clearSystemTimer(); };
+      utterance.onend = () => { restore(); resolve(); };
+      utterance.onerror = (event) => {
+        if (event?.error === "canceled" || event?.error === "interrupted") restore();
+        else fail("AI 发音不可用，系统语音播放也失败，请重试");
+        resolve();
       };
       try {
         synth.cancel();
-        // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
         synth.speak(utterance);
         systemTimer = window.setTimeout(() => {
-          if (button?.disabled) fallbackToLocal();
+          if (!started) {
+            try { synth.cancel(); } catch (_) {}
+            fail("AI 发音不可用，系统语音未能启动，请重试");
+            resolve();
+          }
         }, 4000);
       } catch (_) {
-        fallbackToLocal();
+        fail("AI 发音不可用，系统语音播放也失败，请重试");
+        resolve();
       }
-    };
-    speakNow();
-    return;
+    });
   }
-
-  // 无 GMS 的国产 Android 等设备：使用本地 Piper 兜底
-  await speakOffline();
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
@@ -847,8 +916,6 @@ function renderLearning(){
    ========================================================= */
 function renderChinese(){
   const di = dayIndex();
-  const writingDate = new Date();
-  const writingGroups = selectDailyWritingGroups(WRITE_WORDS, writingDate);
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("book","语文学习"));
 
@@ -888,14 +955,17 @@ function renderChinese(){
   main.appendChild(card2);
 
   // 写字打卡
-  const strokesHtml = STROKES.map(s=>`<span class="stroke-chip">${s}</span>`).join("");
-  const wordsHtml = writingGroupsHtml(writingGroups);
+  const worksheet = resolveWritingWorksheet();
+  if (!worksheet) return;
+  const worksheetHtml = renderWritingWorksheetHtml(worksheet);
+  createWritingPrintRoot(worksheet);
+  const strokesHtml = STROKES.map(renderStrokeChip).join("");
   const card3 = $(`
     <div class="card" data-writing-practice>
-      <h3>${icon("pen")} 写字打卡 <span class="pill">8 基础笔画 + 控笔</span></h3>
+      <h3>${icon("pen")} 写字打卡 <span class="pill">今日字帖 · 4 行</span></h3>
       <div class="desc">8 个基础笔画：${strokesHtml}</div>
-      <div class="desc">今日练习汉字（从简到难，控笔临摹）：</div>
-      ${wordsHtml}
+      <div class="desc">今天练习下面 4 行字帖，先描一格，再试着独立书写。</div>
+      ${worksheetHtml}
       <div class="spacer-12"></div>
       <button class="checkin" type="button" data-print>${icon("download")} 打印 A4 字帖</button>
       <div class="spacer-10"></div>
@@ -903,15 +973,46 @@ function renderChinese(){
     </div>
   `);
   main.appendChild(card3);
-  document.body.appendChild($(`
-    <section class="writing-print-sheet" data-writing-print-sheet>
-      <h1>今日写字字帖</h1>
-      <p class="writing-print-date">${writingDateLabel(writingDate)}</p>
-      <p class="writing-print-note">基础笔画：${STROKES.join("、")}</p>
-      <div class="writing-print-groups">${wordsHtml}</div>
-    </section>
-  `));
-  card3.querySelector("[data-print]").onclick = () => window.print();
+  const printButton = card3.querySelector("[data-print]");
+  const printButtonLabel = printButton.innerHTML;
+  let printErrorTimer = null;
+  const restorePrintButton = () => {
+    if (!printButton.isConnected) return;
+    printButton.disabled = false;
+    printButton.removeAttribute("aria-busy");
+    printButton.removeAttribute("title");
+    printButton.innerHTML = printButtonLabel;
+  };
+  printButton.onclick = () => {
+    if (printButton.disabled) return;
+    if (printErrorTimer !== null) window.clearTimeout(printErrorTimer);
+    printButton.disabled = true;
+    printButton.setAttribute("aria-busy", "true");
+    printButton.textContent = "准备打印…";
+    void openWritingPrintWindow(activeWorksheetSnapshot || worksheet)
+      .then(restorePrintButton)
+      .catch((error) => {
+        console.error("Writing worksheet print failed:", error);
+        if (!printButton.isConnected) return;
+        printButton.disabled = false;
+        printButton.removeAttribute("aria-busy");
+        printButton.title = error?.message || "打印准备失败，请重试。";
+        printButton.textContent = "打印准备失败，请重试";
+        printErrorTimer = window.setTimeout(restorePrintButton, 5000);
+      });
+  };
+  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-hanzi-speak], [data-hanzi-meaning-speak]").forEach((button) => {
+    button.dataset.speechOriginalLabel = button.textContent?.trim() || "听发音";
+    button.setAttribute("aria-live", "polite");
+    button.setAttribute("aria-atomic", "true");
+    button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
+    button.onclick = () => speak(
+      button.dataset.speechText || "",
+      button,
+      button.dataset.speechLocale || "en-US",
+      button.dataset.speechContentId || "",
+    );
+  });
 }
 
 /* =========================================================
@@ -1066,6 +1167,7 @@ function renderEnglish(){
   main.appendChild(card1);
   const spokenWords = [w1[0], w2[0]];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
+    button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     button.onclick = () => speak(spokenWords[Number(button.dataset.speak)], button);
   });
 
@@ -1731,20 +1833,21 @@ function renderGuide(){
         <div class="guide-steps">
           <article class="guide-step"><span class="guide-step-no">1</span><div><h4>家长登录</h4><p>点击右上角“登录”，输入家长邮箱。可以使用邮箱验证码或共享密码登录；尚未设置密码时，先用验证码完成登录。</p></div></article>
           <article class="guide-step"><span class="guide-step-no">2</span><div><h4>建立家庭空间</h4><p>填写家庭名称和第一个学习者；之后可以在家庭空间里添加孩子、修改资料和切换当前孩子。</p></div></article>
-          <article class="guide-step"><span class="guide-step-no">3</span><div><h4>开始学习和打卡</h4><p>从左侧选择语文、数学、英语或绘本。每个任务单独打卡，再次点击同一个按钮即可取消。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">3</span><div><h4>开始学习和打卡</h4><p>从左侧进入“学习”，再选择语文、数学、英语或绘本。每个任务单独打卡，再次点击同一个按钮即可取消。</p></div></article>
         </div>
       </section>
 
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音前，先准备系统语音</h3><p>影伴使用设备自带的语音服务，不额外上传录音。第一次使用或按钮无声音时，按设备下载英语语音。</p></div></div>
+        <div class="guide-section-heading"><span>02</span><div><h3>听发音与共享语音</h3><p>影伴优先播放发布前生成的共享 AI 语音；共享音频不可用时才尝试同语言系统语音。不会上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">国产 Android（无 Google 服务）没有英语系统语音时，首次点“听发音”会提示下载影伴内置的高质量离线语音包（约 115MB，一次性，可离线使用，不上传录音），下载后即可正常发音。</p>
+          <p class="guide-device-tip">固定课程音频由 CDN 提供并按标准 HTTP 规则缓存，不需要下载本地模型。下方仅显示旧离线包的清理入口；旧包已停用，不会再次下载。</p>
         </div>
-        <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
+        <div data-piper-resource-manager></div>
+        <div class="guide-note">播放失败时先检查网络、设备音量、静音开关和浏览器声音权限；旧离线包只需在需要释放空间时手动删除。</div>
       </section>
 
       <section class="guide-card" data-guide-section="sync">
@@ -1763,6 +1866,7 @@ function renderGuide(){
       </section>
     </div>
   `));
+  mountPiperResourceManager(main.querySelector("[data-piper-resource-manager]"));
 }
 
 /* =========================================================
@@ -1781,7 +1885,7 @@ function checkinBtn(mod,label){
    ========================================================= */
 function switchMod(mod){
   CURRENT_MOD = mod;
-  document.querySelector("[data-writing-print-sheet]")?.remove();
+  removeWritingPrintRoot();
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
     b.classList.toggle("active", active);
@@ -1842,9 +1946,68 @@ wechatDialog?.addEventListener("close", () => {
 // 初始渲染
 switchMod("home");
 
+function persistenceScopeLabel() {
+  return getHanziLearnerScope();
+}
+
+function compatibilityScopeObject(scope) {
+  if (scope === "anonymous") return { household_id: null, profile_id: null };
+  const profileId = String(scope).replace(/^profile:/, "");
+  return {
+    household_id: "compatibility-household",
+    profile_id: profileId,
+  };
+}
+
 window.learningDesk = {
-  getState(){
+  getState(scope){
+    if (scope !== undefined && scope !== persistenceScopeLabel()) {
+      return createLearningState();
+    }
     return JSON.parse(JSON.stringify(store));
+  },
+  getPersistenceScope(){
+    return persistenceScopeLabel();
+  },
+  getPersistenceStatus(){
+    return { pending: false };
+  },
+  activateScope(scope, options = {}){
+    if (typeof scope !== "string" || scope.trim().length === 0) return false;
+    if (!canWriteLearningState({ allowScopeTransition: true })) return false;
+    const previousScope = persistenceScopeLabel();
+    const nextState = options.state ?? (scope === previousScope ? store : {});
+    removeWritingPrintRoot();
+    learningEnvelope = {
+      ...learningEnvelope,
+      scope: compatibilityScopeObject(scope),
+    };
+    store = createLearningState(nextState);
+    if (options.persist !== false) persistLearningState({ allowScopeTransition: true });
+    if (options.render !== false) switchMod(CURRENT_MOD);
+    return true;
+  },
+  activateSafeAnonymousScope(){
+    removeWritingPrintRoot();
+    learningEnvelope = migrateLegacyLearningState({}, {});
+    store = createLearningState();
+    switchMod(CURRENT_MOD);
+    return true;
+  },
+  flushLocalState(){
+    return persistLearningState();
+  },
+  markCloudConfirmed(scope, state){
+    if (scope !== persistenceScopeLabel()) return false;
+    store = createLearningState(state);
+    learningEnvelope = {
+      ...learningEnvelope,
+      learning: structuredClone(store),
+    };
+    return true;
+  },
+  renderCurrent(){
+    switchMod(CURRENT_MOD);
   },
   getEnvelope(){
     return structuredClone({
@@ -1871,6 +2034,7 @@ window.learningDesk = {
   clearLocalData(){
     const { reload = true } = arguments[0] || {};
     clearLearningDeskStorage(localStorage);
+    removeWritingPrintRoot();
     if (reload) {
       window.location.reload();
       return;
@@ -1878,7 +2042,11 @@ window.learningDesk = {
     learningEnvelope = migrateLegacyLearningState({}, {});
     store = createLearningState();
     switchMod(CURRENT_MOD);
-  }
+  },
+  removePersistenceScope(scope){
+    if (scope !== persistenceScopeLabel()) return true;
+    return this.activateSafeAnonymousScope();
+  },
 };
 
 void growthLoopController.hydrate().catch((error) => {

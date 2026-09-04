@@ -1,0 +1,93 @@
+{
+  "release": "shadow-mate-v1.3.12",
+  "updated_at": "2026-09-05",
+  "reason": "Replace the unstable mobile-browser Matcha runtime with release-time Tencent Cloud synthesis and shared immutable CDN audio for the fixed curriculum.",
+  "changes": [
+    {
+      "id": "tencent-fixed-curriculum-speech",
+      "type": "production_impact_external_service",
+      "test": {
+        "status": "generated_and_cdn_verified",
+        "voices": {
+          "zh-CN": "101030",
+          "en-US": "101050"
+        },
+        "catalog_entries": 96,
+        "generated_objects": 96,
+        "reused_objects": 0,
+        "verified_bytes": 495648,
+        "verified_at": "2026-09-05T02:51:00+08:00",
+        "cos_prefix": "tts/tencent/v1/",
+        "cdn_origin": "https://voice.shadow.wang"
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "The immutable MP3 set and verified manifest must be generated before Preview deployment; Production additionally requires written redistribution permission from Tencent Cloud."
+      },
+      "validation": "Run npm run tts:catalog, authenticated npm run tts:prewarm, required sample audition, npm run tts:smoke -- --origin https://preview-sm.shadow.wang, then repository verification in that order.",
+      "rollback": "Revert the application and manifest to the prior revision; immutable content-addressed COS objects may remain unused."
+    },
+    {
+      "id": "unified-offline-voice-assets",
+      "type": "external_cdn_assets",
+      "test": {
+        "status": "deployed_and_verified",
+        "origin": "https://preview-sm.shadow.wang",
+        "base_url": "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+        "verified_at": "2026-09-04T11:29:00Z",
+        "required_files": [
+          "sherpa-onnx-wasm-main-tts.data",
+          "sherpa-onnx-wasm-main-tts.wasm"
+        ]
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "Production deployment is outside this Preview-only change and requires a separate release authorization."
+      },
+      "validation": "node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts --package matcha-icefall-zh-en-1.13.2",
+      "rollback": "Revert the application commit before promoting to production; the versioned CDN objects are immutable and may remain unused."
+    },
+    {
+      "id": "mobile-offline-voice-memory-runtime",
+      "type": "external_cdn_asset",
+      "reason": "The upstream WASM eagerly reserves a 512 MB shared heap; together with the 149 MB package expansion this can terminate Android browser workers after a successful download.",
+      "test": {
+        "status": "deployed_and_verified",
+        "url": "https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm",
+        "bytes": 12883754,
+        "sha256": "ff161b9927ca92164930fe564476ee32edaf8ec460b94df2353af7333754119e",
+        "verified_at": "2026-09-04T13:36:00Z",
+        "initial_memory": "256MB",
+        "reuse": "The existing verified 149,228,019-byte data file remains unchanged and is reused from the current cache."
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "Production deployment is outside this Preview-only fix and requires separate authorization and mobile acceptance."
+      },
+      "validation": "Run the CDN smoke command, restricted-heap Chinese/English word and sentence synthesis, then real-device Preview acceptance.",
+      "rollback": "Revert the application commit; the original immutable WASM remains at its existing URL."
+    },
+    {
+      "id": "cross-origin-isolation",
+      "type": "http_response_headers",
+      "test": {
+        "status": "implemented_in_repository",
+        "headers": {
+          "Cross-Origin-Opener-Policy": "same-origin",
+          "Cross-Origin-Embedder-Policy": "require-corp"
+        }
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "Production deployment is outside this Preview-only change and requires a separate release authorization."
+      },
+      "validation": "Verify both response headers on Preview and confirm window.crossOriginIsolated === true before exercising offline synthesis.",
+      "rollback": "Revert the application commit to remove the new COEP header and restore the prior runtime."
+    }
+  ],
+  "database": {
+    "migration_class": "none",
+    "status": "N/A",
+    "reason": "No schema, data, RLS, function, view, or shared control-plane change."
+  }
+}
