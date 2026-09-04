@@ -153,7 +153,7 @@ test.describe("Offline mode (no login)", () => {
     await context.setOffline(true);
     try {
       await page.reload();
-      await expect(page).toHaveTitle("影伴");
+      await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
       const offlinePackage = await page.evaluate(async (fixture) => {
         const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
         const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
