@@ -88,7 +88,7 @@ describe("Piper resource manager", () => {
     expect(english.querySelector('[data-piper-resource-action="download"]')).toBeTruthy();
 
     expect(container.querySelector('[data-piper-resource="zh_CN-candidate"]')).toBeNull();
-    expect(container.textContent).toContain("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
+    expect(container.textContent).toContain("切换 Chrome、夸克、小米浏览器、无痕模式或站点域名都需要分别下载");
     unmount();
   });
 

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const ENGLISH_PACKAGE = "en_US-ljspeech-medium";
+const ENGLISH_PACKAGE = "matcha-icefall-zh-en-1.13.2";
 
 async function installNoSystemSpeech(page) {
   await page.addInitScript(() => {
@@ -156,7 +156,7 @@ test.describe("Offline voice warmup", () => {
       }
       Object.defineProperty(window, "AudioContext", { configurable: true, value: GestureAudioContext });
       Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
-      window.localStorage.setItem("shadow-mate-piper-cache-hints-v1", JSON.stringify(["en_US-ljspeech-medium"]));
+      window.localStorage.setItem("shadow-mate-piper-cache-hints-v1", JSON.stringify(["matcha-icefall-zh-en-1.13.2"]));
     });
     await openEnglish(page);
     const button = page.locator("[data-speak]").first();

@@ -3,11 +3,13 @@
 ## [Unreleased]
 
 ### Changed
+- 将原先分离的英语与中文 Piper 兜底统一替换为 `matcha-icefall-zh-en`：一次下载约 154.6MB 的中英双语包即可在同一浏览器配置文件和域名内离线朗读两种语言；不同浏览器仍受 Cache Storage 隔离，需要分别下载。
+- 迁移到固定版本 sherpa-onnx `v1.13.2` WebAssembly Worker。原因是 Chaowen 在原生与浏览器推理中均会错读部分孤立汉字，Kokoro/MeloTTS 也未通过试听；Matcha 已通过中英文单字和长句试听，当前接受音色偏机械的限制。
 - 新增语音模型的“先试听、后实现”门禁：必须先用官方运行时生成代表性样本并取得产品负责人明确确认，才能进入应用实现、CDN 上传或 Preview 发布。
 - Piper CDN 语音包统一由版本化资源注册表驱动；在同一浏览器配置文件和域名内复用已校验文件，并显示当前包的状态与已校验大小。
 - 同一语音包的跨标签页下载使用互斥协调；旧版本缓存只有在能确认未被使用时才允许自动清理，无法确认时跳过清理并保留以避免中断其他标签页。
 - 内置 Piper 浏览器运行时固定上游 commit、许可证文本和再分发记录，并在 release gate 中强制执行组件审计。
-- 在同一套下载、校验、缓存和引擎回退流程中开放 `zh_CN-chaowen-medium` 中文普通话离线语音包；首次使用前需从 `voice.shadow.wang` 下载约 60.3MB 资源。
+- 将旧 `en_US-ljspeech-medium` 与 `zh_CN-chaowen-medium` 标记为停止新增下载，仅保留历史缓存识别和安全迁移元数据。
 
 ### Fixed
 - 修复中文 Piper 将 `phoneme_type: "pinyin"` 的模型元数据误送入 eSpeak，导致离线中文发音听起来不是普通话或加载超时的问题；中文现在使用固定版本的 `pinyin-pro` 生成声母、韵母和声调音素，英语仍沿用原有 eSpeak 路径。

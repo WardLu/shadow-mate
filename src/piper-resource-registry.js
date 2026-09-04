@@ -3,6 +3,7 @@ const GIT_COMMIT_RE = /^[a-f0-9]{40}$/i;
 
 const MIT_REDISTRIBUTION_TERMS = "MIT permits use, copy, modify, merge, publish, distribute, sublicense, and sell copies when the copyright and permission notices are retained; the software is provided without warranty.";
 const ESPEAK_REDISTRIBUTION_TERMS = "Retain the four tracked eSpeak NG license texts and apply the text attached to each incorporated material: GPL-3.0-or-later material requires the corresponding source and GPL notices when conveying object code; Apache-2.0 material retains its license and required notices; BSD-2-Clause material retains copyright, conditions, and disclaimer; Unicode text retains its copyright, permission notice, and disclaimer.";
+const APACHE_2_REDISTRIBUTION_TERMS = "Apache-2.0 permits use, reproduction, and distribution with the license, copyright, attribution, and NOTICE obligations retained; modified files must carry prominent change notices, and the software is provided without warranty.";
 
 const BUNDLED_RUNTIME_AUDIT_COMPONENTS = [
   {
@@ -67,6 +68,17 @@ const BUNDLED_RUNTIME_AUDIT_COMPONENTS = [
     ],
     redistributionTerms: ESPEAK_REDISTRIBUTION_TERMS,
   },
+  {
+    name: "sherpa-onnx WebAssembly TTS",
+    version: "1.13.2",
+    versionSource: "signed upstream release tag",
+    commit: "13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24",
+    source: "https://github.com/k2-fsa/sherpa-onnx/tree/13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24/wasm/tts",
+    license: { status: "approved", name: "Apache-2.0" },
+    licenseUrl: "https://github.com/k2-fsa/sherpa-onnx/blob/13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24/LICENSE",
+    licenseTextPaths: ["third_party/licenses/sherpa-onnx-Apache-2.0.txt"],
+    redistributionTerms: APACHE_2_REDISTRIBUTION_TERMS,
+  },
 ];
 
 function deepFreeze(value) {
@@ -87,7 +99,7 @@ const ENGLISH_PIPER_RESOURCE = {
   source: "cdn",
   cachePolicy: "user-download",
   totalBytes: 63536351,
-  releaseApproved: true,
+  releaseApproved: false,
   licenseStatus: "approved",
   license: {
     status: "approved",
@@ -133,7 +145,7 @@ const CHINESE_PIPER_RESOURCE = {
   source: "cdn",
   cachePolicy: "user-download",
   totalBytes: 63224911,
-  releaseApproved: true,
+  releaseApproved: false,
   licenseStatus: "approved",
   license: {
     status: "approved",
@@ -169,16 +181,67 @@ const CHINESE_PIPER_RESOURCE = {
   ],
 };
 
+export const UNIFIED_OFFLINE_VOICE_PACKAGE_ID = "matcha-icefall-zh-en-1.13.2";
+
+const UNIFIED_MATCHA_RESOURCE = {
+  id: UNIFIED_OFFLINE_VOICE_PACKAGE_ID,
+  locale: "zh-CN + en-US",
+  locales: ["zh-CN", "en-US"],
+  label: "中英双语（Matcha）",
+  kind: "voice",
+  engine: "sherpa-onnx-matcha",
+  version: "1",
+  baseUrl: "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+  source: "cdn",
+  cachePolicy: "user-download",
+  totalBytes: 162111773,
+  releaseApproved: true,
+  licenseStatus: "approved",
+  license: {
+    status: "approved",
+    model: "Apache-2.0",
+    trainingData: "See pinned upstream model package documentation",
+    reference: "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.2",
+  },
+  provenance: {
+    status: "verified",
+    source: "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-1.13.2-matcha-icefall-zh-en.tar.bz2",
+    modelCard: "https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html",
+  },
+  distribution: {
+    status: "approved",
+    channel: "public-cdn",
+    notice: "THIRD_PARTY_NOTICES.md#统一中英双语-matcha-cdn-资源",
+  },
+  redistributionTerms: APACHE_2_REDISTRIBUTION_TERMS,
+  files: [
+    {
+      key: "data",
+      suffix: ".data",
+      contentType: "application/octet-stream",
+      bytes: 149228019,
+      sha256: "3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c",
+    },
+    {
+      key: "wasm",
+      suffix: ".wasm",
+      contentType: "application/wasm",
+      bytes: 12883754,
+      sha256: "9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640",
+    },
+  ],
+};
+
 const BUNDLED_PIPER_RUNTIME = {
   id: "piper-browser-runtime",
   locale: "und",
-  label: "Piper browser runtime",
+  label: "Browser offline TTS runtimes",
   kind: "runtime",
   version: "1",
   baseUrl: null,
   source: "bundled",
   cachePolicy: "app-shell",
-  totalBytes: 76608615,
+  totalBytes: 76786160,
   releaseApproved: true,
   licenseStatus: "reviewed",
   license: {
@@ -235,12 +298,40 @@ const BUNDLED_PIPER_RUNTIME = {
       license: "piper-phonemize and eSpeak NG applicable upstream licenses",
       provenance: "THIRD_PARTY_NOTICES.md#vendored-浏览器语音资源",
     },
+    {
+      key: "sherpa-onnx-engine",
+      url: "/sherpa-onnx/sherpa-onnx-wasm-main-tts.js",
+      contentType: "application/javascript",
+      bytes: 143833,
+      sha256: "2f7d50fe6991982a4bcc8dd938d63de6edbb3f2b971e383e8986331ca5fcb311",
+      license: "Apache-2.0",
+      provenance: "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.2",
+    },
+    {
+      key: "sherpa-onnx-adapter",
+      url: "/sherpa-onnx/sherpa-onnx-tts.js",
+      contentType: "application/javascript",
+      bytes: 32010,
+      sha256: "d0febb99e78c8322eb7dbda12e90a1b473de8a7d65f016a146576fbdadbf266a",
+      license: "Apache-2.0",
+      provenance: "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.2",
+    },
+    {
+      key: "sherpa-onnx-worker",
+      url: "/sherpa-onnx/sherpa-onnx-tts.worker.js",
+      contentType: "application/javascript",
+      bytes: 1702,
+      sha256: "c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14",
+      license: "Apache-2.0 with Shadow Mate integration changes",
+      provenance: "docs/superpowers/specs/2026-09-04-unified-offline-voice-design.md",
+    },
   ],
 };
 
 export const PIPER_RESOURCE_PACKAGES = deepFreeze([
   ENGLISH_PIPER_RESOURCE,
   CHINESE_PIPER_RESOURCE,
+  UNIFIED_MATCHA_RESOURCE,
   BUNDLED_PIPER_RUNTIME,
 ]);
 

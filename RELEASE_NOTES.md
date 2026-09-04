@@ -9,6 +9,9 @@
 
 ## Unreleased — Piper resource release gates
 
+- Replaced separate English and Chinese Piper downloads with one 154.6 MB `matcha-icefall-zh-en` offline package powered by the pinned sherpa-onnx v1.13.2 WebAssembly worker.
+- Recorded the migration reason: the previous Chinese model mispronounced isolated characters even in native inference, while Matcha passed listening checks for Chinese and English words and sentences. Its mechanical timbre is an accepted current limitation.
+- One download serves both languages in the same browser profile and origin; browser security prevents sharing the package across Chrome, Quark, Xiaomi Browser, private profiles, or different domains.
 - Unified active Piper CDN voice packages behind the resource registry: verified files are reused within the same browser profile and origin, while the guide reports package status and verified storage size. Switching browsers, profiles, domains, or environments has an independent cache by design.
 - Added conservative cross-tab coordination and cache cleanup: concurrent downloads for one package are mutually exclusive, and automatic superseded-version cleanup is skipped unless active use can be established; otherwise old caches remain available until explicitly deleted.
 - Added fail-closed CDN download checks for bounded `HEAD` and `GET` requests, manifest `Content-Length`, expected response types, CORS, actual byte count, and SHA-256. Timeouts and validation failures leave the package incomplete and retryable.

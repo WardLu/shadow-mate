@@ -176,11 +176,16 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-“Listen” uses a completed local Piper package first, so a downloaded English `en_US-ljspeech-medium` or Chinese `zh_CN-chaowen-medium` voice remains consistent across browsers that support the local runtime. Before a package is downloaded, it prefers a matching system voice; devices without a usable system voice, especially Android devices without GMS, are offered the matching local package. The first use downloads and caches the package from `voice.shadow.wang`; after that, synthesis works offline. Chinese text is converted to the Chaowen model's Pinyin initial/final/tone phonemes in the browser, while English continues to use the bundled eSpeak phonemizer. The cache is scoped to the current browser profile and origin, so changing browsers, profiles, domains, or environments can require a separate download; the same scope reuses verified files and exposes its status and size in the in-app guide. The system TTS path may depend on the device and browser, and Shadow Mate does not collect microphone recordings.
+“Listen” uses the matching system voice when it is reliable, then falls back to one browser-local `matcha-icefall-zh-en` package for both Mandarin and English. The first fallback downloads and validates the 154.6 MB package from `voice.shadow.wang`; after that, synthesis works offline in the same browser profile and origin. Chrome, Quark, Xiaomi Browser, private profiles, and different domains cannot share Cache Storage, so each requires its own download. The package replaced separate Piper voices because the Chinese Piper model mispronounced isolated characters in both browser and native inference, while the Matcha model passed product-owner listening checks for Chinese and English words and sentences. The accepted first version has a noticeably mechanical timbre. Shadow Mate does not collect microphone recordings.
 
 ## Acknowledgements
 
-The speech fallback uses these open-source projects:
+The active speech fallback uses:
+
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0): audited WebAssembly TTS runtime
+- [matcha-icefall-zh-en](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html): one Chinese-English model distributed through `voice.shadow.wang`
+
+The repository temporarily retains the following deprecated Piper assets only for historical compatibility and safe cache migration:
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT): browser Piper engine wrapper
 - [pinyin-pro](https://github.com/zh-lx/pinyin-pro) (MIT): Chinese Pinyin phoneme conversion for the Chaowen voice

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   ENGLISH_PIPER_PACKAGE_ID,
+  UNIFIED_OFFLINE_VOICE_PACKAGE_ID,
   VOICE,
   VOICE_FILES,
   withTimeout,
@@ -13,12 +14,13 @@ afterEach(() => {
 });
 
 describe("offline Piper voice packages", () => {
-  test("keeps the legacy English exports delegated to the active English package", () => {
-    expect(ENGLISH_PIPER_PACKAGE_ID).toBe("en_US-ljspeech-medium");
-    expect(VOICE).toBe("https://voice.shadow.wang/piper/en_US-ljspeech-medium");
+  test("delegates legacy exports to the one active Chinese-English package", () => {
+    expect(ENGLISH_PIPER_PACKAGE_ID).toBe(UNIFIED_OFFLINE_VOICE_PACKAGE_ID);
+    expect(UNIFIED_OFFLINE_VOICE_PACKAGE_ID).toBe("matcha-icefall-zh-en-1.13.2");
+    expect(VOICE).toBe("https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts");
     expect(VOICE_FILES).toEqual([
-      "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx",
-      "https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json",
+      `${VOICE}.data`,
+      `${VOICE}.wasm`,
     ]);
   });
 
@@ -43,9 +45,10 @@ describe("offline Piper voice packages", () => {
     };
     const englishPackage = {
       ...resourcePackage,
-      id: "en_US-ljspeech-medium",
-      baseUrl: "https://voice.shadow.wang/piper/en_US-ljspeech-medium",
-      files: [{ suffix: ".onnx" }, { suffix: ".onnx.json" }],
+      id: "matcha-icefall-zh-en-1.13.2",
+      locales: ["zh-CN", "en-US"],
+      baseUrl: "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+      files: [{ suffix: ".data" }, { suffix: ".wasm" }],
     };
     const deletePackage = vi.fn().mockResolvedValue(undefined);
     vi.doMock("../../src/piper-resource-registry.js", () => ({
@@ -53,6 +56,7 @@ describe("offline Piper voice packages", () => {
       listPiperResourcePackages: () => [englishPackage, resourcePackage],
       isActivePiperCdnVoicePackage: () => true,
       formatPiperResourceBytes: () => "1.0 MB",
+      UNIFIED_OFFLINE_VOICE_PACKAGE_ID: englishPackage.id,
     }));
     vi.doMock("../../src/piper-resource-store.js", () => ({
       getPiperResourceStatus: vi.fn().mockResolvedValue("invalid"),

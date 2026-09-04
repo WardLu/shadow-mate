@@ -1,0 +1,48 @@
+{
+  "release": "shadow-mate-v1.3.12",
+  "updated_at": "2026-09-04",
+  "reason": "Replace separate Chinese and English Piper fallbacks with one audition-approved matcha-icefall-zh-en package because the former Chinese model mispronounced isolated characters and caused duplicate per-language downloads.",
+  "changes": [
+    {
+      "id": "unified-offline-voice-assets",
+      "type": "external_cdn_assets",
+      "test": {
+        "status": "pending_upload",
+        "origin": "https://preview-sm.shadow.wang",
+        "base_url": "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+        "required_files": [
+          "sherpa-onnx-wasm-main-tts.data",
+          "sherpa-onnx-wasm-main-tts.wasm"
+        ]
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "Production deployment is outside this Preview-only change and requires a separate release authorization."
+      },
+      "validation": "node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts --package matcha-icefall-zh-en-1.13.2",
+      "rollback": "Revert the application commit before promoting to production; the versioned CDN objects are immutable and may remain unused."
+    },
+    {
+      "id": "cross-origin-isolation",
+      "type": "http_response_headers",
+      "test": {
+        "status": "implemented_in_repository",
+        "headers": {
+          "Cross-Origin-Opener-Policy": "same-origin",
+          "Cross-Origin-Embedder-Policy": "require-corp"
+        }
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "Production deployment is outside this Preview-only change and requires a separate release authorization."
+      },
+      "validation": "Verify both response headers on Preview and confirm window.crossOriginIsolated === true before exercising offline synthesis.",
+      "rollback": "Revert the application commit to remove the new COEP header and restore the prior runtime."
+    }
+  ],
+  "database": {
+    "migration_class": "none",
+    "status": "N/A",
+    "reason": "No schema, data, RLS, function, view, or shared control-plane change."
+  }
+}
