@@ -12,16 +12,8 @@ import {
 import { buildMissingSequence, escapeHtml } from "./lib.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
-import {
-  askDownloadVoice,
-  ENGINE_LOAD_TIMEOUT_MS,
-  prepareLocalVoice,
-  resetLocalVoiceEngine,
-  speakLocally,
-  SYNTHESIS_TIMEOUT_MS,
-  withTimeout,
-} from "./piper-tts.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
+import { createPublishedSpeechPlayer } from "./tencent-tts-player.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
   createLearningState,
@@ -53,6 +45,7 @@ import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPer
 inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
+const publishedSpeechPlayer = createPublishedSpeechPlayer();
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -657,54 +650,7 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
-const PIPER_CACHE_HINT_KEY = "shadow-mate-piper-cache-hints-v1";
-const UNIFIED_OFFLINE_VOICE_PACKAGE_ID = "matcha-icefall-zh-en-1.13.2";
-const piperCacheHints = new Set((() => {
-  try {
-    const stored = JSON.parse(window.localStorage?.getItem(PIPER_CACHE_HINT_KEY) || "[]");
-    return Array.isArray(stored) ? stored.filter((packageId) => typeof packageId === "string") : [];
-  } catch (_) {
-    return [];
-  }
-})());
-
-function persistPiperCacheHints() {
-  try {
-    window.localStorage?.setItem(PIPER_CACHE_HINT_KEY, JSON.stringify([...piperCacheHints]));
-  } catch (_) {
-    // Cache hints are an optimization; speech must continue if storage is unavailable.
-  }
-}
-
-function rememberPiperCacheHint(packageId) {
-  if (piperCacheHints.has(packageId)) return;
-  piperCacheHints.add(packageId);
-  persistPiperCacheHints();
-}
-
-function forgetPiperCacheHint(packageId) {
-  if (!piperCacheHints.delete(packageId)) return;
-  persistPiperCacheHints();
-}
-
-async function isCachedPiperPackage(packageId) {
-  try {
-    const piperTts = await import("./piper-tts.js");
-    return typeof piperTts.isPiperVoiceCached === "function"
-      && await piperTts.isPiperVoiceCached(packageId);
-  } catch (_) {
-    return false;
-  }
-}
-
-function refreshPiperCacheHint(packageId) {
-  void isCachedPiperPackage(packageId).then((cached) => {
-    if (cached) rememberPiperCacheHint(packageId);
-    else forgetPiperCacheHint(packageId);
-  });
-}
-
-async function speak(t, button, locale = "en-US"){
+async function speak(t, button, locale = "en-US", contentId = ""){
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
     if (activeSpeechRequest.button?.isConnected) return;
@@ -738,24 +684,6 @@ async function speak(t, button, locale = "en-US"){
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
   }
-  const voiceHelp = locale === "zh-CN"
-    ? "请在系统设置中安装中文（普通话）语音，然后重试"
-    : "请在系统设置中安装英语语音包，然后重试";
-  const piperPackageId = UNIFIED_OFFLINE_VOICE_PACKAGE_ID;
-  const piperLanguage = "中英文";
-  const showSpeechGuide = () => {
-    if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
-    const guideLink = document.createElement("button");
-    guideLink.type = "button";
-    guideLink.className = "speech-guide-link";
-    guideLink.dataset.speechGuide = "true";
-    guideLink.textContent = "查看发音设置指引";
-    guideLink.onclick = () => {
-      switchMod("guide");
-      document.querySelector('[data-guide-section="speech"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
-    button.after(guideLink);
-  };
   let shouldRestoreButtonFocus = false;
   const restoreButtonFocus = () => {
     if (!button || !shouldRestoreButtonFocus) return;
@@ -779,6 +707,7 @@ async function speak(t, button, locale = "en-US"){
     button.disabled = false;
     button.removeAttribute("aria-busy");
     button.removeAttribute("data-speech-failure");
+    button.removeAttribute("data-published-speech-error");
     button.removeAttribute("data-speech-in-flight");
     activeSpeechRequest = null;
     restoreButtonFocus();
@@ -789,15 +718,14 @@ async function speak(t, button, locale = "en-US"){
     if (!button) return;
     button.innerHTML = buttonContent("alert", message);
     button.setAttribute("aria-label", message);
-    button.title = message.startsWith("未检测到") ? voiceHelp : message;
+    button.title = message;
     button.dataset.speechFailure = "true";
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
-      source: "offline_tts",
+      source: "published_tts",
       error_code: errorCode,
       retryable: true,
     }, `${errorCode}:${Date.now()}`);
-    if (locale !== "zh-CN") showSpeechGuide();
     window.setTimeout(() => {
       if (button.dataset.speechFailure === "true") restore();
     }, 5000);
@@ -823,233 +751,51 @@ async function speak(t, button, locale = "en-US"){
     }
   };
 
-  const speakOffline = async () => {
-    setBusy("准备中…");
-    const audioContext = getAudioContext();
-    const audioContextReady = audioContext
-      ? Promise.resolve().then(() => audioContext.state === "suspended" ? audioContext.resume() : undefined).catch(() => {})
-      : null;
-    let playbackTimer = null;
-    const clearPlaybackTimer = () => {
-      if (playbackTimer !== null) {
-        window.clearTimeout(playbackTimer);
-        playbackTimer = null;
-      }
-    };
-    try {
-      const status = await askDownloadVoice(
-        piperPackageId,
-        (received, total) => {
-          if (!isCurrentSpeech() || !button) return;
-          button.innerHTML = buttonContent(
-            "volume",
-            total ? Math.min(99, Math.max(1, Math.round((received / total) * 100))) + "%" : "下载中…"
-          );
-        }
-      );
-      if (status === "cancel") {
-        restore();
-        return;
-      }
-      if (!isCurrentSpeech()) return;
-      if (status !== "ok") {
-        forgetPiperCacheHint(piperPackageId);
-        const message = status === "gated"
-          ? "离线中英文语音尚未开放，请安装对应系统语音后重试"
-          : status === "unsupported"
-            ? `当前浏览器不支持离线${piperLanguage}语音，请使用系统语音或更换浏览器`
-            : status === "timeout"
-              ? `离线${piperLanguage}语音下载超时，请检查网络或代理后重试`
-              : status === "network"
-                ? `离线${piperLanguage}语音下载失败，请检查网络、代理或 CDN 跨域配置后重试`
-                : status === "http" || status === "integrity" || status === "storage"
-                  ? `离线${piperLanguage}语音资源不可用，请稍后重试`
-                  : `离线${piperLanguage}语音下载失败，请重试`;
-        fail(message);
-        return;
-      }
-      rememberPiperCacheHint(piperPackageId);
-      setBusy("加载语音引擎…");
-      await withTimeout(
-        prepareLocalVoice(piperPackageId),
-        ENGINE_LOAD_TIMEOUT_MS,
-        "本地语音引擎加载超时"
-      );
-      if (!isCurrentSpeech()) return;
-      setBusy("合成中…");
-      const { url, duration } = await withTimeout(speakLocally(t, piperPackageId), SYNTHESIS_TIMEOUT_MS, "发音合成超时");
-      if (!isCurrentSpeech()) {
-        releaseObjectUrl(url);
-        return;
-      }
-      stopActivePlayback();
-
-      if (audioContext) {
-        try {
-          const response = await fetch(url);
-          if (!response.ok) throw new Error("生成的音频读取失败");
-          const audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
-          await audioContextReady;
-          if (audioContext.state === "suspended") await audioContext.resume();
-          const source = audioContext.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(audioContext.destination);
-          activeAudioSource = source;
-          activeAudioSourceUrl = url;
-          let playbackSettled = false;
-          const finishPlayback = () => {
-            if (playbackSettled) return;
-            playbackSettled = true;
-            clearPlaybackTimer();
-            if (activeAudioSource === source) activeAudioSource = null;
-            if (activeAudioSourceUrl === url) activeAudioSourceUrl = null;
-            try {
-              source.disconnect();
-            } catch (_) {
-              // Some lightweight browser implementations do not expose disconnect().
-            }
-            restore();
-            releaseObjectUrl(url);
-          };
-          source.onended = finishPlayback;
-          const reportedDurationMs = Number.isFinite(duration) && duration > 0 ? duration : 0;
-          const decodedDurationMs = Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
-            ? audioBuffer.duration * 1000
-            : 0;
-          const playbackFallbackMs = Math.max(reportedDurationMs, decodedDurationMs) + 750;
-          playbackTimer = window.setTimeout(finishPlayback, Math.max(1000, playbackFallbackMs));
-          source.start();
-          if (!playbackSettled) setBusy("播放中…");
-          return;
-        } catch (_) {
-          if (activeAudioSourceUrl === url) {
-            activeAudioSource = null;
-            activeAudioSourceUrl = null;
-          }
-        }
-      }
-
-      const audio = document.createElement("audio");
-      audio.preload = "auto";
-      audio.setAttribute("aria-hidden", "true");
-      audio.src = url;
-      document.body.appendChild(audio);
-      activeAudio = audio;
-      let playbackSettled = false;
-      const finishPlayback = () => {
-        if (playbackSettled) return;
-        playbackSettled = true;
-        clearPlaybackTimer();
-        restore();
-        releaseAudio(audio, url);
-      };
-      audio.onended = () => {
-        finishPlayback();
-      };
-      audio.onerror = () => {
-        if (playbackSettled) return;
-        playbackSettled = true;
-        clearPlaybackTimer();
-        fail("发音失败，请重试");
-        releaseAudio(audio, url);
-      };
-      const playbackFallbackMs = Number.isFinite(duration) && duration > 0
-        ? Math.max(1000, Math.ceil(duration) + 750)
-        : 5000;
-      playbackTimer = window.setTimeout(finishPlayback, playbackFallbackMs);
-      audio.load();
-      await audio.play();
-      if (!playbackSettled) setBusy("播放中…");
-    } catch (error) {
-      clearPlaybackTimer();
-      if (error?.name === "TimeoutError" && isCurrentSpeech()) await resetLocalVoiceEngine();
-      if (error?.message === "本地语音引擎加载超时") {
-        fail("本地语音引擎加载超时，请重试");
-      } else if (error?.code === "gated") {
-        fail("离线中英文语音尚未开放，请安装对应系统语音后重试");
-      } else if (error?.code === "storage") {
-        fail(`离线${piperLanguage}语音资源不可用，请稍后重试`);
-      } else {
-        fail(error?.name === "TimeoutError" ? "发音合成超时，请刷新页面后重试" : "发音失败，请检查网络后重试");
-      }
-    }
-  };
-
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
   setBusy();
-  refreshPiperCacheHint(piperPackageId);
-  if (piperCacheHints.has(piperPackageId)) {
-    try {
-      synth?.cancel();
-    } catch (_) {
-      // Some browser speech implementations throw while cancelling residual speech.
-    }
-    await speakOffline();
+  try {
+    await publishedSpeechPlayer.play(contentId);
+    restore();
     return;
-  }
-  const requestedSystemVoice = await waitForSystemVoice(locale, 4000);
-  if (!isCurrentSpeech()) return;
-  const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() : [];
-  const systemVoice = requestedSystemVoice || (locale === "en-US"
-    ? voices.find((item) => /^en[-_]US/i.test(item.lang)) || voices.find((item) => /^en\b/i.test(item.lang))
-    : null);
-  if (!(synth && typeof Utterance === "function") || !systemVoice) {
-    try {
-      synth?.cancel();
-    } catch (_) {
-      // Some browser speech implementations throw while cancelling residual speech.
-    }
-    await speakOffline();
-    return;
-  }
-
-  let fallbackStarted = false;
-  let systemStarted = false;
-  const fallbackToLocal = () => {
-    if (fallbackStarted || !isCurrentSpeech()) return;
-    fallbackStarted = true;
-    clearSystemTimer();
-    try {
-      synth.cancel();
-    } catch (_) {
-      // Some browser speech implementations throw while cancelling a stalled utterance.
-    }
-    void speakOffline();
-  };
-  setBusy();
-  const utterance = new Utterance(t);
-  utterance.lang = locale;
-  utterance.rate = 0.9;
-  utterance.voice = systemVoice;
-  utterance.onstart = () => {
-    systemStarted = true;
-    clearSystemTimer();
-  };
-  utterance.onend = () => {
-    if (isCurrentSpeech() && !fallbackStarted) restore();
-  };
-  utterance.onerror = (event) => {
-    if (!isCurrentSpeech() || fallbackStarted) return;
-    if (event?.error === "canceled" || event?.error === "interrupted") {
-      restore();
+  } catch (publishedError) {
+    if (!isCurrentSpeech()) return;
+    if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
+    const systemVoice = await waitForSystemVoice(locale, 1200);
+    if (!isCurrentSpeech()) return;
+    if (!(synth && typeof Utterance === "function") || !systemVoice) {
+      const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
+      fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
       return;
     }
-    fallbackToLocal();
-  };
-  try {
-    try {
-      synth.cancel();
-    } catch (_) {
-      // Some browser speech implementations throw while cancelling a prior utterance.
-    }
-    // Call speak synchronously from the user gesture for iOS/iPadOS Safari.
-    synth.speak(utterance);
-    systemTimer = window.setTimeout(() => {
-      if (!systemStarted) fallbackToLocal();
-    }, 4000);
-  } catch (_) {
-    fallbackToLocal();
+    await new Promise((resolve) => {
+      const utterance = new Utterance(t);
+      let started = false;
+      utterance.lang = locale;
+      utterance.rate = 0.9;
+      utterance.voice = systemVoice;
+      utterance.onstart = () => { started = true; clearSystemTimer(); };
+      utterance.onend = () => { restore(); resolve(); };
+      utterance.onerror = (event) => {
+        if (event?.error === "canceled" || event?.error === "interrupted") restore();
+        else fail("AI 发音不可用，系统语音播放也失败，请重试");
+        resolve();
+      };
+      try {
+        synth.cancel();
+        synth.speak(utterance);
+        systemTimer = window.setTimeout(() => {
+          if (!started) {
+            try { synth.cancel(); } catch (_) {}
+            fail("AI 发音不可用，系统语音未能启动，请重试");
+            resolve();
+          }
+        }, 4000);
+      } catch (_) {
+        fail("AI 发音不可用，系统语音播放也失败，请重试");
+        resolve();
+      }
+    });
   }
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
@@ -1264,6 +1010,7 @@ function renderChinese(){
       button.dataset.speechText || "",
       button,
       button.dataset.speechLocale || "en-US",
+      button.dataset.speechContentId || "",
     );
   });
 }
@@ -2091,16 +1838,16 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音与离线资源</h3><p>影伴优先使用设备自带的语音服务；没有合适系统语音时，只需下载一套中英双语离线语音。不会上传录音。</p></div></div>
+        <div class="guide-section-heading"><span>02</span><div><h3>听发音与共享语音</h3><p>影伴优先播放发布前生成的共享 AI 语音；共享音频不可用时才尝试同语言系统语音。不会上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">系统语音不可用时，可在下方下载统一的中英双语 Matcha 语音包；同一浏览器配置文件与域名内下载一次后可离线使用。不同浏览器不能共享缓存。</p>
+          <p class="guide-device-tip">固定课程音频由 CDN 提供并按标准 HTTP 规则缓存，不需要下载本地模型。下方仅显示旧离线包的清理入口；旧包已停用，不会再次下载。</p>
         </div>
         <div data-piper-resource-manager></div>
-        <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>
+        <div class="guide-note">播放失败时先检查网络、设备音量、静音开关和浏览器声音权限；旧离线包只需在需要释放空间时手动删除。</div>
       </section>
 
       <section class="guide-card" data-guide-section="sync">

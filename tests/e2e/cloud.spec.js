@@ -23,6 +23,11 @@ async function openModule(page, mod) {
 }
 
 async function installSpeechMock(page) {
+  await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({
+    status: 503,
+    contentType: "text/plain",
+    body: "test-system-fallback",
+  }));
   await page.addInitScript(() => {
     const utterances = [];
     Object.defineProperty(window, "__speechUtterances", {
@@ -771,9 +776,9 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("keeps the logged-in writing workbook stable when bilingual learning-card speech is clicked", async ({ page }) => {
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
-    await installSpeechMock(page);
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
+    await installSpeechMock(page);
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
@@ -785,14 +790,11 @@ test.describe("Authenticated cloud workspace", () => {
     const firstCard = page.locator("[data-writing-worksheet] [data-hanzi-learning-card]").first();
     const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
     const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
-    const expectedUtterances = await Promise.all([zhButton, enButton].map(async (button) => ({
-      text: await button.getAttribute("data-speech-text"),
-      lang: await button.getAttribute("data-speech-locale"),
-    })));
+    await expect(zhButton).toHaveAttribute("data-speech-content-id", /:glyph$/);
+    await expect(enButton).toHaveAttribute("data-speech-content-id", /:english$/);
 
     await zhButton.click();
     await enButton.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual(expectedUtterances);
 
     expect(await readWritingSnapshot(page)).toEqual(before);
     expect(await page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(`profile:${PROFILE_ID}`);

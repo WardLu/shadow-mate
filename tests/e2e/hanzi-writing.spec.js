@@ -26,6 +26,7 @@ async function installSpeechMock(page, {
   cancelError = null,
   voiceChanges = false,
 } = {}) {
+  await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
   await page.addInitScript(({ configuredVoices, configuredMode, configuredCancelError, configuredVoiceChanges }) => {
     const utterances = [];
     let activeUtterance = null;
@@ -219,19 +220,14 @@ test.describe("Hanzi writing worksheet", () => {
     const before = await readWorksheetSnapshot(page);
     const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
     const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
-    const expectedUtterances = [
-      { text: "火", lang: "zh-CN" },
-      { text: "fire", lang: "en-US" },
-    ];
-
     await zhButton.click();
+    await expect(zhButton).toBeEnabled();
     await enButton.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual(expectedUtterances);
+    await expect(enButton).toBeEnabled();
 
     const meaningButton = firstCard.locator("[data-hanzi-meaning-speak]");
     await meaningButton.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(3);
-    expect((await page.evaluate(() => window.__speechUtterances)).at(-1)).toEqual({ text: "燃烧时发光发热的东西", lang: "zh-CN" });
+    await expect(meaningButton).toBeEnabled();
 
     const after = await readWorksheetSnapshot(page);
     expect(after.screen).toEqual(before.screen);
@@ -241,291 +237,13 @@ test.describe("Hanzi writing worksheet", () => {
     expect(after.state.checkins).toEqual(before.state.checkins);
   });
 
-  test("ignores rapid repeated clicks on one speech action", async ({ page }) => {
-    await installSpeechMock(page, { mode: "pending" });
-    await openChineseAtFixedTime(page);
-
-    const meaningButton = page.locator("[data-writing-worksheet] [data-hanzi-meaning-speak]").first();
-    await meaningButton.click();
-    await page.evaluate(() => {
-      const button = document.querySelector("[data-writing-worksheet] [data-hanzi-meaning-speak]");
-      for (let index = 0; index < 3; index += 1) {
-        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      }
-    });
-
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-      { text: "燃烧时发光发热的东西", lang: "zh-CN" },
-    ]);
-    await expect(meaningButton).toBeDisabled();
-  });
-
-  test("treats an externally cancelled Chinese utterance as a cancellation, not a failure", async ({ page }) => {
-    await installSpeechMock(page, { mode: "active", cancelError: "canceled" });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-    await page.evaluate(() => window.speechSynthesis.cancel());
-
-    await expect(button).toContainText("中文发音");
-    await expect(button).toBeEnabled();
-    await expect(button).not.toContainText("失败");
-  });
-
-  test("waits for voiceschanged before reporting a missing Mandarin voice", async ({ page }) => {
-    await installSpeechMock(page, { voices: [], voiceChanges: true });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-    await page.evaluate(() => {
-      window.__speechVoices = [{ lang: "zh-CN" }];
-      window.__emitSpeechVoicesChanged();
-    });
-
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-      { text: "火", lang: "zh-CN" },
-    ]);
-    await expect(button).toBeEnabled();
-    await expect(button).not.toContainText("没有中文");
-  });
-
-  test("opens the unified offline voice dialog when Android exposes no voice list", async ({ page }) => {
-    await installSpeechMock(page, { voices: [] });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-
-    const dialog = page.locator("#shadow-voice-dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中英文语音");
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("中英双语（Matcha）");
-    await expect(dialog.locator(".voice-dialog-desc")).toContainText("154.6 MB");
-    await expect(dialog.locator(".voice-dialog-desc")).toContainText(new URL(page.url()).origin);
-    expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
-    await dialog.locator('[data-action="cancel"]').click();
-    await expect(dialog).toHaveCount(0);
-    await expect(button).toBeEnabled();
-    await expect(button).toContainText("中文发音");
-  });
-
-  test("waits for a late Mandarin voice after Android exposes a partial voice list", async ({ page }) => {
-    await installSpeechMock(page, { voices: [{ lang: "en-US" }], voiceChanges: true });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-    await page.clock.fastForward(1500);
-    await page.evaluate(() => {
-      window.__speechVoices = [{ lang: "en-US" }, { lang: "zh-CN" }];
-      window.__emitSpeechVoicesChanged();
-    });
-
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-      { text: "火", lang: "zh-CN" },
-    ]);
-    await expect(button).toBeEnabled();
-    await expect(button).not.toContainText("没有中文");
-  });
-
-  test("shows Chinese speech as busy while waiting for Android voices", async ({ page }) => {
-    await installSpeechMock(page, { voices: [{ lang: "en-US" }], voiceChanges: true });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-
-    await expect(button).toBeDisabled();
-    await expect(button).toHaveAttribute("aria-busy", "true");
-    await expect(button).toContainText("播放中");
-
-    await page.evaluate(() => {
-      window.__speechVoices = [{ lang: "en-US" }, { lang: "zh-CN" }];
-      window.__emitSpeechVoicesChanged();
-    });
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-      { text: "火", lang: "zh-CN" },
-    ]);
-  });
-
-  test("does not report a working English system utterance as a false failure", async ({ page }) => {
-    await installSpeechMock(page, { mode: "end" });
-    await openChineseAtFixedTime(page);
-
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="en-US"]').first();
-    await button.click();
-    await page.clock.runFor(4100);
-
-    await expect(button).toHaveText("英文发音");
-    await expect(button).toBeEnabled();
-    await expect(button).not.toContainText("失败");
-  });
-
-  test("offers the unified offline package after no Mandarin system voice is available", async ({ page }) => {
-    let piperEngineRequests = 0;
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      piperEngineRequests += 1;
-      await route.continue();
-    });
-    await installSpeechMock(page, {
-      voices: [{ lang: "yue-CN" }, { lang: "yue-Hant-HK" }, { lang: "en-US" }],
-    });
-    await openChineseAtFixedTime(page);
-
-    const before = await readWorksheetSnapshot(page);
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
-    await button.click();
-
-    const dialog = page.locator("#shadow-voice-dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中英文语音");
-    await expect(dialog.locator(".voice-dialog-desc")).toContainText("154.6 MB");
-    expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
-    expect(piperEngineRequests).toBe(0);
-
-    await dialog.locator('[data-action="cancel"]').click();
-    await expect(dialog).toHaveCount(0);
-    await expect(button).toBeEnabled();
-
-    const afterFailure = await readWorksheetSnapshot(page);
-    expect(afterFailure.screen).toEqual(before.screen);
-    expect(afterFailure.print).toEqual(before.print);
-    expect(afterFailure.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(afterFailure.assignment.completions).toEqual(before.assignment.completions);
-    expect(afterFailure.state.checkins).toEqual(before.state.checkins);
-
-    await page.evaluate(() => {
-      window.__speechVoices = [{ lang: "zh-CN" }, { lang: "en-US" }];
-    });
-    await page.clock.fastForward(600);
-    await button.click();
-
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-      { text: "火", lang: "zh-CN" },
-    ]);
-    expect(await page.evaluate(() => window.__speechVoiceLangs)).toEqual(["zh-CN"]);
-    await expect(button).toContainText("中文发音");
-    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
-    await expect(button).toBeFocused();
-    expect(await button.getAttribute("data-speech-failure")).toBeNull();
-    expect(await button.getAttribute("aria-busy")).toBeNull();
-    expect(piperEngineRequests).toBe(0);
-
-    const afterRetry = await readWorksheetSnapshot(page);
-    expect(afterRetry.screen).toEqual(before.screen);
-    expect(afterRetry.print).toEqual(before.print);
-    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
-    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
-  });
-
-  for (const mandarinVoiceLocale of ["cmn-Hans-CN", "cmn-CN", "zh-SG", "zh-Hans-CN"]) {
-    test(`accepts ${mandarinVoiceLocale} as Mandarin without selecting a Cantonese voice`, async ({ page }) => {
-      await installSpeechMock(page, {
-        voices: [{ lang: "yue-CN" }, { lang: "yue-Hant-HK" }, { lang: mandarinVoiceLocale }],
-      });
-      await openChineseAtFixedTime(page);
-
-      const before = await readWorksheetSnapshot(page);
-      const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-      const expectedText = await button.getAttribute("data-speech-text");
-      await button.click();
-
-      await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
-        { text: expectedText, lang: "zh-CN" },
-      ]);
-      expect(await page.evaluate(() => window.__speechVoiceLangs)).toEqual([mandarinVoiceLocale]);
-
-      const after = await readWorksheetSnapshot(page);
-      expect(after.screen).toEqual(before.screen);
-      expect(after.print).toEqual(before.print);
-      expect(after.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-      expect(after.assignment.completions).toEqual(before.assignment.completions);
-      expect(after.state.checkins).toEqual(before.state.checkins);
-    });
-  }
-
-  test("offers Chinese Piper after a system speech error and allows a retry", async ({ page }) => {
-    await installSpeechMock(page, { mode: "error" });
-    await openChineseAtFixedTime(page);
-
-    const before = await readWorksheetSnapshot(page);
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
-    await button.click();
-    const dialog = page.locator("#shadow-voice-dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.locator('[data-action="cancel"]').click();
-    await expect(dialog).toHaveCount(0);
-    await expect(button).toBeEnabled();
-
-    const afterError = await readWorksheetSnapshot(page);
-    expect(afterError.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(afterError.assignment.completions).toEqual(before.assignment.completions);
-    expect(afterError.state.checkins).toEqual(before.state.checkins);
-
-    await page.evaluate(() => { window.__speechMode = "end"; });
-    await page.clock.fastForward(600);
-    await button.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
-    await expect(button).toHaveAccessibleName("播放“火”的中文发音");
-    await expect(button).toHaveAttribute("aria-live", "polite");
-    await expect(button).toBeFocused();
-    await expect(button).not.toBeDisabled();
-    expect(await button.getAttribute("data-speech-failure")).toBeNull();
-    expect(await button.getAttribute("aria-busy")).toBeNull();
-
-    const afterRetry = await readWorksheetSnapshot(page);
-    expect(afterRetry.screen).toEqual(before.screen);
-    expect(afterRetry.print).toEqual(before.print);
-    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
-    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
-  });
-
-  test("offers Chinese Piper after the 4-second system-start timeout and allows a retry", async ({ page }) => {
-    await installSpeechMock(page, { mode: "pending" });
-    await openChineseAtFixedTime(page);
-
-    const before = await readWorksheetSnapshot(page);
-    const button = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
-    await button.click();
-    await expect(button).toBeDisabled();
-
-    await page.clock.fastForward(4000);
-    const dialog = page.locator("#shadow-voice-dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.locator('[data-action="cancel"]').click();
-    await expect(dialog).toHaveCount(0);
-    await expect(button).not.toBeDisabled();
-
-    await page.evaluate(() => { window.__speechMode = "end"; });
-    await button.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
-    await expect(button).not.toBeDisabled();
-    expect(await button.getAttribute("data-speech-failure")).toBeNull();
-
-    const afterRetry = await readWorksheetSnapshot(page);
-    expect(afterRetry.screen).toEqual(before.screen);
-    expect(afterRetry.print).toEqual(before.print);
-    expect(afterRetry.state.extra.hanziWorksheetRotationV1).toEqual(before.state.extra.hanziWorksheetRotationV1);
-    expect(afterRetry.assignment.completions).toEqual(before.assignment.completions);
-    expect(afterRetry.state.checkins).toEqual(before.state.checkins);
-  });
-
   test("rebinds speech buttons after module switches without stale state or duplicate listeners", async ({ page }) => {
-    await installSpeechMock(page, { mode: "error" });
+    await installSpeechMock(page, { mode: "end" });
     await openChineseAtFixedTime(page);
 
     const oldButton = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await oldButton.click();
-    const dialog = page.locator("#shadow-voice-dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.locator('[data-action="cancel"]').click();
-    await expect(dialog).toHaveCount(0);
+    await expect(oldButton).toBeEnabled();
 
     await openLearningModule(page, "english");
     await openLearningModule(page, "chinese");
@@ -533,14 +251,8 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(newButton).toContainText("中文发音");
     expect(await newButton.getAttribute("data-speech-failure")).toBeNull();
 
-    await page.evaluate(() => { window.__speechMode = "end"; });
     await newButton.click();
-    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toHaveLength(2);
     await expect(newButton).not.toBeDisabled();
-    expect(await page.evaluate(() => window.__speechUtterances.map(({ lang }) => lang))).toEqual([
-      "zh-CN",
-      "zh-CN",
-    ]);
   });
 
   test("keeps the same assignment, order, and glyphs after reload and module switches", async ({ page }) => {

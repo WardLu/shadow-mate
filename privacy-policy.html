@@ -64,7 +64,7 @@
 
           <h2>分析服务和朗读功能</h2>
           <p>应用通过 Vercel Web Analytics 记录匿名、聚合的页面访问数据；当前没有自定义事件，也不把学习状态、邮箱或儿童显示名称作为 Analytics 自定义字段发送。页面访问数据可能包含时间、页面 URL、来源、设备、浏览器、操作系统和粗略地理位置。详情见 <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a>。</p>
-          <p>当前版本的本地 Piper 朗读不把文本发送到影伴服务器。影伴不采集麦克风录音。</p>
+          <p>固定课程文字会在发布准备阶段发送给腾讯云语音合成，生成后的 MP3 保存在项目自己的 COS/CDN 中供所有用户复用。用户点击播放时不会把文字、学习记录、账号信息或儿童资料发送给腾讯云，也不会触发新的付费合成。浏览器可能按标准 HTTP 规则缓存这些音频。影伴不采集麦克风录音。</p>
 
           <h2>家长同意和学习者档案</h2>
           <p>学习者不是独立登录账号。创建第一个学习者或添加学习者前，登录用户必须确认自己是家长或监护人，并阅读本隐私说明。系统会在 Supabase 数据库记录家庭 ID、认证用户 ID、同意类型 <code>learner_data_processing</code>、隐私说明版本 <code>privacy-v1</code> 和数据库生成的同意时间。客户端不能修改同意时间戳，也不能在没有同意记录的情况下通过公开 API 创建新的学习者档案。</p>
@@ -108,7 +108,7 @@
 
           <h2>Analytics and Reading Aloud</h2>
           <p>The app uses Vercel Web Analytics for anonymous, aggregated page-visit data. It currently sends no custom events and does not send learning status, email addresses, or learner display names as custom Analytics fields. Page-visit data may include the time, page URL, referrer, device, browser, operating system, and approximate location. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel Web Analytics Privacy and Compliance</a> for details.</p>
-          <p>The local Piper text-to-speech feature does not send text to Shadow Mate servers in the current version. Shadow Mate does not record microphone audio.</p>
+          <p>Fixed public curriculum text is sent to Tencent Cloud TTS during release preparation. Generated MP3 files are stored in the project's COS/CDN for shared reuse. Playback does not send curriculum text, learning history, account data, or child profile data to Tencent and does not trigger paid synthesis. Browsers may cache these files under standard HTTP rules. Shadow Mate does not record microphone audio.</p>
 
           <h2>Parental Consent and Learner Profiles</h2>
           <p>A learner is not an independent login account. Before creating or adding a learner, the signed-in user must confirm that they are the child's parent or guardian and read this policy. Supabase stores the household ID, authenticated user ID, consent type <code>learner_data_processing</code>, policy version <code>privacy-v1</code>, and a database-generated consent timestamp. The client cannot change the timestamp, and the public API cannot create a new learner profile without a consent record.</p>

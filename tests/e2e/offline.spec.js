@@ -305,10 +305,10 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="matcha-icefall-zh-en-1.13.2"]')).toContainText("清单大小");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="matcha-icefall-zh-en-1.13.2"]')).toContainText("154.6 MB");
-    await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("切换 Chrome、夸克、小米浏览器、无痕模式或站点域名都需要分别下载");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("共享 AI 语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("不需要下载本地模型");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("旧离线包只需在需要释放空间时手动删除");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource-action="download"]')).toHaveCount(0);
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
@@ -335,27 +335,21 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button offers the unified offline package when system speech is unavailable", async ({ page }) => {
-    await page.goto("/");
-    const origin = new URL(page.url()).origin;
-    await page.evaluate(() => {
+  test("speech button reports unavailable audio without reopening the retired download flow", async ({ page }) => {
+    await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+    await page.addInitScript(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
-        value: { getVoices() { return []; }, speak() {} },
+        value: { cancel() {}, getVoices() { return []; }, speak() {} },
       });
       Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
     });
+    await page.goto("/");
     await openModule(page, "english");
     const button = page.locator("[data-speak]").first();
     await button.click();
-    await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线中英文语音");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("中英双语（Matcha）");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("版本 1");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("154.6 MB");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText(origin);
-    await page.click('.voice-dialog-actions [data-action="cancel"]');
-    await expect(page.locator("#shadow-voice-dialog")).toBeHidden();
+    await expect(button).toContainText("AI 发音暂不可用，且未检测到对应系统语音，请稍后重试");
+    await expect(page.locator("#shadow-voice-dialog")).toHaveCount(0);
   });
 
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   getPiperResourcePackage,
   isActivePiperCdnVoicePackage,
+  listActivePiperCdnVoicePackages,
+  listRetiredPiperCdnVoicePackages,
   resolvePiperResourceFileUrl,
   validatePiperResourcePackages,
 } from "../../src/piper-resource-registry.js";
@@ -36,11 +38,11 @@ describe("bundled Piper runtime registry", () => {
     expect(() => validatePiperResourcePackages([runtime])).toThrow(/audit/i);
   });
 
-  it("accepts one approved Chinese-English Matcha package with exact runtime fingerprints", () => {
+  it("retains the retired Chinese-English Matcha package for explicit cache cleanup", () => {
     const voice = structuredClone(getPiperResourcePackage("matcha-icefall-zh-en-1.13.2"));
 
     expect(() => validatePiperResourcePackages([voice])).not.toThrow();
-    expect(isActivePiperCdnVoicePackage(voice)).toBe(true);
+    expect(isActivePiperCdnVoicePackage(voice)).toBe(false);
     expect(voice).toMatchObject({
       id: "matcha-icefall-zh-en-1.13.2",
       locale: "zh-CN + en-US",
@@ -49,7 +51,8 @@ describe("bundled Piper runtime registry", () => {
       version: "1",
       baseUrl: "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
       totalBytes: 162111773,
-      releaseApproved: true,
+      releaseApproved: false,
+      lifecycle: "retired",
       licenseStatus: "approved",
       provenance: { status: "verified" },
       distribution: { status: "approved", channel: "public-cdn" },
@@ -60,6 +63,8 @@ describe("bundled Piper runtime registry", () => {
     ]);
     expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toBe(false);
     expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("en_US-ljspeech-medium"))).toBe(false);
+    expect(listActivePiperCdnVoicePackages()).toEqual([]);
+    expect(listRetiredPiperCdnVoicePackages().map(({ id }) => id)).toContain("matcha-icefall-zh-en-1.13.2");
   });
 
   it("resolves an immutable per-file URL without moving unchanged package files", () => {

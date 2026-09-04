@@ -82,7 +82,7 @@ async function seedCompletePackage(store, resourcePackage) {
 }
 
 describe("Piper resource registry", () => {
-  it("exposes one approved bilingual package and retains deprecated Piper metadata", () => {
+  it("retains deprecated Piper and Matcha metadata without an active download", () => {
     expect(getPiperResourcePackage("en_US-ljspeech-medium")).toMatchObject({
       id: "en_US-ljspeech-medium",
       locale: "en-US",
@@ -99,7 +99,8 @@ describe("Piper resource registry", () => {
     });
     expect(getPiperResourcePackage("matcha-icefall-zh-en-1.13.2")).toMatchObject({
       locales: ["zh-CN", "en-US"],
-      releaseApproved: true,
+      releaseApproved: false,
+      lifecycle: "retired",
       source: "cdn",
       cachePolicy: "user-download",
       totalBytes: 162111773,

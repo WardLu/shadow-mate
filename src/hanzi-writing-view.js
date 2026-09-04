@@ -83,13 +83,14 @@ function renderExampleWords(row) {
 }
 
 function renderSpeechButtons(row) {
+  const contentId = row?.itemId ?? row?.id ?? "";
   const glyph = row?.glyph ?? "";
   const englishSpeechText = row?.concept?.characterEnglishLabel || row?.concept?.englishLabel || "";
   const characterMeaning = row?.concept?.characterMeaning || row?.concept?.visual?.alt || row?.concept?.label || "";
   return `<div class="hanzi-speech-actions">
-    <button type="button" data-hanzi-speak data-speech-text="${text(glyph)}" data-speech-locale="zh-CN" aria-label="${text(`播放“${glyph}”的中文发音`)}">中文发音</button>
-    <button type="button" data-hanzi-speak data-speech-text="${text(englishSpeechText)}" data-speech-locale="en-US" aria-label="${text(`播放“${englishSpeechText}”的英文发音`)}">英文发音</button>
-    <button type="button" data-hanzi-meaning-speak data-speech-text="${text(characterMeaning)}" data-speech-locale="zh-CN" aria-label="${text(`朗读“${characterMeaning}”的字意`)}">朗读字意</button>
+    <button type="button" data-hanzi-speak data-speech-content-id="${text(`${contentId}:glyph`)}" data-speech-text="${text(glyph)}" data-speech-locale="zh-CN" aria-label="${text(`播放“${glyph}”的中文发音`)}">中文发音</button>
+    <button type="button" data-hanzi-speak data-speech-content-id="${text(`${contentId}:english`)}" data-speech-text="${text(englishSpeechText)}" data-speech-locale="en-US" aria-label="${text(`播放“${englishSpeechText}”的英文发音`)}">英文发音</button>
+    <button type="button" data-hanzi-meaning-speak data-speech-content-id="${text(`${contentId}:meaning`)}" data-speech-text="${text(characterMeaning)}" data-speech-locale="zh-CN" aria-label="${text(`朗读“${characterMeaning}”的字意`)}">朗读字意</button>
   </div>`;
 }
 

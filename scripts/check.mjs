@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
 import { validateHanziWritingPack } from "../src/content/hanzi-writing/validate-pack.js";
 import {
-  listActivePiperCdnVoicePackages,
   listBundledPiperRuntimePackages,
   listPiperResourcePackages,
   validatePiperResourcePackages,
 } from "../src/piper-resource-registry.js";
+import { buildTencentSpeechCatalog, validateTencentTtsManifest } from "../src/tencent-tts-catalog.js";
 
 const requiredFiles = [
   "index.html",
@@ -31,6 +31,10 @@ const requiredFiles = [
   "src/piper-resource-capabilities.js",
   "src/piper-resource-ui.js",
   "scripts/piper-resource-smoke.mjs",
+  "src/tencent-tts-catalog.js",
+  "src/tencent-tts-player.js",
+  "scripts/tencent-tts-prewarm.mjs",
+  "scripts/tencent-tts-smoke.mjs",
   "src/config.js",
   "src/lib.js",
   "src/cloud.js",
@@ -71,15 +75,12 @@ if (!hanziWritingPackValidation.valid) {
 
 validatePiperResourcePackages(listPiperResourcePackages());
 
-const activePiperCdnPackages = listActivePiperCdnVoicePackages();
-if (activePiperCdnPackages.length === 0) throw new Error("At least one approved Piper CDN voice package is required");
-for (const resourcePackage of activePiperCdnPackages) {
-  if (resourcePackage.license?.status !== "approved"
-    || resourcePackage.provenance?.status !== "verified"
-    || resourcePackage.distribution?.status !== "approved") {
-    throw new Error(`Active Piper CDN package ${resourcePackage.id} is missing approved license, provenance, or distribution metadata`);
-  }
-}
+const expectedTencentTtsCatalog = await buildTencentSpeechCatalog(activeHanziWritingPack.items);
+const tencentTtsManifest = await readFile("public/tts/tencent-v1-manifest.json", "utf8").then(JSON.parse).catch((error) => {
+  if (error?.code === "ENOENT") return null;
+  throw error;
+});
+if (tencentTtsManifest) validateTencentTtsManifest(tencentTtsManifest, expectedTencentTtsCatalog);
 
 async function fingerprint(path) {
   const hash = createHash("sha256");
@@ -199,8 +200,8 @@ const piperResourceUi = await readFile("src/piper-resource-ui.js", "utf8");
 if (!piperResourceUi.includes('from "./piper-resource-registry.js"')) {
   throw new Error("Piper resource UI must source package metadata from the registry");
 }
-if (!piperResourceUi.includes("listActivePiperCdnVoicePackages")) {
-  throw new Error("Piper resource UI must present only active CDN voice packages");
+if (!piperResourceUi.includes("listRetiredPiperCdnVoicePackages")) {
+  throw new Error("Piper resource UI must preserve explicit cleanup for retired voice packages");
 }
 if (!piperResourceUi.includes("resourcePackage.totalBytes")) {
   throw new Error("Piper resource UI must render voice sizes from registered package bytes");
