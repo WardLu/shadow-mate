@@ -1,0 +1,976 @@
+{
+  "schemaVersion": 1,
+  "setId": "hanzi-writing-v2",
+  "contentVersion": "hanzi-v2-pilot-1",
+  "algorithmCompatibility": "rotation-v1",
+  "locale": "zh-CN",
+  "targetAgeRange": [4, 5],
+  "worksheetPolicy": {
+    "rowsPerDay": 4,
+    "recentDayWindow": 7
+  },
+  "reviewers": ["product-owner"],
+  "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+  "items": [
+    {
+      "id": "hz-001",
+      "glyph": "一",
+      "pinyin": "yī",
+      "exampleWord": "一个",
+      "order": 1,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字一",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪵",
+          "alt": "一根小棍子"
+        },
+        "englishLabel": "one",
+        "characterEnglishLabel": "one",
+        "characterMeaning": "表示数量一"
+      },
+      "exampleWords": ["一个", "一天"],
+      "sentence": "一只小鸟飞。",
+      "writing": {
+        "strokeCount": 1,
+        "structure": "独体字",
+        "hint": "先看一横，再看字的位置。"
+      }
+    },
+    {
+      "id": "hz-002",
+      "glyph": "二",
+      "pinyin": "èr",
+      "exampleWord": "二月",
+      "order": 2,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字二",
+        "visual": {
+          "kind": "emoji",
+          "value": "✌️",
+          "alt": "两根小手指"
+        },
+        "englishLabel": "two",
+        "characterEnglishLabel": "two",
+        "characterMeaning": "表示数量二"
+      },
+      "exampleWords": ["二月", "二人"],
+      "sentence": "二月有小雨。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "两横要平稳，下面一横更长。"
+      }
+    },
+    {
+      "id": "hz-003",
+      "glyph": "三",
+      "pinyin": "sān",
+      "exampleWord": "三天",
+      "order": 3,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字三",
+        "visual": {
+          "kind": "emoji",
+          "value": "3️⃣",
+          "alt": "数字三的符号"
+        },
+        "englishLabel": "three",
+        "characterEnglishLabel": "three",
+        "characterMeaning": "表示数量三"
+      },
+      "exampleWords": ["三天", "三个"],
+      "sentence": "三只小猫跑。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "三横有长短，横画之间留一点空。"
+      }
+    },
+    {
+      "id": "hz-004",
+      "glyph": "十",
+      "pinyin": "shí",
+      "exampleWord": "十天",
+      "order": 4,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字十",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔟",
+          "alt": "十个小手指"
+        },
+        "englishLabel": "ten",
+        "characterEnglishLabel": "ten",
+        "characterMeaning": "表示数量十"
+      },
+      "exampleWords": ["十天", "十个"],
+      "sentence": "十个小手指。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先写横，再写竖，交叉在中间。"
+      }
+    },
+    {
+      "id": "hz-005",
+      "glyph": "人",
+      "pinyin": "rén",
+      "exampleWord": "大人",
+      "order": 5,
+      "theme": "人物",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小朋友",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "一个小朋友"
+        },
+        "englishLabel": "person",
+        "characterEnglishLabel": "person",
+        "characterMeaning": "人类；有生命的个体"
+      },
+      "exampleWords": ["大人", "人口"],
+      "sentence": "小朋友是人。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "撇和捺像两条腿，站得要稳。"
+      }
+    },
+    {
+      "id": "hz-006",
+      "glyph": "口",
+      "pinyin": "kǒu",
+      "exampleWord": "口水",
+      "order": 6,
+      "theme": "身体",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "嘴巴",
+        "visual": {
+          "kind": "emoji",
+          "value": "👄",
+          "alt": "一张嘴巴"
+        },
+        "englishLabel": "mouth",
+        "characterEnglishLabel": "mouth",
+        "characterMeaning": "嘴；也表示入口"
+      },
+      "exampleWords": ["口水", "开口"],
+      "sentence": "小猫张开口。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写外框，最后关好小门。"
+      }
+    },
+    {
+      "id": "hz-007",
+      "glyph": "手",
+      "pinyin": "shǒu",
+      "exampleWord": "小手",
+      "order": 7,
+      "theme": "身体",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小手",
+        "visual": {
+          "kind": "emoji",
+          "value": "🖐️",
+          "alt": "一只张开的手"
+        },
+        "englishLabel": "hand",
+        "characterEnglishLabel": "hand",
+        "characterMeaning": "人的上肢；用来做事"
+      },
+      "exampleWords": ["小手", "手心"],
+      "sentence": "我用小手拿。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "横画排整齐，弯钩要写得有力。"
+      }
+    },
+    {
+      "id": "hz-008",
+      "glyph": "日",
+      "pinyin": "rì",
+      "exampleWord": "日子",
+      "order": 8,
+      "theme": "时间",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "太阳",
+        "visual": {
+          "kind": "emoji",
+          "value": "☀️",
+          "alt": "一轮温暖的太阳"
+        },
+        "englishLabel": "sun",
+        "characterEnglishLabel": "sun",
+        "characterMeaning": "太阳；也表示一天"
+      },
+      "exampleWords": ["日子", "日出"],
+      "sentence": "今日有太阳。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "外框要方正，中间横画要清楚。"
+      }
+    },
+    {
+      "id": "hz-009",
+      "glyph": "月",
+      "pinyin": "yuè",
+      "exampleWord": "月儿",
+      "order": 9,
+      "theme": "时间",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "月亮",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌙",
+          "alt": "一弯明亮的月亮"
+        },
+        "englishLabel": "moon",
+        "characterEnglishLabel": "moon",
+        "characterMeaning": "月亮；也表示月份"
+      },
+      "exampleWords": ["月儿", "月光"],
+      "sentence": "月亮出来了。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先写外框，再把里面的横画写匀。"
+      }
+    },
+    {
+      "id": "hz-010",
+      "glyph": "水",
+      "pinyin": "shuǐ",
+      "exampleWord": "水果",
+      "order": 10,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "水滴",
+        "visual": {
+          "kind": "emoji",
+          "value": "💧",
+          "alt": "一滴清清的水"
+        },
+        "englishLabel": "water",
+        "characterEnglishLabel": "water",
+        "characterMeaning": "没有颜色、会流动的液体"
+      },
+      "exampleWords": ["水果", "水花"],
+      "sentence": "小鱼在水里。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "中间的竖钩要挺直，左右要舒展。"
+      }
+    },
+    {
+      "id": "hz-011",
+      "glyph": "火",
+      "pinyin": "huǒ",
+      "exampleWord": "火山",
+      "order": 11,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "火山",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌋",
+          "alt": "一座火山"
+        },
+        "englishLabel": "volcano",
+        "characterEnglishLabel": "fire",
+        "characterMeaning": "燃烧时发光发热的东西"
+      },
+      "exampleWords": ["火山", "火光"],
+      "sentence": "火山有火。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先看两点，再写中间像人一样的部分。"
+      }
+    },
+    {
+      "id": "hz-012",
+      "glyph": "木",
+      "pinyin": "mù",
+      "exampleWord": "木头",
+      "order": 12,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "大树",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌳",
+          "alt": "一棵枝叶茂盛的大树"
+        },
+        "englishLabel": "tree",
+        "characterEnglishLabel": "wood",
+        "characterMeaning": "树木；木头"
+      },
+      "exampleWords": ["木头", "木马"],
+      "sentence": "小鸟站在木头上。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "横要平，竖在中间，撇捺向两边展开。"
+      }
+    },
+    {
+      "id": "hz-013",
+      "glyph": "山",
+      "pinyin": "shān",
+      "exampleWord": "大山",
+      "order": 13,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "高山",
+        "visual": {
+          "kind": "emoji",
+          "value": "⛰️",
+          "alt": "一座高高的山"
+        },
+        "englishLabel": "mountain",
+        "characterEnglishLabel": "mountain",
+        "characterMeaning": "地面上高起的地方"
+      },
+      "exampleWords": ["大山", "山羊"],
+      "sentence": "山上有云。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "中间的竖最高，三笔要站稳。"
+      }
+    },
+    {
+      "id": "hz-014",
+      "glyph": "石",
+      "pinyin": "shí",
+      "exampleWord": "石头",
+      "order": 14,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "石头",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪨",
+          "alt": "一块圆圆的石头"
+        },
+        "englishLabel": "stone",
+        "characterEnglishLabel": "stone",
+        "characterMeaning": "坚硬的石块"
+      },
+      "exampleWords": ["石头", "石子"],
+      "sentence": "石头在地上。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "上面一横要稳，下面的口要方正。"
+      }
+    },
+    {
+      "id": "hz-015",
+      "glyph": "田",
+      "pinyin": "tián",
+      "exampleWord": "田地",
+      "order": 15,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "田地",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌾",
+          "alt": "一片金色的田地"
+        },
+        "englishLabel": "field",
+        "characterEnglishLabel": "field",
+        "characterMeaning": "种庄稼的土地"
+      },
+      "exampleWords": ["田地", "田野"],
+      "sentence": "小鸟飞过田地。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先写外框，再把里面分成整齐的小格。"
+      }
+    },
+    {
+      "id": "hz-016",
+      "glyph": "土",
+      "pinyin": "tǔ",
+      "exampleWord": "土地",
+      "order": 16,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "泥土",
+        "visual": {
+          "kind": "emoji",
+          "value": "🟫",
+          "alt": "一块松松的泥土"
+        },
+        "englishLabel": "soil",
+        "characterEnglishLabel": "soil",
+        "characterMeaning": "地面上的泥土"
+      },
+      "exampleWords": ["土地", "泥土"],
+      "sentence": "花长在土里。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写短横，再写竖，最后托住一长横。"
+      }
+    },
+    {
+      "id": "hz-017",
+      "glyph": "上",
+      "pinyin": "shàng",
+      "exampleWord": "上下",
+      "order": 17,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "向上",
+        "visual": {
+          "kind": "emoji",
+          "value": "⬆️",
+          "alt": "指向上方的箭头"
+        },
+        "englishLabel": "up",
+        "characterEnglishLabel": "up",
+        "characterMeaning": "位置在高处或前面"
+      },
+      "exampleWords": ["上下", "上学"],
+      "sentence": "小鸟飞上天。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "竖要站在中间，短横和长横分开。"
+      }
+    },
+    {
+      "id": "hz-018",
+      "glyph": "下",
+      "pinyin": "xià",
+      "exampleWord": "下雨",
+      "order": 18,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "向下",
+        "visual": {
+          "kind": "emoji",
+          "value": "⬇️",
+          "alt": "指向下方的箭头"
+        },
+        "englishLabel": "down",
+        "characterEnglishLabel": "down",
+        "characterMeaning": "位置在低处或后面"
+      },
+      "exampleWords": ["下雨", "下来"],
+      "sentence": "小猫跳下台阶。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "横要写平，竖要写直，最后一点落在下面。"
+      }
+    },
+    {
+      "id": "hz-019",
+      "glyph": "大",
+      "pinyin": "dà",
+      "exampleWord": "大门",
+      "order": 19,
+      "theme": "比较",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "大象",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐘",
+          "alt": "一头大大的象"
+        },
+        "englishLabel": "elephant",
+        "characterEnglishLabel": "big",
+        "characterMeaning": "体积、面积或程度较大"
+      },
+      "exampleWords": ["大门", "大人"],
+      "sentence": "大象很大。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "撇捺打开像两只手，横要托住全字。"
+      }
+    },
+    {
+      "id": "hz-020",
+      "glyph": "小",
+      "pinyin": "xiǎo",
+      "exampleWord": "小猫",
+      "order": 20,
+      "theme": "比较",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小猫",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐈",
+          "alt": "一只小小的猫"
+        },
+        "englishLabel": "kitten",
+        "characterEnglishLabel": "small",
+        "characterMeaning": "体积、面积或程度较小"
+      },
+      "exampleWords": ["小猫", "小鸟"],
+      "sentence": "小猫睡觉了。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写中间的竖钩，再写两边的小点。"
+      }
+    },
+    {
+      "id": "hz-021",
+      "glyph": "中",
+      "pinyin": "zhōng",
+      "exampleWord": "中间",
+      "order": 21,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "中间",
+        "visual": {
+          "kind": "emoji",
+          "value": "🎯",
+          "alt": "靶心在正中间"
+        },
+        "englishLabel": "middle",
+        "characterEnglishLabel": "middle",
+        "characterMeaning": "位置在两边之间"
+      },
+      "exampleWords": ["中间", "中心"],
+      "sentence": "小球在中间。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "口字要方正，竖从中间穿过去。"
+      }
+    },
+    {
+      "id": "hz-022",
+      "glyph": "天",
+      "pinyin": "tiān",
+      "exampleWord": "天空",
+      "order": 22,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "天空",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌤️",
+          "alt": "有云的蓝蓝天空"
+        },
+        "englishLabel": "sky",
+        "characterEnglishLabel": "sky",
+        "characterMeaning": "天空；一天的时间"
+      },
+      "exampleWords": ["天空", "天气"],
+      "sentence": "今天的天很蓝。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "两横有变化，撇捺要向外打开。"
+      }
+    },
+    {
+      "id": "hz-023",
+      "glyph": "王",
+      "pinyin": "wáng",
+      "exampleWord": "王子",
+      "order": 23,
+      "theme": "人物",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "国王",
+        "visual": {
+          "kind": "emoji",
+          "value": "🤴",
+          "alt": "一位戴王冠的国王"
+        },
+        "englishLabel": "king",
+        "characterEnglishLabel": "king",
+        "characterMeaning": "古代的最高统治者"
+      },
+      "exampleWords": ["王子", "大王"],
+      "sentence": "王子骑马。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "三横要有长短，竖线要穿过中间。"
+      }
+    },
+    {
+      "id": "hz-024",
+      "glyph": "马",
+      "pinyin": "mǎ",
+      "exampleWord": "马车",
+      "order": 24,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "马儿",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐎",
+          "alt": "一匹奔跑的小马"
+        },
+        "englishLabel": "horse",
+        "characterEnglishLabel": "horse",
+        "characterMeaning": "一种常见的哺乳动物"
+      },
+      "exampleWords": ["马车", "马上"],
+      "sentence": "马儿跑得快。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "横折要连贯，最后一横向右伸展。"
+      }
+    },
+    {
+      "id": "hz-025",
+      "glyph": "牛",
+      "pinyin": "niú",
+      "exampleWord": "水牛",
+      "order": 25,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "奶牛",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐄",
+          "alt": "一头黑白花奶牛"
+        },
+        "englishLabel": "cow",
+        "characterEnglishLabel": "cow",
+        "characterMeaning": "一种能耕地的家畜"
+      },
+      "exampleWords": ["水牛", "牛奶"],
+      "sentence": "奶牛吃草。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "撇要短，竖要直，最后一横写舒展。"
+      }
+    },
+    {
+      "id": "hz-026",
+      "glyph": "羊",
+      "pinyin": "yáng",
+      "exampleWord": "山羊",
+      "order": 26,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小羊",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐑",
+          "alt": "一只软软的小羊"
+        },
+        "englishLabel": "sheep",
+        "characterEnglishLabel": "sheep",
+        "characterMeaning": "一种有角的家畜"
+      },
+      "exampleWords": ["山羊", "小羊"],
+      "sentence": "小羊在山上。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "点和撇像羊角，三横要排得整齐。"
+      }
+    },
+    {
+      "id": "hz-027",
+      "glyph": "鸟",
+      "pinyin": "niǎo",
+      "exampleWord": "小鸟",
+      "order": 27,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小鸟",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐦",
+          "alt": "一只飞翔的小鸟"
+        },
+        "englishLabel": "bird",
+        "characterEnglishLabel": "bird",
+        "characterMeaning": "有羽毛、会飞的动物"
+      },
+      "exampleWords": ["小鸟", "鸟儿"],
+      "sentence": "小鸟在唱歌。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "鸟头小，身体宽，最后一横要托住全字。"
+      }
+    },
+    {
+      "id": "hz-028",
+      "glyph": "虫",
+      "pinyin": "chóng",
+      "exampleWord": "虫子",
+      "order": 28,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "小虫",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐛",
+          "alt": "一只慢慢爬的小虫"
+        },
+        "englishLabel": "bug",
+        "characterEnglishLabel": "bug",
+        "characterMeaning": "小型无脊椎动物的统称"
+      },
+      "exampleWords": ["虫子", "小虫"],
+      "sentence": "小虫爬过叶子。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "中间的口要圆，最后一笔像小虫的脚。"
+      }
+    },
+    {
+      "id": "hz-029",
+      "glyph": "云",
+      "pinyin": "yún",
+      "exampleWord": "白云",
+      "order": 29,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "白云",
+        "visual": {
+          "kind": "emoji",
+          "value": "☁️",
+          "alt": "一朵软绵绵的白云"
+        },
+        "englishLabel": "cloud",
+        "characterEnglishLabel": "cloud",
+        "characterMeaning": "天空中由水汽形成的团状物"
+      },
+      "exampleWords": ["白云", "云朵"],
+      "sentence": "白云飘在天上。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "上横短，下横长，撇折要连起来。"
+      }
+    },
+    {
+      "id": "hz-030",
+      "glyph": "雨",
+      "pinyin": "yǔ",
+      "exampleWord": "下雨",
+      "order": 30,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "下雨",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌧️",
+          "alt": "天空下着细细的雨"
+        },
+        "englishLabel": "rain",
+        "characterEnglishLabel": "rain",
+        "characterMeaning": "从云中降落的水滴"
+      },
+      "exampleWords": ["下雨", "雨水"],
+      "sentence": "下雨了，带好伞。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "独体字",
+        "hint": "先写雨字头，里面四点要分开。"
+      }
+    },
+    {
+      "id": "hz-031",
+      "glyph": "风",
+      "pinyin": "fēng",
+      "exampleWord": "大风",
+      "order": 31,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "风车",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌬️",
+          "alt": "一阵轻轻吹来的风"
+        },
+        "englishLabel": "wind",
+        "characterEnglishLabel": "wind",
+        "characterMeaning": "空气的流动"
+      },
+      "exampleWords": ["大风", "风车"],
+      "sentence": "风车转起来。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "半包围结构",
+        "hint": "外面的弯钩像风，里面的撇点要靠近。"
+      }
+    },
+    {
+      "id": "hz-032",
+      "glyph": "花",
+      "pinyin": "huā",
+      "exampleWord": "花朵",
+      "order": 32,
+      "theme": "植物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": ["shadow-mate-preschool-hanzi-curriculum"],
+      "traceEligible": true,
+      "concept": {
+        "label": "花朵",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌸",
+          "alt": "一朵粉色的小花"
+        },
+        "englishLabel": "flower",
+        "characterEnglishLabel": "flower",
+        "characterMeaning": "植物开放的部分"
+      },
+      "exampleWords": ["花朵", "花开"],
+      "sentence": "花朵开了。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "上下结构",
+        "hint": "草字头要扁，下面的化字写在中间。"
+      }
+    }
+  ]
+}

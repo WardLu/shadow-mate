@@ -1,34 +1,172 @@
 import { test, expect } from "@playwright/test";
 
-const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
-const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
+const PIPER_LIFECYCLE_FIXTURE = {
+  id: "test-piper-lifecycle",
+  locale: "en-US",
+  label: "Piper lifecycle fixture",
+  kind: "voice",
+  version: "1",
+  source: "cdn",
+  cachePolicy: "user-download",
+  releaseApproved: true,
+  files: [
+    {
+      key: "model",
+      suffix: ".onnx",
+      contentType: "application/octet-stream",
+      content: "abc",
+      bytes: 3,
+      sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    },
+    {
+      key: "metadata",
+      suffix: ".onnx.json",
+      contentType: "application/json",
+      content: "{}",
+      bytes: 2,
+      sha256: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    },
+  ],
+  totalBytes: 5,
+};
 
 async function openModule(page, mod) {
   await page.click('[data-mod="learning"]');
   await page.click(`[data-go="${mod}"]`);
 }
 
-async function freezeWritingDate(page) {
-  await page.addInitScript((fixedTime) => {
-    const NativeDate = Date;
-    class FixedDate extends NativeDate {
-      constructor(...args) {
-        if (args.length === 0) super(fixedTime);
-        else super(...args);
-      }
+async function expectRichLearningCards(root, { includeSpeech = false, gridCells = null } = {}) {
+  const cards = root.locator("[data-hanzi-learning-card]");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-visual]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-example-words]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-sentence]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-writing-hint]")).toHaveCount(4);
+  await expect(cards.locator("[data-hanzi-glyph]")).toHaveCount(4);
+  await expect(cards.locator("[data-writing-pinyin]")).toHaveCount(4);
+  if (gridCells === null) {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(0);
+  } else {
+    await expect(cards.locator("[data-writing-grid]")).toHaveCount(4);
+    await expect(cards.locator("[data-writing-grid] .writing-cell")).toHaveCount(gridCells * 4);
+  }
 
-      static now() {
-        return fixedTime;
-      }
-    }
-    window.Date = FixedDate;
-  }, FIXED_WRITING_TIME);
+  expect(await cards.evaluateAll((elements) => elements.map((card) => ({
+    visual: card.querySelectorAll("[data-hanzi-visual]").length,
+    word: Boolean(card.querySelector("[data-hanzi-example-word]")?.textContent?.trim()),
+    target: Boolean(card.querySelector("[data-hanzi-glyph]")?.textContent?.trim()),
+    pinyin: Boolean(card.querySelector("[data-writing-pinyin]")?.textContent?.trim()),
+    sentence: Boolean(card.querySelector("[data-hanzi-sentence]")?.textContent?.trim()),
+    writingHint: Boolean(card.querySelector("[data-hanzi-writing-hint]")?.textContent?.trim()),
+    gridCells: card.querySelectorAll("[data-writing-grid] .writing-cell").length,
+  })))).toEqual(Array.from({ length: 4 }, () => ({
+    visual: 1,
+    word: true,
+    target: true,
+    pinyin: true,
+    sentence: true,
+    writingHint: true,
+    gridCells: gridCells === null ? 0 : gridCells,
+  })));
+
+  if (includeSpeech) {
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]')).toHaveCount(4);
+    await expect(cards.locator('[data-hanzi-speak][data-speech-locale="en-US"]')).toHaveCount(4);
+  }
 }
 
 test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
+  });
+
+  test("service-worker activation retains a completed Piper package without a second resource GET", async ({ page, context }) => {
+    const resourceGetRequests = { model: 0, metadata: 0 };
+    for (const file of PIPER_LIFECYCLE_FIXTURE.files) {
+      await page.route(`**/piper-lifecycle-fixture${file.suffix}`, async (route) => {
+        if (route.request().method() === "GET") resourceGetRequests[file.key] += 1;
+        await route.continue();
+      });
+    }
+    await page.goto("/");
+
+    const seeded = await page.evaluate(async (fixture) => {
+      if (!("serviceWorker" in navigator) || !("caches" in window)) return { supported: false };
+      const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
+      const { createPiperResourceStore } = await import("/src/piper-resource-store.js");
+      const store = createPiperResourceStore({
+        packages: [resourcePackage],
+        cacheStorage: caches,
+        getCapabilities: () => ({ canDownload: true }),
+      });
+      const cache = await caches.open(store.getCacheName(resourcePackage));
+      for (const file of resourcePackage.files) {
+        await cache.put(`${resourcePackage.baseUrl}${file.suffix}`, new Response(file.content, { headers: { "content-type": file.contentType } }));
+      }
+      const marker = await store.writeCompletionMarker(resourcePackage);
+      const completed = await store.isPiperResourceCached(resourcePackage.id);
+      await caches.open("shadow-mate-app-v3");
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker did not become ready")), 10_000)),
+      ]);
+      const lifecycleToken = Date.now();
+      const registration = await navigator.serviceWorker.register(`/sw.js?lifecycle=${lifecycleToken}`, { scope: "/" });
+      await registration.update();
+      await new Promise((resolve, reject) => {
+        const deadline = Date.now() + 10_000;
+        const check = () => {
+          if (registration.active?.scriptURL.includes(`lifecycle=${lifecycleToken}`) && registration.active.state === "activated") resolve();
+          else if (Date.now() >= deadline) reject(new Error("updated service worker did not activate"));
+          else setTimeout(check, 25);
+        };
+        check();
+      });
+      return {
+        supported: true,
+        cacheNames: await caches.keys(),
+        scriptUrl: registration.active?.scriptURL || null,
+        completed,
+        marker,
+      };
+    }, PIPER_LIFECYCLE_FIXTURE);
+
+    expect(seeded.supported).toBe(true);
+    expect(seeded.scriptUrl).toContain("/sw.js");
+    expect(seeded.completed).toBe(true);
+    expect(seeded.cacheNames).toContain(`shadow-mate-piper-${PIPER_LIFECYCLE_FIXTURE.id}-${PIPER_LIFECYCLE_FIXTURE.version}`);
+    expect(seeded.cacheNames).not.toContain("shadow-mate-app-v3");
+    expect(seeded.marker).toMatchObject({
+      id: PIPER_LIFECYCLE_FIXTURE.id,
+      version: PIPER_LIFECYCLE_FIXTURE.version,
+      manifestVersion: PIPER_LIFECYCLE_FIXTURE.version,
+      files: PIPER_LIFECYCLE_FIXTURE.files.map((file) => ({
+        key: file.key,
+        expectedBytes: file.bytes,
+        actualBytes: file.bytes,
+        expectedSha256: file.sha256,
+        actualSha256: file.sha256,
+      })),
+    });
+
+    await context.setOffline(true);
+    try {
+      await page.reload();
+      await expect(page).toHaveTitle("影伴");
+      const offlinePackage = await page.evaluate(async (fixture) => {
+        const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
+        const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
+        const markerRoot = `${resourcePackage.baseUrl}/__shadow-mate-piper-package__/${encodeURIComponent(`${resourcePackage.id}@${resourcePackage.version}`)}`;
+        const marker = (await cache.keys()).some((request) => request.url === markerRoot || request.url.startsWith(`${markerRoot}?owner=`));
+        const files = await Promise.all(resourcePackage.files.map((file) => cache.match(`${resourcePackage.baseUrl}${file.suffix}`)));
+        return { marker, files: files.map(Boolean) };
+      }, PIPER_LIFECYCLE_FIXTURE);
+      expect(offlinePackage).toEqual({ marker: true, files: [true, true] });
+    } finally {
+      await context.setOffline(false);
+    }
+    expect(resourceGetRequests).toEqual({ model: 0, metadata: 0 });
   });
 
   test("home page shows banner and stats", async ({ page }) => {
@@ -125,8 +263,22 @@ test.describe("Offline mode (no login)", () => {
     await expect(toast.evaluate((element) => element.parentElement?.id)).resolves.toBe("cloudPanel");
   });
 
-  test("navigation switches between modules", async ({ page }) => {
+  test("keeps exact top-level navigation and enters subjects from learning", async ({ page }) => {
     await page.goto("/");
+    const topLevelNav = page.locator(".navbtn");
+    await expect(topLevelNav).toHaveCount(5);
+    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南"]);
+    for (const mod of ["chinese", "math", "english", "book"]) {
+      await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveCount(0);
+    }
+
+    await page.locator('[data-mod="learning"]').click();
+    await expect(page.locator("[data-go]")).toHaveCount(4);
+    await expect(page.locator('[data-go="chinese"]')).toBeVisible();
+    await expect(page.locator('[data-go="math"]')).toBeVisible();
+    await expect(page.locator('[data-go="english"]')).toBeVisible();
+    await expect(page.locator('[data-go="book"]')).toBeVisible();
+
     for (const [mod, label] of [
       ["chinese", "语文"],
       ["math", "数学"],
@@ -147,13 +299,16 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
-  test("usage guide explains setup and speech downloads", async ({ page }) => {
+  test("usage guide explains setup and manages browser-scoped speech resources", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="guide"]');
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("约 115MB");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("共享 AI 语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("不需要下载本地模型");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("旧离线包只需在需要释放空间时手动删除");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource-action="download"]')).toHaveCount(0);
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
@@ -180,22 +335,21 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button offers local offline voice when system has no usable voice", async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
+  test("speech button reports unavailable audio without reopening the retired download flow", async ({ page }) => {
+    await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+    await page.addInitScript(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
-        value: { getVoices() { return []; }, speak() {} },
+        value: { cancel() {}, getVoices() { return []; }, speak() {} },
       });
       Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
     });
+    await page.goto("/");
     await openModule(page, "english");
     const button = page.locator("[data-speak]").first();
     await button.click();
-    await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线英语语音");
-    await page.click('.voice-dialog-actions [data-action="cancel"]');
-    await expect(page.locator("#shadow-voice-dialog")).toBeHidden();
+    await expect(button).toContainText("AI 发音暂不可用，且未检测到对应系统语音，请稍后重试");
+    await expect(page.locator("#shadow-voice-dialog")).toHaveCount(0);
   });
 
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {
@@ -219,30 +373,71 @@ test.describe("Offline mode (no login)", () => {
     }
   });
 
-  test("keeps the daily writing workbook stable for local users, including printing", async ({ page }) => {
-    await freezeWritingDate(page);
+  test("keeps the V2 Pilot learning-card snapshot stable for local users, including printing", async ({ page }) => {
+    await page.context().addInitScript(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
+    await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await page.goto("/");
     await openModule(page, "chinese");
+    await page.clock.pauseAt(new Date("2026-09-01T02:00:00.000Z"));
 
-    const writingGroups = page.locator("[data-writing-practice] .write-grid");
-    await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
-    const beforeCheckin = await writingGroups.allTextContents();
-
-    await page.locator('[data-cmod="chinese-writing"]').click();
-    await expect(writingGroups).toHaveText(beforeCheckin);
-
-    await page.evaluate(() => {
-      window.print = () => {
-        window.__printedWritingGroups = [...document.querySelectorAll("[data-writing-print-sheet] .write-grid")]
-          .map((element) => element.textContent);
+    const readWorksheetSnapshot = () => page.evaluate(() => {
+      const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
+        rowId: row.dataset.writingRowId,
+        itemId: row.dataset.writingItemId,
+        glyph: row.querySelector("[data-writing-glyph]")?.textContent,
+        pinyin: row.querySelector("[data-writing-pinyin]")?.textContent,
+        exampleWord: row.querySelector("[data-writing-example-word]")?.textContent,
+      }));
+      const readSheet = (root) => ({
+        assignmentId: root?.dataset.writingAssignmentId,
+        dayKey: root?.dataset.writingDayKey,
+        packId: root?.dataset.writingPackId,
+        packVersion: root?.dataset.writingPackVersion,
+        rows: root ? readRows(root) : [],
+      });
+      return {
+        screen: readSheet(document.querySelector("[data-writing-worksheet]")),
+        print: readSheet(document.querySelector("[data-writing-print-sheet]")),
+        state: window.learningDesk.getState(),
       };
     });
-    await page.locator("[data-print]").click();
-    await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
+    await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
+    const beforePrint = await readWorksheetSnapshot();
+    expect(beforePrint.screen).toMatchObject({
+      dayKey: "2026-09-01",
+      packId: "hanzi-writing-v2",
+      packVersion: "hanzi-v2-pilot-1",
+    });
+    expect(beforePrint.screen.rows).toHaveLength(4);
+    expect(beforePrint.print).toEqual(beforePrint.screen);
 
+    const popupPromise = page.waitForEvent("popup");
+    await page.locator("[data-print]").click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState("load");
+    await expect.poll(() => popup.evaluate(() => window.__printCalls), { timeout: 15000 }).toBe(1);
+    expect(await readWorksheetSnapshot()).toEqual(beforePrint);
+    await popup.close();
+
+    await page.locator('[data-cmod="chinese-writing"]').click();
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveClass(/done/);
+    const afterCheckin = await readWorksheetSnapshot();
+    expect(afterCheckin.screen).toEqual(beforePrint.screen);
+    expect(afterCheckin.print).toEqual(beforePrint.print);
     await page.reload();
     await openModule(page, "chinese");
-    await expect(writingGroups).toHaveText(beforeCheckin);
+    await expectRichLearningCards(page.locator("[data-writing-worksheet]"), { includeSpeech: true });
+    await expectRichLearningCards(page.locator("[data-writing-print-sheet]"), { gridCells: 9 });
+    const afterReload = await readWorksheetSnapshot();
+    expect(afterReload.screen).toEqual(beforePrint.screen);
+    expect(afterReload.print).toEqual(beforePrint.print);
+    expect(afterReload.print).toEqual(afterReload.screen);
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveClass(/done/);
   });
 
   test("checkin can be cancelled by clicking again", async ({ page }) => {

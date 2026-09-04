@@ -13,8 +13,10 @@ import {
 
 describe("content package registry", () => {
   it("exposes a stable package and module registry", () => {
-    expect(FOUNDATION_PACKAGE.id).toBe("foundation-v1");
-    expect(FOUNDATION_PACKAGE.version).toBe(1);
+    expect(FOUNDATION_PACKAGE.id).toBe("foundation-v2");
+    expect(FOUNDATION_PACKAGE.version).toBe(2);
+    expect(FOUNDATION_PACKAGE.name).toBe("启蒙学习包 V2");
+    expect(FOUNDATION_PACKAGE.suggested_age).toBe("4-5");
     expect(FOUNDATION_PACKAGE.modules.map((module) => module.id)).toEqual(["chinese", "math", "english", "book"]);
     for (const module of FOUNDATION_PACKAGE.modules) {
       expect(getContentModuleDefinition(module.id)).toBe(module);
@@ -25,8 +27,8 @@ describe("content package registry", () => {
   it("defaults every module and the package to enabled", () => {
     expect(defaultContentConfig()).toEqual({
       schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
-      package_id: "foundation-v1",
-      package_version: 1,
+      package_id: "foundation-v2",
+      package_version: 2,
       enabled: true,
       modules: { chinese: true, math: true, english: true, book: true },
     });
@@ -62,8 +64,8 @@ describe("content package registry", () => {
     expect(getEnabledModuleIds(config)).toEqual(["chinese", "math", "english", "book"]);
     expect(normalizeContentConfig({ modules: { chinese: false, junk: true } })).toEqual({
       schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
-      package_id: "foundation-v1",
-      package_version: 1,
+      package_id: "foundation-v2",
+      package_version: 2,
       enabled: true,
       modules: { chinese: false, math: true, english: true, book: true },
     });

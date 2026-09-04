@@ -14,6 +14,20 @@ import {
   latestUpdatedAt,
   passwordStrength,
 } from "../../src/lib.js";
+import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
+
+const HANZI_PACK = getActiveHanziWritingPack();
+
+function makeRotationState(learnerScope = "anonymous") {
+  return resolveDailyWorksheet({
+    rotationState: {},
+    pack: HANZI_PACK,
+    learnerScope,
+    now: new Date("2026-09-01T00:30:00.000Z"),
+    timeZone: "Asia/Singapore",
+  }).rotationState;
+}
 
 describe("family sync metadata", () => {
   it("uses the newest child state timestamp for the family workspace", () => {
@@ -149,6 +163,23 @@ describe("stateHasData", () => {
   });
   it("returns true when bookShelf has entries", () => {
     expect(stateHasData({ bookShelf: { 0: 1 } })).toBe(true);
+  });
+  it("returns true for a valid rotation assignment", () => {
+    expect(stateHasData({
+      extra: { hanziWorksheetRotationV1: makeRotationState() },
+    })).toBe(true);
+  });
+  it("rejects empty, malformed, and cross-scope rotation state", () => {
+    const malformed = makeRotationState();
+    malformed.assignments["2026-09-01"] = {};
+
+    const crossScope = makeRotationState("profile:learner-a");
+    crossScope.learnerScope = "profile:learner-b";
+
+    expect(stateHasData({ extra: { hanziWorksheetRotationV1: {} } })).toBe(false);
+    expect(stateHasData({ extra: { hanziWorksheetRotationV1: [] } })).toBe(false);
+    expect(stateHasData({ extra: { hanziWorksheetRotationV1: malformed } })).toBe(false);
+    expect(stateHasData({ extra: { hanziWorksheetRotationV1: crossScope } })).toBe(false);
   });
 });
 

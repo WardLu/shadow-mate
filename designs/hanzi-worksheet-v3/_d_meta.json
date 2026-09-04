@@ -1,0 +1,127 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Hanzi worksheet v3": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v3.html",
+          "createdAt": "2026-09-01T14:41:54.440Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "writing-worksheet-v3.png",
+          "createdAt": "2026-09-01T14:41:54.495Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Hanzi worksheet v4": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v4.html",
+          "createdAt": "2026-09-01T17:02:34.426Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 793,
+            "height": 1123
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v4 preview": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v4.png",
+          "createdAt": "2026-09-01T17:02:34.482Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 1280,
+            "height": 1810
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v5": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v5.html",
+          "createdAt": "2026-09-01T17:44:59.069Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 793,
+            "height": 1123
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v5 preview": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v5.png",
+          "createdAt": "2026-09-01T17:44:59.122Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 1280,
+            "height": 1810
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v6": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v6.html",
+          "createdAt": "2026-09-01T17:53:59.817Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 793,
+            "height": 1123
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v6 preview": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v6.png",
+          "createdAt": "2026-09-01T17:53:59.869Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 1280,
+            "height": 1810
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v7 preview": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v7.png",
+          "createdAt": "2026-09-01T18:01:08.549Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 1280,
+            "height": 1810
+          }
+        }
+      ]
+    },
+    "Hanzi worksheet v7": {
+      "versions": [
+        {
+          "path": "writing-worksheet-v7.html",
+          "createdAt": "2026-09-01T19:24:59.647Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 793,
+            "height": 1123
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-09-01T14:41:54.440Z",
+  "updatedAt": "2026-09-01T19:24:59.648Z"
+}

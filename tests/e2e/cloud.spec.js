@@ -7,8 +7,6 @@ const SECOND_PROFILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const THIRD_PROFILE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const SENSITIVE_MARK_PAYLOAD = "synthetic-mark-payload-not-for-telemetry";
-const FIXED_WRITING_TIME = new Date(2026, 7, 20, 9, 0, 0).getTime();
-const EXPECTED_WRITING_GROUPS = ["木山中", "田土石", "天王马", "牛羊鸟"];
 
 const emptyState = {
   checkins: {},
@@ -19,26 +17,63 @@ const emptyState = {
   peanutRead: {},
 };
 
-async function freezeWritingDate(page) {
-  await page.addInitScript((fixedTime) => {
-    const NativeDate = Date;
-    class FixedDate extends NativeDate {
-      constructor(...args) {
-        if (args.length === 0) super(fixedTime);
-        else super(...args);
-      }
-
-      static now() {
-        return fixedTime;
-      }
-    }
-    window.Date = FixedDate;
-  }, FIXED_WRITING_TIME);
-}
-
 async function openModule(page, mod) {
   await page.click('[data-mod="learning"]');
   await page.click(`[data-go="${mod}"]`);
+}
+
+async function installSpeechMock(page) {
+  await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({
+    status: 503,
+    contentType: "text/plain",
+    body: "test-system-fallback",
+  }));
+  await page.addInitScript(() => {
+    const utterances = [];
+    Object.defineProperty(window, "__speechUtterances", {
+      configurable: true,
+      value: utterances,
+    });
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: function SpeechSynthesisUtterance(text) {
+        this.text = text;
+        this.lang = "";
+      },
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices() {
+          return [{ lang: "zh-CN" }, { lang: "en-US" }];
+        },
+        speak(utterance) {
+          utterances.push({ text: utterance.text, lang: utterance.lang });
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+}
+
+async function readWritingSnapshot(page) {
+  return page.evaluate(() => {
+    const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
+      itemId: row.dataset.writingItemId,
+      glyph: row.querySelector("[data-writing-glyph]")?.textContent,
+    }));
+    const readSheet = (root) => ({
+      assignmentId: root?.dataset.writingAssignmentId,
+      dayKey: root?.dataset.writingDayKey,
+      packVersion: root?.dataset.writingPackVersion,
+      rows: readRows(root),
+    });
+    return {
+      screen: readSheet(document.querySelector("[data-writing-worksheet]")),
+      print: readSheet(document.querySelector("[data-writing-print-sheet]")),
+    };
+  });
 }
 
 async function seedAuthenticatedSession(page) {
@@ -700,7 +735,11 @@ test.describe("Authenticated cloud workspace", () => {
   });
 
   test("keeps the same daily writing workbook and isolates its print sheet for a logged-in user", async ({ page }) => {
-    await freezeWritingDate(page);
+    await page.context().addInitScript(() => {
+      window.__printCalls = 0;
+      window.print = () => { window.__printCalls += 1; };
+    });
+    await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await seedAuthenticatedSession(page);
     await mockCloudApi(page);
 
@@ -708,30 +747,58 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
     await openModule(page, "chinese");
 
-    const writingGroups = page.locator("[data-writing-practice] .write-grid");
-    await expect(writingGroups).toHaveText(EXPECTED_WRITING_GROUPS);
-    const beforeCheckin = await writingGroups.allTextContents();
+    await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
+    const beforeCheckin = await readWritingSnapshot(page);
+    expect(beforeCheckin.screen.rows).toHaveLength(4);
 
     await page.locator('[data-cmod="chinese-writing"]').click();
-    await expect(writingGroups).toHaveText(beforeCheckin);
+    const afterCheckin = await readWritingSnapshot(page);
+    expect(afterCheckin.screen).toEqual(beforeCheckin.screen);
 
-    await page.evaluate(() => {
-      window.print = () => {
-        window.__printedWritingGroups = [...document.querySelectorAll("[data-writing-print-sheet] .write-grid")]
-          .map((element) => element.textContent);
-      };
-    });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    const popupPromise = page.waitForEvent("popup");
     await page.locator("[data-print]").click();
-    await expect.poll(() => page.evaluate(() => window.__printedWritingGroups)).toEqual(beforeCheckin);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("load");
+    await expect.poll(() => popup.evaluate(() => window.__printCalls), { timeout: 15000 }).toBe(1);
+    expect(await readWritingSnapshot(page)).toEqual(afterCheckin);
+    await popup.close();
 
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
-    await expect(page.locator("[data-writing-print-sheet] .tian")).toHaveText(beforeCheckin.flatMap((group) => [...group]));
-    await expect(page.locator(".module-title")).toBeHidden();
-    await expect(page.locator("[data-writing-practice]")).toBeHidden();
+    await expect(page.locator(".app")).toBeHidden();
+    await expect(page.locator("[data-writing-worksheet]")).toBeHidden();
+    await expect(page.locator("[data-writing-print-sheet] button")).toHaveCount(0);
 
     await page.emulateMedia({ media: "screen" });
     await expect(page.locator('[data-cmod="chinese-writing"]')).toBeVisible();
+  });
+
+  test("keeps the logged-in writing workbook stable when bilingual learning-card speech is clicked", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+    await installSpeechMock(page);
+
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await openModule(page, "chinese");
+    await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
+
+    const before = await readWritingSnapshot(page);
+    const beforeState = await page.evaluate(() => window.learningDesk.getState());
+    const firstCard = page.locator("[data-writing-worksheet] [data-hanzi-learning-card]").first();
+    const zhButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]');
+    const enButton = firstCard.locator('[data-hanzi-speak][data-speech-locale="en-US"]');
+    await expect(zhButton).toHaveAttribute("data-speech-content-id", /:glyph$/);
+    await expect(enButton).toHaveAttribute("data-speech-content-id", /:english$/);
+
+    await zhButton.click();
+    await enButton.click();
+
+    expect(await readWritingSnapshot(page)).toEqual(before);
+    expect(await page.evaluate(() => window.learningDesk.getPersistenceScope())).toBe(`profile:${PROFILE_ID}`);
+    expect(await page.evaluate(() => window.learningDesk.getState())).toEqual(beforeState);
   });
 
   test("switches learners after the local IndexedDB connection closes and updates the active style", async ({ page }) => {

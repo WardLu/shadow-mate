@@ -1,4 +1,6 @@
 
+@font-face{font-family:"ShadowMateWriting";src:url('/brand_assets/shadow-mate-writing-hand.ttf') format('truetype');font-display:swap;font-weight:400;font-style:normal;}
+
   :root{
     color-scheme:light;
     --green:#2fa84f;
@@ -151,7 +153,64 @@
   }
   .write-grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
   .stroke-list{display:flex;flex-wrap:wrap;gap:8px;}
-  .stroke-chip{background:var(--green-soft);border-radius:14px;padding:8px 12px;font-size:14px;font-weight:700;color:var(--green-deep);}
+  .stroke-chip{display:inline-flex;align-items:center;gap:5px;margin:3px 4px 3px 0;background:var(--green-soft);border-radius:14px;padding:5px 8px;font-size:12px;font-weight:700;color:var(--green-deep);}
+  .stroke-glyph{display:block;min-width:18px;flex:0 0 auto;font-family:"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:19px;font-weight:800;line-height:1;text-align:center;}
+
+  /* 今日图字学习：屏幕与打印共用 worksheet snapshot 的行结构 */
+  .writing-worksheet{margin-top:10px;padding:10px 0 2px;border-top:1px solid var(--line);}
+  .writing-worksheet-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;}
+  .writing-worksheet-label{font-size:13px;font-weight:800;color:var(--green-deep);}
+  .writing-worksheet-day{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .hanzi-learning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px;}
+  .writing-row{padding:10px 0;border-top:1px solid var(--line);break-inside:avoid;page-break-inside:avoid;}
+  .writing-row:first-child{border-top:0;}
+  .hanzi-learning-card{min-width:0;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:var(--shadow);}
+  .hanzi-learning-grid .hanzi-learning-card{border-top:1px solid var(--line);}
+  .hanzi-learning-grid .hanzi-learning-card:first-child{border-top:1px solid var(--line);}
+  .hanzi-learning-visual{margin-bottom:10px;}
+  .hanzi-visual{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:10px;row-gap:2px;padding:10px;border-radius:14px;background:var(--green-soft);}
+  .hanzi-visual-value{grid-row:span 3;font-size:38px;line-height:1;}
+  .hanzi-concept-label{font-size:14px;font-weight:800;color:var(--ink);}
+  .hanzi-english-label{font-size:11px;color:var(--ink-soft);font-style:italic;}
+  .hanzi-visual-alt{font-size:11px;color:var(--ink-soft);line-height:1.35;}
+  .hanzi-learning-word{display:grid;gap:5px;margin-bottom:8px;}
+  .hanzi-section-label{font-size:11px;font-weight:800;color:var(--green-deep);}
+  .hanzi-example-words{display:flex;gap:6px;flex-wrap:wrap;}
+  .hanzi-example-word{padding:5px 9px;border-radius:999px;background:var(--green-soft);color:var(--ink);font-size:14px;font-weight:700;}
+  .hanzi-example-word mark{background:var(--yellow-soft);color:inherit;border-radius:3px;padding-inline:1px;}
+  .hanzi-learning-target{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line);}
+  .hanzi-target-glyph{font-size:46px;font-weight:800;color:var(--ink);line-height:1;}
+  .hanzi-target-pinyin{font-size:16px;font-weight:800;color:var(--green-deep);}
+  .hanzi-speech-actions{display:flex;gap:5px;margin-left:auto;flex-wrap:wrap;}
+  .hanzi-speech-actions button{border:1px solid var(--green);border-radius:999px;padding:5px 8px;background:var(--card);color:var(--green-deep);font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
+  .hanzi-meaning{display:flex;align-items:flex-start;gap:6px;margin-top:7px;color:var(--ink-soft);font-size:12px;line-height:1.5;}
+  .hanzi-meaning-label{flex:0 0 auto;color:var(--green-deep);font-weight:800;}
+  .hanzi-meaning-text{min-width:0;}
+  .hanzi-sentence{margin:7px 0 0;color:var(--ink);font-size:13px;line-height:1.55;}
+  .hanzi-writing-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;color:var(--ink-soft);font-size:11px;}
+  .hanzi-writing-meta span{padding:4px 7px;border-radius:8px;background:var(--green-soft);}
+  .hanzi-writing-meta [data-hanzi-stroke-order]{flex-basis:100%;}
+  .hanzi-writing-hint{margin:7px 0 0;padding:8px 9px;border-left:3px solid var(--yellow);border-radius:0 9px 9px 0;background:var(--yellow-soft);color:var(--ink);font-size:12px;line-height:1.5;}
+  .writing-row-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px;}
+  .writing-cell{aspect-ratio:1;min-width:0;border:2px solid var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;background:
+    linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+    linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+    linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
+    linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
+  .writing-cell-model{background-color:var(--green-soft);}
+  .writing-cell-model [data-writing-glyph]{font-size:34px;font-weight:800;line-height:1;color:var(--ink);}
+  .writing-cell-trace{color:rgba(31,122,57,.45);}
+  .writing-cell-trace [data-writing-glyph]{font-size:34px;font-weight:800;line-height:1;}
+  .writing-cell-empty{background:
+    linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+    linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+    linear-gradient(to top right,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%),
+    linear-gradient(to top left,transparent 49%,var(--line) 49%,var(--line) 51%,transparent 51%);}
+  .writing-print-root{display:none;}
+  @media (max-width:680px){
+    .hanzi-learning-grid{grid-template-columns:1fr;}
+    .hanzi-learning-card{padding:13px;}
+  }
 
   /* 数学口算 */
   .quiz-box{text-align:center;padding:10px 0;}
@@ -356,19 +415,199 @@
   .log-meta{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;}
   .log-del{border:0;background:transparent;color:var(--ink-soft);cursor:pointer;padding:7px;display:inline-flex;align-items:center;justify-content:center;}
 
-  /* 打印区 */
-  .writing-print-sheet{display:none;}
+  /* 打印区：body 只保留独立的 snapshot print root */
   @media print{
-    @page{size:A4 portrait;margin:12mm;}
-    body{background:#fff !important;color:#000 !important;}
-    body > :not(.writing-print-sheet){display:none !important;}
-    .writing-print-sheet{display:block !important;color:#000;font-family:"Kaiti SC","STKaiti","KaiTi","Noto Serif SC",serif;}
-    .writing-print-sheet h1{margin:0;text-align:center;font-size:22pt;letter-spacing:3pt;}
-    .writing-print-date{margin:3mm 0 1mm;text-align:center;font-size:11pt;}
-    .writing-print-note{margin:0 0 6mm;font-size:11pt;}
-    .writing-print-groups{display:grid;gap:5mm;}
-    .writing-print-sheet .write-grid{display:grid;grid-template-columns:repeat(3,28mm);gap:4mm;break-inside:avoid;}
-    .writing-print-sheet .tian{width:28mm;height:28mm;box-sizing:border-box;border:0.5mm solid #000;border-radius:0;color:#c86a6a;background:linear-gradient(#999,#999) center/100% 0.25mm no-repeat,linear-gradient(#999,#999) center/0.25mm 100% no-repeat,linear-gradient(to top right,transparent 49.5%,#bbb 49.5%,#bbb 50.5%,transparent 50.5%),linear-gradient(to top left,transparent 49.5%,#bbb 49.5%,#bbb 50.5%,transparent 50.5%);font-size:16mm;font-weight:400;line-height:1;break-inside:avoid;}
+    @page{size:A4 portrait;margin:0;}
+    html,body{background:#fff;color:#111;}
+    body > *:not(#writingPrintRoot){display:none !important;}
+    #writingPrintRoot{display:block !important;width:100%;}
+    #writingPrintRoot [data-writing-print-sheet]{display:block !important;width:100%;}
+    #writingPrintRoot .writing-print-sheet{width:210mm;height:297mm;padding:7.5mm;box-sizing:border-box;background:#fff;}
+    #writingPrintRoot .writing-print-paper{position:relative;width:100%;height:100%;box-sizing:border-box;overflow:hidden;padding:7.5mm 7.5mm 4.5mm;border:0.55mm solid #5c56cf;border-radius:4.5mm;background:#fff;}
+    #writingPrintRoot .writing-print-paper::before{content:"";position:absolute;top:0;right:0;left:0;height:1.3mm;background:linear-gradient(90deg,#5c56cf 0 36%,#60bfa8 36% 68%,#efad4e 68% 86%,#e96d9d 86%);}
+    #writingPrintRoot .writing-print-header{display:grid;grid-template-columns:1fr auto;grid-template-rows:7mm 12mm 10mm;column-gap:5mm;align-items:start;}
+    #writingPrintRoot .writing-print-eyebrow{display:flex;align-items:center;gap:2mm;color:#95a1b5;font-size:8pt;letter-spacing:.1em;font-weight:700;}
+    #writingPrintRoot .writing-print-brand-logo{display:block;width:6mm;height:6mm;flex:0 0 auto;border-radius:2mm;background:none;overflow:hidden;}
+    #writingPrintRoot .writing-print-divider{color:#c0c9d6;}
+    #writingPrintRoot .writing-print-badge{display:grid;grid-template-columns:10mm auto;align-items:center;min-width:34mm;height:10mm;padding:1mm 3mm 1mm 1.2mm;border:0.3mm solid #d4d1ff;border-radius:4mm;background:#f4f3ff;}
+    #writingPrintRoot .writing-print-badge strong{display:grid;width:8mm;height:8mm;place-items:center;color:#fff;font-size:14pt;border-radius:2.5mm;background:#5c56cf;}
+    #writingPrintRoot .writing-print-badge span{color:#5c56cf;font-size:8pt;font-weight:800;white-space:nowrap;}
+    #writingPrintRoot .writing-print-header h1{grid-column:1/-1;margin:0;color:#25344f;font-size:24pt;line-height:1;font-weight:800;letter-spacing:.04em;}
+    #writingPrintRoot .writing-print-subtitle{grid-column:1/-1;margin:0;color:#8996ab;font-size:9pt;letter-spacing:.03em;white-space:nowrap;}
+    #writingPrintRoot .writing-print-subtitle strong{color:#e96d9d;}
+    #writingPrintRoot .writing-print-meta-bar{display:grid;grid-column:1/-1;grid-template-columns:1.05fr 1.05fr .72fr 1.05fr;align-items:center;height:10mm;padding:0 3mm;border:0.3mm solid #d9e2ed;border-radius:3mm;background:#fbfcfe;}
+    #writingPrintRoot .writing-print-meta-bar > div{display:flex;align-items:baseline;gap:1.5mm;min-width:0;color:#9aa7ba;font-size:7pt;white-space:nowrap;}
+    #writingPrintRoot .writing-print-meta-bar > div + div{padding-left:3mm;border-left:0.25mm solid #e7ecf3;}
+    #writingPrintRoot .writing-print-meta-bar strong{color:#25344f;font-size:8pt;}
+    #writingPrintRoot .writing-print-line{position:relative;top:1.2mm;display:inline-block;width:15mm;border-bottom:0.25mm solid #b8c5d6;}
+    #writingPrintRoot .writing-print-line.short{width:9mm;}
+    #writingPrintRoot .writing-print-stars{color:#efad4e;font-size:12pt;letter-spacing:1mm;line-height:1;}
+    #writingPrintRoot .writing-print-lesson-strip{display:grid;grid-template-columns:1.05fr 1fr;gap:3mm;height:14mm;margin-top:2mm;}
+    #writingPrintRoot .writing-print-lesson-box,#writingPrintRoot .writing-print-chars-box{display:flex;align-items:center;min-width:0;padding:2mm 3mm;border:0.3mm solid #e6dfcf;border-radius:3.5mm;background:linear-gradient(135deg,#fffaf0,#fffdf8);}
+    #writingPrintRoot .writing-print-lesson-box{display:grid;grid-template-columns:24mm 1fr 1fr;grid-template-rows:1fr 1fr;column-gap:1.5mm;row-gap:0.5mm;}
+    #writingPrintRoot .writing-print-chars-box{border-color:#cce9df;background:linear-gradient(135deg,#f2fcf8,#fbfffd);}
+    #writingPrintRoot .writing-print-lesson-box > strong,#writingPrintRoot .writing-print-chars-box > strong{display:flex;align-items:center;gap:2mm;min-width:24mm;font-size:9pt;white-space:nowrap;}
+    #writingPrintRoot .writing-print-lesson-box > strong{grid-row:1/3;}
+    #writingPrintRoot .writing-print-lesson-box > strong::before,#writingPrintRoot .writing-print-chars-box > strong::before{content:"";display:inline-block;width:1.5mm;height:7mm;border-radius:999px;background:#efad4e;}
+    #writingPrintRoot .writing-print-chars-box > strong::before{background:#60bfa8;}
+    #writingPrintRoot .writing-print-lesson-box > span{color:#7f8da3;font-size:6.2pt;white-space:nowrap;}
+    #writingPrintRoot .writing-print-chars-box > div{display:flex;flex-wrap:wrap;gap:1.5mm;min-width:0;}
+    #writingPrintRoot .writing-print-chars-box > div > span{display:grid;width:7mm;height:7.5mm;place-items:center;color:#25344f;font-family:"ShadowMateWriting","PingFang SC",sans-serif;font-size:15pt;border:0.3mm solid #bfe3d6;border-radius:2mm;background:#fff;}
+    #writingPrintRoot .writing-print-chars-box > div > span:nth-child(odd){color:#e96d9d;}
+    #writingPrintRoot .writing-print-section-head,#writingPrintRoot .writing-print-bottom-head{display:flex;align-items:center;justify-content:space-between;height:9mm;margin-top:2mm;}
+    #writingPrintRoot .writing-print-section-head h2,#writingPrintRoot .writing-print-bottom-head h2{display:flex;align-items:center;gap:2mm;margin:0;font-size:12pt;font-weight:800;}
+    #writingPrintRoot .writing-print-section-head h2 span,#writingPrintRoot .writing-print-bottom-head h2 span{display:grid;width:7mm;height:7mm;place-items:center;color:#fff;font-size:8pt;border-radius:2mm;background:#e96d9d;}
+    #writingPrintRoot .writing-print-bottom-head h2 span{background:#5c56cf;}
+    #writingPrintRoot .writing-print-section-head > div{display:flex;gap:3mm;color:#9ba7b8;font-size:6.5pt;}
+    #writingPrintRoot .writing-print-section-head .model{color:#53637a;}
+    #writingPrintRoot .writing-print-section-head .trace{color:#e96d9d;}
+    #writingPrintRoot .writing-print-section-head .practice{color:#9ba7b8;}
+    #writingPrintRoot .writing-print-rows{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(2,72mm);gap:2mm;margin-top:1mm;}
+    #writingPrintRoot .writing-print-card{display:grid;grid-template-rows:9mm 8mm 1fr 4mm;min-width:0;padding:2.5mm;border:0.35mm solid #d8e1ec;border-radius:3.5mm;background:linear-gradient(135deg,#fffafe,#fff);break-inside:avoid;page-break-inside:avoid;}
+    #writingPrintRoot .writing-print-card:nth-child(2){background:linear-gradient(135deg,#f8fdfb,#fff);}
+    #writingPrintRoot .writing-print-card:nth-child(3){background:linear-gradient(135deg,#fffdf7,#fff);}
+    #writingPrintRoot .writing-print-card:nth-child(4){background:linear-gradient(135deg,#f8fbff,#fff);}
+    #writingPrintRoot .writing-print-card-head{display:flex;align-items:center;gap:1.5mm;min-width:0;}
+    #writingPrintRoot .writing-print-number{display:grid;width:6mm;height:6mm;place-items:center;color:#fff;font-size:7pt;font-weight:800;border-radius:1.8mm;background:#5c56cf;}
+    #writingPrintRoot .writing-print-card:nth-child(2) .writing-print-number{background:#60bfa8;}
+    #writingPrintRoot .writing-print-card:nth-child(3) .writing-print-number{background:#5c56cf;}
+    #writingPrintRoot .writing-print-card:nth-child(4) .writing-print-number{background:#efad4e;}
+    #writingPrintRoot .writing-print-target{color:#25344f;font-family:"ShadowMateWriting","PingFang SC",sans-serif;font-size:18pt;line-height:1;}
+    #writingPrintRoot .writing-print-pinyin{color:#8492a7;font-size:7pt;white-space:nowrap;}
+    #writingPrintRoot .writing-print-phrase{margin-left:auto;overflow:hidden;color:#6f809a;font-size:6.5pt;text-overflow:ellipsis;white-space:nowrap;}
+    #writingPrintRoot .writing-print-context{display:flex;align-items:center;gap:2mm;min-width:0;overflow:hidden;color:#7f8da3;}
+    #writingPrintRoot .writing-print-context .hanzi-visual{display:flex;align-items:center;gap:1mm;padding:0;background:transparent;white-space:nowrap;}
+    #writingPrintRoot .writing-print-context .hanzi-visual-value{font-size:10pt;line-height:1;}
+    #writingPrintRoot .writing-print-context .hanzi-concept-label{font-size:6.5pt;font-weight:800;}
+    #writingPrintRoot .writing-print-context .hanzi-english-label{font-size:6pt;}
+    #writingPrintRoot .writing-print-context .hanzi-visual-alt{display:none;}
+    #writingPrintRoot .writing-print-context .hanzi-example-words{display:flex;gap:1mm;min-width:0;}
+    #writingPrintRoot .writing-print-context .hanzi-example-word{padding:0.7mm 1.2mm;color:#53637a;font-size:6pt;background:#eefaf6;}
+    #writingPrintRoot .writing-print-context .hanzi-example-word mark{background:#fff0bd;}
+    #writingPrintRoot .writing-print-body{display:grid;grid-template-columns:30mm 1fr;gap:3mm;min-width:0;padding-top:1mm;}
+    #writingPrintRoot .writing-print-model-side{display:grid;grid-template-columns:5mm 1fr;grid-template-rows:34mm auto auto;gap:1mm;min-width:0;padding-right:2mm;border-right:0.25mm dashed #d7e1ed;}
+    #writingPrintRoot .writing-print-model-label{grid-row:1;color:#99a6b8;font-size:6pt;writing-mode:vertical-rl;letter-spacing:.08em;}
+    #writingPrintRoot .writing-print-model-side .writing-print-cell{width:24mm;height:34mm;}
+    #writingPrintRoot .writing-print-info{grid-column:1/-1;overflow:hidden;margin:0;color:#7d8ba0;font-size:5.8pt;line-height:1.25;white-space:nowrap;text-overflow:ellipsis;}
+    #writingPrintRoot .writing-print-info strong{color:#53637a;}
+    #writingPrintRoot .writing-print-practice{display:grid;grid-template-rows:17mm 17mm 1fr 7mm;gap:1mm;min-width:0;}
+    #writingPrintRoot .writing-print-practice-row{display:grid;grid-template-columns:7mm 1fr;align-items:center;gap:1.5mm;min-width:0;}
+    #writingPrintRoot .writing-print-practice-label{color:#9ca9b9;font-size:6.5pt;font-weight:700;}
+    #writingPrintRoot .writing-print-practice-label.trace{color:#e96d9d;}
+    #writingPrintRoot .writing-print-cells{display:flex;gap:1mm;min-width:0;}
+    #writingPrintRoot .writing-print-cell{position:relative;display:grid;width:12mm;height:12mm;flex:0 0 12mm;place-items:center;overflow:hidden;--guide:#c6d3e0;border:0.3mm solid #cbd7e5;background:rgba(255,255,255,.72);}
+    #writingPrintRoot .writing-print-cell.trace{--guide:#efc0d3;border-color:#efbad0;background:#fff0f6;}
+    #writingPrintRoot .writing-print-cell > span{position:relative;z-index:1;color:#25344f;font-family:"ShadowMateWriting","PingFang SC",sans-serif;font-size:14pt;line-height:1;}
+    #writingPrintRoot .writing-print-cell.trace > span{color:#e96d9d;opacity:.5;}
+    #writingPrintRoot .writing-print-rice-line{position:absolute;z-index:0;pointer-events:none;border-color:var(--guide);border-style:dashed;border-width:0;}
+    #writingPrintRoot .writing-print-rice-line.horizontal{top:50%;left:0;width:100%;border-top-width:0.25mm;}
+    #writingPrintRoot .writing-print-rice-line.vertical{top:0;left:50%;height:100%;border-left-width:0.25mm;}
+    #writingPrintRoot .writing-print-rice-line.diagonal{top:50%;left:50%;width:142%;border-top-width:0.25mm;transform:translate(-50%,-50%) rotate(45deg);}
+    #writingPrintRoot .writing-print-rice-line.diagonal-reverse{transform:translate(-50%,-50%) rotate(-45deg);}
+    #writingPrintRoot .writing-print-sentence{align-self:end;overflow:hidden;margin:0;color:#50aab7;font-size:5.8pt;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;}
+    #writingPrintRoot .writing-print-sentence strong{font-weight:800;}
+    #writingPrintRoot .writing-print-hint{overflow:hidden;margin:0;color:#9b8d71;font-size:5.8pt;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;}
+    #writingPrintRoot .writing-print-card-meta{display:none;}
+    #writingPrintRoot .writing-print-bottom-head{margin-top:2mm;}
+    #writingPrintRoot .writing-print-bottom-head small{color:#9ba7b8;font-size:6.5pt;}
+    #writingPrintRoot .writing-print-bottom-grid{display:grid;grid-template-columns:1.65fr .85fr;gap:2mm;height:42mm;}
+    #writingPrintRoot .writing-print-module{min-width:0;overflow:hidden;padding:2.5mm;border:0.3mm solid #dbe4ef;border-radius:3.5mm;background:#fbfcff;}
+    #writingPrintRoot .writing-print-module.writing-print-sentence{border-color:#f0dec0;background:linear-gradient(135deg,#fffdf8,#fffaf0);}
+    #writingPrintRoot .writing-print-module h3{display:flex;align-items:center;gap:2mm;margin:0 0 2mm;font-size:9pt;}
+    #writingPrintRoot .writing-print-module h3::before{content:"";display:inline-block;width:1.5mm;height:5mm;border-radius:999px;background:#5c56cf;}
+    #writingPrintRoot .writing-print-sentence h3::before{background:#efad4e;}
+    #writingPrintRoot .writing-print-module h3 small{margin-left:auto;color:#a0aabd;font-size:6pt;font-weight:400;}
+    #writingPrintRoot .writing-print-phrases > div{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 4mm;}
+    #writingPrintRoot .writing-print-phrase-row{display:grid;grid-template-columns:11.6mm 1fr;align-items:center;gap:1.6mm;min-width:0;min-height:12.7mm;}
+    #writingPrintRoot .writing-print-phrase-name{overflow:hidden;color:#8997ab;font-family:"ShadowMateWriting","PingFang SC",sans-serif;font-size:12pt;white-space:nowrap;text-overflow:ellipsis;}
+    #writingPrintRoot .writing-print-phrase-cells{display:flex;gap:0.7mm;min-width:0;}
+    #writingPrintRoot .writing-print-phrase-cells .writing-print-cell{width:11.1mm;height:11.1mm;flex-basis:11.1mm;}
+    #writingPrintRoot .writing-print-phrase-cells .writing-print-cell > span{font-size:23pt;}
+    #writingPrintRoot .writing-print-sentence p{margin:0 0 1mm;color:#9b8d71;font-size:6.5pt;}
+    #writingPrintRoot .writing-print-ruled-line{height:7mm;border-bottom:0.25mm dashed #dbcaa9;}
+    #writingPrintRoot .writing-print-self-check{display:flex;align-items:center;justify-content:space-between;margin-top:1mm;padding-top:1mm;border-top:0.25mm solid #f0e2c9;color:#9b8d71;font-size:6.5pt;}
+    #writingPrintRoot .writing-print-self-check span:last-child{color:#efad4e;font-size:12pt;letter-spacing:1mm;}
+    #writingPrintRoot .writing-print-footer{display:flex;align-items:center;justify-content:space-between;height:6mm;margin-top:2mm;padding-top:1mm;border-top:0.25mm solid #e7edf4;color:#a2afbf;font-size:5.8pt;}
+    #writingPrintRoot .writing-print-footer strong{color:#5c56cf;font-size:6.5pt;}
+    #writingPrintRoot .writing-print-footer em{color:#e96d9d;font-size:10pt;font-style:normal;}
+    /* v7 approved layout: the paper owns the single inset and each work row contains two character units. */
+    #writingPrintRoot .writing-print-sheet{padding:0;}
+    #writingPrintRoot .writing-print-header{grid-template-rows:28px 48px 43px;column-gap:18px;}
+    #writingPrintRoot .writing-print-eyebrow{gap:8px;font-size:12px;letter-spacing:.12em;}
+    #writingPrintRoot .writing-print-brand-logo{width:24px;height:24px;border-radius:8px;}
+    #writingPrintRoot .writing-print-badge{grid-template-columns:38px auto;min-width:128px;height:40px;padding:4px 12px 4px 5px;border-radius:14px;}
+    #writingPrintRoot .writing-print-badge strong{width:32px;height:32px;font-size:18px;border-radius:10px;}
+    #writingPrintRoot .writing-print-badge span{font-size:12px;}
+    #writingPrintRoot .writing-print-header h1{font-size:34px;}
+    #writingPrintRoot .writing-print-subtitle{font-size:14px;}
+    #writingPrintRoot .writing-print-meta-bar{height:43px;padding:0 12px;border-radius:12px;}
+    #writingPrintRoot .writing-print-meta-bar > div{gap:6px;font-size:11px;}
+    #writingPrintRoot .writing-print-meta-bar > div + div{padding-left:12px;}
+    #writingPrintRoot .writing-print-meta-bar strong{font-size:12px;}
+    #writingPrintRoot .writing-print-line{top:3px;width:54px;}
+    #writingPrintRoot .writing-print-line.short{width:34px;}
+    #writingPrintRoot .writing-print-stars{font-size:16px;letter-spacing:1px;}
+    #writingPrintRoot .writing-print-lesson-strip{gap:10px;height:56px;margin-top:8px;}
+    #writingPrintRoot .writing-print-lesson-box,#writingPrintRoot .writing-print-chars-box{padding:7px 10px;border-radius:13px;}
+    #writingPrintRoot .writing-print-lesson-box{display:flex;}
+    #writingPrintRoot .writing-print-lesson-box > strong,#writingPrintRoot .writing-print-chars-box > strong{gap:8px;min-width:78px;font-size:15px;}
+    #writingPrintRoot .writing-print-lesson-box > strong::before,#writingPrintRoot .writing-print-chars-box > strong::before{width:6px;height:25px;}
+    #writingPrintRoot .writing-print-lesson-steps{display:grid;grid-template-columns:1fr 1fr;gap:3px 5px;color:#7f8da3;font-size:10.5px;line-height:1.25;}
+    #writingPrintRoot .writing-print-lesson-steps span{white-space:nowrap;}
+    #writingPrintRoot .writing-print-lesson-steps span::before{display:inline-grid;width:18px;height:18px;margin-right:3px;place-items:center;color:#b57922;font-size:9px;font-weight:800;border-radius:5px;background:#ffedc2;content:attr(data-step);}
+    #writingPrintRoot .writing-print-chars-box > div{gap:4px;}
+    #writingPrintRoot .writing-print-chars-box > div > span{width:29px;height:30px;font-size:25px;border-radius:8px;}
+    #writingPrintRoot .writing-print-section-head{height:31px;margin-top:9px;margin-bottom:6px;}
+    #writingPrintRoot .writing-print-section-head h2,#writingPrintRoot .writing-print-bottom-head h2{gap:8px;font-size:18px;}
+    #writingPrintRoot .writing-print-section-head h2 span,#writingPrintRoot .writing-print-bottom-head h2 span{width:30px;height:30px;font-size:13px;border-radius:9px;}
+    #writingPrintRoot .writing-print-section-head > div{gap:10px;font-size:12px;}
+    #writingPrintRoot .writing-print-rows{grid-template-columns:1fr 1fr;grid-template-rows:repeat(2,278px);gap:8px;margin-top:0;}
+    #writingPrintRoot .writing-print-card{display:grid;grid-template-rows:37px 1fr 20px;min-width:0;padding:9px 10px 7px;border:0;border-radius:0;background:transparent;box-shadow:none;break-inside:avoid;page-break-inside:avoid;}
+    #writingPrintRoot .writing-print-card:nth-child(even){border-left:1px solid #e1e8f0;}
+    #writingPrintRoot .writing-print-context{display:none;}
+    #writingPrintRoot .writing-print-card-head{gap:6px;}
+    #writingPrintRoot .writing-print-number{width:23px;height:23px;font-size:12px;border-radius:7px;}
+    #writingPrintRoot .writing-print-row-card:first-child .writing-print-card:nth-child(2) .writing-print-number{background:#60bfa8;}
+    #writingPrintRoot .writing-print-row-card:nth-child(2) .writing-print-card:nth-child(2) .writing-print-number{background:#efad4e;}
+    #writingPrintRoot .writing-print-target{font-size:34px;}
+    #writingPrintRoot .writing-print-pinyin{font-size:12px;}
+    #writingPrintRoot .writing-print-stroke-count{margin-left:-6px;color:#8492a7;font-size:12px;white-space:nowrap;}
+    #writingPrintRoot .writing-print-phrase{font-size:11px;}
+    #writingPrintRoot .writing-print-body{grid-template-columns:99px 1fr;gap:8px;padding-top:4px;}
+    #writingPrintRoot .writing-print-model-side{grid-template-columns:1fr;grid-template-rows:94px auto auto;gap:5px;padding-right:9px;}
+    #writingPrintRoot .writing-print-model-label{display:none;}
+    #writingPrintRoot .writing-print-model-side .writing-print-cell{width:94px;height:94px;flex-basis:94px;}
+    #writingPrintRoot .writing-print-model-side .writing-print-cell > span{font-size:72px;}
+    #writingPrintRoot .writing-print-info{font-size:13px;line-height:1.25;white-space:normal;}
+    #writingPrintRoot .writing-print-practice{grid-template-rows:61px 61px 1fr;gap:5px;padding-top:2px;}
+    #writingPrintRoot .writing-print-practice-row{grid-template-columns:28px 1fr;gap:5px;}
+    #writingPrintRoot .writing-print-practice-label{font-size:11px;}
+    #writingPrintRoot .writing-print-cells{gap:4px;}
+    #writingPrintRoot .writing-print-cell{width:44px;height:44px;flex-basis:44px;}
+    #writingPrintRoot .writing-print-cell > span{font-size:37px;}
+    #writingPrintRoot .writing-print-sentence{align-self:start;padding-top:4px;font-size:11px;line-height:15px;}
+    #writingPrintRoot .writing-print-hint{display:none;}
+    #writingPrintRoot .writing-print-bottom-head{height:28px;margin-top:8px;margin-bottom:5px;}
+    #writingPrintRoot .writing-print-bottom-head small{font-size:11px;}
+    #writingPrintRoot .writing-print-bottom-grid{grid-template-columns:1.65fr .85fr;gap:7px;height:156px;}
+    #writingPrintRoot .writing-print-module{padding:10px 11px;border-radius:13px;}
+    #writingPrintRoot .writing-print-module h3{gap:7px;margin:0 0 4px;font-size:15px;}
+    #writingPrintRoot .writing-print-module h3::before{width:5px;height:15px;}
+    #writingPrintRoot .writing-print-module h3 small{font-size:10px;}
+    #writingPrintRoot .writing-print-phrases > div{gap:5px 16px;}
+    #writingPrintRoot .writing-print-phrase-row{grid-template-columns:44px 1fr;gap:6px;min-height:48px;}
+    #writingPrintRoot .writing-print-phrase-name{font-size:16px;}
+    #writingPrintRoot .writing-print-phrase-cells{gap:4px;}
+    #writingPrintRoot .writing-print-phrase-cells .writing-print-cell{width:42px;height:42px;flex-basis:42px;}
+    #writingPrintRoot .writing-print-phrase-cells .writing-print-cell > span{font-size:31px;}
+    #writingPrintRoot .writing-print-sentence p{margin:0 0 2px;font-size:11px;}
+    #writingPrintRoot .writing-print-ruled-line{height:21px;}
+    #writingPrintRoot .writing-print-self-check{margin-top:5px;padding-top:4px;font-size:11px;}
+    #writingPrintRoot .writing-print-self-check span:last-child{font-size:16px;letter-spacing:1px;}
+    #writingPrintRoot .writing-print-footer{height:23px;margin-top:6px;padding-top:5px;font-size:10px;}
+    #writingPrintRoot .writing-print-footer strong{font-size:11px;}
+    #writingPrintRoot .writing-print-footer em{font-size:13px;}
+    #writingPrintRoot button{display:none !important;}
   }
   .hidden{display:none !important;}
 
@@ -423,6 +662,14 @@
   .guide-link{display:inline-flex;margin-top:8px;color:var(--green-deep);font-size:11px;font-weight:800;text-decoration:none;}
   .guide-link:hover{text-decoration:underline;}
   .guide-note{margin-top:10px;padding:10px 11px;border-radius:13px;background:var(--yellow-soft);color:#7d5b10;font-size:11px;line-height:1.6;}
+  .piper-resource-manager{display:grid;gap:9px;margin-top:12px;}
+  .piper-resource-scope,.piper-resource-estimate{margin:0;padding:9px 10px;border-radius:12px;background:var(--green-soft);color:var(--ink-soft);font-size:11px;line-height:1.55;}
+  .piper-resource-estimate{background:#f7fbf8;}
+  .piper-resource-manager [data-piper-resource-list]{display:grid;gap:8px;}
+  .piper-resource-row{padding:11px;border:1px solid var(--line);border-radius:14px;background:#f7fbf8;}
+  .piper-resource-summary{display:grid;gap:2px;}.piper-resource-summary strong{font-size:13px;}.piper-resource-summary span{color:var(--ink-soft);font-size:11px;}
+  .piper-resource-details{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:9px 0;}.piper-resource-details div{min-width:0;}.piper-resource-details dt{color:var(--ink-soft);font-size:10px;}.piper-resource-details dd{overflow-wrap:anywhere;margin:1px 0 0;color:var(--ink);font-size:11px;}
+  .piper-resource-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;font-size:11px;font-weight:700;color:var(--green-deep);}.piper-resource-actions [data-piper-resource-status]{margin-right:auto;}.piper-resource-actions button{border:0;border-radius:999px;padding:6px 10px;background:var(--green);color:#fff;font:inherit;font-size:11px;font-weight:800;cursor:pointer;}
   .guide-facts,.guide-install-grid{display:grid;gap:8px;}
   .guide-facts>div,.guide-install-grid>div{display:grid;gap:2px;padding:10px 11px;border-left:3px solid var(--green);background:#f7fbf8;border-radius:0 12px 12px 0;}
   .guide-facts strong,.guide-install-grid strong{font-size:12px;color:var(--green-deep);}
@@ -470,6 +717,7 @@
 .voice-dialog-actions{display:flex;justify-content:flex-end;gap:10px;}
 .voice-dialog-actions button{border:none;border-radius:999px;padding:9px 18px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}
 .voice-dialog-cancel{background:var(--green-light);color:var(--ink-soft);}
+.voice-dialog-delete{background:#fff1f1;color:#a33;}
 .voice-dialog-ok{background:var(--green);color:#fff;}
 .voice-dialog-actions button:disabled{opacity:.6;cursor:default;}
 .guide-device-tip{font-size:12.5px;color:var(--green-deep);background:var(--green-light);border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.6;}
@@ -545,6 +793,7 @@
     .guide-hero{background:linear-gradient(135deg,#1b6235 0%,#238b46 60%,#3a9e59 100%);}
     .guide-card{background:var(--card);border-color:var(--line);}
     .guide-device,.guide-facts>div,.guide-install-grid>div{background:#1b2c22;border-color:var(--line);}
+    .piper-resource-estimate,.piper-resource-row{background:#1b2c22;border-color:var(--line);}
     .guide-note,.guide-help-card{background:#2f291b;border-color:#66552e;}
     .guide-note{color:#e1c77b;}
     .guide-help-card h3{color:#ffd875;}
