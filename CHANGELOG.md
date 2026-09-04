@@ -8,7 +8,7 @@ _No unreleased changes._
 
 ### Changed
 - 首页可见标题与未登录副标题统一为“影伴 Shadow Mate”和“家庭成长工作台 · 陪伴有方法，成长有动力”。
-- WebApplication 结构化数据增加稳定实体 ID、`1.3.12` 软件版本及 Shadow Nexus publisher 关系。
+- WebApplication 结构化数据增加稳定实体 ID、`1.3.13` 软件版本及 Shadow Nexus publisher 关系。
 
 ### Tests
 - 新增静态 Schema 契约与真实浏览器未登录状态断言，避免运行时恢复旧品牌文案。

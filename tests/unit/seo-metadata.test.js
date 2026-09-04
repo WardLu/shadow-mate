@@ -14,7 +14,7 @@ describe("public SEO and GEO contract", () => {
     const schema = JSON.parse(match[1]);
     const application = schema["@graph"].find((item) => item["@type"] === "WebApplication");
     expect(application["@id"]).toBe("https://sm.shadow.wang/#application");
-    expect(application.softwareVersion).toBe("1.3.12");
+    expect(application.softwareVersion).toBe("1.3.13");
     expect(application.publisher).toEqual({
       "@type": "Organization",
       "@id": "https://shadow.wang/#organization",
