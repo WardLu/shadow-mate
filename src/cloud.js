@@ -797,7 +797,7 @@ function setAccountState() {
     accountButton.innerHTML = `${icon("learner")}<span>登录</span>`;
     accountButton.setAttribute("aria-label", "账户与云端同步，登录");
     accountButton.title = "点击登录，开启云端跨设备同步";
-    if (subEl) subEl.textContent = "绿色挖掘机 · 每日成长打卡";
+    if (subEl) subEl.textContent = "家庭成长工作台 · 陪伴有方法，成长有动力";
   }
 }
 
