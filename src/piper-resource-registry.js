@@ -129,7 +129,6 @@ const CHINESE_PIPER_RESOURCE = {
   label: "Chinese (Chaowen, medium)",
   kind: "voice",
   version: "1",
-  phonemizeVoice: "cmn",
   baseUrl: "https://voice.shadow.wang/piper/zh_CN-chaowen-medium",
   source: "cdn",
   cachePolicy: "user-download",

@@ -41,7 +41,6 @@ describe("bundled Piper runtime registry", () => {
       id: "zh_CN-chaowen-medium",
       locale: "zh-CN",
       version: "1",
-      phonemizeVoice: "cmn",
       baseUrl: "https://voice.shadow.wang/piper/zh_CN-chaowen-medium",
       totalBytes: 63224911,
       releaseApproved: true,

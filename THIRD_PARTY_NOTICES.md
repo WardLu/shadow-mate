@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-09-03
+更新时间：2026-09-04
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -18,6 +18,7 @@
 | `@supabase/supabase-js` | `2.111.0` | MIT | [supabase-js](https://github.com/supabase/supabase-js) |
 | `@vercel/analytics` | `2.0.1` | MIT | [vercel/analytics](https://github.com/vercel/analytics) |
 | `lucide` | `1.28.0` | ISC | [lucide](https://github.com/lucide-icons/lucide) |
+| `pinyin-pro` | `3.29.3` | MIT | [zh-lx/pinyin-pro](https://github.com/zh-lx/pinyin-pro) |
 
 构建和测试依赖由锁文件记录。分发者应按实际构建产物重新检查传递依赖及其许可证要求。
 

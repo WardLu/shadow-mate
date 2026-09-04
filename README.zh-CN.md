@@ -212,13 +212,14 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 ### 中文发音
 
-“听发音”优先使用设备提供的中文普通话系统语音。没有可用普通话语音的 Android 浏览器会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 60.3MB 的 `zh_CN-chaowen-medium` 离线语音包并缓存到当前浏览器配置文件和当前域名；下载完成后可离线合成，不上传录音。英语和中文语音包使用同一套下载、校验、缓存、删除和错误处理机制；切换浏览器、配置文件、域名或环境后仍需分别下载。
+“听发音”优先使用设备提供的中文普通话系统语音。没有可用普通话语音的 Android 浏览器会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 60.3MB 的 `zh_CN-chaowen-medium` 离线语音包并缓存到当前浏览器配置文件和当前域名；下载完成后可离线合成，不上传录音。中文文本会在浏览器内转换为 Chaowen 模型要求的拼音声母、韵母和声调音素，不再交给英语使用的 eSpeak 路径。英语和中文语音包使用同一套下载、校验、缓存、删除和错误处理机制；切换浏览器、配置文件、域名或环境后仍需分别下载。
 
 ## 致谢
 
 影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro)（MIT）：为 Chaowen 中文模型生成拼音音素
 - [rhasspy/piper](https://github.com/rhasspy/piper)（MIT）：轻量神经网络语音合成
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime)（MIT）：本地推理运行时
 - [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语 `en_US-ljspeech-medium` 和中文 `zh_CN-chaowen-medium` 语音模型（经 `voice.shadow.wang` CDN 分发）

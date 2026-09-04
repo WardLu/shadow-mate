@@ -179,12 +179,16 @@ test.describe("Local Chinese Piper compatibility probe", () => {
         duration: synthesis.duration,
         audioContentType: audioResponse.headers.get("content-type"),
         audioBytes,
+        phonemes: synthesis.phonemes,
+        phonemeIds: synthesis.phonemeIds,
       };
     });
     expect(evidence).toMatchObject({
       packageId: "zh_CN-chaowen-medium",
       packageStatus: "completed",
       audioContentType: expect.stringMatching(/^audio\/(?:x-)?wav/i),
+      phonemes: ["h", "uo", "3"],
+      phonemeIds: [1, 14, 51, 66, 0, 2],
     });
     expect(evidence.duration).toBeGreaterThan(0);
     expect(evidence.audioBytes).toBeGreaterThan(1000);

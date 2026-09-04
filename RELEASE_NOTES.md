@@ -16,6 +16,7 @@
 - Added local release checks for versioned app-shell cache ownership and browser lifecycle coverage so an app-shell update must retain Piper package cache namespaces and must not trigger a model GET by itself.
 - Added a read-only CDN smoke command for approved package manifests. Its result is external CDN evidence, not a local test or a deployment action.
 - Opened the approved `zh_CN-chaowen-medium` Chinese Piper package through the same versioned CDN download, integrity, cache, and engine fallback path as English. Its final CDN bytes, hashes, model-card provenance, and CORS smoke evidence must remain attached to the release record; desktop Playwright Preview coverage is not Xiaomi acceptance.
+- Fixed Chinese local synthesis so the Pinyin-based Chaowen model receives initial, final, and tone phonemes instead of eSpeak output. English voices continue to use the existing eSpeak runtime; real Xiaomi playback remains a separate Preview acceptance gate.
 
 ## v1.3.12 - 2026-09-01
 

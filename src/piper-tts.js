@@ -6,6 +6,7 @@
 
 import { getPiperDownloadError, downloadPiperResource } from "./piper-resource-download.js";
 import { acquirePiperDownloadLock } from "./piper-resource-lock.js";
+import { createPiperPhonemizeRuntime } from "./piper-pinyin.js";
 import {
   formatPiperResourceBytes,
   getPiperResourcePackage,
@@ -142,12 +143,7 @@ async function createEngineSession() {
             throw new PiperLocalVoiceError("engine", "Piper voice engine was reset while loading its model");
           }
           session.modelObjectUrls.add(modelUrl);
-          const metadataJson = await metadata.json();
-          const phonemizeVoice = resourcePackage.phonemizeVoice;
-          const normalizedMetadata = phonemizeVoice && metadataJson?.espeak?.voice !== phonemizeVoice
-            ? { ...metadataJson, espeak: { ...metadataJson.espeak, voice: phonemizeVoice } }
-            : metadataJson;
-          return [normalizedMetadata, modelUrl];
+          return [await metadata.json(), modelUrl];
         }).catch((error) => {
           session.voiceProviders.delete(key);
           throw error;
@@ -157,9 +153,10 @@ async function createEngineSession() {
       return session.voiceProviders.get(key);
     },
   };
+  const espeakRuntime = new mod.PhonemizeWebRuntime({ basePath: "/piper/" });
   session.engine = new mod.PiperWebEngine({
     onnxRuntime: new mod.OnnxWebRuntime({ basePath: "/onnx/", numThreads: 1 }),
-    phonemizeRuntime: new mod.PhonemizeWebRuntime({ basePath: "/piper/" }),
+    phonemizeRuntime: createPiperPhonemizeRuntime(espeakRuntime),
     voiceProvider,
   });
   return session;
@@ -207,7 +204,12 @@ export async function speakLocally(text, packageId = ENGLISH_PIPER_PACKAGE_ID) {
     const resourcePackage = getApprovedPackage(packageId);
     const engine = await loadEngine();
     const result = await engine.generate(text, resourcePackage.baseUrl, 0);
-    return { url: URL.createObjectURL(result.file), duration: result.duration };
+    return {
+      url: URL.createObjectURL(result.file),
+      duration: result.duration,
+      phonemes: result.phonemeData?.phonemes,
+      phonemeIds: result.phonemeData?.phoneme_ids,
+    };
   } catch (error) {
     if (engineGeneration === generation) await resetLocalVoiceEngine();
     throw asLocalVoiceError(error);
