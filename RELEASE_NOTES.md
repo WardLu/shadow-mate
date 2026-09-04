@@ -9,6 +9,8 @@
 
 ## Unreleased — Piper resource release gates
 
+- Fixed the unified package downloading successfully but failing to speak on mobile browsers: the upstream WASM build eagerly reserved a 512 MB shared heap, which could terminate an Android worker after the 149 MB model was unpacked. The mobile-compatible runtime starts at 256 MB and retains memory growth.
+- Existing browsers reuse the verified 149 MB model data and fetch only the replacement 12 MB mobile WASM, avoiding a full package download.
 - Replaced separate English and Chinese Piper downloads with one 154.6 MB `matcha-icefall-zh-en` offline package powered by the pinned sherpa-onnx v1.13.2 WebAssembly worker.
 - Recorded the migration reason: the previous Chinese model mispronounced isolated characters even in native inference, while Matcha passed listening checks for Chinese and English words and sentences. Its mechanical timbre is an accepted current limitation.
 - One download serves both languages in the same browser profile and origin; browser security prevents sharing the package across Chrome, Quark, Xiaomi Browser, private profiles, or different domains.

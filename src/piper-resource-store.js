@@ -3,6 +3,7 @@ import { createPiperResourceSha256 } from "./piper-resource-hash.js";
 import {
   isActivePiperCdnVoicePackage,
   listPiperResourcePackages,
+  resolvePiperResourceFileUrl,
 } from "./piper-resource-registry.js";
 
 const LEGACY_ENGLISH_CACHE = "shadow-mate-voice";
@@ -52,7 +53,7 @@ function fileMarkerKey(resourcePackage, file, commitId = null) {
 }
 
 function fileUrl(resourcePackage, file) {
-  return normalizedUrl(`${resourcePackage.baseUrl}${file.suffix}`);
+  return normalizedUrl(resolvePiperResourceFileUrl(resourcePackage, file));
 }
 
 async function responseIntegrity(response, { canCommit = null } = {}) {

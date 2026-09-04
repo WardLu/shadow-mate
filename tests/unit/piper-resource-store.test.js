@@ -107,7 +107,7 @@ describe("Piper resource registry", () => {
     expect(listPiperResourcePackages().find((entry) => entry.id === "piper-browser-runtime")).toMatchObject({
       source: "bundled",
       cachePolicy: "app-shell",
-      totalBytes: 76786160,
+      totalBytes: 76786515,
       files: expect.arrayContaining([
         expect.objectContaining({ url: "/piper-tts-web.js", bytes: 46656168, license: expect.any(String) }),
         expect.objectContaining({ url: "/onnx/ort-wasm-simd-threaded.wasm", bytes: 11246032 }),

@@ -5,6 +5,7 @@ import {
   getPiperResourcePackage,
   isActivePiperCdnVoicePackage,
   listActivePiperCdnVoicePackages,
+  resolvePiperResourceFileUrl,
 } from "../src/piper-resource-registry.js";
 
 const REQUIRED_CORS_METHODS = ["GET", "HEAD", "OPTIONS"];
@@ -79,7 +80,7 @@ export function assertCors(response, phase, url) {
 }
 
 async function inspectFile(resourcePackage, file) {
-  const url = `${resourcePackage.baseUrl}${file.suffix}`;
+  const url = resolvePiperResourceFileUrl(resourcePackage, file);
   const requestOptions = { headers: { Origin: "https://preview-sm.shadow.wang" } };
   const head = await fetch(url, { ...requestOptions, method: "HEAD" });
   assertSuccess(head, "HEAD", url);

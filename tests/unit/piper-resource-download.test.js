@@ -96,7 +96,7 @@ function headers(contentLength, contentType = "application/octet-stream") {
 function createFetch({ package: resourcePackage, streamOptions = {}, getContentLengths = {}, contentTypes = {}, contents = {}, onFetch } = {}) {
   return vi.fn((url, options = {}) => {
     onFetch?.(url, options);
-    const file = resourcePackage.files.find((entry) => url.endsWith(entry.suffix));
+    const file = resourcePackage.files.find((entry) => entry.url ? url === entry.url : url.endsWith(entry.suffix));
     const contentType = contentTypes[file.key] || file.contentType;
     if (options.method === "HEAD") return Promise.resolve(new Response(null, { status: 200, headers: headers(file.bytes, contentType) }));
     const content = contents[file.key] ?? (file.key === "model" ? ["abc"] : ["{}"]);
@@ -264,6 +264,24 @@ describe("Piper resource downloader", () => {
     expect(setup.fetch).toHaveBeenCalledTimes(2);
     expect(setup.fetch.mock.calls.every(([url]) => url.endsWith(".onnx.json"))).toBe(true);
     await expect(setup.store.isPiperResourceCached(setup.resourcePackage.id)).resolves.toBe(true);
+  });
+
+  it("reuses an unchanged large file and fetches only a replacement file at its immutable URL", async () => {
+    const resourcePackage = createPackage();
+    resourcePackage.files[1].url = "https://voice.example.test/mobile-v2/test-voice.onnx.json";
+    const setup = createDownloader({ resourcePackage });
+    const cache = await packageCache(setup);
+    await cache.put(`${resourcePackage.baseUrl}.onnx`, new Response("abc"));
+    await setup.store.writeFileCompletionMarker(resourcePackage, resourcePackage.files[0], {
+      bytes: 3,
+      sha256: HASHES.model,
+    }, { cache });
+
+    await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).resolves.toMatchObject({ status: "completed" });
+    expect(setup.fetch).toHaveBeenCalledTimes(2);
+    expect(setup.fetch.mock.calls.every(([url]) => url === resourcePackage.files[1].url)).toBe(true);
+    await expect(cache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeTruthy();
+    await expect(cache.match(resourcePackage.files[1].url)).resolves.toBeTruthy();
   });
 
   it("does not write a completion marker when lease ownership is lost after files cache", async () => {

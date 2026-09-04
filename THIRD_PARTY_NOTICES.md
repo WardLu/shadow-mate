@@ -46,7 +46,9 @@ active 包 `matcha-icefall-zh-en-1.13.2` 来自 sherpa-onnx `v1.13.2` 的固定�
 
 迁移原因不是运输错误：旧 Chaowen 模型即使在原生推理中也会错误朗读部分孤立汉字；Kokoro 出现静音或错误前置音；MeloTTS 未通过孤立汉字试听。`matcha-icefall-zh-en` 已于 2026-09-04 对中文单字“花、雨、风、牛”、对应英文单词及中英文长句完成试听，发音和完整性获确认；音色偏机械是当前明确接受、留待后续优化的限制。
 
-CDN 基础 URL 为 `https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts`：`.data` 为 149,228,019 bytes（SHA-256 `3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c`），`.wasm` 为 12,883,754 bytes（SHA-256 `9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640`），清单合计 162,111,773 bytes。发布前运行 `node scripts/piper-resource-smoke.mjs --base-url <上述基础 URL> --package matcha-icefall-zh-en-1.13.2`，逐文件核对响应类型、CORS、字节数和 SHA-256；任一项不匹配都不得写入完成标记。
+模型数据 URL 为 `https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.data`，共 149,228,019 bytes（SHA-256 `3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c`）。移动兼容 WASM URL 为 `https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm`，共 12,883,754 bytes（SHA-256 `ff161b9927ca92164930fe564476ee32edaf8ec460b94df2353af7333754119e`），清单合计仍为 162,111,773 bytes。发布前运行 `node scripts/piper-resource-smoke.mjs --base-url https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts --package matcha-icefall-zh-en-1.13.2`，逐文件核对响应类型、CORS、字节数和 SHA-256；任一项不匹配都不得写入完成标记。
+
+移动兼容 WASM 由固定的官方 SHA-256 `9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640` 通过 `scripts/patch-sherpa-wasm-memory.mjs` 可复现生成。该脚本只把唯一的 shared-memory import 最低值从 8192 页（512MB）调整为 4096 页（256MB），不改模型、代码段、最大内存或按需增长能力；产物哈希固定为上述 `ff161b...`。原因是官方构建预占 512MB，再叠加 149MB 数据包与模型加载会使部分 Android 浏览器终止 Worker。受限堆桌面原型已完成中英文单字和长句合成；真实手机仍需 Preview 验收。
 
 浏览器缓存受浏览器配置文件和 Origin 隔离。同一浏览器与同一 Shadow Mate 域名下只需下载一次；Chrome、夸克、小米浏览器或不同域名之间不能共享该缓存。
 
@@ -66,5 +68,5 @@ CDN 基础 URL 为 `https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
 | `public/sherpa-onnx/sherpa-onnx-wasm-main-tts.js` | `2f7d50fe6991982a4bcc8dd938d63de6edbb3f2b971e383e8986331ca5fcb311` |
 | `public/sherpa-onnx/sherpa-onnx-tts.js` | `d0febb99e78c8322eb7dbda12e90a1b473de8a7d65f016a146576fbdadbf266a` |
-| `public/sherpa-onnx/sherpa-onnx-tts.worker.js` | `c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14` |
+| `public/sherpa-onnx/sherpa-onnx-tts.worker.js` | `e6274d02b08ca502ae910cdbd3084cda557ee52a12bc020a96187af43a0dd4ca` |
 | `public/brand_assets/shadow-mate-writing-hand.ttf` | `38e6473bcbe4e3d2dba2218eb7235b4b5f7f3f080d75528f8e4d1fc8bc1c4a10` |

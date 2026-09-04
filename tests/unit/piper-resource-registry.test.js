@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getPiperResourcePackage,
   isActivePiperCdnVoicePackage,
+  resolvePiperResourceFileUrl,
   validatePiperResourcePackages,
 } from "../../src/piper-resource-registry.js";
 
@@ -12,7 +13,7 @@ const RUNTIME_FILES = [
   ["/piper/piper_phonemize.data", 18077249, "a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa"],
   ["/sherpa-onnx/sherpa-onnx-wasm-main-tts.js", 143833, "2f7d50fe6991982a4bcc8dd938d63de6edbb3f2b971e383e8986331ca5fcb311"],
   ["/sherpa-onnx/sherpa-onnx-tts.js", 32010, "d0febb99e78c8322eb7dbda12e90a1b473de8a7d65f016a146576fbdadbf266a"],
-  ["/sherpa-onnx/sherpa-onnx-tts.worker.js", 1702, "c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14"],
+  ["/sherpa-onnx/sherpa-onnx-tts.worker.js", 2057, "e6274d02b08ca502ae910cdbd3084cda557ee52a12bc020a96187af43a0dd4ca"],
 ];
 
 function bundledRuntimeFixture() {
@@ -53,12 +54,21 @@ describe("bundled Piper runtime registry", () => {
       provenance: { status: "verified" },
       distribution: { status: "approved", channel: "public-cdn" },
     });
-    expect(voice.files.map(({ suffix, bytes, sha256 }) => [suffix, bytes, sha256])).toEqual([
-      [".data", 149228019, "3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c"],
-      [".wasm", 12883754, "9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640"],
+    expect(voice.files.map(({ suffix, url, bytes, sha256 }) => [suffix, url, bytes, sha256])).toEqual([
+      [".data", undefined, 149228019, "3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c"],
+      [".wasm", "https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm", 12883754, "ff161b9927ca92164930fe564476ee32edaf8ec460b94df2353af7333754119e"],
     ]);
     expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toBe(false);
     expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("en_US-ljspeech-medium"))).toBe(false);
+  });
+
+  it("resolves an immutable per-file URL without moving unchanged package files", () => {
+    const voice = structuredClone(getPiperResourcePackage("matcha-icefall-zh-en-1.13.2"));
+    const [data, wasm] = voice.files;
+    wasm.url = "https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm";
+
+    expect(resolvePiperResourceFileUrl(voice, data)).toBe(`${voice.baseUrl}.data`);
+    expect(resolvePiperResourceFileUrl(voice, wasm)).toBe(wasm.url);
   });
 
   it("rejects a bundled runtime component without a fixed source commit", () => {
