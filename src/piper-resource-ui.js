@@ -1,6 +1,6 @@
 import { downloadPiperResource } from "./piper-resource-download.js";
 import { acquirePiperDownloadLock } from "./piper-resource-lock.js";
-import { formatPiperResourceBytes, listActivePiperCdnVoicePackages } from "./piper-resource-registry.js";
+import { formatPiperResourceBytes, listActivePiperCdnVoicePackages, listRetiredPiperCdnVoicePackages } from "./piper-resource-registry.js";
 import {
   deletePiperResource,
   getPiperResourceCachedBytes,
@@ -31,13 +31,13 @@ function actionsForStatus(status) {
   return [];
 }
 
-function renderPackage(container, resourcePackage, { status, actualBytes, onAction }) {
-  const actions = actionsForStatus(status);
+function renderPackage(container, resourcePackage, { status, actualBytes, onAction, retired = false }) {
+  const actions = retired ? [{ action: "delete", label: "删除并释放空间" }] : actionsForStatus(status);
   container.className = "piper-resource-row";
   container.dataset.piperResource = resourcePackage.id;
   container.innerHTML = `
     <div class="piper-resource-summary">
-      <strong>${resourcePackage.label}</strong>
+      <strong>${resourcePackage.label}${retired ? "（已停用，可删除以释放空间）" : ""}</strong>
       <span>${resourcePackage.locale} · 版本 ${resourcePackage.version}</span>
     </div>
     <dl class="piper-resource-details">
@@ -75,19 +75,22 @@ export function mountPiperResourceManager(container) {
   }
 
   async function refresh() {
-    const packages = listActivePiperCdnVoicePackages();
-    const rows = await Promise.all(packages.map(async (resourcePackage) => ({
+    const activePackages = listActivePiperCdnVoicePackages().map((resourcePackage) => ({ resourcePackage, retired: false }));
+    const retiredPackages = listRetiredPiperCdnVoicePackages().map((resourcePackage) => ({ resourcePackage, retired: true }));
+    const rows = await Promise.all([...activePackages, ...retiredPackages].map(async ({ resourcePackage, retired }) => ({
       resourcePackage,
+      retired,
       status: activeStatuses.get(resourcePackage.id) || await getPiperResourceStatus(resourcePackage.id),
       actualBytes: await getPiperResourceCachedBytes(resourcePackage.id),
     })));
     if (disposed) return;
     list.innerHTML = "";
-    for (const row of rows) {
+    for (const row of rows.filter((item) => !item.retired || item.actualBytes > 0 || !["not-downloaded", "gated", "unsupported"].includes(item.status))) {
       const element = document.createElement("article");
       renderPackage(element, row.resourcePackage, {
         status: row.status,
         actualBytes: row.actualBytes,
+        retired: row.retired,
         onAction: async (event) => {
           const action = event.currentTarget.dataset.piperResourceAction;
           if (action === "delete") {

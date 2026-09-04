@@ -13,8 +13,10 @@ function response(headers) {
 }
 
 describe("Piper CDN CORS gate", () => {
-  it("requires approved license, provenance, and distribution metadata for every active CDN package", () => {
-    const approved = getPiperResourcePackage("matcha-icefall-zh-en-1.13.2");
+  it("rejects retired packages and still validates synthetic active package metadata", () => {
+    const retired = getPiperResourcePackage("matcha-icefall-zh-en-1.13.2");
+    expect(() => assertApprovedCdnPackage(retired)).toThrow(/not an approved/i);
+    const approved = { ...retired, releaseApproved: true };
     expect(() => assertApprovedCdnPackage(approved)).not.toThrow();
     expect(() => assertApprovedCdnPackage({ ...approved, licenseStatus: "pending" })).toThrow(/license/i);
     expect(() => assertApprovedCdnPackage({ ...approved, provenance: { status: "partial" } })).toThrow(/provenance/i);

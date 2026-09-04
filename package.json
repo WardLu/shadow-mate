@@ -23,7 +23,10 @@
     "supabase:local:functions:serve": "node scripts/serve-shared-functions.mjs",
     "test:db": "node scripts/test-shared-db.mjs",
     "test:functions": "node scripts/test-delete-account-guard.mjs",
-    "test:e2e": "node scripts/run-e2e.mjs"
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "tts:catalog": "node scripts/tencent-tts-prewarm.mjs --dry-run",
+    "tts:prewarm": "node --env-file-if-exists=.env.tts.local scripts/tencent-tts-prewarm.mjs",
+    "tts:smoke": "node scripts/tencent-tts-smoke.mjs"
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
@@ -38,8 +41,10 @@
     "@playwright/test": "1.62.1",
     "@vitest/coverage-v8": "4.1.10",
     "@vitest/ui": "4.1.10",
+    "cos-nodejs-sdk-v5": "3.0.0",
     "jsdom": "30.0.1",
     "supabase": "2.111.0",
+    "tencentcloud-sdk-nodejs-tts": "4.1.237",
     "vite": "8.2.0",
     "vitest": "4.1.10"
   },

@@ -119,6 +119,26 @@ const findings = [
   ...await checkProduction(config),
 ];
 
+const ttsManifestPath = join(root, "public/tts/tencent-v1-manifest.json");
+const hasTtsManifest = await readFile(ttsManifestPath).then(() => true).catch((error) => {
+  if (error?.code === "ENOENT") return false;
+  throw error;
+});
+if (!hasTtsManifest) {
+  findings.push("public/tts/tencent-v1-manifest.json is required before release");
+} else if (process.env.RELEASE_REQUIRE_TTS_CDN === "1" || process.env.RELEASE_REQUIRE_PRODUCTION === "1") {
+  const speechOrigin = process.env.RELEASE_TTS_ORIGIN;
+  if (!speechOrigin) {
+    findings.push("RELEASE_TTS_ORIGIN is required for the external speech CDN gate");
+  } else {
+    try {
+      execFileSync(process.execPath, ["scripts/tencent-tts-smoke.mjs", "--origin", speechOrigin], { stdio: "inherit" });
+    } catch (_) {
+      findings.push("Tencent TTS CDN manifest smoke check failed");
+    }
+  }
+}
+
 if (findings.length) {
   throw new Error(`Release checks failed:\n- ${[...new Set(findings)].join("\n- ")}`);
 }

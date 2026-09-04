@@ -1,8 +1,32 @@
 {
   "release": "shadow-mate-v1.3.12",
-  "updated_at": "2026-09-04",
-  "reason": "Replace separate Chinese and English Piper fallbacks with one audition-approved matcha-icefall-zh-en package because the former Chinese model mispronounced isolated characters and caused duplicate per-language downloads.",
+  "updated_at": "2026-09-05",
+  "reason": "Replace the unstable mobile-browser Matcha runtime with release-time Tencent Cloud synthesis and shared immutable CDN audio for the fixed curriculum.",
   "changes": [
+    {
+      "id": "tencent-fixed-curriculum-speech",
+      "type": "production_impact_external_service",
+      "test": {
+        "status": "generated_and_cdn_verified",
+        "voices": {
+          "zh-CN": "101030",
+          "en-US": "101050"
+        },
+        "catalog_entries": 96,
+        "generated_objects": 96,
+        "reused_objects": 0,
+        "verified_bytes": 495648,
+        "verified_at": "2026-09-05T02:51:00+08:00",
+        "cos_prefix": "tts/tencent/v1/",
+        "cdn_origin": "https://voice.shadow.wang"
+      },
+      "live": {
+        "status": "not_enabled",
+        "reason": "The immutable MP3 set and verified manifest must be generated before Preview deployment; Production additionally requires written redistribution permission from Tencent Cloud."
+      },
+      "validation": "Run npm run tts:catalog, authenticated npm run tts:prewarm, required sample audition, npm run tts:smoke -- --origin https://preview-sm.shadow.wang, then repository verification in that order.",
+      "rollback": "Revert the application and manifest to the prior revision; immutable content-addressed COS objects may remain unused."
+    },
     {
       "id": "unified-offline-voice-assets",
       "type": "external_cdn_assets",

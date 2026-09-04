@@ -7,6 +7,12 @@
 - Fixed the A4 worksheet print preview briefly showing unstyled content while its print resources were loading.
 - Kept the Shadow Mate logo visible in browser print previews and exported PDFs by embedding it in the print snapshot.
 
+## Unreleased — Shared curriculum speech
+
+- Fixed curriculum speech is generated before release with Tencent Cloud TTS, using Zhike (`101030`) for Mandarin and WeJack (`101050`) for English, then reused from the shared CDN.
+- Browsers no longer download the 154.6 MB Matcha model. If a published clip fails, Shadow Mate tries only a matching system-language voice.
+- Matcha is retired after repeated Android browser runtime failures; existing cached copies remain explicitly removable from the guide.
+
 ## Unreleased — Piper resource release gates
 
 - Fixed the unified package downloading successfully but failing to speak on mobile browsers: the upstream WASM build eagerly reserved a 512 MB shared heap, which could terminate an Android worker after the 149 MB model was unpacked. The mobile-compatible runtime starts at 256 MB and retains memory growth.

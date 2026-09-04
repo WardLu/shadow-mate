@@ -195,7 +195,8 @@ const UNIFIED_MATCHA_RESOURCE = {
   source: "cdn",
   cachePolicy: "user-download",
   totalBytes: 162111773,
-  releaseApproved: true,
+  releaseApproved: false,
+  lifecycle: "retired",
   licenseStatus: "approved",
   license: {
     status: "approved",
@@ -469,6 +470,13 @@ export function listPiperResourcePackages() {
 
 export function listActivePiperCdnVoicePackages() {
   return PIPER_RESOURCE_PACKAGES.filter(isActivePiperCdnVoicePackage);
+}
+
+export function listRetiredPiperCdnVoicePackages() {
+  return PIPER_RESOURCE_PACKAGES.filter((resourcePackage) =>
+    resourcePackage.kind === "voice"
+    && resourcePackage.source === "cdn"
+    && resourcePackage.lifecycle === "retired");
 }
 
 export function listBundledPiperRuntimePackages() {

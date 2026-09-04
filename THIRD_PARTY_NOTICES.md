@@ -1,6 +1,6 @@
 # Shadow Mate Third-Party Notices
 
-更新时间：2026-09-04
+更新时间：2026-09-05
 
 本文件列出当前仓库直接分发的第三方代码、模型和资源来源。第三方组件仍归各自权利人所有，并按各自许可证使用；使用者应在分发或修改前阅读对应的许可证全文。
 
@@ -40,9 +40,15 @@
 
 ### Piper CDN 资源发布门禁
 
-### 统一中英双语 Matcha CDN 资源
+### 腾讯云固定课程语音
 
-active 包 `matcha-icefall-zh-en-1.13.2` 来自 sherpa-onnx `v1.13.2` 的固定发布资产。模型原始来源为 ModelScope `dengcunqin/matcha_tts_zh_en_20251010`，其模型 API 在本次审查时标记 `Apache License 2.0`；sherpa-onnx 源码与浏览器运行时同为 Apache-2.0。模型支持中文与英文、单说话人、16 kHz。
+当前 active 发音路径在发布准备阶段调用腾讯云语音合成：中文使用精品音色智柯（VoiceType `101030`），英文使用精品音色 WeJack（VoiceType `101050`），输出 16 kHz MP3，并以内容寻址路径保存到项目 COS/CDN。运行时只读取已生成音频，不携带腾讯云凭据，也不动态调用付费合成接口。发布脚本使用锁定版本的 `tencentcloud-sdk-nodejs-tts`（Apache-2.0）和 `cos-nodejs-sdk-v5`（ISC）；二者不进入浏览器 bundle。
+
+腾讯云服务条款对生成音频共享分发的适用范围仍有歧义。产品负责人已于 2026-09-05 接受该不确定性，仅用于 Preview MVP 私有验收；Production 上线前必须取得腾讯云书面确认，详见 `docs/superpowers/specs/2026-09-05-tencent-cloud-tts-mvp-design.md`。
+
+### 已停用的统一中英双语 Matcha CDN 资源
+
+已停用包 `matcha-icefall-zh-en-1.13.2` 来自 sherpa-onnx `v1.13.2` 的固定发布资产。模型原始来源为 ModelScope `dengcunqin/matcha_tts_zh_en_20251010`，其模型 API 在本次审查时标记 `Apache License 2.0`；sherpa-onnx 源码与浏览器运行时同为 Apache-2.0。模型支持中文与英文、单说话人、16 kHz。
 
 迁移原因不是运输错误：旧 Chaowen 模型即使在原生推理中也会错误朗读部分孤立汉字；Kokoro 出现静音或错误前置音；MeloTTS 未通过孤立汉字试听。`matcha-icefall-zh-en` 已于 2026-09-04 对中文单字“花、雨、风、牛”、对应英文单词及中英文长句完成试听，发音和完整性获确认；音色偏机械是当前明确接受、留待后续优化的限制。
 

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const mocks = vi.hoisted(() => ({
   englishStatus: "not-downloaded",
+  showRetired: false,
   getPiperResourceStatus: vi.fn(),
   getPiperResourceCachedBytes: vi.fn(),
   deletePiperResource: vi.fn(),
@@ -35,6 +36,13 @@ const packages = [
     files: [],
   },
 ];
+const retiredPackage = {
+  ...packages[0],
+  id: "matcha-retired",
+  label: "中英双语（Matcha）",
+  releaseApproved: false,
+  lifecycle: "retired",
+};
 
 const getPiperResourceStatus = mocks.getPiperResourceStatus.mockImplementation(async (packageId) => packageId === packages[0].id ? mocks.englishStatus : "gated");
 const getPiperResourceCachedBytes = mocks.getPiperResourceCachedBytes.mockResolvedValue(1024);
@@ -46,6 +54,7 @@ const downloadPiperResource = mocks.downloadPiperResource.mockImplementation(asy
 
 vi.mock("../../src/piper-resource-registry.js", () => ({
   listActivePiperCdnVoicePackages: () => [packages[0]],
+  listRetiredPiperCdnVoicePackages: () => mocks.showRetired ? [retiredPackage] : [],
   formatPiperResourceBytes: (bytes) => bytes === 1024 ? "1 KB" : `${bytes} B`,
 }));
 vi.mock("../../src/piper-resource-store.js", () => ({
@@ -69,8 +78,21 @@ describe("Piper resource manager", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     mocks.englishStatus = "not-downloaded";
+    mocks.showRetired = false;
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("offers delete-only cleanup for a retired cached package", async () => {
+    mocks.showRetired = true;
+    const container = document.body.appendChild(document.createElement("div"));
+    const unmount = mountPiperResourceManager(container);
+    await vi.waitFor(() => expect(container.querySelector('[data-piper-resource="matcha-retired"]')).toBeTruthy());
+    const retired = container.querySelector('[data-piper-resource="matcha-retired"]');
+    expect(retired.textContent).toContain("已停用，可删除以释放空间");
+    expect(retired.querySelector('[data-piper-resource-action="download"]')).toBeNull();
+    expect(retired.querySelector('[data-piper-resource-action="delete"]')).toBeTruthy();
+    unmount();
   });
 
   it("renders only active CDN voice packages with scoped storage details", async () => {
