@@ -28,7 +28,7 @@ async function freezeWritingDate(page) {
 test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle("影伴");
+    await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
   });
 
   test("home page shows banner and stats", async ({ page }) => {
