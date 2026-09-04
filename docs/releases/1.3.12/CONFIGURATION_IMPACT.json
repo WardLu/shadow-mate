@@ -7,9 +7,10 @@
       "id": "unified-offline-voice-assets",
       "type": "external_cdn_assets",
       "test": {
-        "status": "pending_upload",
+        "status": "deployed_and_verified",
         "origin": "https://preview-sm.shadow.wang",
         "base_url": "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+        "verified_at": "2026-09-04T11:29:00Z",
         "required_files": [
           "sherpa-onnx-wasm-main-tts.data",
           "sherpa-onnx-wasm-main-tts.wasm"
