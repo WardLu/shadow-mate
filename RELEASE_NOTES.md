@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.3.14 - 2026-09-05
+
+Reconciles the production ancestry required by the protected deployment workflow.
+
+- Preserves the Baidu site-verification asset already present in production history.
+- Keeps the v1.3.13 product behavior while advancing release metadata to v1.3.14.
+
 ## v1.3.13 - 2026-09-05
 
 统一影伴首页可见品牌与结构化数据。
