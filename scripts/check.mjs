@@ -54,7 +54,7 @@ if (/<style[\s>]/i.test(html)) {
 if (/\sstyle=["']/i.test(html)) {
   throw new Error("Inline style attributes are not allowed");
 }
-if (/<script(?![^>]*\ssrc=)[^>]*>/i.test(html)) {
+if (/<script(?![^>]*(?:\ssrc=|type=["']application\/ld\+json["']))[^>]*>/i.test(html)) {
   throw new Error("Inline <script> blocks are not allowed; use external modules");
 }
 if (/\sonclick\s*=/i.test(html)) {
