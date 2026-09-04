@@ -31,6 +31,21 @@
 - Opened the approved `zh_CN-chaowen-medium` Chinese Piper package through the same versioned CDN download, integrity, cache, and engine fallback path as English. Its final CDN bytes, hashes, model-card provenance, and CORS smoke evidence must remain attached to the release record; desktop Playwright Preview coverage is not Xiaomi acceptance.
 - Fixed Chinese local synthesis so the Pinyin-based Chaowen model receives initial, final, and tone phonemes instead of eSpeak output. English voices continue to use the existing eSpeak runtime; real Xiaomi playback remains a separate Preview acceptance gate.
 
+## v1.3.14 - 2026-09-05
+
+Reconciles the production ancestry required by the protected deployment workflow.
+
+- Preserves the Baidu site-verification asset already present in production history.
+- Keeps the v1.3.13 product behavior while advancing release metadata to v1.3.14.
+
+## v1.3.13 - 2026-09-05
+
+Aligns the visible Shadow Mate brand and structured application data.
+
+- Shows “影伴 Shadow Mate” and the family growth workspace positioning on the signed-out page.
+- Adds stable application and publisher entities plus release-version metadata for search systems.
+- Adds static and browser regressions that prevent the old signed-out subtitle from returning.
+
 ## v1.3.12 - 2026-09-01
 
 - Fixed a learner switch that could remain incomplete after signing in again and creating a new family space.
