@@ -260,7 +260,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Docs
 - README.md 项目概述与本地运行指南
-- docs/architecture.md 架构设计与实施方案（v2.1）
 - docs/security-baseline.md 安全基线与发布闸门
 - docs/auth-setup.md Supabase Auth 配置指南
 - PRIVACY.md / SECURITY.md / CONTRIBUTING.md
