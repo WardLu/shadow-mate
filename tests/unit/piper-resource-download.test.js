@@ -89,18 +89,19 @@ function bodyFromChunks(chunks, { stall = false, onCancel = vi.fn() } = {}) {
   };
 }
 
-function headers(contentLength) {
-  return new Headers({ "content-length": String(contentLength), "content-type": "application/octet-stream" });
+function headers(contentLength, contentType = "application/octet-stream") {
+  return new Headers({ "content-length": String(contentLength), "content-type": contentType });
 }
 
-function createFetch({ package: resourcePackage, streamOptions = {}, getContentLengths = {}, contents = {}, onFetch } = {}) {
+function createFetch({ package: resourcePackage, streamOptions = {}, getContentLengths = {}, contentTypes = {}, contents = {}, onFetch } = {}) {
   return vi.fn((url, options = {}) => {
     onFetch?.(url, options);
     const file = resourcePackage.files.find((entry) => url.endsWith(entry.suffix));
-    if (options.method === "HEAD") return Promise.resolve(new Response(null, { status: 200, headers: headers(file.bytes) }));
+    const contentType = contentTypes[file.key] || file.contentType;
+    if (options.method === "HEAD") return Promise.resolve(new Response(null, { status: 200, headers: headers(file.bytes, contentType) }));
     const content = contents[file.key] ?? (file.key === "model" ? ["abc"] : ["{}"]);
     const stream = bodyFromChunks(content, streamOptions[file.key]);
-    return Promise.resolve(new Response(stream.body, { status: 200, headers: headers(getContentLengths[file.key] ?? file.bytes) }));
+    return Promise.resolve(new Response(stream.body, { status: 200, headers: headers(getContentLengths[file.key] ?? file.bytes, contentType) }));
   });
 }
 
@@ -207,6 +208,20 @@ describe("Piper resource downloader", () => {
     const actualCache = await packageCache(actualSetup);
     await expect(actualCache.match(`${resourcePackage.baseUrl}.onnx`)).resolves.toBeUndefined();
     await expect(completionMarkers(actualSetup)).resolves.toHaveLength(0);
+  });
+
+  it("rejects a resource whose response type does not match the manifest", async () => {
+    const resourcePackage = createPackage();
+    const setup = createDownloader({
+      resourcePackage,
+      fetch: createFetch({ package: resourcePackage, contentTypes: { model: "text/plain" } }),
+    });
+
+    await expect(setup.downloader.downloadPiperResource(resourcePackage.id)).rejects.toMatchObject({
+      code: "integrity",
+      message: "Piper resource HEAD Content-Type does not match the manifest",
+    });
+    await expect(completionMarkers(setup)).resolves.toHaveLength(0);
   });
 
   it("passes Cache.put a streaming Response and completes verified files before the marker", async () => {

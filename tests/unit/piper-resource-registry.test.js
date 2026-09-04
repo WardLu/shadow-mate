@@ -10,6 +10,9 @@ const RUNTIME_FILES = [
   ["/onnx/ort-wasm-simd-threaded.wasm", 11246032, "207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea"],
   ["/piper/piper_phonemize.wasm", 629166, "2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23"],
   ["/piper/piper_phonemize.data", 18077249, "a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa"],
+  ["/sherpa-onnx/sherpa-onnx-wasm-main-tts.js", 143833, "2f7d50fe6991982a4bcc8dd938d63de6edbb3f2b971e383e8986331ca5fcb311"],
+  ["/sherpa-onnx/sherpa-onnx-tts.js", 32010, "d0febb99e78c8322eb7dbda12e90a1b473de8a7d65f016a146576fbdadbf266a"],
+  ["/sherpa-onnx/sherpa-onnx-tts.worker.js", 1702, "c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14"],
 ];
 
 function bundledRuntimeFixture() {
@@ -32,26 +35,30 @@ describe("bundled Piper runtime registry", () => {
     expect(() => validatePiperResourcePackages([runtime])).toThrow(/audit/i);
   });
 
-  it("accepts the approved Chinese CDN package with its exact resource fingerprints", () => {
-    const chinese = structuredClone(getPiperResourcePackage("zh_CN-chaowen-medium"));
+  it("accepts one approved Chinese-English Matcha package with exact runtime fingerprints", () => {
+    const voice = structuredClone(getPiperResourcePackage("matcha-icefall-zh-en-1.13.2"));
 
-    expect(() => validatePiperResourcePackages([chinese])).not.toThrow();
-    expect(isActivePiperCdnVoicePackage(chinese)).toBe(true);
-    expect(chinese).toMatchObject({
-      id: "zh_CN-chaowen-medium",
-      locale: "zh-CN",
+    expect(() => validatePiperResourcePackages([voice])).not.toThrow();
+    expect(isActivePiperCdnVoicePackage(voice)).toBe(true);
+    expect(voice).toMatchObject({
+      id: "matcha-icefall-zh-en-1.13.2",
+      locale: "zh-CN + en-US",
+      locales: ["zh-CN", "en-US"],
+      engine: "sherpa-onnx-matcha",
       version: "1",
-      baseUrl: "https://voice.shadow.wang/piper/zh_CN-chaowen-medium",
-      totalBytes: 63224911,
+      baseUrl: "https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts",
+      totalBytes: 162111773,
       releaseApproved: true,
       licenseStatus: "approved",
       provenance: { status: "verified" },
       distribution: { status: "approved", channel: "public-cdn" },
     });
-    expect(chinese.files.map(({ suffix, bytes, sha256 }) => [suffix, bytes, sha256])).toEqual([
-      [".onnx", 63221984, "820d64ac16048fbcf38dd0823d37fab5f5e0c2bd71b01ca5a50f553fac19e746"],
-      [".onnx.json", 2927, "a6bb2caafa0645642f13cbf7e2f6fbbb16fded66e51109fc26d622f6472fa16f"],
+    expect(voice.files.map(({ suffix, bytes, sha256 }) => [suffix, bytes, sha256])).toEqual([
+      [".data", 149228019, "3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c"],
+      [".wasm", 12883754, "9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640"],
     ]);
+    expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toBe(false);
+    expect(isActivePiperCdnVoicePackage(getPiperResourcePackage("en_US-ljspeech-medium"))).toBe(false);
   });
 
   it("rejects a bundled runtime component without a fixed source commit", () => {

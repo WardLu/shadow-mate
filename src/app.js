@@ -658,6 +658,7 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
 }
 
 const PIPER_CACHE_HINT_KEY = "shadow-mate-piper-cache-hints-v1";
+const UNIFIED_OFFLINE_VOICE_PACKAGE_ID = "matcha-icefall-zh-en-1.13.2";
 const piperCacheHints = new Set((() => {
   try {
     const stored = JSON.parse(window.localStorage?.getItem(PIPER_CACHE_HINT_KEY) || "[]");
@@ -740,8 +741,8 @@ async function speak(t, button, locale = "en-US"){
   const voiceHelp = locale === "zh-CN"
     ? "请在系统设置中安装中文（普通话）语音，然后重试"
     : "请在系统设置中安装英语语音包，然后重试";
-  const piperPackageId = locale === "zh-CN" ? "zh_CN-chaowen-medium" : "en_US-ljspeech-medium";
-  const piperLanguage = locale === "zh-CN" ? "中文" : "英语";
+  const piperPackageId = UNIFIED_OFFLINE_VOICE_PACKAGE_ID;
+  const piperLanguage = "中英文";
   const showSpeechGuide = () => {
     if (!button || button.parentElement?.querySelector("[data-speech-guide]")) return;
     const guideLink = document.createElement("button");
@@ -854,7 +855,7 @@ async function speak(t, button, locale = "en-US"){
       if (status !== "ok") {
         forgetPiperCacheHint(piperPackageId);
         const message = status === "gated"
-          ? "中文离线语音尚未开放，请安装系统中文普通话语音后重试"
+          ? "离线中英文语音尚未开放，请安装对应系统语音后重试"
           : status === "unsupported"
             ? `当前浏览器不支持离线${piperLanguage}语音，请使用系统语音或更换浏览器`
             : status === "timeout"
@@ -965,7 +966,7 @@ async function speak(t, button, locale = "en-US"){
       if (error?.message === "本地语音引擎加载超时") {
         fail("本地语音引擎加载超时，请重试");
       } else if (error?.code === "gated") {
-        fail("中文离线语音尚未开放，请安装系统中文普通话语音后重试");
+        fail("离线中英文语音尚未开放，请安装对应系统语音后重试");
       } else if (error?.code === "storage") {
         fail(`离线${piperLanguage}语音资源不可用，请稍后重试`);
       } else {
@@ -2090,13 +2091,13 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音与离线资源</h3><p>影伴优先使用设备自带的语音服务；没有合适系统语音时，可按需下载已开放的本地语音资源。不会上传录音。</p></div></div>
+        <div class="guide-section-heading"><span>02</span><div><h3>听发音与离线资源</h3><p>影伴优先使用设备自带的语音服务；没有合适系统语音时，只需下载一套中英双语离线语音。不会上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
           <article class="guide-device"><h4>iPhone / iPad</h4><p>设置 → 辅助功能 → 朗读内容 → 声音 → English，点击下载需要的声音。</p><a class="guide-link" href="https://support.apple.com/en-us/105018" target="_blank" rel="noopener">查看 Apple 语音说明 ↗</a></article>
           <article class="guide-device"><h4>Android</h4><p>设置 → 无障碍 → 文字转语音输出 → 选择引擎和语言 → 安装语音数据 → English。</p><a class="guide-link" href="https://support.google.com/accessibility/android/answer/6006983?hl=en" target="_blank" rel="noopener">查看 Google 安装说明 ↗</a></article>
-          <p class="guide-device-tip">系统语音不可用时，可在下方查看已开放的本地语音资源；下载完成后可离线使用，不上传录音。</p>
+          <p class="guide-device-tip">系统语音不可用时，可在下方下载统一的中英双语 Matcha 语音包；同一浏览器配置文件与域名内下载一次后可离线使用。不同浏览器不能共享缓存。</p>
         </div>
         <div data-piper-resource-manager></div>
         <div class="guide-note">下载完成后重新打开影伴，再点击“听发音”。同时检查设备音量、静音开关和浏览器是否允许播放声音。</div>

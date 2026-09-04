@@ -21,6 +21,9 @@ const requiredFiles = [
   "public/onnx/ort-wasm-simd-threaded.wasm",
   "public/piper/piper_phonemize.wasm",
   "public/piper/piper_phonemize.data",
+  "public/sherpa-onnx/sherpa-onnx-wasm-main-tts.js",
+  "public/sherpa-onnx/sherpa-onnx-tts.js",
+  "public/sherpa-onnx/sherpa-onnx-tts.worker.js",
   "src/cache-policy.js",
   "src/piper-resource-registry.js",
   "src/piper-resource-store.js",
@@ -48,6 +51,7 @@ const requiredFiles = [
   "third_party/licenses/espeak-ng-COPYING.APACHE.txt",
   "third_party/licenses/espeak-ng-COPYING.BSD2.txt",
   "third_party/licenses/espeak-ng-COPYING.UCD.txt",
+  "third_party/licenses/sherpa-onnx-Apache-2.0.txt",
   ".vercelignore",
   "supabase/tests/learning_rls_test.sql",
   "supabase/migrations/20260811202411_child_privacy_consent.sql",
@@ -234,7 +238,8 @@ if (/https:\/\/esm\.sh/i.test(cloud)) {
 
 const piper = await readFile("src/piper-tts.js", "utf8");
 for (const marker of [
-  'export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium"',
+  "UNIFIED_OFFLINE_VOICE_PACKAGE_ID",
+  "createMatchaTtsRuntime",
   'export const VOICE_FILES',
 ]) {
   if (!piper.includes(marker)) throw new Error(`piper-tts.js is missing ${marker}`);

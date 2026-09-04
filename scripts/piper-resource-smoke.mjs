@@ -34,10 +34,6 @@ function parseArgs(argv) {
   return { baseUrl: baseUrl.replace(/\/+$/, ""), packageId };
 }
 
-function expectedPackageBaseUrl(baseUrl, packageId) {
-  return `${baseUrl}/${packageId}`;
-}
-
 function assertSuccess(response, phase, url) {
   if (!response.ok) fail(`${phase} ${url} returned HTTP ${response.status}`);
 }
@@ -136,8 +132,7 @@ export function assertApprovedCdnPackage(resourcePackage) {
 
 async function inspectPackage(baseUrl, resourcePackage) {
   assertApprovedCdnPackage(resourcePackage);
-  const expectedBaseUrl = expectedPackageBaseUrl(baseUrl, resourcePackage.id);
-  if (resourcePackage.baseUrl !== expectedBaseUrl) {
+  if (resourcePackage.baseUrl !== baseUrl) {
     fail(`Registry URL ${resourcePackage.baseUrl ?? "missing"} does not match --base-url ${baseUrl}`);
   }
   if (!resourcePackage.files.length) fail(`Piper package ${resourcePackage.id} has no registered files`);

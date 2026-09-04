@@ -14,12 +14,12 @@ function response(headers) {
 
 describe("Piper CDN CORS gate", () => {
   it("requires approved license, provenance, and distribution metadata for every active CDN package", () => {
-    const approved = getPiperResourcePackage("en_US-ljspeech-medium");
+    const approved = getPiperResourcePackage("matcha-icefall-zh-en-1.13.2");
     expect(() => assertApprovedCdnPackage(approved)).not.toThrow();
     expect(() => assertApprovedCdnPackage({ ...approved, licenseStatus: "pending" })).toThrow(/license/i);
     expect(() => assertApprovedCdnPackage({ ...approved, provenance: { status: "partial" } })).toThrow(/provenance/i);
     expect(() => assertApprovedCdnPackage({ ...approved, distribution: { status: "blocked" } })).toThrow(/distribution/i);
-    expect(() => assertApprovedCdnPackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).not.toThrow();
+    expect(() => assertApprovedCdnPackage(getPiperResourcePackage("zh_CN-chaowen-medium"))).toThrow(/not an approved/i);
   });
 
   it("accepts an expected Preview origin with all required methods and exposed headers", () => {

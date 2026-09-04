@@ -291,7 +291,7 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).not.toContainText("没有中文");
   });
 
-  test("opens the Chinese Piper download dialog when Android exposes no voice list", async ({ page }) => {
+  test("opens the unified offline voice dialog when Android exposes no voice list", async ({ page }) => {
     await installSpeechMock(page, { voices: [] });
     await openChineseAtFixedTime(page);
 
@@ -300,9 +300,9 @@ test.describe("Hanzi writing worksheet", () => {
 
     const dialog = page.locator("#shadow-voice-dialog");
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中文语音");
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("Chinese (Chaowen, medium)");
-    await expect(dialog.locator(".voice-dialog-desc")).toContainText("60.3 MB");
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中英文语音");
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("中英双语（Matcha）");
+    await expect(dialog.locator(".voice-dialog-desc")).toContainText("154.6 MB");
     await expect(dialog.locator(".voice-dialog-desc")).toContainText(new URL(page.url()).origin);
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
     await dialog.locator('[data-action="cancel"]').click();
@@ -363,7 +363,7 @@ test.describe("Hanzi writing worksheet", () => {
     await expect(button).not.toContainText("失败");
   });
 
-  test("offers Chinese Piper after no Mandarin system voice is available", async ({ page }) => {
+  test("offers the unified offline package after no Mandarin system voice is available", async ({ page }) => {
     let piperEngineRequests = 0;
     await page.route("**/piper-tts-web.js*", async (route) => {
       piperEngineRequests += 1;
@@ -381,8 +381,8 @@ test.describe("Hanzi writing worksheet", () => {
 
     const dialog = page.locator("#shadow-voice-dialog");
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中文语音");
-    await expect(dialog.locator(".voice-dialog-desc")).toContainText("60.3 MB");
+    await expect(dialog.locator(".voice-dialog-title")).toContainText("离线中英文语音");
+    await expect(dialog.locator(".voice-dialog-desc")).toContainText("154.6 MB");
     expect(await page.evaluate(() => window.__speechUtterances)).toEqual([]);
     expect(piperEngineRequests).toBe(0);
 

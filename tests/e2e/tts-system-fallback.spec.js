@@ -47,7 +47,7 @@ test.describe("System speech fallback", () => {
       });
       window.localStorage.setItem(
         "shadow-mate-piper-cache-hints-v1",
-        JSON.stringify(["zh_CN-chaowen-medium"]),
+        JSON.stringify(["matcha-icefall-zh-en-1.13.2"]),
       );
       Object.defineProperty(window, "AudioContext", { configurable: true, value: undefined });
       Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: undefined });
@@ -67,11 +67,11 @@ test.describe("System speech fallback", () => {
       piper: window.__piperCalls || [],
       system: window.__systemSpeechOrder,
     }))).toEqual({
-      cached: "zh_CN-chaowen-medium",
+      cached: "matcha-icefall-zh-en-1.13.2",
       piper: [
-        ["download", "zh_CN-chaowen-medium"],
-        ["prepare", "zh_CN-chaowen-medium"],
-        ["speak", "zh_CN-chaowen-medium"],
+        ["download", "matcha-icefall-zh-en-1.13.2"],
+        ["prepare", "matcha-icefall-zh-en-1.13.2"],
+        ["speak", "matcha-icefall-zh-en-1.13.2"],
       ],
       system: [],
     });
@@ -120,7 +120,7 @@ test.describe("System speech fallback", () => {
 
     await expect.poll(() => page.evaluate(() => window.__speechFallbackOrder)).toEqual([
       ["cancel"],
-      ["piper", "zh_CN-chaowen-medium"],
+      ["piper", "matcha-icefall-zh-en-1.13.2"],
     ]);
   });
 
@@ -249,9 +249,9 @@ test.describe("System speech fallback", () => {
     }))).toEqual({
       cancels: 2,
       packages: [
-        ["download", "en_US-ljspeech-medium"],
-        ["prepare", "en_US-ljspeech-medium"],
-        ["speak", "en_US-ljspeech-medium"],
+        ["download", "matcha-icefall-zh-en-1.13.2"],
+        ["prepare", "matcha-icefall-zh-en-1.13.2"],
+        ["speak", "matcha-icefall-zh-en-1.13.2"],
       ],
       plays: 1,
     });
@@ -304,7 +304,7 @@ test.describe("System speech fallback", () => {
     await page.click('[data-go="english"]');
     const button = page.locator("[data-speak]").first();
     await button.click();
-    await expect.poll(() => page.evaluate(() => window.__downloadCalls || [])).toEqual(["en_US-ljspeech-medium"]);
+    await expect.poll(() => page.evaluate(() => window.__downloadCalls || [])).toEqual(["matcha-icefall-zh-en-1.13.2"]);
     await page.evaluate(() => {
       const speakButton = document.querySelector("[data-speak]");
       speakButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -318,9 +318,9 @@ test.describe("System speech fallback", () => {
       spoken: window.__speakCalls || [],
       plays: window.__rapidAudioPlays || 0,
     }))).toEqual({
-      downloads: ["en_US-ljspeech-medium"],
-      prepared: ["en_US-ljspeech-medium"],
-      spoken: ["en_US-ljspeech-medium"],
+      downloads: ["matcha-icefall-zh-en-1.13.2"],
+      prepared: ["matcha-icefall-zh-en-1.13.2"],
+      spoken: ["matcha-icefall-zh-en-1.13.2"],
       plays: 1,
     });
   });
@@ -356,7 +356,7 @@ test.describe("System speech fallback", () => {
     await Promise.all([page.goto("/"), secondPage.goto("/")]);
     await Promise.all([page, secondPage].map((target) => target.evaluate(async () => {
       const { askDownloadVoice } = await import("/src/piper-tts.js");
-      window.__speechDialogResult = askDownloadVoice("en_US-ljspeech-medium").then((status) => {
+      window.__speechDialogResult = askDownloadVoice("matcha-icefall-zh-en-1.13.2").then((status) => {
         window.__speechDialogStatus = status;
       });
     })));
@@ -370,239 +370,4 @@ test.describe("System speech fallback", () => {
     await secondPage.close();
   });
 
-  test("sends Chinese text through Pinyin phonemes instead of the eSpeak runtime", async ({ page }) => {
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: `
-          export class OnnxWebRuntime { constructor() {} }
-          export class PhonemizeWebRuntime {
-            constructor() {}
-            async phonemize() {
-              window.__espeakPhonemizeCalls = (window.__espeakPhonemizeCalls || 0) + 1;
-              return { text: "花", phonemes: [null, "en", null, "uo", null], phoneme_ids: [127, 35, 120, 51, 135] };
-            }
-            destroy() {}
-          }
-          export class PiperWebEngine {
-            constructor({ phonemizeRuntime, voiceProvider }) {
-              this.phonemizeRuntime = phonemizeRuntime;
-              this.voiceProvider = voiceProvider;
-            }
-            async generate(text, voice) {
-              const voiceFiles = await this.voiceProvider.fetch(voice);
-              const phonemeData = await this.phonemizeRuntime.phonemize(text, voiceFiles);
-              window.__generatedChinesePhonemes = phonemeData;
-              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1, phonemeData };
-            }
-            destroy() { this.phonemizeRuntime.destroy?.(); }
-          }
-        `,
-      });
-    });
-    await page.addInitScript(() => {
-      const metadata = {
-        phoneme_type: "pinyin",
-        phoneme_id_map: {
-          _: [0], "^": [1], $: [2], "Ø": [3], h: [14], ua: [50], "1": [64],
-        },
-        espeak: { voice: "zh" },
-      };
-      const cacheStore = new Map([
-        ["https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx", new Response(new Blob(["model"]))],
-        ["https://voice.shadow.wang/piper/zh_CN-chaowen-medium.onnx.json", new Response(JSON.stringify(metadata))],
-      ]);
-      Object.defineProperty(window, "caches", {
-        configurable: true,
-        value: { open: async () => ({ match: async (url) => cacheStore.get(url) }) },
-      });
-    });
-    await page.goto("/");
-
-    const result = await page.evaluate(async () => {
-      const { resetLocalVoiceEngine, speakLocally } = await import("/src/piper-tts.js");
-      const speech = await speakLocally("花", "zh_CN-chaowen-medium");
-      URL.revokeObjectURL(speech.url);
-      const snapshot = {
-        phonemes: speech.phonemes,
-        phonemeIds: speech.phonemeIds,
-        espeakCalls: window.__espeakPhonemizeCalls || 0,
-      };
-      await resetLocalVoiceEngine();
-      return snapshot;
-    });
-
-    expect(result).toEqual({
-      phonemes: ["h", "ua", "1"],
-      phonemeIds: [1, 14, 50, 64, 0, 2],
-      espeakCalls: 0,
-    });
-  });
-
-  test("reuses one validated model provider and object URL across repeated syntheses", async ({ page }) => {
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: `
-          export class OnnxWebRuntime { constructor() {} }
-          export class PhonemizeWebRuntime { constructor() {} }
-          export class PiperWebEngine {
-            constructor({ voiceProvider }) { this.voiceProvider = voiceProvider; }
-            async generate(_text, voice) {
-              const [, modelUrl] = await this.voiceProvider.fetch(voice);
-              window.__providerModelUrls = [...(window.__providerModelUrls || []), modelUrl];
-              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
-            }
-            destroy() {}
-          }
-        `,
-      });
-    });
-    await page.addInitScript(() => {
-      Object.defineProperty(window, "caches", {
-        configurable: true,
-        value: {
-          open: async () => ({
-            match: async (url) => {
-              if (url.endsWith(".onnx.json")) {
-                window.__metadataCacheReads = (window.__metadataCacheReads || 0) + 1;
-                return new Response("{}");
-              }
-              window.__modelCacheReads = (window.__modelCacheReads || 0) + 1;
-              return new Response(new Blob(["model"]));
-            },
-          }),
-        },
-      });
-    });
-    await page.goto("/");
-
-    const result = await page.evaluate(async () => {
-      const { resetLocalVoiceEngine, speakLocally } = await import("/src/piper-tts.js");
-      const first = await speakLocally("first", "en_US-ljspeech-medium");
-      const second = await speakLocally("second", "en_US-ljspeech-medium");
-      URL.revokeObjectURL(first.url);
-      URL.revokeObjectURL(second.url);
-      const snapshot = {
-        modelReads: window.__modelCacheReads,
-        metadataReads: window.__metadataCacheReads,
-        providerUrls: window.__providerModelUrls,
-      };
-      await resetLocalVoiceEngine();
-      return snapshot;
-    });
-
-    expect(result.modelReads).toBe(1);
-    expect(result.metadataReads).toBe(1);
-    expect(result.providerUrls).toHaveLength(2);
-    expect(new Set(result.providerUrls).size).toBe(1);
-  });
-
-  test("destroys a failed engine so the next local request creates a fresh one", async ({ page }) => {
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: `
-          export class OnnxWebRuntime { constructor() {} }
-          export class PhonemizeWebRuntime { constructor() {} }
-          export class PiperWebEngine {
-            constructor() { window.__piperEngines = (window.__piperEngines || 0) + 1; }
-            async generate() {
-              const call = (window.__piperGenerates = (window.__piperGenerates || 0) + 1);
-              if (call === 1) throw new Error("broken ONNX session");
-              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
-            }
-            destroy() { window.__piperDestroys = (window.__piperDestroys || 0) + 1; }
-          }
-        `,
-      });
-    });
-    await page.addInitScript(() => {
-      const cacheStore = new Map([
-        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["model"]))],
-        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
-      ]);
-      Object.defineProperty(window, "caches", {
-        configurable: true,
-        value: { open: async () => ({ match: async (url) => cacheStore.get(url) }) },
-      });
-    });
-    await page.goto("/");
-
-    const result = await page.evaluate(async () => {
-      const { speakLocally } = await import("/src/piper-tts.js");
-      const failed = await speakLocally("first", "en_US-ljspeech-medium")
-        .then(() => null, (error) => error.code);
-      const next = await speakLocally("second", "en_US-ljspeech-medium");
-      URL.revokeObjectURL(next.url);
-      return {
-        failed,
-        engines: window.__piperEngines,
-        destroys: window.__piperDestroys,
-        generates: window.__piperGenerates,
-      };
-    });
-
-    expect(result).toEqual({ failed: "error", engines: 2, destroys: 1, generates: 2 });
-  });
-
-  test("replaces a hung Piper engine after synthesis timeout", async ({ page }) => {
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: `
-          export class OnnxWebRuntime { constructor() {} }
-          export class PhonemizeWebRuntime { constructor() {} }
-          export class PiperWebEngine {
-            constructor() { window.__timeoutEngines = (window.__timeoutEngines || 0) + 1; }
-            async generate(text) {
-              const call = (window.__timeoutGenerates = (window.__timeoutGenerates || 0) + 1);
-              window.__timeoutGenerateStarted = (window.__timeoutGenerateStarted || 0) + 1;
-              if (text === "first") return new Promise(() => {});
-              return { file: new Blob(["audio"], { type: "audio/wav" }), duration: 1 };
-            }
-            destroy() { window.__timeoutDestroys = (window.__timeoutDestroys || 0) + 1; }
-          }
-        `,
-      });
-    });
-    await page.addInitScript(() => {
-      const cacheStore = new Map([
-        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx", new Response(new Blob(["model"]))],
-        ["https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx.json", new Response("{}")],
-      ]);
-      Object.defineProperty(window, "caches", {
-        configurable: true,
-        value: { open: async () => ({ match: async (url) => cacheStore.get(url) }) },
-      });
-    });
-    await page.goto("/");
-
-    await page.evaluate(async () => {
-      const { resetLocalVoiceEngine, speakLocally, withTimeout } = await import("/src/piper-tts.js");
-      window.__timeoutSpeech = speakLocally("first", "en_US-ljspeech-medium");
-      window.__timeoutSpeechHelpers = { resetLocalVoiceEngine, speakLocally, withTimeout };
-    });
-    await expect.poll(() => page.evaluate(() => window.__timeoutGenerateStarted || 0)).toBe(1);
-
-    const result = await page.evaluate(async () => {
-      const { resetLocalVoiceEngine, speakLocally, withTimeout } = window.__timeoutSpeechHelpers;
-      const timedOut = await withTimeout(
-        window.__timeoutSpeech,
-        5,
-        "发音合成超时"
-      ).then(() => null, (error) => error.name);
-      await resetLocalVoiceEngine();
-      const next = await speakLocally("second", "en_US-ljspeech-medium");
-      URL.revokeObjectURL(next.url);
-      return {
-        timedOut,
-        engines: window.__timeoutEngines,
-        destroys: window.__timeoutDestroys,
-        generates: window.__timeoutGenerates,
-      };
-    });
-
-    expect(result).toEqual({ timedOut: "TimeoutError", engines: 2, destroys: 1, generates: 2 });
-  });
 });

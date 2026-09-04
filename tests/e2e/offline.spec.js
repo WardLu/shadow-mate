@@ -305,12 +305,10 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("清单大小");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="en_US-ljspeech-medium"]')).toContainText("60.6 MB");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("清单大小");
-    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="zh_CN-chaowen-medium"]')).toContainText("60.3 MB");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="matcha-icefall-zh-en-1.13.2"]')).toContainText("清单大小");
+    await expect(page.locator('[data-guide-section="speech"] [data-piper-resource="matcha-icefall-zh-en-1.13.2"]')).toContainText("154.6 MB");
     await expect(page.locator('[data-guide-section="speech"]')).not.toContainText(/(?:90|115)\s*MB/i);
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("切换 Chrome、夸克、小米浏览器、无痕模式或站点域名都需要分别下载");
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.microsoft.com"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.apple.com"]').first()).toBeVisible();
     await expect(page.locator('[data-guide-section="speech"] a[href*="support.google.com"]')).toBeVisible();
@@ -337,7 +335,7 @@ test.describe("Offline mode (no login)", () => {
     await expect.poll(() => page.evaluate(() => window.__speechCalls)).toEqual([word]);
   });
 
-  test("speech button offers the active English Piper package when system speech is unavailable", async ({ page }) => {
+  test("speech button offers the unified offline package when system speech is unavailable", async ({ page }) => {
     await page.goto("/");
     const origin = new URL(page.url()).origin;
     await page.evaluate(() => {
@@ -351,10 +349,10 @@ test.describe("Offline mode (no login)", () => {
     const button = page.locator("[data-speak]").first();
     await button.click();
     await expect(page.locator("#shadow-voice-dialog[open]")).toBeVisible();
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线英语语音");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("English (LJSpeech, medium)");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("离线中英文语音");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-title")).toContainText("中英双语（Matcha）");
     await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("版本 1");
-    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("60.6 MB");
+    await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText("154.6 MB");
     await expect(page.locator("#shadow-voice-dialog .voice-dialog-desc")).toContainText(origin);
     await page.click('.voice-dialog-actions [data-action="cancel"]');
     await expect(page.locator("#shadow-voice-dialog")).toBeHidden();

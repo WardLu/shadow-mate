@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const managedByRunner = process.env.E2E_EXTERNAL_SERVER === "1";
 const baseURL = process.env.E2E_BASE_URL || "http://localhost:5173";
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -15,7 +16,13 @@ export default defineConfig({
     actionTimeout: 5000,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(chromiumExecutablePath ? { launchOptions: { executablePath: chromiumExecutablePath } } : {}),
+      },
+    },
   ],
   ...(managedByRunner ? {} : {
     webServer: {

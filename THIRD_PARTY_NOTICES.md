@@ -32,18 +32,23 @@
 | `ONNX Runtime Web` — `public/onnx/ort-wasm-simd-threaded.wasm` | version `1.20.1` at [commit `5c1b7ccbff7e5141c1da7a9d963d660e5741c319`](https://github.com/microsoft/onnxruntime/tree/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/js/web)。vendored runtime header/source 也保留此组件记录。 | [MIT](https://github.com/microsoft/onnxruntime/blob/5c1b7ccbff7e5141c1da7a9d963d660e5741c319/LICENSE)；[`third_party/licenses/onnxruntime-MIT.txt`](./third_party/licenses/onnxruntime-MIT.txt) | MIT 文本允许 use、copy、modify、merge、publish、distribute、sublicense 和 sell；复制或实质部分须保留版权和许可声明，软件按无担保条款提供。 |
 | `piper-phonemize` — `public/piper/piper_phonemize.wasm`、`public/piper/piper_phonemize.data` | version `1.2.0` at [commit `cfff8e52ebaea37c7e953ae2d06b174acb827ac4`](https://github.com/rhasspy/piper-phonemize/tree/cfff8e52ebaea37c7e953ae2d06b174acb827ac4)。当前 WASM/data 是由 [piper-tts-web package version `1.0.0`, commit `7cec5cb4861f9322cd094b1b8b41a5b173e314db`](https://github.com/Poket-Jony/piper-tts-web/tree/7cec5cb4861f9322cd094b1b8b41a5b173e314db/dist/piper) 提供的构件。 | [MIT](https://github.com/rhasspy/piper-phonemize/blob/cfff8e52ebaea37c7e953ae2d06b174acb827ac4/LICENSE.md)；[`third_party/licenses/piper-phonemize-MIT.txt`](./third_party/licenses/piper-phonemize-MIT.txt) | MIT 文本允许 use、copy、modify、merge、publish、distribute、sublicense 和 sell；复制或实质部分须保留版权和许可声明，软件按无担保条款提供。 |
 | `eSpeak NG` — piper-phonemize CMake 依赖 | piper-phonemize build metadata 固定 version `1.52.0.1` at [commit `0f65aa301e0d6bae5e172cc74197d32a6182200f`](https://github.com/espeak-ng/espeak-ng/tree/0f65aa301e0d6bae5e172cc74197d32a6182200f)。 | [GPL-3.0-or-later COPYING](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING)、[Apache-2.0](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.APACHE)、[BSD-2-Clause](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.BSD2)、[Unicode](https://github.com/espeak-ng/espeak-ng/blob/0f65aa301e0d6bae5e172cc74197d32a6182200f/COPYING.UCD)；仓库保留 [`COPYING`](./third_party/licenses/espeak-ng-COPYING.txt)、[`COPYING.APACHE`](./third_party/licenses/espeak-ng-COPYING.APACHE.txt)、[`COPYING.BSD2`](./third_party/licenses/espeak-ng-COPYING.BSD2.txt)、[`COPYING.UCD`](./third_party/licenses/espeak-ng-COPYING.UCD.txt)。 | 随构件保留四份文本，并按所纳入材料对应的文本处理：GPL-3.0-or-later 受覆盖 object code 的 conveyance 需提供 Corresponding Source 并保留 GPL notices；Apache-2.0 保留 license/required notices；BSD-2-Clause 保留版权、条件和 disclaimer；Unicode 保留 copyright、permission notice 和 disclaimer。 |
+| `sherpa-onnx WebAssembly TTS` — `public/sherpa-onnx/*` | version `1.13.2` at signed tag/commit [`13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24`](https://github.com/k2-fsa/sherpa-onnx/tree/13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24/wasm/tts)。JS 运行时来自同版本发布资产 `sherpa-onnx-wasm-simd-1.13.2-matcha-icefall-zh-en.tar.bz2`；worker 仅做 Shadow Mate 消息协议适配。 | [Apache-2.0](https://github.com/k2-fsa/sherpa-onnx/blob/13d0ae6c539d2809d32f5eaa3ef1db0c459d0b24/LICENSE)；[`third_party/licenses/sherpa-onnx-Apache-2.0.txt`](./third_party/licenses/sherpa-onnx-Apache-2.0.txt) | 分发时保留许可证、版权/归属及适用 NOTICE；修改文件保留显著修改说明；软件按无担保条款提供。 |
 
 该 allowlist 的 `approved` 是本项目对来源记录和所列上游文本已齐备的内部审计状态，不是对构件全部版权归属、许可适用范围或某一再分发方案合规性的法律结论。涉及新构建、修改或新的公开再分发时，仍须对实际纳入的材料和相应上游文本进行许可/法律审查。
 
-此外，离线英语语音模型 `en_US-ljspeech-medium` 由 `voice.shadow.wang` CDN 分发，首次下载后由浏览器缓存，不随应用包分发。模型来自采用 MIT 许可证的 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium) `en_US/ljspeech/medium`；其 [MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD) 将训练数据标注为 public domain。注册表分别记录模型许可、来源和本项目 CDN 分发批准状态，任一项缺失都会阻止 active CDN 包通过静态与 smoke 门禁。
+旧离线英语 `en_US-ljspeech-medium` 与中文 `zh_CN-chaowen-medium` 仍保留来源记录用于识别和安全清理历史浏览器缓存，但从本版本起不再是 active 下载包。英语 Piper 模型来自采用 MIT 许可证的 [Piper Voices](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium)，模型卡将训练数据标注为 public domain；中文 Chaowen 模型卡记录训练数据为 CC0。
 
 ### Piper CDN 资源发布门禁
 
-英语包 `en_US-ljspeech-medium` 的已批准清单版本为 `1`，基础 URL 为 `https://voice.shadow.wang/piper/en_US-ljspeech-medium`：`.onnx` 为 63,531,379 bytes（SHA-256 `6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22`），`.onnx.json` 为 4,972 bytes（SHA-256 `141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860`）。发布前以 `scripts/piper-resource-smoke.mjs` 对清单 URL、响应类型、CORS、字节数与 SHA-256 做只读核验。
+### 统一中英双语 Matcha CDN 资源
 
-中文离线语音包 `zh_CN-chaowen-medium` 使用 Piper Voices 的 Chaowen medium 文件，经 `voice.shadow.wang` CDN 分发，清单版本为 `1`：`.onnx` 为 63,221,984 bytes（SHA-256 `820d64ac16048fbcf38dd0823d37fab5f5e0c2bd71b01ca5a50f553fac19e746`），`.onnx.json` 为 2,927 bytes（SHA-256 `a6bb2caafa0645642f13cbf7e2f6fbbb16fded66e51109fc26d622f6472fa16f`）。模型卡将训练数据集标为 CC0，并记录该模型从 Xiao Ya voice 微调；本项目保留模型卡、来源、文件指纹和 CDN 分发记录，不能将数据集许可扩大解释为其他未记录材料的许可。
+active 包 `matcha-icefall-zh-en-1.13.2` 来自 sherpa-onnx `v1.13.2` 的固定发布资产。模型原始来源为 ModelScope `dengcunqin/matcha_tts_zh_en_20251010`，其模型 API 在本次审查时标记 `Apache License 2.0`；sherpa-onnx 源码与浏览器运行时同为 Apache-2.0。模型支持中文与英文、单说话人、16 kHz。
 
-中文包基础 URL 为 `https://voice.shadow.wang/piper/zh_CN-chaowen-medium`。发布前和资源变更后使用 `scripts/piper-resource-smoke.mjs` 对最终 CDN URL 的响应类型、CORS、字节数与 SHA-256 做只读核验；任一项不匹配都必须保持下载未完成状态。
+迁移原因不是运输错误：旧 Chaowen 模型即使在原生推理中也会错误朗读部分孤立汉字；Kokoro 出现静音或错误前置音；MeloTTS 未通过孤立汉字试听。`matcha-icefall-zh-en` 已于 2026-09-04 对中文单字“花、雨、风、牛”、对应英文单词及中英文长句完成试听，发音和完整性获确认；音色偏机械是当前明确接受、留待后续优化的限制。
+
+CDN 基础 URL 为 `https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts`：`.data` 为 149,228,019 bytes（SHA-256 `3a00cfc82ddf39a2e798e63fad038e2c56f10aa4b7b952a0c98db758d119c14c`），`.wasm` 为 12,883,754 bytes（SHA-256 `9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640`），清单合计 162,111,773 bytes。发布前运行 `node scripts/piper-resource-smoke.mjs --base-url <上述基础 URL> --package matcha-icefall-zh-en-1.13.2`，逐文件核对响应类型、CORS、字节数和 SHA-256；任一项不匹配都不得写入完成标记。
+
+浏览器缓存受浏览器配置文件和 Origin 隔离。同一浏览器与同一 Shadow Mate 域名下只需下载一次；Chrome、夸克、小米浏览器或不同域名之间不能共享该缓存。
 
 ## 字帖字体资源
 
@@ -59,4 +64,7 @@
 | `public/onnx/ort-wasm-simd-threaded.wasm` | `207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea` |
 | `public/piper/piper_phonemize.data` | `a9879123581336fc36ae3706ae81c9e67becc388b80b8a4943cef2a78542e6aa` |
 | `public/piper/piper_phonemize.wasm` | `2189e43490744c95445e251c38a47063f2ca266bcc30bbb18f692c47ff2bfd23` |
+| `public/sherpa-onnx/sherpa-onnx-wasm-main-tts.js` | `2f7d50fe6991982a4bcc8dd938d63de6edbb3f2b971e383e8986331ca5fcb311` |
+| `public/sherpa-onnx/sherpa-onnx-tts.js` | `d0febb99e78c8322eb7dbda12e90a1b473de8a7d65f016a146576fbdadbf266a` |
+| `public/sherpa-onnx/sherpa-onnx-tts.worker.js` | `c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14` |
 | `public/brand_assets/shadow-mate-writing-hand.ttf` | `38e6473bcbe4e3d2dba2218eb7235b4b5f7f3f080d75528f8e4d1fc8bc1c4a10` |

@@ -6,25 +6,26 @@
 
 import { getPiperDownloadError, downloadPiperResource } from "./piper-resource-download.js";
 import { acquirePiperDownloadLock } from "./piper-resource-lock.js";
-import { createPiperPhonemizeRuntime } from "./piper-pinyin.js";
+import { createMatchaTtsRuntime, encodeMonoWav } from "./matcha-tts.js";
 import {
   formatPiperResourceBytes,
   getPiperResourcePackage,
   isActivePiperCdnVoicePackage,
-  listPiperResourcePackages,
+  UNIFIED_OFFLINE_VOICE_PACKAGE_ID,
 } from "./piper-resource-registry.js";
 import { deletePiperResource, getPiperResourceStatus } from "./piper-resource-store.js";
 
-export const ENGLISH_PIPER_PACKAGE_ID = "en_US-ljspeech-medium";
-const ENGINE_URL = "/piper-tts-web.js";
+export { UNIFIED_OFFLINE_VOICE_PACKAGE_ID };
+// Compatibility alias for existing callers while the generic resource modules
+// retain their historical Piper filenames.
+export const ENGLISH_PIPER_PACKAGE_ID = UNIFIED_OFFLINE_VOICE_PACKAGE_ID;
 export const ENGINE_LOAD_TIMEOUT_MS = 120_000;
 export const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 const englishPackage = getPiperResourcePackage(ENGLISH_PIPER_PACKAGE_ID);
 // Compatibility exports for existing callers. New code must use package IDs.
-export const VOICE = "https://voice.shadow.wang/piper/en_US-ljspeech-medium";
+export const VOICE = englishPackage.baseUrl;
 export const VOICE_FILES = englishPackage.files.map((file) => `${englishPackage.baseUrl}${file.suffix}`);
-if (VOICE !== englishPackage.baseUrl) throw new Error("The legacy Piper voice export must match the English package registry");
 
 export class PiperLocalVoiceError extends Error {
   constructor(code, message, cause) {
@@ -74,13 +75,6 @@ function getApprovedPackage(packageId) {
   return resourcePackage;
 }
 
-function packageForVoice(voice) {
-  for (const resourcePackage of listPiperResourcePackages()) {
-    if (isActivePiperCdnVoicePackage(resourcePackage) && normalizedUrl(resourcePackage.baseUrl) === normalizedUrl(voice)) return resourcePackage;
-  }
-  throw new PiperLocalVoiceError("invalid", "Piper requested an unregistered voice URL");
-}
-
 function asLocalVoiceError(error, fallbackCode = "error", fallbackMessage = "本地语音合成失败") {
   if (error instanceof PiperLocalVoiceError) return error;
   const code = error?.name === "TimeoutError" ? "timeout" : fallbackCode;
@@ -106,58 +100,20 @@ async function disposeEngineSession(session) {
   if (!session || session.disposed) return;
   session.disposed = true;
   try {
-    Promise.resolve(session.engine?.destroy?.()).catch(() => {});
+    session.engine?.reset?.();
   } catch (_) {
-    // A failed engine must never prevent object URL cleanup or a fresh retry.
+    // A failed worker must never prevent a fresh retry.
   }
-  for (const url of session.modelObjectUrls) URL.revokeObjectURL(url);
-  session.modelObjectUrls.clear();
-  session.voiceProviders.clear();
-}
-
-async function readVoiceFile(session, resourcePackage, suffix) {
-  if (!("caches" in globalThis) || !globalThis.caches?.open) {
-    throw new PiperLocalVoiceError("storage", "Piper package cache is unavailable");
-  }
-  const cache = await globalThis.caches.open(packageCacheName(resourcePackage));
-  const response = await cache.match(fileUrl(resourcePackage, suffix));
-  if (!response?.ok) throw new PiperLocalVoiceError("storage", "Piper package file is unavailable in the local cache");
-  return response;
 }
 
 async function createEngineSession() {
-  const session = { engine: null, modelObjectUrls: new Set(), voiceProviders: new Map(), disposed: false };
-  const mod = await import(/* @vite-ignore */ ENGINE_URL);
-  const voiceProvider = {
-    async fetch(voice) {
-      const resourcePackage = packageForVoice(voice);
-      const key = `${resourcePackage.id}@${resourcePackage.version}`;
-      if (!session.voiceProviders.has(key)) {
-        const pending = Promise.all([
-          readVoiceFile(session, resourcePackage, ".onnx.json"),
-          readVoiceFile(session, resourcePackage, ".onnx"),
-        ]).then(async ([metadata, model]) => {
-          const modelUrl = URL.createObjectURL(await model.blob());
-          if (session.disposed) {
-            URL.revokeObjectURL(modelUrl);
-            throw new PiperLocalVoiceError("engine", "Piper voice engine was reset while loading its model");
-          }
-          session.modelObjectUrls.add(modelUrl);
-          return [await metadata.json(), modelUrl];
-        }).catch((error) => {
-          session.voiceProviders.delete(key);
-          throw error;
-        });
-        session.voiceProviders.set(key, pending);
-      }
-      return session.voiceProviders.get(key);
-    },
-  };
-  const espeakRuntime = new mod.PhonemizeWebRuntime({ basePath: "/piper/" });
-  session.engine = new mod.PiperWebEngine({
-    onnxRuntime: new mod.OnnxWebRuntime({ basePath: "/onnx/", numThreads: 1 }),
-    phonemizeRuntime: createPiperPhonemizeRuntime(espeakRuntime),
-    voiceProvider,
+  const session = { engine: null, disposed: false };
+  const resourcePackage = getApprovedPackage(UNIFIED_OFFLINE_VOICE_PACKAGE_ID);
+  session.engine = createMatchaTtsRuntime();
+  await session.engine.prepare({
+    cacheName: packageCacheName(resourcePackage),
+    dataUrl: fileUrl(resourcePackage, ".data"),
+    wasmUrl: fileUrl(resourcePackage, ".wasm"),
   });
   return session;
 }
@@ -201,14 +157,13 @@ export async function resetLocalVoiceEngine() {
 export async function speakLocally(text, packageId = ENGLISH_PIPER_PACKAGE_ID) {
   const generation = engineGeneration;
   try {
-    const resourcePackage = getApprovedPackage(packageId);
+    getApprovedPackage(packageId);
     const engine = await loadEngine();
-    const result = await engine.generate(text, resourcePackage.baseUrl, 0);
+    const result = await engine.generate(text);
+    const file = encodeMonoWav(result.samples, result.sampleRate);
     return {
-      url: URL.createObjectURL(result.file),
-      duration: result.duration,
-      phonemes: result.phonemeData?.phonemes,
-      phonemeIds: result.phonemeData?.phoneme_ids,
+      url: URL.createObjectURL(file),
+      duration: (result.samples.length / result.sampleRate) * 1000,
     };
   } catch (error) {
     if (engineGeneration === generation) await resetLocalVoiceEngine();
@@ -232,11 +187,11 @@ export async function isPiperVoiceCached(packageId = ENGLISH_PIPER_PACKAGE_ID) {
 }
 
 export async function isVoiceCached() {
-  return isPiperVoiceCached(ENGLISH_PIPER_PACKAGE_ID);
+  return isPiperVoiceCached(UNIFIED_OFFLINE_VOICE_PACKAGE_ID);
 }
 
 export async function downloadVoice(onProgress, signal) {
-  return downloadPiperResource(ENGLISH_PIPER_PACKAGE_ID, onProgress, signal);
+  return downloadPiperResource(UNIFIED_OFFLINE_VOICE_PACKAGE_ID, onProgress, signal);
 }
 
 function combineAbortSignals(signals) {
@@ -275,7 +230,7 @@ function dialogDescription(resourcePackage, resourceStatus) {
 
 function buildDialog(resourcePackage, resourceStatus) {
   document.getElementById("shadow-voice-dialog")?.remove();
-  const language = resourcePackage.locale === "zh-CN" ? "中文" : "英语";
+  const language = resourcePackage.locales?.length > 1 ? "中英文" : resourcePackage.locale === "zh-CN" ? "中文" : "英语";
   const dlg = document.createElement("dialog");
   dlg.id = "shadow-voice-dialog";
   dlg.className = "voice-dialog";
@@ -332,7 +287,7 @@ export async function askDownloadVoice(packageId, onProgress, options) {
       resolve(status);
     };
     const run = async () => {
-      title.textContent = `正在下载离线${resourcePackage.locale === "zh-CN" ? "中文" : "英语"}语音`;
+      title.textContent = `正在下载离线${resourcePackage.locales?.length > 1 ? "中英文" : resourcePackage.locale === "zh-CN" ? "中文" : "英语"}语音`;
       desc.hidden = true;
       deleteButton.disabled = true;
       progress.hidden = false;

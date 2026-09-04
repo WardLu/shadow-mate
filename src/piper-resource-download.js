@@ -55,6 +55,13 @@ function requireContentLength(response, expectedBytes, phase) {
   }
 }
 
+function requireContentType(response, expectedType, phase) {
+  const value = response.headers.get("content-type") || "";
+  if (!value.toLowerCase().startsWith(expectedType.toLowerCase())) {
+    throw downloadError("integrity", `Piper resource ${phase} Content-Type does not match the manifest`);
+  }
+}
+
 function requireSuccess(response, phase) {
   if (!response?.ok) throw downloadError("http", `Piper resource ${phase} request failed with HTTP ${response?.status ?? "unknown"}`);
 }
@@ -253,7 +260,10 @@ export function createPiperResourceDownloader({
         failedFile = file;
         if (entry.present && allowSharedCleanup) await store.removeInvalidFile(resourcePackage, file, { cache, canCommit });
         const url = fileUrl(resourcePackage, file);
-        stagedKey = stagingUrl(url, commitId);
+        // Stream directly into the canonical cache key. Completion remains
+        // fail-closed because no file/package marker is written until the
+        // streamed bytes and SHA-256 are verified; failures delete this key.
+        stagedKey = allowSharedCleanup ? url : stagingUrl(url, commitId);
         const headRequest = createRequestController(signal);
         let head;
         try {
@@ -267,6 +277,7 @@ export function createPiperResourceDownloader({
         }
         requireSuccess(head, "HEAD");
         requireContentLength(head, file.bytes, "HEAD");
+        requireContentType(head, file.contentType, "HEAD");
 
         const getRequest = createRequestController(signal);
         let response;
@@ -279,6 +290,7 @@ export function createPiperResourceDownloader({
           });
           requireSuccess(response, "GET");
           requireContentLength(response, file.bytes, "GET");
+          requireContentType(response, file.contentType, "GET");
           if (!response.body) throw downloadError("unsupported", "Piper resource GET response does not expose a readable stream");
 
           const hasher = createPiperResourceSha256();
@@ -305,10 +317,12 @@ export function createPiperResourceDownloader({
           if (actualBytes !== file.bytes) throw downloadError("integrity", "Piper resource actual bytes do not match the manifest");
           if (actualSha256 !== file.sha256.toLowerCase()) throw downloadError("integrity", "Piper resource SHA-256 does not match the manifest");
           ensureCanCommit(signal, canCommit);
-          const stagedResponse = await cache.match(stagedKey);
-          if (!stagedResponse) throw downloadError("storage", "Piper resource staging response is unavailable");
-          await cache.put(url, stagedResponse);
-          await cache.delete(stagedKey);
+          if (stagedKey !== url) {
+            const stagedResponse = await cache.match(stagedKey);
+            if (!stagedResponse) throw downloadError("storage", "Piper resource staging response is unavailable");
+            await cache.put(url, stagedResponse);
+            await cache.delete(stagedKey);
+          }
           stagedKey = null;
           ensureCanCommit(signal, canCommit);
           const metadata = await store.writeFileCompletionMarker(resourcePackage, file, {

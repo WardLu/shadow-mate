@@ -198,7 +198,7 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 | [使用指南](docs/user-guide.md) | 家长登录、家庭空间、打卡、日历、同步、语音和安装 |
 | [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
 | [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
-| [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、Piper、模型和 vendored 资源的来源与许可状态 |
+| [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、语音模型和 vendored 资源的来源与许可状态 |
 | [Changelog](CHANGELOG.md) | 详细变更记录 |
 | [Release Notes](RELEASE_NOTES.md) | 版本发布说明 |
 
@@ -206,17 +206,22 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 影伴当前仓库版本为 v1.3.12，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
-### 英语发音
+### 中英文发音
 
-“听发音”优先使用设备提供的英语系统语音。MacBook 等通常有可用系统语音的设备，听到的是系统 TTS；没有英语系统语音的国产 Android（尤其是无 GMS 设备）会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 63.5MB 的 `en_US-ljspeech-medium` 离线语音包并缓存到浏览器。缓存只属于当前浏览器配置文件和当前域名；切换浏览器、配置文件、域名或环境后需要分别下载，同一环境会复用已校验文件，并可在应用内指南查看状态和大小。两类设备使用的引擎不同，因此音色和听感可能不同；Piper 下载完成后可离线合成，且不会上传录音。
+“听发音”优先使用与中文或英文匹配的设备系统语音。没有可用系统语音的国产 Android（尤其是无 GMS 设备）会切换到浏览器本地 Matcha，首次使用会从 `voice.shadow.wang` CDN 下载一套约 154.6MB 的 `matcha-icefall-zh-en` 中英双语离线包。下载完成后，同一浏览器配置文件和当前域名中的中文、英文都使用这套模型，无需分别下载。
 
-### 中文发音
+缓存受浏览器安全边界限制：Chrome、夸克、小米浏览器、无痕模式及不同域名不能共享，因此需要分别下载。模型已通过“花、雨、风、牛”、对应英文单词及中英文长句试听；当前音色偏机械是已接受、后续再优化的限制。离线合成不会上传录音。
 
-“听发音”优先使用设备提供的中文普通话系统语音。没有可用普通话语音的 Android 浏览器会切换到浏览器本地 Piper，首次使用会从 `voice.shadow.wang` CDN 下载约 60.3MB 的 `zh_CN-chaowen-medium` 离线语音包并缓存到当前浏览器配置文件和当前域名；下载完成后可离线合成，不上传录音。中文文本会在浏览器内转换为 Chaowen 模型要求的拼音声母、韵母和声调音素，不再交给英语使用的 eSpeak 路径。英语和中文语音包使用同一套下载、校验、缓存、删除和错误处理机制；切换浏览器、配置文件、域名或环境后仍需分别下载。
+更换模型的原因是旧 Chaowen 在原生与浏览器推理中都会错读部分孤立汉字，Kokoro 和 MeloTTS 也未通过试听；`matcha-icefall-zh-en` 的中英文发音与完整性通过后才进入实现。
 
 ## 致谢
 
-影伴的“听发音”当前优先使用设备系统英语语音；系统没有可用语音、语音无响应或播放失败时，使用浏览器本地 Piper 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
+影伴的“听发音”优先使用匹配语言的系统语音；系统语音不可用、无响应或播放失败时，使用浏览器本地 sherpa-onnx/Matcha 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
+
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（Apache-2.0）：浏览器 WebAssembly TTS 运行时
+- [matcha-icefall-zh-en](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html)：统一中英双语模型
+
+以下 Piper 项目仅作为历史兼容与旧缓存迁移记录保留：
 
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web)（MIT）：浏览器端 Piper 语音引擎封装
 - [pinyin-pro](https://github.com/zh-lx/pinyin-pro)（MIT）：为 Chaowen 中文模型生成拼音音素

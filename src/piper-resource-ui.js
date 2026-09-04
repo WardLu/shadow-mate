@@ -56,7 +56,7 @@ export function mountPiperResourceManager(container) {
   let disposed = false;
   const activeStatuses = new Map();
   container.className = "piper-resource-manager";
-  container.innerHTML = `<p class="piper-resource-scope">下载记录只保存在当前浏览器、当前浏览器配置文件和当前域名；切换环境不会共享缓存。</p><p class="piper-resource-estimate" data-piper-resource-estimate>正在读取本站存储用量…</p><div data-piper-resource-list></div>`;
+  container.innerHTML = `<p class="piper-resource-scope">下载记录只保存在当前浏览器配置文件和当前域名；切换 Chrome、夸克、小米浏览器、无痕模式或站点域名都需要分别下载。</p><p class="piper-resource-estimate" data-piper-resource-estimate>正在读取本站存储用量…</p><div data-piper-resource-list></div>`;
   const list = container.querySelector("[data-piper-resource-list]");
 
   async function refreshEstimate() {

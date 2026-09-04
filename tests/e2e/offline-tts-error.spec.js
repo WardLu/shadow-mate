@@ -3,20 +3,10 @@ import { test, expect } from "@playwright/test";
 test.describe("Offline voice download errors", () => {
   test.use({ serviceWorkers: "block" });
 
-  test("keeps an unavailable English package resource visible to the user", async ({ page }) => {
+  test("keeps an unavailable unified package resource visible to the user", async ({ page }) => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
-    await page.route("**/piper-tts-web.js*", async (route) => {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: `
-          export class OnnxWebRuntime { constructor() {} }
-          export class PhonemizeWebRuntime { constructor() {} }
-          export class PiperWebEngine { constructor() {} }
-        `,
-      });
-    });
-    await page.route("https://voice.shadow.wang/piper/en_US-ljspeech-medium.onnx*", async (route) => {
+    await page.route("https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/**", async (route) => {
       if (route.request().method() === "HEAD") {
         await route.fulfill({ status: 200, headers: { "content-length": "5" } });
         return;
@@ -40,7 +30,7 @@ test.describe("Offline voice download errors", () => {
     await button.click();
     await page.click('.voice-dialog-actions [data-action="ok"]');
 
-    await expect(button).toContainText("离线英语语音资源不可用，请稍后重试");
+    await expect(button).toContainText("离线中英文语音资源不可用，请稍后重试");
     expect(pageErrors).toEqual([]);
   });
 });

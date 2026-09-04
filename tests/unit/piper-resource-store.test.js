@@ -82,24 +82,32 @@ async function seedCompletePackage(store, resourcePackage) {
 }
 
 describe("Piper resource registry", () => {
-  it("exposes approved English and Chinese packages", () => {
+  it("exposes one approved bilingual package and retains deprecated Piper metadata", () => {
     expect(getPiperResourcePackage("en_US-ljspeech-medium")).toMatchObject({
       id: "en_US-ljspeech-medium",
       locale: "en-US",
+      releaseApproved: false,
       source: "cdn",
       cachePolicy: "user-download",
     });
     expect(listPiperResourcePackages().find((entry) => entry.id === "zh_CN-chaowen-medium")).toMatchObject({
       id: "zh_CN-chaowen-medium",
-      releaseApproved: true,
+      releaseApproved: false,
       source: "cdn",
       cachePolicy: "user-download",
       totalBytes: 63224911,
     });
+    expect(getPiperResourcePackage("matcha-icefall-zh-en-1.13.2")).toMatchObject({
+      locales: ["zh-CN", "en-US"],
+      releaseApproved: true,
+      source: "cdn",
+      cachePolicy: "user-download",
+      totalBytes: 162111773,
+    });
     expect(listPiperResourcePackages().find((entry) => entry.id === "piper-browser-runtime")).toMatchObject({
       source: "bundled",
       cachePolicy: "app-shell",
-      totalBytes: 76608615,
+      totalBytes: 76786160,
       files: expect.arrayContaining([
         expect.objectContaining({ url: "/piper-tts-web.js", bytes: 46656168, license: expect.any(String) }),
         expect.objectContaining({ url: "/onnx/ort-wasm-simd-threaded.wasm", bytes: 11246032 }),
