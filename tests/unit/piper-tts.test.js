@@ -20,7 +20,7 @@ describe("offline Piper voice packages", () => {
     expect(VOICE).toBe("https://voice.shadow.wang/sherpa-onnx/1.13.2/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts");
     expect(VOICE_FILES).toEqual([
       `${VOICE}.data`,
-      `${VOICE}.wasm`,
+      "https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm",
     ]);
   });
 
@@ -55,6 +55,7 @@ describe("offline Piper voice packages", () => {
       getPiperResourcePackage: (packageId) => packageId === englishPackage.id ? englishPackage : resourcePackage,
       listPiperResourcePackages: () => [englishPackage, resourcePackage],
       isActivePiperCdnVoicePackage: () => true,
+      resolvePiperResourceFileUrl: (pkg, file) => file.url || `${pkg.baseUrl}${file.suffix}`,
       formatPiperResourceBytes: () => "1.0 MB",
       UNIFIED_OFFLINE_VOICE_PACKAGE_ID: englishPackage.id,
     }));

@@ -21,6 +21,11 @@ self.onmessage = async ({ data: message }) => {
         wasmResponse.arrayBuffer(),
       ]);
       const Module = await createModule({
+        // The upstream browser bundle defaults to a 512 MiB shared heap. That
+        // eager allocation can terminate Android browser workers before the
+        // model is initialized. Start smaller and let Emscripten's configured
+        // ALLOW_MEMORY_GROWTH expand the heap only when inference needs it.
+        INITIAL_MEMORY: 256 * 1024 * 1024,
         getPreloadedPackage: () => dataBuffer,
         wasmBinary: new Uint8Array(wasmBuffer),
         setStatus: () => {},

@@ -1,5 +1,9 @@
 import { createPiperResourceSha256 } from "./piper-resource-hash.js";
-import { getPiperResourcePackage, isActivePiperCdnVoicePackage } from "./piper-resource-registry.js";
+import {
+  getPiperResourcePackage,
+  isActivePiperCdnVoicePackage,
+  resolvePiperResourceFileUrl,
+} from "./piper-resource-registry.js";
 import { createPiperResourceStore, isPiperResourceCached } from "./piper-resource-store.js";
 
 const DEFAULT_TIMEOUTS = Object.freeze({ head: 10_000, response: 20_000, read: 30_000 });
@@ -31,7 +35,7 @@ function absoluteUrl(url) {
 }
 
 function fileUrl(resourcePackage, file) {
-  return absoluteUrl(`${resourcePackage.baseUrl}${file.suffix}`);
+  return absoluteUrl(resolvePiperResourceFileUrl(resourcePackage, file));
 }
 
 function stagingUrl(url, commitId) {

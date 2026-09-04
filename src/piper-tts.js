@@ -11,6 +11,7 @@ import {
   formatPiperResourceBytes,
   getPiperResourcePackage,
   isActivePiperCdnVoicePackage,
+  resolvePiperResourceFileUrl,
   UNIFIED_OFFLINE_VOICE_PACKAGE_ID,
 } from "./piper-resource-registry.js";
 import { deletePiperResource, getPiperResourceStatus } from "./piper-resource-store.js";
@@ -25,7 +26,7 @@ export const SYNTHESIS_TIMEOUT_MS = 30_000;
 const englishPackage = getPiperResourcePackage(ENGLISH_PIPER_PACKAGE_ID);
 // Compatibility exports for existing callers. New code must use package IDs.
 export const VOICE = englishPackage.baseUrl;
-export const VOICE_FILES = englishPackage.files.map((file) => `${englishPackage.baseUrl}${file.suffix}`);
+export const VOICE_FILES = englishPackage.files.map((file) => resolvePiperResourceFileUrl(englishPackage, file));
 
 export class PiperLocalVoiceError extends Error {
   constructor(code, message, cause) {
@@ -58,8 +59,10 @@ function normalizedUrl(url) {
   return new URL(url, globalThis.location?.href || "https://shadow-mate.invalid/").href;
 }
 
-function fileUrl(resourcePackage, suffix) {
-  return normalizedUrl(`${resourcePackage.baseUrl}${suffix}`);
+function fileUrl(resourcePackage, key) {
+  const file = resourcePackage.files.find((entry) => entry.key === key);
+  if (!file) throw new PiperLocalVoiceError("invalid", `Offline voice package is missing ${key}`);
+  return normalizedUrl(resolvePiperResourceFileUrl(resourcePackage, file));
 }
 
 function packageCacheName(resourcePackage) {
@@ -112,8 +115,8 @@ async function createEngineSession() {
   session.engine = createMatchaTtsRuntime();
   await session.engine.prepare({
     cacheName: packageCacheName(resourcePackage),
-    dataUrl: fileUrl(resourcePackage, ".data"),
-    wasmUrl: fileUrl(resourcePackage, ".wasm"),
+    dataUrl: fileUrl(resourcePackage, "data"),
+    wasmUrl: fileUrl(resourcePackage, "wasm"),
   });
   return session;
 }

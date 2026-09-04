@@ -12,6 +12,7 @@
 - 将旧 `en_US-ljspeech-medium` 与 `zh_CN-chaowen-medium` 标记为停止新增下载，仅保留历史缓存识别和安全迁移元数据。
 
 ### Fixed
+- 修复 Matcha 离线包在 Android 浏览器下载完成后仍无法发音的问题：官方 WASM 预占 512MB 共享内存，叠加模型展开后可能终止移动端 Worker；移动兼容运行时改为 256MB 起始内存并保留按需增长。已有 149MB 模型数据继续复用，只补下约 12MB WASM。
 - 修复中文 Piper 将 `phoneme_type: "pinyin"` 的模型元数据误送入 eSpeak，导致离线中文发音听起来不是普通话或加载超时的问题；中文现在使用固定版本的 `pinyin-pro` 生成声母、韵母和声调音素，英语仍沿用原有 eSpeak 路径。
 - 为 CDN 语音下载增加有时限的 `HEAD` / `GET` 请求，以及 `Content-Length`、响应类型、CORS、实际字节数和 SHA-256 的 fail-closed 校验；失败不会写入完成标记，可安全重试。
 - 明确语音缓存按浏览器配置文件、域名和资源版本隔离，避免把更换浏览器或环境后的再次下载误判为重复下载。

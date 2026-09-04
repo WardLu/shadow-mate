@@ -225,9 +225,10 @@ const UNIFIED_MATCHA_RESOURCE = {
     {
       key: "wasm",
       suffix: ".wasm",
+      url: "https://voice.shadow.wang/sherpa-onnx/1.13.2-mobile-256/matcha-icefall-zh-en/sherpa-onnx-wasm-main-tts.wasm",
       contentType: "application/wasm",
       bytes: 12883754,
-      sha256: "9554feafc2bf4452c3e1f5d5d4b29b690e6e7db1eb3835478a793e864111f640",
+      sha256: "ff161b9927ca92164930fe564476ee32edaf8ec460b94df2353af7333754119e",
     },
   ],
 };
@@ -241,7 +242,7 @@ const BUNDLED_PIPER_RUNTIME = {
   baseUrl: null,
   source: "bundled",
   cachePolicy: "app-shell",
-  totalBytes: 76786160,
+  totalBytes: 76786515,
   releaseApproved: true,
   licenseStatus: "reviewed",
   license: {
@@ -320,8 +321,8 @@ const BUNDLED_PIPER_RUNTIME = {
       key: "sherpa-onnx-worker",
       url: "/sherpa-onnx/sherpa-onnx-tts.worker.js",
       contentType: "application/javascript",
-      bytes: 1702,
-      sha256: "c9c5bac9cb38e3d658ab0d3d68d6adbf09d9c724d2451372af33633d25814a14",
+      bytes: 2057,
+      sha256: "e6274d02b08ca502ae910cdbd3084cda557ee52a12bc020a96187af43a0dd4ca",
       license: "Apache-2.0 with Shadow Mate integration changes",
       provenance: "docs/superpowers/specs/2026-09-04-unified-offline-voice-design.md",
     },
@@ -340,6 +341,13 @@ export function isActivePiperCdnVoicePackage(resourcePackage) {
     && resourcePackage.kind === "voice"
     && resourcePackage.source === "cdn"
     && resourcePackage.cachePolicy === "user-download";
+}
+
+export function resolvePiperResourceFileUrl(resourcePackage, file) {
+  return new URL(
+    file?.url || `${resourcePackage?.baseUrl || ""}${file?.suffix || ""}`,
+    globalThis.location?.href || "https://shadow-mate.invalid/",
+  ).href;
 }
 
 function validateApprovedCdnMetadata(resourcePackage) {
@@ -423,7 +431,9 @@ export function validatePiperResourcePackages(packages) {
     let totalBytes = 0;
     const fileKeys = new Set();
     for (const file of resourcePackage.files) {
-      const hasLocation = isBundled ? /^\/.+/.test(file?.url || "") : Boolean(file?.suffix);
+      const hasLocation = isBundled
+        ? /^\/.+/.test(file?.url || "")
+        : Boolean(file?.suffix) && (!file.url || /^https:\/\//.test(file.url));
       if (!file?.key || fileKeys.has(file.key) || !hasLocation || !file.contentType) {
         throw new Error(`Active Piper package ${resourcePackage.id} has an invalid file entry`);
       }
