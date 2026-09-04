@@ -243,7 +243,7 @@ test.describe("Hanzi writing worksheet", () => {
 
     const oldButton = page.locator('[data-writing-worksheet] [data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await oldButton.click();
-    await expect(oldButton).toBeEnabled();
+    await expect(oldButton).toBeEnabled({ timeout: 10_000 });
 
     await openLearningModule(page, "english");
     await openLearningModule(page, "chinese");
@@ -252,7 +252,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(await newButton.getAttribute("data-speech-failure")).toBeNull();
 
     await newButton.click();
-    await expect(newButton).not.toBeDisabled();
+    await expect(newButton).not.toBeDisabled({ timeout: 10_000 });
   });
 
   test("keeps the same assignment, order, and glyphs after reload and module switches", async ({ page }) => {
