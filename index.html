@@ -26,12 +26,20 @@
   "@graph": [
     {
       "@type": "WebApplication",
+      "@id": "https://sm.shadow.wang/#application",
       "name": "影伴",
       "alternateName": ["Shadow Mate", "影伴 Shadow Mate"],
       "url": "https://sm.shadow.wang/",
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web, iOS, Android, macOS, Windows",
+      "softwareVersion": "1.4.0",
       "description": "面向家庭的成长工作台，帮助家长把成长目标变成孩子愿意参与的现实行动。陪伴有方法，成长有动力。",
+      "publisher": {
+        "@type": "Organization",
+        "@id": "https://shadow.wang/#organization",
+        "name": "Shadow Nexus",
+        "url": "https://shadow.wang/"
+      },
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -87,8 +95,8 @@
   <div class="topbar">
     <div class="logo"><svg viewBox="0 0 100 100" width="30" height="30" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="62" width="60" height="18" rx="9" fill="#1f7a39"/><rect x="20" y="38" width="36" height="28" rx="7" fill="#ffc83d"/><rect x="26" y="43" width="15" height="13" rx="3" fill="#cfeeff"/><path d="M54 50 L76 30 L86 38 L64 60 Z" fill="#ffc83d" stroke="#1f7a39" stroke-width="2" stroke-linejoin="round"/><path d="M76 30 q12 3 9 16 l-9 -3 q-1 -9 0 -13 Z" fill="#1f7a39"/></svg></div>
     <div>
-      <h1>影伴</h1>
-      <div class="sub">绿色挖掘机 · 每日成长打卡</div>
+      <h1>影伴 Shadow Mate</h1>
+      <div class="sub">家庭成长工作台 · 陪伴有方法，成长有动力</div>
     </div>
     <div class="datepill" id="datepill">今天</div>
     <button class="account-button" id="accountButton" type="button" aria-label="账户与云端同步" title="本机模式">登录</button>

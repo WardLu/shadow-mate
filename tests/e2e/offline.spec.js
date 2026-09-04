@@ -79,6 +79,8 @@ test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
+    await expect(page.locator(".topbar h1")).toHaveText("影伴 Shadow Mate");
+    await expect(page.locator(".topbar .sub")).toHaveText("家庭成长工作台 · 陪伴有方法，成长有动力");
   });
 
   test("service-worker activation retains a completed Piper package without a second resource GET", async ({ page, context }) => {
