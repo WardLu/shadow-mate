@@ -40,7 +40,7 @@ for (const size of ["192x192", "512x512"]) {
 
 const html = await readFile("index.html", "utf8");
 for (const marker of [
-  "<title>影伴</title>",
+  "<title>影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力</title>",
   'id="accountButton"',
   'id="cloudDialog"',
   'src="/src/cloud.js"',
