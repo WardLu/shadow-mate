@@ -45,4 +45,5 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_URL: ${{ inputs.url }}
           RELEASE_REQUIRE_PRODUCTION: "1"
+          RELEASE_TTS_ORIGIN: ${{ inputs.url }}
           RELEASE_REQUIRE_DEPLOYMENT_CHECKLIST: "1"
