@@ -124,6 +124,14 @@ describe("additional error branches", () => {
     expect(formatAuthError({ message: "unexpected auth failure" }, "fallback")).toBe("fallback");
   });
 
+  it("can preserve an operation-specific fallback for network auth errors", () => {
+    expect(formatAuthError(
+      { message: "Failed to fetch" },
+      "密码重设邮件发送失败，请稍后再试。",
+      { preserveFallbackForNetwork: true },
+    )).toBe("密码重设邮件发送失败，请稍后再试。");
+  });
+
   it("translates cloud conflict, network, and fallback errors", () => {
     expect(formatCloudError({ message: "learning_state_conflict" }, "fallback")).not.toBe("fallback");
     expect(formatCloudError({ message: "network timeout" }, "fallback")).not.toBe("fallback");
