@@ -8,7 +8,7 @@ Shadow Mate 的 v1.3.14 SEO/GEO 变更已合并并发布；随后 `production` �
 
 ## 当前未完成项
 
-- Vercel 项目 API 的 `targets.production` 仍返回旧 deployment `dpl_CG45uA25soFLKdZk8avYtetFK2Vu`（提交 `7d330a5…`），而 `sm.shadow.wang` 与 Promote 接口均确认 v1.4.0 deployment `dpl_jJT4g38ExBEjgonCfgLZdSpdnyr7` 为当前生产；该平台读模型差异已单独记录，不再重复创建部署。
+- Vercel 项目 API 的 `targets.production` 仍返回旧 deployment `dpl_CG45uA25soFLKdZk8avYtetFK2Vu`（提交 `7d330a5…`），而 `sm.shadow.wang` 与 Promote 接口均确认 v1.4.0 deployment `dpl_jJT4g38ExBEjgonCfgLZdSpdnyr7` 为当前生产；重复 Promote 返回 409 `already the current production deployment`，因此不再回滚或制造新部署。
 - 真实账号、CrUX 现场数据与长期性能趋势不由本仓库 workflow 推断，需专用测试账号和持续观测。
 
 产品 workflow 不携带生产数据库凭据，不直接执行 Supabase migration，也不写入生产用户数据。
