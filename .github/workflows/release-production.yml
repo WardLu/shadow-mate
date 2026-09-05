@@ -39,6 +39,9 @@ jobs:
       - name: Build release candidate
         run: npm run build
 
+      - name: Install ffprobe for CDN audio validation
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Verify deployed release
         run: npm run release:check
         env:
