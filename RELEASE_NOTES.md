@@ -2,6 +2,8 @@
 
 > This file lists user-visible product changes for each published version.
 
+For the 2026-09-05 post-release merges and remaining work from PR #69, see [PR follow-up](docs/pr-follow-up.md). These records do not indicate a new production release.
+
 ## v1.4.0 - 2026-09-05
 
 ### Print preview
