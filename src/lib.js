@@ -32,7 +32,11 @@ function errorText(error) {
   return String(error?.message || error?.error_description || error || "").trim();
 }
 
-export function formatAuthError(error, fallback = "验证失败，请稍后再试。") {
+export function formatAuthError(
+  error,
+  fallback = "验证失败，请稍后再试。",
+  { preserveFallbackForNetwork = false } = {},
+) {
   const message = errorText(error);
   const code = String(error?.code || "");
   const retryMatch = message.match(/only request this after\s+(\d+)\s+seconds?/i);
@@ -56,7 +60,7 @@ export function formatAuthError(error, fallback = "验证失败，请稍后再�
     return "新密码不能与当前密码相同。";
   }
   if (/network|failed to fetch|timeout/i.test(message)) {
-    return "网络连接失败，请检查网络后再试。";
+    return preserveFallbackForNetwork ? fallback : "网络连接失败，请检查网络后再试。";
   }
   return fallback;
 }
