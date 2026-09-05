@@ -757,7 +757,9 @@ function renderPasswordRecoveryRequest(prefillEmail = "") {
         redirectTo: AUTH_REDIRECT_ORIGIN,
       });
       if (error) {
-        showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。"), 6000);
+        showToast(formatAuthError(error, "密码重设邮件发送失败，请稍后再试。", {
+          preserveFallbackForNetwork: true,
+        }), 6000);
         return;
       }
       panel.innerHTML = `
