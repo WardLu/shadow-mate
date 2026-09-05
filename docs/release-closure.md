@@ -6,9 +6,15 @@ Shadow Mate 的 v1.3.14 SEO/GEO 变更已合并并发布；随后 `production` �
 
 本文件记录已核验的部署快照和后续交接边界，文件本身不能证明任何 workflow 已执行。生产发布仍需独立的 `production`、Stage、Promote、正式域名验收与审计证据。
 
-## 当前未完成项
+## 项目指针与生产别名对齐（2026-09-05）
 
-- Vercel 项目 API 的 `targets.production` 仍返回旧 deployment `dpl_CG45uA25soFLKdZk8avYtetFK2Vu`（提交 `7d330a5…`），而 `sm.shadow.wang` 与 Promote 接口均确认 v1.4.0 deployment `dpl_jJT4g38ExBEjgonCfgLZdSpdnyr7` 为当前生产；重复 Promote 返回 409 `already the current production deployment`，因此不再回滚或制造新部署。
+- 已从同一 v1.4.0 发布提交 `cdf5fb41d17022f165ce8b3fddde7f7e4c73dc68` 构建、验收并 Promote deployment `dpl_5Y1pXLakBYiD2tmQEdC4S6wJXvDv`（`shadow-mate-ci3hl7xzc-wardlus-projects.vercel.app`）。版本与应用代码未改变；构建产物相比旧生产仅省略 19 个 Vercel 注入的平台元数据字段。
+- 项目 `targets.production` 与 `sm.shadow.wang`、`shadow-mate.vercel.app`、`shadow-mate-wardlus-projects.vercel.app`、`shadow-mate-git-production-wardlus-projects.vercel.app` 四个生产别名已全部回读到上述 deployment；`autoAssignCustomDomains=false` 保持不变。
+- 独立检出通过 public/security/static/build 检查、374 项单元测试、产物与第三方资源审核；生产 Release 检查通过，96 个既有语音 CDN 对象完成长度、SHA-256、CORS 和解码验证，共 495648 bytes。未调用付费语音生成接口。
+- 旧部署 `dpl_jJT4g38ExBEjgonCfgLZdSpdnyr7` 保留为同版本恢复点。此前 Promote 409、同目标 Rollback 422 和项目旧记录是历史现象，没有执行旧版本回滚。
+
+## 独立后续事项
+
 - Mate 的登录后云同步如需补测，应使用专用测试家庭账号；Portal P0b 中的账号待办指 Portal 自身登录与 Dashboard 权限。CrUX 现场数据与长期性能趋势需持续观测。
 
 产品 workflow 不携带生产数据库凭据，不直接执行 Supabase migration，也不写入生产用户数据。
