@@ -3,7 +3,9 @@ import { test, expect } from "@playwright/test";
 const FIXED_NOW = new Date("2026-09-01T02:00:00.000Z");
 const TIME_ZONE = "Asia/Singapore";
 
-test.use({ timezoneId: TIME_ZONE });
+// These interaction tests mock speech requests; SW interception bypasses page.route.
+// Offline/cache lifecycle behavior is covered separately in offline.spec.js.
+test.use({ timezoneId: TIME_ZONE, serviceWorkers: "block" });
 
 async function openLearningModule(page, module) {
   await page.locator('.navbtn[data-mod="learning"]').click();
@@ -228,6 +230,7 @@ test.describe("Hanzi writing worksheet", () => {
     const meaningButton = firstCard.locator("[data-hanzi-meaning-speak]");
     await meaningButton.click();
     await expect(meaningButton).toBeEnabled();
+    expect(await page.evaluate(() => window.__speechUtterances.map(({ lang }) => lang))).toEqual(["zh-CN", "en-US", "zh-CN"]);
 
     const after = await readWorksheetSnapshot(page);
     expect(after.screen).toEqual(before.screen);
@@ -253,6 +256,7 @@ test.describe("Hanzi writing worksheet", () => {
 
     await newButton.click();
     await expect(newButton).not.toBeDisabled({ timeout: 10_000 });
+    expect(await page.evaluate(() => window.__speechUtterances.map(({ lang }) => lang))).toEqual(["zh-CN", "zh-CN"]);
   });
 
   test("keeps the same assignment, order, and glyphs after reload and module switches", async ({ page }) => {

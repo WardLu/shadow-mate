@@ -18,3 +18,9 @@ Shadow Mate 的 v1.3.14 SEO/GEO 变更已合并并发布；随后 `production` �
 - Mate 的登录后云同步如需补测，应使用专用测试家庭账号；Portal P0b 中的账号待办指 Portal 自身登录与 Dashboard 权限。CrUX 现场数据与长期性能趋势需持续观测。
 
 产品 workflow 不携带生产数据库凭据，不直接执行 Supabase migration，也不写入生产用户数据。
+
+## 旧 release-manifest 提案的处置（2026-09-06）
+
+[Issue #103](https://github.com/WardLu/shadow-mate/issues/103) 中的旧 handoff 提案不再进入当前实现。旧 `release-closure.yml`、`release-manifest*.mjs` 及对应测试保持为历史材料，不迁入主线，也不增加 `release:manifest` 命令。旧 workflow 通过可变的跨仓库 `main` 调用 reusable workflow，不能作为发布状态的可靠依据，因此不应形成第二条交接路径。
+
+该提案不会取代项目现有的发布审查。生产迁移、部署、正式发布和生产验收仍须通过各自独立门禁；本次整理不执行任何生产操作。

@@ -1,4 +1,5 @@
 import { inject } from "@vercel/analytics";
+import { ANALYTICS_EVENTS, hasConsecutiveCheckinDays, recordAnalyticsEvent } from "./analytics.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
   renderWritingPrintSheetHtml,
@@ -171,6 +172,7 @@ function isProfileScopeBlocked() {
 }
 
 const profileScopeBlockedAtStartup = isProfileScopeBlocked();
+if (!profileScopeBlockedAtStartup) recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
@@ -424,7 +426,13 @@ function toggleCheckin(mod){
     key: mod,
   });
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
-  save();
+  const saved = save();
+  if (saved && !wasChecked && hasCheckin(store.checkins[checkinDate], mod)) {
+    recordAnalyticsEvent(ANALYTICS_EVENTS.firstCheckin, { once: true });
+    if (hasConsecutiveCheckinDays(store.checkins, 3)) {
+      recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
+    }
+  }
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
     { source: "checkin", entry_type: "manual" },
@@ -720,6 +728,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     button.setAttribute("aria-label", message);
     button.title = message;
     button.dataset.speechFailure = "true";
+    if (button.isConnected) recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
       source: "published_tts",
