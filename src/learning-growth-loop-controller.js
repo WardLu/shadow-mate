@@ -67,7 +67,7 @@ function rebindSnapshotScope(input, scope) {
   return next;
 }
 
-export function createGrowthLoopController({ db, canWrite = () => true, canTransition = canWrite } = {}) {
+export function createGrowthLoopController({ db, canWrite = () => true, canTransition = canWrite, onRewardFulfilled = null } = {}) {
   if (!db) throw new Error("growth_loop_local_db_required");
   let scope = { household_id: null, profile_id: null };
   let scopeKey = scopeKeyForGrowthLoop(scope);
@@ -430,11 +430,15 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     } else if (event.type === "redemption_fulfill") {
       const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
       if (redemption && remote?.status === "fulfilled") {
+        const alreadyFulfilled = redemption.status === "fulfilled";
         Object.assign(redemption, remote, {
           status: "fulfilled",
           confirmed: true,
           fulfill_requested: false,
         });
+        if (!alreadyFulfilled && typeof onRewardFulfilled === "function") {
+          onRewardFulfilled({ redemption: clone(redemption) });
+        }
       }
     } else if (event.type === "redemption_cancel") {
       const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);

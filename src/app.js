@@ -41,6 +41,7 @@ import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
+import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-sounds.js";
 
 inject();
 installRapidActionGuard(document);
@@ -172,16 +173,22 @@ function isProfileScopeBlocked() {
 
 const profileScopeBlockedAtStartup = isProfileScopeBlocked();
 const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
+const soundEffects = createSoundEngine();
+window.soundEffects = soundEffects;
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
   canWrite: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteLocalState?.() !== false,
   canTransition: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteScopeTransition?.() !== false,
+  onRewardFulfilled: ({ redemption }) => {
+    if (redemption?.status === "fulfilled") soundEffects.play("reward_fulfilled");
+  },
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";
 window.growthLoop = growthLoopController;
+window.switchMod = switchMod;
 
 function clientRequestId(prefix = "growth") {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -425,6 +432,7 @@ function toggleCheckin(mod){
   });
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   save();
+  if (isChecked(mod)) soundEffects.play("action_completed");
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
     { source: "checkin", entry_type: "manual" },
@@ -480,6 +488,8 @@ function togglePoint(itemId, day){
   const item = pointItemAt(itemId);
   if(!item) return;
   const requestId = clientRequestId("point");
+  const wasOn = pointOn(itemId, day);
+  const delta = Number(item.default_points ?? item.pts);
   void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
     void queueGrowthActivity(
       ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
@@ -489,6 +499,13 @@ function togglePoint(itemId, day){
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.CORE_ACTIVATION, { source: "point_item" }, "once");
     window.cloudSync?.scheduleGrowthLoop?.();
     renderPoints();
+    if (wasOn) {
+      soundEffects.play("try_again");
+    } else if (delta < 0) {
+      soundEffects.play("points_deducted");
+    } else {
+      soundEffects.play("points_earned");
+    }
   }).catch((error) => {
     console.error("Growth Loop local point write failed:", error);
     alert("本机记录没有保存成功，请稍后重试。");
@@ -1054,8 +1071,8 @@ function renderMath(){
     const v = el("qa").value;
     const f = el("qf");
     if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
-    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
+    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; soundEffects.play("action_completed"); }
+    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; soundEffects.play("try_again"); }
   };
 
   // 数感：数字填写 1-100 找缺失
@@ -1865,6 +1882,83 @@ function renderBook(){
   main.appendChild($(`<div class="footer">${icon("library")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
+
+/* =========================================================
+   渲染：音效设置（设备级，仅本机）
+   ========================================================= */
+function renderSettings(){
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("settings","音效设置"));
+  const settings = soundEffects.getSettings();
+  main.appendChild($(`
+    <div class="card">
+      <h3>${icon("volume")} 音效总开关与音量</h3>
+      <div class="sound-row">
+        <span class="sound-label">启用界面音效</span>
+        <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
+      </div>
+      <div class="sound-row">
+        <span class="sound-label" id="snd-volume-label">总音量 ${Math.round(settings.volume*100)}%</span>
+        <input class="sound-range" type="range" id="snd-volume" min="0" max="100" step="5" value="${Math.round(settings.volume*100)}" aria-label="总音量">
+      </div>
+    </div>
+  `));
+  const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
+  main.appendChild(eventsCard);
+  const list = eventsCard.querySelector(".sound-events");
+  for (const key of SOUND_EVENT_KEYS) {
+    const def = SOUND_EVENTS[key];
+    const eventSettings = settings.events[key];
+    const variantOptions = Object.entries(def.variants).map(([variantKey, variant]) =>
+      `<option value="${variantKey}" ${variantKey===eventSettings.variant?"selected":""}>${variant.name}</option>`
+    ).join("");
+    list.appendChild($(`
+      <div class="sound-event" data-event="${key}">
+        <div class="sound-event-head">
+          <span class="sound-label">${def.label}</span>
+          <button class="sound-switch ${eventSettings.enabled?"on":""}" type="button" data-event-enable="${key}" role="switch" aria-checked="${eventSettings.enabled}">${eventSettings.enabled?"开":"关"}</button>
+        </div>
+        <div class="sound-event-controls">
+          <select data-event-variant="${key}" aria-label="${def.label}变体" ${eventSettings.enabled?"":"disabled"}>${variantOptions}</select>
+          <button class="checkin sound-preview" type="button" data-event-preview="${key}">${icon("play")} 试听</button>
+        </div>
+      </div>
+    `));
+  }
+  main.appendChild($(`
+    <div class="card">
+      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认音效设置</button>
+      <div class="desc">恢复为默认的总开关、音量与每个事件的变体选择。</div>
+    </div>
+  `));
+  main.appendChild($(`<div class="footer">${icon("settings")} 音效设置只保存在当前设备，不会同步到云端。</div>`));
+
+  el("snd-master").onclick = () => {
+    soundEffects.setEnabled(!soundEffects.getSettings().enabled);
+    renderSettings();
+  };
+  el("snd-volume").oninput = (event) => {
+    soundEffects.setVolume(Number(event.target.value) / 100);
+    const label = el("snd-volume-label");
+    if (label) label.textContent = `总音量 ${Math.round(soundEffects.getSettings().volume*100)}%`;
+  };
+  el("snd-reset").onclick = () => {
+    soundEffects.resetDefaults();
+    renderSettings();
+  };
+  main.querySelectorAll("[data-event-enable]").forEach((button) => button.onclick = () => {
+    soundEffects.setEventEnabled(button.dataset.eventEnable, !soundEffects.getSettings().events[button.dataset.eventEnable].enabled);
+    renderSettings();
+  });
+  main.querySelectorAll("[data-event-variant]").forEach((select) => select.onchange = () => {
+    soundEffects.setEventVariant(select.dataset.eventVariant, select.value);
+    renderSettings();
+  });
+  main.querySelectorAll("[data-event-preview]").forEach((button) => button.onclick = () => {
+    soundEffects.preview(button.dataset.eventPreview);
+  });
+}
+
 function renderGuide(){
   const main = el("main");
   main.innerHTML = "";
@@ -1950,6 +2044,7 @@ function switchMod(mod){
   else if(mod==="points") renderPoints();
   else if(mod==="grow") renderGrow();
   else if(mod==="guide") renderGuide();
+  else if(mod==="settings") renderSettings();
   // 绑定打卡按钮
   el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
     btn.onclick=()=>{
