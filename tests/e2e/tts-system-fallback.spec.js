@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 
 async function openChinese(page) {
   await page.goto("/");
@@ -70,6 +71,7 @@ test.describe("Published speech and system fallback", () => {
   });
 
   test("falls back only to a matching Mandarin system voice when CDN fails", async ({ page }) => {
+    await captureAnalytics(page);
     await installSystemSpeech(page, [{ lang: "zh-CN", name: "Mandarin" }, { lang: "en-US", name: "English" }]);
     await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
     await openChinese(page);
@@ -79,6 +81,7 @@ test.describe("Published speech and system fallback", () => {
     await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
       { text: expectedText, lang: "zh-CN", voiceLang: "zh-CN" },
     ]);
+    expect((await readAnalytics(page)).filter((event) => event.name === "tts_failed")).toEqual([]);
   });
 
   test("never uses an English voice for Chinese fallback and never requests Piper", async ({ page }) => {

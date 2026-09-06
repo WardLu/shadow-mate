@@ -62,7 +62,7 @@
 
 | 文件或资源 | 来源和许可证 |
 | --- | --- |
-| `public/brand_assets/shadow-mate-writing-hand.ttf` | 项目负责人提供的“瑞美加张清平硬笔楷书”字体文件；许可证或公开分发授权信息未随仓库提供，公开发布前需补充确认并保留相应授权说明 |
+| `public/brand_assets/shadow-mate-writing-hand.ttf` | “瑞美加张清平硬笔楷书”；作者在 [CPC 中文印刷社区首发帖](https://www.cnprint.org/bbs/thread/342208/) 声明免费商用，允许商标和嵌入使用；禁止标价出售、改编再发布和换名发布。详见[授权资料](docs/licenses/ruimeijia-zhangqingping-font.md) |
 
 ## 资源指纹
 
