@@ -186,7 +186,7 @@ export async function fetchGrowthLoopSnapshot(client, { householdId, profileId }
       rewards: rowsOrEmpty(rewards),
       profile_rewards: rowsOrEmpty(profileRewards),
       ledger: rowsOrEmpty(ledger).map((row) => ({ ...row, status: "confirmed" })),
-      redemptions: rowsOrEmpty(redemptions),
+      redemptions: rowsOrEmpty(redemptions).map((row) => ({ ...row, confirmed: true })),
     },
     errors,
   };

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyLegacyPointsImport,
+  applyCancelRedemption,
+  applyFulfillRedemption,
   applyOpeningBalance,
   applyPointAction,
   applyRedemption,
@@ -124,6 +126,98 @@ describe("Growth Loop local projection", () => {
     expect(result.snapshot.ledger.at(-1)).toEqual(expect.objectContaining({ delta: -5, status: "pending", entry_type: "redemption" }));
     expect(getBalance(result.snapshot)).toBe(3);
     expect(result.events).toEqual([expect.objectContaining({ type: "reward_redeem", request_id: "redeem-1" })]);
+  });
+
+  it("queues fulfillment only after cloud confirmation", () => {
+    const state = createGrowthLoopState(scope);
+    state.redemptions = [{
+      id: "redemption-1",
+      request_id: "redeem-1",
+      profile_id: scope.profile_id,
+      reward_name_snapshot: "去公园",
+      cost_points_snapshot: 5,
+      status: "pending",
+      confirmed: true,
+    }];
+
+    const result = applyFulfillRedemption(state, {
+      scope,
+      redemption_id: "redemption-1",
+      request_id: "fulfill-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot.redemptions[0]).toEqual(expect.objectContaining({
+      status: "pending",
+      confirmed: true,
+      fulfill_requested: true,
+      fulfill_request_id: "fulfill-1",
+    }));
+    expect(result.events).toEqual([expect.objectContaining({
+      type: "redemption_fulfill",
+      request_id: "fulfill-1",
+      payload: { redemption_id: "redemption-1" },
+    })]);
+  });
+
+  it("queues a pending refund without changing the redemption until cloud confirmation", () => {
+    const state = createGrowthLoopState(scope);
+    state.redemptions = [{
+      id: "redemption-1",
+      request_id: "redeem-1",
+      profile_id: scope.profile_id,
+      reward_name_snapshot: "去公园",
+      cost_points_snapshot: 5,
+      status: "pending",
+      confirmed: true,
+    }];
+    state.ledger = [{
+      id: "debit-1",
+      request_id: "redeem-1:debit",
+      profile_id: scope.profile_id,
+      delta: -5,
+      entry_type: "redemption",
+      status: "confirmed",
+      redemption_id: "redemption-1",
+    }];
+
+    const result = applyCancelRedemption(state, {
+      scope,
+      redemption_id: "redemption-1",
+      request_id: "cancel-1",
+      note: "孩子临时改约",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot.redemptions[0]).toEqual(expect.objectContaining({
+      status: "pending",
+      cancel_requested: true,
+      cancel_request_id: "cancel-1",
+    }));
+    expect(result.snapshot.ledger.at(-1)).toEqual(expect.objectContaining({
+      delta: 5,
+      entry_type: "refund",
+      status: "pending",
+      redemption_id: "redemption-1",
+      request_id: "cancel-1:refund",
+      note: "孩子临时改约",
+    }));
+    expect(result.events).toEqual([expect.objectContaining({
+      type: "redemption_cancel",
+      request_id: "cancel-1",
+      payload: { redemption_id: "redemption-1", note: "孩子临时改约" },
+    })]);
+    expect(getBalance(result.snapshot)).toBe(0);
+  });
+
+  it("rejects fulfillment and cancellation before redemption confirmation", () => {
+    const state = createGrowthLoopState(scope);
+    state.redemptions = [{ id: "redemption-1", status: "pending", confirmed: false, cost_points_snapshot: 5 }];
+
+    expect(applyFulfillRedemption(state, { scope, redemption_id: "redemption-1" }).error)
+      .toBe("redemption_waiting_for_confirmation");
+    expect(applyCancelRedemption(state, { scope, redemption_id: "redemption-1" }).error)
+      .toBe("redemption_waiting_for_confirmation");
   });
 
   it("ends a point period with immutable adjustment entries while preserving history", () => {

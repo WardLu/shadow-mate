@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryLearningDb } from "../../src/learning-local-db.js";
 import { createGrowthLoopController } from "../../src/learning-growth-loop-controller.js";
+import { createGrowthLoopState } from "../../src/learning-growth-loop.js";
 
 describe("Growth Loop controller scope adoption", () => {
   it("does not hydrate or create a local snapshot while the global write guard is blocked", async () => {
@@ -216,6 +217,86 @@ describe("Growth Loop controller scope adoption", () => {
     expect(controller.getSnapshot().ledger).toEqual([
       expect.objectContaining({ household_id: "household-1", profile_id: "profile-1" }),
     ]);
+  });
+});
+
+describe("Growth Loop redemption actions", () => {
+  const scope = { household_id: "household-1", profile_id: "profile-1" };
+
+  it("confirms a cancellation refund and a later fulfillment through ordered outbox actions", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.ledger = [{
+      id: "ledger-1",
+      request_id: "point-1",
+      profile_id: scope.profile_id,
+      delta: 10,
+      entry_type: "manual",
+      status: "confirmed",
+    }];
+    await db.putSnapshot("household-1:profile-1", state);
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope(scope);
+
+    await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-1" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "reward_redeem"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "pending" } }
+          : { status: "confirmed" },
+      },
+    });
+
+    await controller.cancelRedemption({
+      redemption_id: "remote-redemption-1",
+      request_id: "cancel-1",
+      note: "临时改约",
+    });
+    expect(controller.getSnapshot().redemptions[0]).toEqual(expect.objectContaining({
+      status: "pending",
+      cancel_requested: true,
+    }));
+    expect(controller.getSnapshot().ledger.at(-1)).toEqual(expect.objectContaining({
+      entry_type: "refund",
+      status: "pending",
+      delta: 5,
+    }));
+
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "redemption_cancel"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "cancelled" } }
+          : { status: "confirmed" },
+      },
+    });
+    expect(controller.getSnapshot().redemptions[0]).toEqual(expect.objectContaining({
+      status: "cancelled",
+      cancel_requested: false,
+    }));
+    expect(controller.getSnapshot().ledger.at(-1)).toEqual(expect.objectContaining({ status: "confirmed" }));
+
+    await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-2" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "reward_redeem"
+          ? { status: "confirmed", data: { id: "remote-redemption-2", status: "pending" } }
+          : { status: "confirmed" },
+      },
+    });
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-2", request_id: "fulfill-2" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "redemption_fulfill"
+          ? { status: "confirmed", data: { id: "remote-redemption-2", status: "fulfilled" } }
+          : { status: "confirmed" },
+      },
+    });
+
+    expect(controller.getSnapshot().redemptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "remote-redemption-2", status: "fulfilled", fulfill_requested: false }),
+    ]));
   });
 });
 

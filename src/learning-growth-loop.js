@@ -724,6 +724,91 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
   };
 }
 
+function findRedemption(snapshot, redemptionId) {
+  return snapshot.redemptions.find((entry) => entry.id === redemptionId) || null;
+}
+
+function redemptionActionEvent(scope, type, requestId, redemptionId, dependsOn = []) {
+  return localEvent({
+    type,
+    scope,
+    request_id: requestId,
+    depends_on: dependsOn,
+    payload: { redemption_id: redemptionId },
+  });
+}
+
+export function applyFulfillRedemption(
+  current,
+  { scope = current.scope, redemption_id, request_id = createId("redemption-fulfill") } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  const redemption = findRedemption(snapshot, redemption_id);
+  if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
+  if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
+  if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (redemption.fulfill_requested) return { snapshot, events: [], error: "redemption_action_pending" };
+
+  const nextRedemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
+  nextRedemption.fulfill_requested = true;
+  nextRedemption.fulfill_request_id = request_id;
+  nextRedemption.updated_at = new Date().toISOString();
+  return {
+    snapshot,
+    redemption: nextRedemption,
+    events: [redemptionActionEvent(normalizedScope, "redemption_fulfill", request_id, redemption_id)],
+  };
+}
+
+export function applyCancelRedemption(
+  current,
+  { scope = current.scope, redemption_id, request_id = createId("redemption-cancel"), note = "本次暂不兑现" } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  const redemption = findRedemption(snapshot, redemption_id);
+  if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
+  if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
+  if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
+
+  const refundRequestId = `${request_id}:refund`;
+  const refund = normalizeLedgerEntry({
+    id: createId("ledger"),
+    household_id: normalizedScope.household_id,
+    profile_id: normalizedScope.profile_id,
+    point_item_id: null,
+    delta: Number(redemption.cost_points_snapshot || 0),
+    entry_type: "refund",
+    item_name_snapshot: redemption.reward_name_snapshot,
+    note: note ? String(note).slice(0, 200) : null,
+    request_id: refundRequestId,
+    occurred_on: new Date().toISOString().slice(0, 10),
+    status: "pending",
+    redemption_id: redemption.id,
+    metadata: { cancel_of: redemption.request_id },
+  }, normalizedScope);
+  snapshot.ledger.push(refund);
+  redemption.cancel_requested = true;
+  redemption.cancel_request_id = request_id;
+  redemption.updated_at = new Date().toISOString();
+  return {
+    snapshot,
+    redemption,
+    refund,
+    events: [localEvent({
+      type: "redemption_cancel",
+      scope: normalizedScope,
+      request_id,
+      payload: {
+        redemption_id,
+        note: refund.note,
+      },
+    })],
+  };
+}
+
 export function mergeGrowthLoopSnapshot(remote, local) {
   const remoteSnapshot = normalizeGrowthLoopState(remote, remote?.scope || local?.scope || {});
   const localSnapshot = normalizeGrowthLoopState(local, remoteSnapshot.scope);

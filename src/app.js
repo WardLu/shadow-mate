@@ -1432,12 +1432,23 @@ function renderGrow(){
     const latest = growthLoopSnapshot.redemptions
       .filter((item) => item.reward_id === reward.id)
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
-    const status = latest?.status === "pending" ? "待联网确认" : latest?.status === "fulfilled" ? "已兑现" : "";
+    const status = latest?.status === "pending"
+      ? latest.confirmed
+        ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : "待兑现"
+        : "待联网确认"
+      : latest?.status === "fulfilled" ? "已兑现" : latest?.status === "cancelled" ? "已取消" : "";
+    const actionPending = latest?.status === "pending" && (latest.fulfill_requested || latest.cancel_requested);
+    const canFulfill = latest?.status === "pending" && latest.confirmed && !actionPending;
+    const canCancel = canFulfill;
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
       <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
       <span class="pts-badge">${cost}分</span>
-      <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${status || "兑换"}</button>
+      <div class="reward-actions">
+        <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost || latest?.status === "pending" ? "disabled" : ""}>${status || "兑换"}</button>
+        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">标记已兑现</button>` : ""}
+        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">取消兑换</button>` : ""}
+      </div>
     </div>`;
   }).join("");
   const rewardCard = $(`<div class="card growth-reward-card">
@@ -1487,6 +1498,44 @@ function renderGrow(){
         return;
       }
       void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    };
+  });
+  rewardCard.querySelectorAll("[data-fulfill-id]").forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      const result = await window.growthLoop.fulfillRedemption({
+        redemption_id: button.dataset.fulfillId,
+        request_id: clientRequestId("redemption-fulfill"),
+      });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "redemption_waiting_for_confirmation"
+          ? "这次兑换还在等待云端确认，请稍后再兑现。"
+          : "这个奖励暂时不能兑现，请稍后重试。");
+        return;
+      }
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+    };
+  });
+  rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
+    button.onclick = async () => {
+      if (!window.confirm("确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。")) return;
+      button.disabled = true;
+      const result = await window.growthLoop.cancelRedemption({
+        redemption_id: button.dataset.cancelId,
+        request_id: clientRequestId("redemption-cancel"),
+        note: "本次暂不兑现",
+      });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "redemption_waiting_for_confirmation"
+          ? "这次兑换还在等待云端确认，请稍后再修正。"
+          : "这个兑换暂时不能取消，请稍后重试。");
+        return;
+      }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
     };
