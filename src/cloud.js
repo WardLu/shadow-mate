@@ -1,5 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
+import { ANALYTICS_EVENTS, recordAnalyticsEvent } from "./analytics.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
@@ -1710,6 +1711,7 @@ async function hydrateProfileRemote(profile, { migrateLocal = false, generation 
     if (error) {
       markPerformance("shadow-mate:profile:remote-hydrate-failed");
       showToast(formatCloudError(error, "读取云端记录失败，本机学习记录可继续使用。"), 5000);
+      recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
       return;
     }
     const normalizedRemote = data ? normalizeCloudLearningState(data, scope) : null;
@@ -1840,10 +1842,12 @@ async function saveCloudState(manual = false, {
       if (error) {
         if (error.message.includes("learning_rate_limited")) {
           showToast("操作过于频繁，请稍后再试。", 5000);
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           break;
         }
         if (!error.message.includes("learning_state_conflict")) {
           showToast(formatCloudError(error, "云端同步失败，请稍后再试。"), 5000);
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
           break;
         }
         // 旧服务端兼容：learning_state_conflict 错误 → 走下方统一冲突处理。
@@ -1864,6 +1868,7 @@ async function saveCloudState(manual = false, {
       if (conflictRetries >= MAX_CONFLICT_RETRIES) {
         if (canApplyActiveState()) cloudSyncBlocked = true;
         showToast("云端记录冲突次数过多，自动同步已暂停，点击同步按钮重试。", 6000);
+        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
         break;
       }
 
@@ -1883,8 +1888,10 @@ async function saveCloudState(manual = false, {
             localStorage.removeItem(ACTIVE_PROFILE_KEY);
           }
           showToast("云端记录已不存在，已停止自动同步。", 6000);
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
         } else {
           showToast(formatCloudError(remoteError, "读取最新云端记录失败，请稍后再试。"), 5000);
+          recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
         }
         break;
       }

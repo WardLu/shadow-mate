@@ -42,3 +42,8 @@ shadow-wang-home.png
 /docs/security-baseline.md
 /docs/test-scope.md
 /docs/architecture-internal.md
+
+# Local large media & marketing project workspaces
+/assets/fonts/
+/assets/marketing/
+/CONTEXT.md

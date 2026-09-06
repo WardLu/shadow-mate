@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 
 const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -766,6 +767,7 @@ test.describe("Authenticated cloud workspace", () => {
 
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("[data-writing-print-sheet]")).toBeVisible();
+    await expect(page.locator("[data-writing-print-sheet]")).not.toContainText("第一单元");
     await expect(page.locator(".app")).toBeHidden();
     await expect(page.locator("[data-writing-worksheet]")).toBeHidden();
     await expect(page.locator("[data-writing-print-sheet] button")).toHaveCount(0);
@@ -1722,7 +1724,25 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toHaveText("已添加新的学习者");
   });
 
+  test("records a visible sync failure without cloud payloads and keeps the active profile", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    await captureAnalytics(page);
+    await mockCloudApi(page);
+    await page.route("**/rest/v1/rpc/learning_save_state", (route) => route.fulfill({
+      status: 500, contentType: "application/json",
+      body: JSON.stringify({ message: "synthetic-private-error-must-not-be-tracked", code: "P0001" }),
+    }));
+    await page.goto("/");
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+    await expect(page.locator("#syncToast")).toContainText("云端同步失败");
+    expect((await readAnalytics(page)).filter((event) => event.name === "sync_failed")).toEqual([{ name: "sync_failed" }]);
+    expect(await page.evaluate(() => window.learningDesk.getEnvelope().scope.profile_id)).toBe(PROFILE_ID);
+  });
+
   test("retries after a version conflict and keeps the remote state", async ({ page }) => {
+    await captureAnalytics(page);
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, {
       remoteState: { ...emptyState, extra: { conflictMarker: "remote" } },
@@ -1735,9 +1755,11 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.rpcPayloads.length).toBe(2);
     await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem("shadow_mate_workbench_v1") || "{}").extra?.conflictMarker)).toBe("remote");
     expect(api.rpcPayloads[1]).toHaveProperty("p_profile_id", PROFILE_ID);
+    expect((await readAnalytics(page)).filter((event) => event.name === "sync_failed")).toEqual([]);
   });
 
   test("stops after repeated version conflicts instead of retrying forever", async ({ page }) => {
+    await captureAnalytics(page);
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { rpcResponses: ["conflict"] });
 
@@ -1749,6 +1771,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("自动同步已暂停");
     await page.waitForTimeout(300);
     expect(api.rpcPayloads).toHaveLength(3);
+    expect((await readAnalytics(page)).filter((event) => event.name === "sync_failed")).toEqual([{ name: "sync_failed" }]);
   });
 
   test("blocks automatic sync after conflict circuit-breaker trips", async ({ page }) => {
@@ -2152,6 +2175,7 @@ test.describe("Authenticated cloud workspace", () => {
 test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
+  await captureAnalytics(page);
   await page.addInitScript(() => {
     localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
     window.__blockedStorageTrace = {
@@ -2201,6 +2225,7 @@ test("does not open or write Learning Desk storage in a fresh BrowserContext whi
   await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).filter(
     ({ name }) => name === "shadow-mate-learning-v1",
   ))).toEqual([]);
+  expect(await readAnalytics(page)).toEqual([]);
   await context.close();
 });
 

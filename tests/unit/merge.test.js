@@ -14,7 +14,7 @@ import {
   latestUpdatedAt,
   passwordStrength,
 } from "../../src/lib.js";
-import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
+import { recordWorksheetCompletion, resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
 import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const HANZI_PACK = getActiveHanziWritingPack();
@@ -27,6 +27,17 @@ function makeRotationState(learnerScope = "anonymous") {
     now: new Date("2026-09-01T00:30:00.000Z"),
     timeZone: "Asia/Singapore",
   }).rotationState;
+}
+
+function makeStateWithRotation(rotationState) {
+  return {
+    checkins: {},
+    extra: { hanziWorksheetRotationV1: rotationState },
+    points: {},
+    bookShelf: {},
+    peanutLog: [],
+    peanutRead: {},
+  };
 }
 
 describe("family sync metadata", () => {
@@ -249,5 +260,44 @@ describe("mergeState", () => {
   it("handles empty peanutLog", () => {
     const merged = mergeState({ checkins: {} }, { checkins: {} });
     expect(merged.peanutLog).toEqual([]);
+  });
+  it("unions same-scope rotation assignments and completions", () => {
+    const first = resolveDailyWorksheet({
+      rotationState: {},
+      pack: HANZI_PACK,
+      learnerScope: "profile:learner-a",
+      now: new Date("2026-09-01T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+    const completedFirst = recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: "2026-09-01T01:00:00.000Z",
+    });
+    const second = resolveDailyWorksheet({
+      // The left side owns day two; only the right side owns day one's completion.
+      rotationState: first.rotationState,
+      pack: HANZI_PACK,
+      learnerScope: "profile:learner-a",
+      now: new Date("2026-09-02T00:30:00.000Z"),
+      timeZone: "Asia/Singapore",
+    });
+
+    const merged = mergeState(
+      makeStateWithRotation(second.rotationState),
+      makeStateWithRotation(completedFirst),
+    );
+    const rotation = merged.extra.hanziWorksheetRotationV1;
+
+    expect(Object.keys(rotation.assignments)).toEqual(["2026-09-01", "2026-09-02"]);
+    expect(rotation.assignments["2026-09-01"].completions)
+      .toHaveProperty(first.worksheet.assignmentId);
+  });
+
+  it("rejects rotation merge across learner scopes", () => {
+    expect(() => mergeState(
+      makeStateWithRotation(makeRotationState("profile:learner-a")),
+      makeStateWithRotation(makeRotationState("profile:learner-b")),
+    )).toThrow(/learnerScope/);
   });
 });

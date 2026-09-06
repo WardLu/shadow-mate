@@ -55,8 +55,13 @@ export function recordAnalyticsEvent(eventName, {
 export function hasConsecutiveCheckinDays(checkins = {}, minimum = 3) {
   if (!Number.isInteger(minimum) || minimum < 1) return false;
   const timestamps = Object.entries(checkins)
-    .filter(([, value]) => value && typeof value === "object" && Object.keys(value).length > 0)
-    .map(([date]) => Date.parse(`${date}T00:00:00Z`))
+    .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value) && Object.values(value).some(Boolean))
+    .map(([date]) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NaN;
+      const timestamp = Date.parse(`${date}T00:00:00Z`);
+      return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date
+        ? timestamp : NaN;
+    })
     .filter(Number.isFinite)
     .sort((a, b) => a - b);
 
