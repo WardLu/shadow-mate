@@ -2175,6 +2175,7 @@ test.describe("Authenticated cloud workspace", () => {
 test("does not open or write Learning Desk storage in a fresh BrowserContext while the marker exists", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
+  await captureAnalytics(page);
   await page.addInitScript(() => {
     localStorage.setItem("shadow_mate_profile_scope_blocked", "1");
     window.__blockedStorageTrace = {
@@ -2224,6 +2225,7 @@ test("does not open or write Learning Desk storage in a fresh BrowserContext whi
   await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).filter(
     ({ name }) => name === "shadow-mate-learning-v1",
   ))).toEqual([]);
+  expect(await readAnalytics(page)).toEqual([]);
   await context.close();
 });
 

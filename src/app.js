@@ -44,7 +44,6 @@ import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.j
 import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 
 inject();
-recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 const publishedSpeechPlayer = createPublishedSpeechPlayer();
@@ -173,6 +172,7 @@ function isProfileScopeBlocked() {
 }
 
 const profileScopeBlockedAtStartup = isProfileScopeBlocked();
+if (!profileScopeBlockedAtStartup) recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
