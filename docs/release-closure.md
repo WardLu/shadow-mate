@@ -21,6 +21,6 @@ Shadow Mate 的 v1.3.14 SEO/GEO 变更已合并并发布；随后 `production` �
 
 ## 旧 release-manifest 提案的处置（2026-09-06）
 
-[Issue #103](https://github.com/WardLu/shadow-mate/issues/103) 中的旧 handoff 提案不再进入当前实现。旧 `release-closure.yml`、`release-manifest*.mjs` 及对应测试保持为历史材料，不迁入主线，也不增加 `release:manifest` 命令。旧 workflow 通过可变的跨仓库 `main` 调用 reusable workflow；它没有现行 Release Watcher 的接纳和串行阶段契约，不应形成第二条交接路径。
+[Issue #103](https://github.com/WardLu/shadow-mate/issues/103) 中的旧 handoff 提案不再进入当前实现。旧 `release-closure.yml`、`release-manifest*.mjs` 及对应测试保持为历史材料，不迁入主线，也不增加 `release:manifest` 命令。旧 workflow 通过可变的跨仓库 `main` 调用 reusable workflow，不能作为发布状态的可靠依据，因此不应形成第二条交接路径。
 
-当前交接继续遵循 Shadow Portal 的 [Release Watcher 日常使用与 AI 执行契约](https://github.com/WardLu/shadow-portal/blob/main/docs/release-watcher.md)：PR 合并前完成 release-impact 分类，合并后由本机 watcher 接纳。本次整理不执行 watcher、不创建 Multica 并行任务，也不授予生产操作权限。
+该提案不会取代项目现有的发布审查。生产迁移、部署、正式发布和生产验收仍须通过各自独立门禁；本次整理不执行任何生产操作。
