@@ -294,25 +294,25 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
       }
     }
     const master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, volume * 1.5));
+    master.gain.value = Math.max(0, Math.min(1, Number(volume) || 0));
+    master.connect(ctx.destination);
 
+    let busInput = master;
     if (typeof ctx.createDynamicsCompressor === "function") {
       try {
         const compressor = ctx.createDynamicsCompressor();
         if (compressor && compressor.threshold && typeof compressor.threshold.setValueAtTime === "function") {
-          compressor.threshold.setValueAtTime(-12, ctx.currentTime);
-          compressor.knee.setValueAtTime(10, ctx.currentTime);
-          compressor.ratio.setValueAtTime(4, ctx.currentTime);
-          compressor.attack.setValueAtTime(0.003, ctx.currentTime);
-          compressor.release.setValueAtTime(0.12, ctx.currentTime);
+          compressor.threshold.setValueAtTime(-6, ctx.currentTime);
+          compressor.knee.setValueAtTime(6, ctx.currentTime);
+          compressor.ratio.setValueAtTime(6, ctx.currentTime);
+          compressor.attack.setValueAtTime(0.002, ctx.currentTime);
+          compressor.release.setValueAtTime(0.08, ctx.currentTime);
         }
-        master.connect(compressor);
-        compressor.connect(ctx.destination);
+        compressor.connect(master);
+        busInput = compressor;
       } catch (_) {
-        master.connect(ctx.destination);
+        busInput = master;
       }
-    } else {
-      master.connect(ctx.destination);
     }
     for (const note of recipe.notes || []) {
       const start = ctx.currentTime + (note.t || 0) / 1000;
@@ -340,7 +340,7 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
         output = filter;
       }
       osc.connect(envelope);
-      output.connect(master);
+      output.connect(busInput);
       osc.start(start);
       osc.stop(start + duration + 0.05);
     }

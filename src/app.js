@@ -1951,6 +1951,9 @@ function renderSettings(){
     const label = el("snd-volume-label");
     if (label) label.textContent = `总音量 ${Math.round(soundEffects.getSettings().volume*100)}%`;
   };
+  el("snd-volume").onchange = () => {
+    soundEffects.preview("points_earned");
+  };
   el("snd-reset").onclick = () => {
     soundEffects.resetDefaults();
     renderSettings();
