@@ -1485,7 +1485,7 @@ function renderGrow(){
         : (latest.sync_error ? "同步未成功" : "待联网确认")
       : latest?.status === "fulfilled"
         ? (latest.cancel_requested ? "取消同步中" : (latest.sync_error ? "同步未成功" : "已兑现"))
-        : latest?.status === "cancelled" ? "已取消" : "";
+        : "";
     const actionPending = (latest?.status === "pending" || latest?.status === "fulfilled") && (latest.fulfill_requested || latest.cancel_requested);
     const canFulfill = latest?.status === "pending" && isConfirmed && !actionPending;
     const canCancel = (latest?.status === "pending" || latest?.status === "fulfilled") && isConfirmed && !actionPending;

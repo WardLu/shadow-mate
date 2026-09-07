@@ -28,7 +28,8 @@ test.describe("Growth Loop local-first boundary", () => {
     const cancelButton = reward.locator(".reward-cancel");
     await expect(cancelButton).toContainText("撤销兑换");
     await cancelButton.click();
-    await expect(reward).toContainText("已取消");
+    await expect(reward.locator(".reward-redeem")).toHaveText("兑换");
+    await expect(reward.locator(".reward-cancel")).toHaveCount(0);
     await expect(page.locator(".stat").filter({ hasText: "当前可用积分" })).toContainText("2");
   });
 
@@ -50,7 +51,9 @@ test.describe("Growth Loop local-first boundary", () => {
 
     page.on("dialog", (dialog) => dialog.accept());
     await reward.locator(".reward-cancel").click();
-    await expect(reward).toContainText("已取消");
+    await expect(reward.locator(".reward-redeem")).toHaveText("兑换");
+    await expect(reward.locator(".reward-cancel")).toHaveCount(0);
+    await expect(page.locator(".stat").filter({ hasText: "当前可用积分" })).toContainText("5");
   });
 
   test("synchronizes redemption lifecycle through cloud when authenticated", async ({ page }) => {
