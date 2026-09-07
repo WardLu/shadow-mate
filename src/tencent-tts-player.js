@@ -1,6 +1,6 @@
 import { TENCENT_TTS_MANIFEST_URL } from "./tencent-tts-catalog.js";
 
-export const SPEECH_GAIN_MULTIPLIER = 1.8;
+export const SPEECH_GAIN_MULTIPLIER = 3.0;
 
 export class PublishedSpeechError extends Error {
   constructor(code, cause) {
@@ -131,7 +131,8 @@ export function createPublishedSpeechPlayer({
 
         gainNode = audioContext.createGain();
         const normalizedVol = Math.max(0, Math.min(1, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
-        const targetGain = normalizedVol * gainMultiplier;
+        const rawGain = normalizedVol * gainMultiplier;
+        const targetGain = Math.round(rawGain * 10000) / 10000;
         if (typeof gainNode.gain?.setValueAtTime === "function") {
           gainNode.gain.setValueAtTime(targetGain, audioContext.currentTime ?? 0);
         } else if (gainNode.gain) {

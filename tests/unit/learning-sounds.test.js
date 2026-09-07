@@ -124,6 +124,7 @@ describe("settings normalization and persistence", () => {
     const settings = DEFAULT_SETTINGS;
     expect(settings.enabled).toBe(true);
     expect(settings.volume).toBe(0.6);
+    expect(settings.speechVolume).toBe(0.6);
     for (const key of SOUND_EVENT_KEYS) {
       expect(settings.events[key].enabled).toBe(true);
       expect(settings.events[key].variant).toBe(SOUND_EVENTS[key].defaultVariant);
@@ -138,6 +139,7 @@ describe("settings normalization and persistence", () => {
     });
     expect(normalized.enabled).toBe(true);
     expect(normalized.volume).toBe(1);
+    expect(normalized.speechVolume).toBe(0.6);
     expect(normalized.events.action_completed.enabled).toBe(false);
     expect(normalized.events.action_completed.variant).toBe("block_click");
   });
@@ -169,12 +171,12 @@ describe("settings normalization and persistence", () => {
     engine.setEventVariant("points_earned", "star_triple");
     engine.resetDefaults();
     expect(engine.getSettings()).toEqual(DEFAULT_SETTINGS);
-    expect(engine.getSpeechVolume()).toBe(1.0);
+    expect(engine.getSpeechVolume()).toBe(0.6);
   });
 
   it("manages speech volume independently with normalization and persistence", () => {
     const { engine, storage } = makeEngine();
-    expect(engine.getSpeechVolume()).toBe(1.0);
+    expect(engine.getSpeechVolume()).toBe(0.6);
     engine.setSpeechVolume(0.75);
     expect(engine.getSpeechVolume()).toBe(0.75);
     expect(engine.getSettings().speechVolume).toBe(0.75);

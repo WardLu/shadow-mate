@@ -238,7 +238,7 @@ export function normalizeSettings(input = {}) {
     schema_version: 1,
     enabled: input?.enabled !== false,
     volume: Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 0.6,
-    speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(1, rawSpeechVolume)) : 1.0,
+    speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(1, rawSpeechVolume)) : 0.6,
     events,
   };
 }

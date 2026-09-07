@@ -791,7 +791,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
   const Utterance = window.SpeechSynthesisUtterance;
   try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
-  const speechVolume = soundEffects?.getSpeechVolume?.() ?? 1.0;
+  const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
   try {
     await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
     restore();
@@ -1929,8 +1929,8 @@ function renderSettings(){
     <div class="card">
       <h3>${icon("volume")} 课程语音朗读音量</h3>
       <div class="sound-row">
-        <span class="sound-label" id="speech-volume-label">朗读音量 ${Math.round((settings.speechVolume ?? 1)*100)}%</span>
-        <input class="sound-range" type="range" id="speech-volume" min="0" max="100" step="5" value="${Math.round((settings.speechVolume ?? 1)*100)}" aria-label="课程语音朗读音量">
+        <span class="sound-label" id="speech-volume-label">朗读音量 ${Math.round((settings.speechVolume ?? 0.6)*100)}%</span>
+        <input class="sound-range" type="range" id="speech-volume" min="0" max="100" step="5" value="${Math.round((settings.speechVolume ?? 0.6)*100)}" aria-label="课程语音朗读音量">
       </div>
       <div class="sound-event-controls" style="margin-top: 10px;">
         <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>

@@ -118,7 +118,7 @@ test.describe("Sound effects settings and playback", () => {
     const settings = await page.evaluate(() => window.soundEffects.getSettings());
     expect(settings.enabled).toBe(true);
     expect(settings.volume).toBe(0.6);
-    expect(settings.speechVolume).toBe(1.0);
+    expect(settings.speechVolume).toBe(0.6);
     expect(settings.events.points_earned.variant).toBe("star_collect");
   });
 
