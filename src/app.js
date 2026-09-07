@@ -1559,6 +1559,7 @@ function renderGrow(){
       void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
+      soundEffects.play("points_deducted");
     };
   });
   rewardCard.querySelectorAll("[data-fulfill-id]").forEach((button) => {
@@ -1609,6 +1610,7 @@ function renderGrow(){
       }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
+      soundEffects.play("try_again");
     };
   });
 

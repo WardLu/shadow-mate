@@ -180,4 +180,40 @@ test.describe("Sound effects settings and playback", () => {
     await page.locator('[data-cmod="chinese-literacy"]').click();
     expect(await playedEvents(page, "play")).toContain("action_completed");
   });
+
+  test("plays deducted, fulfilled, and retry sounds for reward lifecycle", async ({ page }) => {
+    await page.goto("/");
+    await installPlaySpies(page);
+
+    // 1. 打卡累积积分
+    await page.click('[data-mod="points"]');
+    await page.fill('#pointItemForm input[name="name"]', "整理书桌");
+    await page.fill('#pointItemForm input[name="points"]', "10");
+    await page.click('#pointItemForm button[type="submit"]');
+    const pointCard = page.locator(".pts-card").filter({ hasText: "整理书桌" });
+    await pointCard.locator(".pts-toggle").click();
+    await expect.poll(async () => (await playedEvents(page, "play"))).toContain("points_earned");
+
+    // 2. 进入成长页兑换奖励 → 播放 points_deducted
+    await page.waitForTimeout(600);
+    await page.click('[data-mod="grow"]');
+    await page.fill('#rewardForm input[name="name"]', "听故事");
+    await page.fill('#rewardForm input[name="cost"]', "5");
+    await page.click('#rewardForm button[type="submit"]');
+    const rewardCard = page.locator(".reward-card").filter({ hasText: "听故事" });
+    await expect(rewardCard).toBeVisible();
+    await rewardCard.locator(".reward-redeem").click();
+    await expect.poll(async () => (await playedEvents(page, "play"))).toContain("points_deducted");
+
+    // 3. 标记已兑现 → 播放 reward_fulfilled
+    await page.waitForTimeout(600);
+    await rewardCard.locator(".reward-fulfill").click();
+    await expect.poll(async () => (await playedEvents(page, "play"))).toContain("reward_fulfilled");
+
+    // 4. 撤销兑换 → 播放 try_again
+    await page.waitForTimeout(800);
+    page.on("dialog", (dialog) => dialog.accept());
+    await rewardCard.locator(".reward-cancel").click();
+    await expect.poll(async () => (await playedEvents(page, "play"))).toContain("try_again");
+  });
 });
