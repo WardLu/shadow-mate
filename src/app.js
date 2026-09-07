@@ -1788,6 +1788,7 @@ function renderGrow(){
     };
   }
 
+  const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
   const rewards = window.growthLoop?.getRewards?.() || [];
   const isCloudConnected = Boolean(growthLoopController.getScope()?.household_id);
   const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
@@ -1799,28 +1800,37 @@ function renderGrow(){
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
     const isLocalMode = !isCloudConnected;
     const isConfirmed = isLocalMode || Boolean(latest?.confirmed);
-    const status = latest?.status === "pending"
+    const isPending = latest?.status === "pending";
+    const isFulfilled = latest?.status === "fulfilled";
+    const fulfilledTime = isFulfilled && (latest.updated_at || latest.created_at)
+      ? new Date(latest.updated_at || latest.created_at).getTime()
+      : 0;
+    const isWithinUndoWindow = isFulfilled && (Date.now() - fulfilledTime <= FULFILL_UNDO_WINDOW_MS);
+    const status = isPending
       ? isConfirmed
         ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : (latest.sync_error ? "同步未成功" : "待兑现")
         : (latest.sync_error ? "同步未成功" : "待联网确认")
-      : latest?.status === "fulfilled"
+      : isFulfilled
         ? (latest.cancel_requested ? "取消同步中" : (latest.sync_error ? "同步未成功" : "已兑现"))
         : "";
-    const actionPending = (latest?.status === "pending" || latest?.status === "fulfilled") && (latest.fulfill_requested || latest.cancel_requested);
-    const canFulfill = latest?.status === "pending" && isConfirmed && !actionPending;
-    const canCancel = (latest?.status === "pending" || latest?.status === "fulfilled") && isConfirmed && !actionPending;
+    const actionPending = (isPending || isFulfilled) && (latest.fulfill_requested || latest.cancel_requested);
+    const canFulfill = isPending && isConfirmed && !actionPending;
+    const canCancel = (isPending || isWithinUndoWindow) && isConfirmed && !actionPending;
+    const redeemBtnText = isFulfilled && balance >= cost ? "再次兑换" : "兑换";
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
       <div class="reward-info">
         <strong>${escapeHtml(reward.name)}</strong>
         <span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span>
+        ${isPending && status ? `<span class="reward-pending-hint">${status}</span>` : ""}
+        ${isWithinUndoWindow ? `<span class="reward-undo-hint">已兑现 · 24小时内可撤回</span>` : ""}
         ${latest?.sync_error ? `<span class="reward-sync-error" style="color:var(--c-danger,#d9534f);font-size:12px;display:block;margin-top:2px;">⚠️ 同步未成功（${escapeHtml(latest.sync_error)}），可重试兑现或取消退款</span>` : ""}
       </div>
       <span class="pts-badge">${cost}分</span>
       <div class="reward-actions">
-        ${latest?.status !== "pending" ? `<button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${latest?.status === "fulfilled" && balance >= cost ? "再次兑换" : (status || "兑换")}</button>` : ""}
+        ${!isPending ? `<button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${redeemBtnText}</button>` : ""}
         ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "确认兑现"}</button>` : ""}
-        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">${latest.sync_error ? "补偿退款 (取消)" : (latest.status === "fulfilled" ? "撤销兑换" : "取消兑换")}</button>` : ""}
+        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}" title="${isFulfilled ? "兑现后 24 小时内支持撤销履约并退还积分" : "取消兑换并退回积分"}">${latest.sync_error ? "补偿退款 (取消)" : (isFulfilled ? "撤回兑现" : "取消兑换")}</button>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -1834,8 +1844,8 @@ function renderGrow(){
         isCloudConnected
           ? (unconfirmedRedemptions > 0
             ? "离线兑换会先记为“待联网确认”，联网并完成服务端确认后生效。"
-            : "奖励兑换已与云端同步，兑现约定后可标记完成。")
-          : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后可直接标记完成。"
+            : "奖励兑换已与云端同步，兑现约定后可标记完成；若属误触，兑现后 24 小时内支持撤回。")
+          : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。"
       }</div>
       <form id="rewardForm" class="growth-form">
         <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
@@ -1900,6 +1910,8 @@ function renderGrow(){
       }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
+      praise("奖励已兑现！🎉");
+      flyStars(10);
     };
   });
   rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
@@ -1911,17 +1923,17 @@ function renderGrow(){
       const rewardName = redemption?.reward_name_snapshot || "该奖励";
       const confirmMsg = isCloudConnected
         ? (isFulfilled
-            ? `确定撤销“${rewardName}”的兑换并退回 ${cost} 积分吗？云端确认后积分将退回。`
+            ? `确定撤回“${rewardName}”的兑现并退回 ${cost} 积分吗？（此操作在兑现后 24 小时内有效，云端确认后退款生效）`
             : "确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。")
         : (isFulfilled
-            ? `确定撤销“${rewardName}”的兑换并退回 ${cost} 积分吗？已扣减的积分将立即恢复。`
+            ? `确定撤回“${rewardName}”的兑现并退回 ${cost} 积分吗？（此操作在兑现后 24 小时内有效）已扣减的积分将立即恢复。`
             : "确定取消这次兑换吗？已扣减的积分将立即恢复。");
       if (!window.confirm(confirmMsg)) return;
       button.disabled = true;
       const result = await window.growthLoop.cancelRedemption({
         redemption_id: redemptionId,
         request_id: clientRequestId("redemption-cancel"),
-        note: isFulfilled ? "撤销兑换退款" : "本次暂不兑现",
+        note: isFulfilled ? "撤回兑现退款" : "本次暂不兑现",
       });
       if (result.error) {
         button.disabled = false;

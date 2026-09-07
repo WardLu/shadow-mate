@@ -26,7 +26,7 @@ test.describe("Growth Loop local-first boundary", () => {
 
     page.on("dialog", (dialog) => dialog.accept());
     const cancelButton = reward.locator(".reward-cancel");
-    await expect(cancelButton).toContainText("撤销兑换");
+    await expect(cancelButton).toContainText("撤回兑现");
     await cancelButton.click();
     await expect(reward.locator(".reward-redeem")).toHaveText("兑换");
     await expect(reward.locator(".reward-cancel")).toHaveCount(0);

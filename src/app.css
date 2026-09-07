@@ -460,6 +460,8 @@
   .reward-redeem{width:auto;padding:8px 10px;font-size:12px;}
   .reward-redeem:disabled{opacity:.55;cursor:not-allowed;}
   .reward-fulfill,.reward-cancel{width:auto;padding:8px 10px;font-size:12px;}
+  .reward-pending-hint{display:inline-block;margin-top:3px;font-size:11px;color:var(--yellow-deep,#925400);background:var(--yellow-soft,#fffbe6);padding:1px 7px;border-radius:6px;font-weight:600;width:fit-content;}
+  .reward-undo-hint{display:inline-block;margin-top:3px;font-size:11px;color:var(--green-deep,#1f7a3a);background:var(--green-soft,#eaf8ee);padding:1px 7px;border-radius:6px;font-weight:600;width:fit-content;}
   .legacy-preview{margin-top:6px;display:grid;gap:6px;}
   .legacy-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);border-bottom:1px dashed var(--line);padding:5px 2px;}
   .legacy-row span:first-child{color:var(--ink-soft);font-variant-numeric:tabular-nums;flex:0 0 auto;}
