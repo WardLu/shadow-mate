@@ -686,9 +686,11 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
 async function speak(t, button, locale = "en-US", contentId = ""){
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
-    if (activeSpeechRequest.button?.isConnected) return;
-    activeSpeechRequest.cancelled = true;
+    if (activeSpeechRequest.button === button) return;
+    const prev = activeSpeechRequest;
     activeSpeechRequest = null;
+    prev.cancelled = true;
+    prev.restore?.();
     try {
       window.speechSynthesis?.cancel();
     } catch (_) {
@@ -696,7 +698,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     }
     stopActivePlayback();
   }
-  const speechRequest = { button, cancelled: false };
+  const speechRequest = { button, cancelled: false, restore: null };
   activeSpeechRequest = speechRequest;
   const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
   if (button) button.dataset.speechInFlight = "true";
@@ -729,23 +731,23 @@ async function speak(t, button, locale = "en-US", contentId = ""){
   const restore = () => {
     try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     clearSystemTimer();
-    if (!isCurrentSpeech()) return;
-    if (!button) {
-      activeSpeechRequest = null;
-      return;
+    if (button) {
+      button.innerHTML = buttonContent("volume", originalLabel);
+      button.setAttribute("aria-label", originalAriaLabel);
+      if (originalTitle) button.title = originalTitle;
+      else button.removeAttribute("title");
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.removeAttribute("data-speech-failure");
+      button.removeAttribute("data-published-speech-error");
+      button.removeAttribute("data-speech-in-flight");
+      restoreButtonFocus();
     }
-    button.innerHTML = buttonContent("volume", originalLabel);
-    button.setAttribute("aria-label", originalAriaLabel);
-    if (originalTitle) button.title = originalTitle;
-    else button.removeAttribute("title");
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
-    button.removeAttribute("data-speech-failure");
-    button.removeAttribute("data-published-speech-error");
-    button.removeAttribute("data-speech-in-flight");
-    activeSpeechRequest = null;
-    restoreButtonFocus();
+    if (activeSpeechRequest === speechRequest) {
+      activeSpeechRequest = null;
+    }
   };
+  speechRequest.restore = restore;
   const fail = (message) => {
     try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     if (!isCurrentSpeech()) return;
@@ -794,6 +796,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
   const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
   try {
     await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
+    if (!isCurrentSpeech()) return;
     restore();
     return;
   } catch (publishedError) {

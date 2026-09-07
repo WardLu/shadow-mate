@@ -216,4 +216,36 @@ describe("published speech player", () => {
     finish();
     await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
   });
+
+  it("cancels previous in-flight fetch when interrupted before playback starts", async () => {
+    const fake = createFakeAudioContext();
+    const entry2 = { contentId: "hz-002:glyph", url: "https://voice.shadow.wang/2.mp3" };
+    let finishFirstFetch;
+    const fetchImpl = vi.fn(async (url) => {
+      if (url.endsWith("manifest.json")) {
+        return new Response(JSON.stringify({ entries: [entry, entry2] }), { headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("101030/a.mp3")) {
+        return new Promise((resolve) => {
+          finishFirstFetch = () => resolve(response());
+        });
+      }
+      return response();
+    });
+
+    const player = createPublishedSpeechPlayer({ fetchImpl, getAudioContext: () => fake.ctx });
+    const firstPromise = player.play(entry.contentId);
+    await vi.waitFor(() => expect(typeof finishFirstFetch).toBe("function"));
+
+    // Interrupted while first is still fetching
+    const secondPromise = player.play(entry2.contentId);
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    // Complete the first fetch now
+    finishFirstFetch();
+    await expect(firstPromise).resolves.toEqual({ status: "cancelled", source: "cdn" });
+
+    fake.getSource().onended();
+    await expect(secondPromise).resolves.toEqual({ status: "played", source: "cdn" });
+  });
 });

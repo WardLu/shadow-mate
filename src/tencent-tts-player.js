@@ -60,6 +60,7 @@ export function createPublishedSpeechPlayer({
   const inFlight = new Map();
   const bufferCache = new Map();
   let currentPlayback = null;
+  let activePlaySessionId = 0;
 
   function loadManifest() {
     if (!manifestPromise) {
@@ -78,6 +79,7 @@ export function createPublishedSpeechPlayer({
   }
 
   function stop() {
+    activePlaySessionId++;
     if (currentPlayback) {
       const active = currentPlayback;
       currentPlayback = null;
@@ -227,6 +229,7 @@ export function createPublishedSpeechPlayer({
     if (!entry) throw new PublishedSpeechError("published-audio-not-found");
 
     stop();
+    const sessionId = activePlaySessionId;
 
     let audioContext = null;
     try {
@@ -237,6 +240,9 @@ export function createPublishedSpeechPlayer({
 
     if (audioContext && bufferCache.has(contentId)) {
       const cachedBuffer = bufferCache.get(contentId);
+      if (sessionId !== activePlaySessionId) {
+        return { status: "cancelled", source: "cdn" };
+      }
       return playViaWebAudio(audioContext, cachedBuffer, volume, playbackTimeoutMs);
     }
 
@@ -249,12 +255,18 @@ export function createPublishedSpeechPlayer({
     } catch (error) {
       throw mapFetchError(error);
     }
+    if (sessionId !== activePlaySessionId) {
+      return { status: "cancelled", source: "cdn" };
+    }
     if (!response.ok) throw new PublishedSpeechError("published-audio-http");
     const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
     if (contentType !== "audio/mpeg" && contentType !== "audio/mp3") {
       throw new PublishedSpeechError("published-audio-invalid-type");
     }
     const blob = await response.blob();
+    if (sessionId !== activePlaySessionId) {
+      return { status: "cancelled", source: "cdn" };
+    }
 
     if (audioContext && typeof audioContext.decodeAudioData === "function") {
       try {
@@ -263,6 +275,9 @@ export function createPublishedSpeechPlayer({
         }
         const arrayBuffer = await blob.arrayBuffer();
         const audioBuffer = await decodeAudio(audioContext, arrayBuffer.slice(0));
+        if (sessionId !== activePlaySessionId) {
+          return { status: "cancelled", source: "cdn" };
+        }
         if (audioBuffer) {
           bufferCache.set(contentId, audioBuffer);
           return await playViaWebAudio(audioContext, audioBuffer, volume, playbackTimeoutMs);
@@ -272,6 +287,9 @@ export function createPublishedSpeechPlayer({
       }
     }
 
+    if (sessionId !== activePlaySessionId) {
+      return { status: "cancelled", source: "cdn" };
+    }
     return playViaAudioElement(blob, volume, playbackTimeoutMs);
   }
 
