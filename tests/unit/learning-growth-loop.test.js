@@ -244,6 +244,56 @@ describe("Growth Loop local projection", () => {
       .toBe("redemption_waiting_for_confirmation");
   });
 
+  it("immediately confirms and allows fulfill/cancel for unauthenticated local scope", () => {
+    const localScope = { household_id: null, profile_id: null };
+    const state = createGrowthLoopState(localScope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: null, reward_id: "reward-1", enabled: true }];
+    state.ledger = [{
+      id: "ledger-1",
+      request_id: "point-1",
+      profile_id: null,
+      delta: 10,
+      entry_type: "manual",
+      status: "confirmed",
+    }];
+
+    // 1. Local unauthenticated redeem is confirmed immediately
+    const redeemResult = applyRedemption(state, {
+      scope: localScope,
+      reward_id: "reward-1",
+      request_id: "local-redeem-1",
+    });
+    expect(redeemResult.error).toBeUndefined();
+    expect(redeemResult.redemption.confirmed).toBe(true);
+    expect(redeemResult.redemption.status).toBe("pending");
+    expect(redeemResult.snapshot.ledger.at(-1).status).toBe("confirmed");
+    expect(getBalance(redeemResult.snapshot)).toBe(5);
+
+    // 2. Local fulfillment completes immediately without cloud sync
+    const fulfillResult = applyFulfillRedemption(redeemResult.snapshot, {
+      scope: localScope,
+      redemption_id: "local-redeem-1",
+      request_id: "local-fulfill-1",
+    });
+    expect(fulfillResult.error).toBeUndefined();
+    expect(fulfillResult.redemption.status).toBe("fulfilled");
+    expect(fulfillResult.redemption.fulfill_requested).toBe(false);
+
+    // 3. Local cancellation completes immediately with confirmed refund
+    const cancelResult = applyCancelRedemption(redeemResult.snapshot, {
+      scope: localScope,
+      redemption_id: "local-redeem-1",
+      request_id: "local-cancel-1",
+      note: "临时改约",
+    });
+    expect(cancelResult.error).toBeUndefined();
+    expect(cancelResult.redemption.status).toBe("cancelled");
+    expect(cancelResult.redemption.cancel_requested).toBe(false);
+    expect(cancelResult.refund.status).toBe("confirmed");
+    expect(getBalance(cancelResult.snapshot)).toBe(10);
+  });
+
   it("ends a point period with immutable adjustment entries while preserving history", () => {
     const item = { ...recommendedPointItems[0], id: "item-1" };
     const first = applyPointAction(createGrowthLoopState(scope), {

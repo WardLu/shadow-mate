@@ -1469,7 +1469,9 @@ function renderGrow(){
   }
 
   const rewards = window.growthLoop?.getRewards?.() || [];
+  const isCloudConnected = Boolean(growthLoopController.getScope()?.household_id);
   const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
+  const unconfirmedRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending" && !item.confirmed).length;
   const rewardCards = rewards.map((reward) => {
     const cost = Number(reward.cost_points || 0);
     const latest = growthLoopSnapshot.redemptions
@@ -1502,9 +1504,15 @@ function renderGrow(){
       <h3>${icon("gift")} 奖励兑换</h3>
       <div class="stat-grid">
         <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
-        <div class="stat"><div class="n">${pendingRedemptions}</div><div class="t">待联网确认</div></div>
+        <div class="stat"><div class="n">${isCloudConnected && unconfirmedRedemptions > 0 ? unconfirmedRedemptions : pendingRedemptions}</div><div class="t">${isCloudConnected && unconfirmedRedemptions > 0 ? "待联网确认" : "待兑现约定"}</div></div>
       </div>
-      <div class="desc">离线兑换会先记为“待联网确认”，联网并完成服务端确认前不代表最终成功。</div>
+      <div class="desc">${
+        isCloudConnected
+          ? (unconfirmedRedemptions > 0
+            ? "离线兑换会先记为“待联网确认”，联网并完成服务端确认后生效。"
+            : "奖励兑换已与云端同步，兑现约定后可标记完成。")
+          : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后可直接标记完成。"
+      }</div>
       <form id="rewardForm" class="growth-form">
         <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
         <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
@@ -1569,7 +1577,10 @@ function renderGrow(){
   });
   rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
     button.onclick = async () => {
-      if (!window.confirm("确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。")) return;
+      const confirmMsg = isCloudConnected
+        ? "确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。"
+        : "确定取消这次兑换吗？已扣减的积分将立即恢复。";
+      if (!window.confirm(confirmMsg)) return;
       button.disabled = true;
       const result = await window.growthLoop.cancelRedemption({
         redemption_id: button.dataset.cancelId,

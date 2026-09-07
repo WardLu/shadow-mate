@@ -34,7 +34,7 @@ Shadow Mate is designed around a family's daily learning routine: what was learn
 
 - **Four learning modules**: Chinese, mathematics, English, and picture books; tasks can be checked in or cancelled independently.
 - **One learning entry**: open “学习” (Learning) in the left navigation first, then choose Chinese, mathematics, English, or picture books; Points, Growth, Guide, and Settings remain separate top-level pages.
-- **Growth records**: completion is summarized by learning module over the last 30 days, with daily progress shown as `completed/4`.
+- **Growth records & reward loop**: 30-day module consistency tracking, with family reward redemptions that work locally offline before sign-in and sync automatically across devices after sign-in.
 - **Points calendar**: behavior points are recorded separately from learning modules and can be reviewed or backfilled by date.
 - **Family space**: one parent manages multiple learners, with records loaded for the active learner.
 - **Shared account sign-in**: email verification and shared email-password authentication for Shadow products.

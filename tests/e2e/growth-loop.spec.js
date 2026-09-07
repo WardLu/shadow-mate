@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Growth Loop local-first boundary", () => {
-  test("lets a parent create a custom point item and a reward from the app", async ({ page }) => {
+  test("lets an unauthenticated parent create a custom point item, redeem and fulfill a reward locally", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
     await page.fill('#pointItemForm input[name="name"]', "自己刷牙");
@@ -20,28 +20,12 @@ test.describe("Growth Loop local-first boundary", () => {
     const reward = page.locator(".reward-card").filter({ hasText: "选一个故事" });
     await expect(reward).toBeVisible();
     await reward.locator(".reward-redeem").click();
-    await expect(reward).toContainText("待联网确认");
-    await page.evaluate(() => window.growthLoop.sync({
-      transport: {
-        send: async (event) => event.type === "reward_redeem"
-          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "pending" } }
-          : { status: "confirmed" },
-      },
-    }));
     await expect(reward).toContainText("待兑现");
     await reward.locator(".reward-fulfill").click();
-    await expect(reward).toContainText("兑现同步中");
-    await page.evaluate(() => window.growthLoop.sync({
-      transport: {
-        send: async (event) => event.type === "redemption_fulfill"
-          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "fulfilled" } }
-          : { status: "confirmed" },
-      },
-    }));
     await expect(reward).toContainText("已兑现");
   });
 
-  test("cancels a confirmed pending redemption with a compensating refund", async ({ page }) => {
+  test("cancels an unauthenticated redemption with immediate local refund", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
     await page.fill('#pointItemForm input[name="name"]', "整理书架");
@@ -55,26 +39,55 @@ test.describe("Growth Loop local-first boundary", () => {
     await page.click('#rewardForm button[type="submit"]');
     const reward = page.locator(".reward-card").filter({ hasText: "取消测试奖励" });
     await reward.locator(".reward-redeem").click();
+    await expect(reward).toContainText("待兑现");
+
+    page.on("dialog", (dialog) => dialog.accept());
+    await reward.locator(".reward-cancel").click();
+    await expect(reward).toContainText("已取消");
+  });
+
+  test("synchronizes redemption lifecycle through cloud when authenticated", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(async () => {
+      await window.growthLoop.loadScope({
+        household_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        profile_id: "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      await window.growthLoop.createReward({
+        request_id: "reward-cloud-1",
+        reward: { name: "云端奖励", cost_points: 2, category: "family" },
+      });
+      await window.growthLoop.recordPoint({
+        item: { id: "item-cloud-1", name: "云端任务", default_points: 5 },
+        occurred_on: "2026-08-14",
+        request_id: "point-cloud-1",
+      });
+    });
+    await page.click('[data-mod="grow"]');
+    const reward = page.locator(".reward-card").filter({ hasText: "云端奖励" });
+    await expect(reward).toBeVisible();
+    await reward.locator(".reward-redeem").click();
+    await expect(reward).toContainText("待联网确认");
+
     await page.evaluate(() => window.growthLoop.sync({
       transport: {
         send: async (event) => event.type === "reward_redeem"
-          ? { status: "confirmed", data: { id: "remote-redemption-cancel", status: "pending" } }
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "pending" } }
           : { status: "confirmed" },
       },
     }));
     await expect(reward).toContainText("待兑现");
 
-    page.on("dialog", (dialog) => dialog.accept());
-    await reward.locator(".reward-cancel").click();
-    await expect(reward).toContainText("取消同步中");
+    await reward.locator(".reward-fulfill").click();
+    await expect(reward).toContainText("兑现同步中");
     await page.evaluate(() => window.growthLoop.sync({
       transport: {
-        send: async (event) => event.type === "redemption_cancel"
-          ? { status: "confirmed", data: { id: "remote-redemption-cancel", status: "cancelled" } }
+        send: async (event) => event.type === "redemption_fulfill"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "fulfilled" } }
           : { status: "confirmed" },
       },
     }));
-    await expect(reward).toContainText("已取消");
+    await expect(reward).toContainText("已兑现");
   });
 
   test("adopts pending local actions and claims one outbox event across two pages", async ({ browser }) => {

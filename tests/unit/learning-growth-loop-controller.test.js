@@ -378,6 +378,39 @@ describe("Growth Loop redemption actions", () => {
     expect(controller.getSnapshot().redemptions[0].fulfill_requested).toBe(true);
     expect(controller.getSnapshot().redemptions[0].sync_error).toBeNull();
   });
+
+  it("allows unauthenticated controller to fulfill and cancel rewards immediately with celebration sound", async () => {
+    const db = createMemoryLearningDb();
+    const fulfilledEvents = [];
+    const controller = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    // Unauthenticated initial state (scope = { household_id: null, profile_id: null })
+    await controller.createReward({
+      request_id: "reward-req-1",
+      reward: { id: "reward-1", name: "去公园", cost_points: 5, category: "family" },
+    });
+    await controller.recordPoint({
+      item: { id: "item-1", name: "做家务", default_points: 10 },
+      occurred_on: "2026-08-14",
+      request_id: "point-1",
+    });
+
+    // Redeem reward locally
+    const redeemResult = await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-1" });
+    expect(redeemResult.error).toBeUndefined();
+    expect(redeemResult.redemptions[0].status).toBe("pending");
+    expect(redeemResult.redemptions[0].confirmed).toBe(true);
+
+    // Fulfill reward locally: immediately transitions to fulfilled and triggers sound
+    const fulfillResult = await controller.fulfillRedemption({ redemption_id: "redeem-1", request_id: "fulfill-1" });
+    expect(fulfillResult.error).toBeUndefined();
+    expect(fulfillResult.redemptions[0].status).toBe("fulfilled");
+    expect(fulfilledEvents).toHaveLength(1);
+    expect(fulfilledEvents[0].userInitiated).toBe(true);
+    expect(fulfilledEvents[0].redemption.status).toBe("fulfilled");
+  });
 });
 
 describe("Growth Loop controller legacy points import", () => {

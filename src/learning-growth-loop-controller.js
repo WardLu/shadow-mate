@@ -334,7 +334,14 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
   async function fulfillRedemption({ redemption_id, request_id = createId("redemption-fulfill") } = {}) {
     const result = applyFulfillRedemption(snapshot, { scope, redemption_id, request_id });
     if (result.error) return { ...clone(snapshot), error: result.error };
-    sessionFulfillRequests.add(request_id);
+    const isLocalScope = !scope?.household_id;
+    if (isLocalScope) {
+      if (typeof onRewardFulfilled === "function") {
+        onRewardFulfilled({ redemption: clone(result.redemption), userInitiated: true });
+      }
+    } else {
+      sessionFulfillRequests.add(request_id);
+    }
     result.events[0].depends_on = await redemptionDependencies(result.redemption);
     await persist(result.snapshot, result.events);
     return clone(snapshot);

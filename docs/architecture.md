@@ -11,3 +11,11 @@ At runtime `src/tencent-tts-player.js` reads that manifest and plays CDN audio. 
 ## Interface sound effects
 
 `src/learning-sounds.js` provides deterministic, real-time synthesized Web Audio sound effects across five key learning events (`action_completed`, `points_earned`, `try_again`, `points_deducted`, `reward_fulfilled`). Sound synthesis routes note envelopes through a master gain scaled by `SOUND_GAIN_MULTIPLIER` (`2.5x`), a presence peaking filter (`+2.5 dB @ 2800 Hz`) for clarity on mobile speakers, and a dynamics compressor/limiter (`-6 dBFS` threshold, `6:1` ratio) to ensure rich, punchy feedback without clipping. Device-local settings (`shadow_mate_sound_settings_v1`) support master toggle, event variant selection, and independent volume control (`volume`, default `60%`, range `0%~200%` with excess boost).
+
+## Growth Loop and local-first redemption lifecycle
+
+`src/learning-growth-loop.js` and `src/learning-growth-loop-controller.js` manage the point ledger, point items, rewards, and redemption lifecycle under a strict local-first contract:
+
+- **Unauthenticated mode (single device, local only)**: With no remote household (`household_id === null`), redemptions and refunds are authoritative on the local device. Redeeming a reward immediately creates a confirmed redemption and debits the ledger, allowing parents to directly mark "fulfilled" or "cancelled" without waiting for network connectivity.
+- **Authenticated mode (cloud synchronized)**: When associated with a Supabase household, redemptions use an outbox-driven two-phase protocol (`pending` -> `confirmed`) to prevent concurrent double-spending across multiple household devices. Offline redemptions show as "待联网确认" until confirmed by the server RPC `learning_redeem_reward`.
+- **Account adoption**: When an unauthenticated user subsequently registers or logs in, local data under `pending:pending` (including completed or pending redemptions) is rebound and merged into the authenticated cloud household via `adoptPending` without loss or ledger duplication.

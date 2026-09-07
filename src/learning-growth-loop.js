@@ -684,6 +684,7 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
   if (!reward || !profileReward) return { snapshot, events: [], error: "reward_not_enabled" };
   const cost = Number(profileReward.cost_override ?? reward.cost_points);
   if (getBalance(snapshot) < cost) return { snapshot, events: [], error: "insufficient_points" };
+  const isLocalScope = !normalizedScope.household_id;
   const redemption = {
     id: request_id,
     household_id: normalizedScope.household_id,
@@ -692,6 +693,12 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
     reward_name_snapshot: reward.name,
     cost_points_snapshot: cost,
     status: "pending",
+    confirmed: isLocalScope ? true : false,
+    fulfill_requested: false,
+    fulfill_request_id: null,
+    cancel_requested: false,
+    cancel_request_id: null,
+    sync_error: null,
     request_id,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -706,10 +713,10 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
     delta: -cost,
     entry_type: "redemption",
     item_name_snapshot: reward.name,
-    note: "待联网确认的奖励兑换",
+    note: isLocalScope ? "奖励兑换" : "待联网确认的奖励兑换",
     request_id: `${request_id}:debit`,
     occurred_on: new Date().toISOString().slice(0, 10),
-    status: "pending",
+    status: isLocalScope ? "confirmed" : "pending",
     redemption_id: request_id,
   }, normalizedScope));
   return {
@@ -750,10 +757,15 @@ export function applyFulfillRedemption(
   if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.fulfill_requested) return { snapshot, events: [], error: "redemption_action_pending" };
 
+  const isLocalScope = !normalizedScope.household_id;
   const nextRedemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
-  nextRedemption.fulfill_requested = true;
+  nextRedemption.fulfill_requested = isLocalScope ? false : true;
   nextRedemption.fulfill_request_id = request_id;
   nextRedemption.sync_error = null;
+  if (isLocalScope) {
+    nextRedemption.status = "fulfilled";
+    nextRedemption.confirmed = true;
+  }
   nextRedemption.updated_at = new Date().toISOString();
   return {
     snapshot,
@@ -774,6 +786,7 @@ export function applyCancelRedemption(
   if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
 
+  const isLocalScope = !normalizedScope.household_id;
   const refundRequestId = request_id;
   const refund = normalizeLedgerEntry({
     id: createId("ledger"),
@@ -786,14 +799,18 @@ export function applyCancelRedemption(
     note: note ? String(note).slice(0, 200) : null,
     request_id: refundRequestId,
     occurred_on: new Date().toISOString().slice(0, 10),
-    status: "pending",
+    status: isLocalScope ? "confirmed" : "pending",
     redemption_id: redemption.id,
     metadata: { cancel_of: redemption.request_id },
   }, normalizedScope);
   snapshot.ledger.push(refund);
-  redemption.cancel_requested = true;
+  redemption.cancel_requested = isLocalScope ? false : true;
   redemption.cancel_request_id = request_id;
   redemption.sync_error = null;
+  if (isLocalScope) {
+    redemption.status = "cancelled";
+    redemption.confirmed = true;
+  }
   redemption.updated_at = new Date().toISOString();
   return {
     snapshot,
