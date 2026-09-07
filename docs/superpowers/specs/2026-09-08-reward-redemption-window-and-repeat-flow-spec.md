@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-08
 - **作者**：Antigravity
-- **状态**：待评审 (Draft / In Review)
+- **状态**：已实施并通过端到端验证 (Implemented & Verified)
 - **文档路径**：`docs/superpowers/specs/2026-09-08-reward-redemption-window-and-repeat-flow-spec.md`
 
 ---

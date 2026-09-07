@@ -30,7 +30,7 @@
 - Consumes: `latest.status`, `latest.updated_at`, `latest.created_at`, `balance`, `cost`
 - Produces: 解耦的主兑换按钮、24h 保护窗口内的 `[撤回兑现]` 按钮及 `.reward-undo-hint` 提示标签
 
-- [ ] **Step 1: 在 `src/app.js` 中增加 24 小时时效计算与状态解耦逻辑**
+- [x] **Step 1: 在 `src/app.js` 中增加 24 小时时效计算与状态解耦逻辑**
   ```javascript
   const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
   const isPending = latest?.status === "pending";
@@ -44,7 +44,7 @@
   const canCancel = (isPending || isWithinUndoWindow) && isConfirmed && !actionPending;
   const redeemBtnText = latest && balance >= cost ? "再次兑换" : "兑换";
   ```
-- [ ] **Step 2: 改造卡片 HTML 输出与时效标签**
+- [x] **Step 2: 改造卡片 HTML 输出与时效标签**
   - 在描述文字下方展示时效说明标签：
     ```javascript
     ${isWithinUndoWindow ? `<span class="reward-undo-hint">已兑现 · 24小时内可撤回</span>` : ""}
@@ -54,13 +54,13 @@
     <div class="reward-actions">
       ${!isPending ? `<button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${redeemBtnText}</button>` : ""}
       ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "确认兑现"}</button>` : ""}
-      ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}" title="${isFulfilled ? "兑现后 24 小时内支持撤销履约并退回积分" : "取消兑换并退回积分"}">${latest.sync_error ? "补偿退款 (取消)" : (isFulfilled ? "撤回兑现" : "取消兑换")}</button>` : ""}
+      ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}" title="${isFulfilled ? "兑现后 24 小时内支持撤销履约并退还积分" : "取消兑换并退回积分"}">${latest.sync_error ? "补偿退款 (取消)" : (isFulfilled ? "撤回兑现" : "取消兑换")}</button>` : ""}
     </div>
     ```
-- [ ] **Step 3: 更新确认弹窗与模块底部说明文案**
+- [x] **Step 3: 更新确认弹窗与模块底部说明文案**
   - 弹窗确认文案：`isFulfilled ? \`确定撤回“${rewardName}”的兑现并退回 ${cost} 积分吗？（此操作在兑现后 24 小时内有效）\` : ...`
   - 底部描述文案：更新单机模式说明为 `单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。`
-- [ ] **Step 4: 在 `src/app.css` 中增加 `.reward-undo-hint` 样式**
+- [x] **Step 4: 在 `src/app.css` 中增加 `.reward-undo-hint` 样式**
   ```css
   .reward-undo-hint {
     display: inline-block;
@@ -81,15 +81,15 @@
 **Files:**
 - Modify: `tests/e2e/points-feedback.spec.js`
 
-- [ ] **Step 1: 编写兑现后即时状态测试（在 24h 窗口内）**
+- [x] **Step 1: 编写兑现后即时状态测试（在 24h 窗口内）**
   - 验证兑现后，卡片出现 `.reward-undo-hint`（包含“已兑现 · 24小时内可撤回”）；
   - 验证主按钮为 `[兑换]` 或 `[再次兑换]`，绝不包含文字为 `已兑现` 的 disabled 按钮；
   - 验证次操作按钮为 `[撤回兑现]`。
-- [ ] **Step 2: 编写超过 24 小时时效后自动归档测试**
+- [x] **Step 2: 编写超过 24 小时时效后自动归档测试**
   - 使用 Playwright `page.clock.fastForward("25:00:00")` 或调整时间；
   - 重新触发卡片渲染，验证 `.reward-undo-hint` 和 `[撤回兑现]` 彻底消失，卡片恢复纯净货架态；
   - 验证再次点击 `[再次兑换]` 可顺利发起下一次兑换。
-- [ ] **Step 3: 运行 E2E 测试并确保全部通过**
+- [x] **Step 3: 运行 E2E 测试并确保全部通过**
   `npx playwright test tests/e2e/points-feedback.spec.js`
 
 ---
@@ -99,11 +99,11 @@
 **Files:**
 - None (构建、验证与双推)
 
-- [ ] **Step 1: 运行全量本地验证**
+- [x] **Step 1: 运行全量本地验证**
   `npm run verify`
-- [ ] **Step 2: 提交代码到本地 Git 分支**
+- [x] **Step 2: 提交代码到本地 Git 分支**
   `git commit -m "feat(rewards): add 24h undo window for fulfilled redemptions and decouple repeat redemption flow"`
-- [ ] **Step 3: 双推到 `feat/growth-loop-redemption-lifecycle` 与 `preview` 分支**
+- [x] **Step 3: 双推到 `feat/growth-loop-redemption-lifecycle` 与 `preview` 分支**
   `git push origin feat/growth-loop-redemption-lifecycle && git push origin feat/growth-loop-redemption-lifecycle:preview`
-- [ ] **Step 4: 线上 Preview 环境自动化测试验证**
+- [x] **Step 4: 线上 Preview 环境自动化测试验证**
   `PLAYWRIGHT_TEST_BASE_URL=https://preview-sm.shadow.wang npx playwright test tests/e2e/points-feedback.spec.js`

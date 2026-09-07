@@ -2441,8 +2441,8 @@ function renderGuide(){
         <div class="guide-section-heading"><span>03</span><div><h3>习惯积分与心愿兑换成长闭环</h3><p>把好习惯变成动力，建立看得见、守信用的家庭激励约定。</p></div></div>
         <div class="guide-facts">
           <div><strong>习惯打卡</strong><span>鼓励做家务、认真学习等好习惯；误操作可再次点击撤销，明细中清晰显示“（撤销）”。</span></div>
-          <div><strong>自主兑换</strong><span>孩子用攒下的积分挑选心愿奖励，发起兑换后进入“待兑现”状态。</span></div>
-          <div><strong>确认兑现</strong><span>家长在现实生活中履约后，点击「确认兑现」完成激励闭环；若有变化可点击「取消兑换」退回积分。</span></div>
+          <div><strong>自主兑换</strong><span>孩子用攒下的积分挑选心愿奖励；心愿货架支持随时「再次兑换」，不再因历史履约而锁死。</span></div>
+          <div><strong>契约履约</strong><span>家长在现实履约后点击「确认兑现」；待兑现可随时取消，兑现后 24 小时内支持防误触「撤回兑现」并退还积分，超时自动归档。</span></div>
         </div>
       </section>
 
