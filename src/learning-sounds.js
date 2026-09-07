@@ -30,8 +30,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 220,
           notes: [
-            { t: 0, dur: 80, freq: 520, wave: "triangle", gain: 0.5, filter: { type: "bandpass", freq: 2000, q: 1.1 } },
-            { t: 70, dur: 120, freq: 700, wave: "triangle", gain: 0.55, filter: { type: "bandpass", freq: 2200, q: 1.1 } },
+            { t: 0, dur: 70, freq: 780, wave: "triangle", gain: 0.85, filter: { type: "bandpass", freq: 1100, q: 0.9 } },
+            { t: 60, dur: 110, freq: 1170, wave: "triangle", gain: 0.90, filter: { type: "bandpass", freq: 1400, q: 0.9 } },
           ],
         },
       },
@@ -40,8 +40,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 180,
           notes: [
-            { t: 0, dur: 70, freq: 660, wave: "sine", gain: 0.4 },
-            { t: 55, dur: 100, freq: 880, wave: "sine", gain: 0.45 },
+            { t: 0, dur: 75, freq: 659.25, wave: "triangle", gain: 0.82 },
+            { t: 60, dur: 110, freq: 880, wave: "triangle", gain: 0.88 },
           ],
         },
       },
@@ -50,8 +50,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 230,
           notes: [
-            { t: 0, dur: 90, freq: 587.33, wave: "sine", gain: 0.42 },
-            { t: 90, dur: 120, freq: 783.99, wave: "sine", gain: 0.5 },
+            { t: 0, dur: 90, freq: [587.33, 700], wave: "sine", gain: 0.82 },
+            { t: 85, dur: 130, freq: 880, wave: "sine", gain: 0.88 },
           ],
         },
       },
@@ -67,9 +67,9 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 330,
           notes: [
-            { t: 0, dur: 90, freq: 523.25, wave: "triangle", gain: 0.55 },
-            { t: 90, dur: 90, freq: 659.25, wave: "triangle", gain: 0.6 },
-            { t: 180, dur: 130, freq: 783.99, wave: "triangle", gain: 0.65 },
+            { t: 0, dur: 90, freq: 523.25, wave: "triangle", gain: 0.82 },
+            { t: 85, dur: 90, freq: 659.25, wave: "triangle", gain: 0.88 },
+            { t: 175, dur: 140, freq: 783.99, wave: "triangle", gain: 0.92 },
           ],
         },
       },
@@ -78,8 +78,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 280,
           notes: [
-            { t: 0, dur: 110, freq: 880, wave: "triangle", gain: 0.55 },
-            { t: 100, dur: 150, freq: 1318.51, wave: "triangle", gain: 0.62 },
+            { t: 0, dur: 110, freq: 880, wave: "triangle", gain: 0.85 },
+            { t: 95, dur: 155, freq: 1318.51, wave: "triangle", gain: 0.92 },
           ],
         },
       },
@@ -88,9 +88,9 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 300,
           notes: [
-            { t: 0, dur: 80, freq: 659.25, wave: "triangle", gain: 0.5 },
-            { t: 80, dur: 80, freq: 880, wave: "triangle", gain: 0.55 },
-            { t: 160, dur: 120, freq: 1174.66, wave: "triangle", gain: 0.6 },
+            { t: 0, dur: 80, freq: 659.25, wave: "triangle", gain: 0.82 },
+            { t: 75, dur: 80, freq: 880, wave: "triangle", gain: 0.88 },
+            { t: 155, dur: 130, freq: 1174.66, wave: "triangle", gain: 0.92 },
           ],
         },
       },
@@ -106,8 +106,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 220,
           notes: [
-            { t: 0, dur: 130, freq: [392, 500], wave: "sine", gain: 0.4 },
-            { t: 110, dur: 90, freq: 440, wave: "sine", gain: 0.25 },
+            { t: 0, dur: 120, freq: [520, 680], wave: "sine", gain: 0.42 },
+            { t: 90, dur: 100, freq: 587.33, wave: "sine", gain: 0.38 },
           ],
         },
       },
@@ -116,8 +116,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 200,
           notes: [
-            { t: 0, dur: 80, freq: 523.25, wave: "sine", gain: 0.32 },
-            { t: 90, dur: 100, freq: 587.33, wave: "sine", gain: 0.3 },
+            { t: 0, dur: 85, freq: 587.33, wave: "sine", gain: 0.40 },
+            { t: 85, dur: 105, freq: 659.25, wave: "sine", gain: 0.38 },
           ],
         },
       },
@@ -126,9 +126,9 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 240,
           notes: [
-            { t: 0, dur: 70, freq: 392, wave: "sine", gain: 0.34 },
-            { t: 70, dur: 80, freq: 466.16, wave: "sine", gain: 0.34 },
-            { t: 140, dur: 90, freq: 523.25, wave: "sine", gain: 0.3 },
+            { t: 0, dur: 75, freq: 523.25, wave: "sine", gain: 0.38 },
+            { t: 70, dur: 85, freq: 587.33, wave: "sine", gain: 0.40 },
+            { t: 140, dur: 95, freq: 659.25, wave: "sine", gain: 0.38 },
           ],
         },
       },
@@ -144,8 +144,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 220,
           notes: [
-            { t: 0, dur: 90, freq: 329.63, wave: "sine", gain: 0.3 },
-            { t: 90, dur: 120, freq: 293.66, wave: "sine", gain: 0.28 },
+            { t: 0, dur: 95, freq: 523.25, wave: "sine", gain: 0.40 },
+            { t: 90, dur: 125, freq: 440, wave: "sine", gain: 0.38 },
           ],
         },
       },
@@ -154,8 +154,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 270,
           notes: [
-            { t: 0, dur: 110, freq: 349.23, wave: "sine", gain: 0.3 },
-            { t: 120, dur: 140, freq: 311.13, wave: "sine", gain: 0.28 },
+            { t: 0, dur: 110, freq: 587.33, wave: "sine", gain: 0.40 },
+            { t: 115, dur: 145, freq: 493.88, wave: "sine", gain: 0.38 },
           ],
         },
       },
@@ -164,8 +164,8 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 170,
           notes: [
-            { t: 0, dur: 60, freq: 660, wave: "triangle", gain: 0.3, filter: { type: "bandpass", freq: 1800, q: 1.3 } },
-            { t: 90, dur: 60, freq: 660, wave: "triangle", gain: 0.26, filter: { type: "bandpass", freq: 1800, q: 1.3 } },
+            { t: 0, dur: 65, freq: 660, wave: "triangle", gain: 0.42, filter: { type: "bandpass", freq: 750, q: 1.0 } },
+            { t: 85, dur: 65, freq: 660, wave: "triangle", gain: 0.38, filter: { type: "bandpass", freq: 750, q: 1.0 } },
           ],
         },
       },
@@ -181,13 +181,14 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 680,
           notes: [
-            { t: 0, dur: 110, freq: 523.25, wave: "triangle", gain: 0.5 },
-            { t: 100, dur: 110, freq: 659.25, wave: "triangle", gain: 0.52 },
-            { t: 200, dur: 110, freq: 783.99, wave: "triangle", gain: 0.55 },
-            { t: 300, dur: 130, freq: 1046.5, wave: "triangle", gain: 0.6 },
-            { t: 480, dur: 180, freq: 523.25, wave: "sine", gain: 0.28 },
-            { t: 480, dur: 180, freq: 783.99, wave: "sine", gain: 0.28 },
-            { t: 480, dur: 180, freq: 1046.5, wave: "sine", gain: 0.28 },
+            { t: 0, dur: 110, freq: 523.25, wave: "triangle", gain: 0.85 },
+            { t: 95, dur: 110, freq: 659.25, wave: "triangle", gain: 0.88 },
+            { t: 190, dur: 110, freq: 783.99, wave: "triangle", gain: 0.90 },
+            { t: 290, dur: 140, freq: 1046.5, wave: "triangle", gain: 0.95 },
+            { t: 460, dur: 190, freq: 523.25, wave: "triangle", gain: 0.45 },
+            { t: 460, dur: 190, freq: 659.25, wave: "triangle", gain: 0.45 },
+            { t: 460, dur: 190, freq: 783.99, wave: "triangle", gain: 0.45 },
+            { t: 460, dur: 190, freq: 1046.5, wave: "triangle", gain: 0.45 },
           ],
         },
       },
@@ -196,12 +197,12 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 560,
           notes: [
-            { t: 0, dur: 110, freq: 392, wave: "triangle", gain: 0.5 },
-            { t: 100, dur: 110, freq: 523.25, wave: "triangle", gain: 0.55 },
-            { t: 200, dur: 120, freq: 659.25, wave: "triangle", gain: 0.58 },
-            { t: 320, dur: 220, freq: 523.25, wave: "sine", gain: 0.26 },
-            { t: 320, dur: 220, freq: 659.25, wave: "sine", gain: 0.26 },
-            { t: 320, dur: 220, freq: 783.99, wave: "sine", gain: 0.26 },
+            { t: 0, dur: 110, freq: 440, wave: "triangle", gain: 0.82 },
+            { t: 95, dur: 110, freq: 554.37, wave: "triangle", gain: 0.88 },
+            { t: 190, dur: 120, freq: 659.25, wave: "triangle", gain: 0.92 },
+            { t: 300, dur: 230, freq: 554.37, wave: "triangle", gain: 0.45 },
+            { t: 300, dur: 230, freq: 659.25, wave: "triangle", gain: 0.45 },
+            { t: 300, dur: 230, freq: 880, wave: "triangle", gain: 0.45 },
           ],
         },
       },
@@ -210,10 +211,10 @@ export const SOUND_EVENTS = {
         recipe: {
           maxDurationMs: 500,
           notes: [
-            { t: 0, dur: 420, freq: 523.25, wave: "sine", gain: 0.26 },
-            { t: 0, dur: 420, freq: 659.25, wave: "sine", gain: 0.26 },
-            { t: 0, dur: 420, freq: 783.99, wave: "sine", gain: 0.26 },
-            { t: 180, dur: 200, freq: 1046.5, wave: "triangle", gain: 0.3 },
+            { t: 0, dur: 420, freq: 523.25, wave: "triangle", gain: 0.48, filter: { type: "lowpass", freq: 1600, q: 0.7 } },
+            { t: 0, dur: 420, freq: 659.25, wave: "triangle", gain: 0.48, filter: { type: "lowpass", freq: 1600, q: 0.7 } },
+            { t: 0, dur: 420, freq: 783.99, wave: "triangle", gain: 0.48, filter: { type: "lowpass", freq: 1600, q: 0.7 } },
+            { t: 160, dur: 220, freq: 1046.5, wave: "triangle", gain: 0.75 },
           ],
         },
       },
@@ -293,8 +294,26 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
       }
     }
     const master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, volume));
-    master.connect(ctx.destination);
+    master.gain.value = Math.max(0, Math.min(1, volume * 1.5));
+
+    if (typeof ctx.createDynamicsCompressor === "function") {
+      try {
+        const compressor = ctx.createDynamicsCompressor();
+        if (compressor && compressor.threshold && typeof compressor.threshold.setValueAtTime === "function") {
+          compressor.threshold.setValueAtTime(-12, ctx.currentTime);
+          compressor.knee.setValueAtTime(10, ctx.currentTime);
+          compressor.ratio.setValueAtTime(4, ctx.currentTime);
+          compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+          compressor.release.setValueAtTime(0.12, ctx.currentTime);
+        }
+        master.connect(compressor);
+        compressor.connect(ctx.destination);
+      } catch (_) {
+        master.connect(ctx.destination);
+      }
+    } else {
+      master.connect(ctx.destination);
+    }
     for (const note of recipe.notes || []) {
       const start = ctx.currentTime + (note.t || 0) / 1000;
       const duration = Math.max(0.03, (note.dur || 100) / 1000);
