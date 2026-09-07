@@ -292,6 +292,18 @@ describe("Growth Loop local projection", () => {
     expect(cancelResult.redemption.cancel_requested).toBe(false);
     expect(cancelResult.refund.status).toBe("confirmed");
     expect(getBalance(cancelResult.snapshot)).toBe(10);
+
+    // 4. Local cancellation of an already fulfilled redemption also succeeds with confirmed refund
+    const cancelFulfilledResult = applyCancelRedemption(fulfillResult.snapshot, {
+      scope: localScope,
+      redemption_id: "local-redeem-1",
+      request_id: "local-cancel-fulfilled-1",
+      note: "误操作撤销兑现",
+    });
+    expect(cancelFulfilledResult.error).toBeUndefined();
+    expect(cancelFulfilledResult.redemption.status).toBe("cancelled");
+    expect(cancelFulfilledResult.refund.status).toBe("confirmed");
+    expect(getBalance(cancelFulfilledResult.snapshot)).toBe(10);
   });
 
   it("ends a point period with immutable adjustment entries while preserving history", () => {

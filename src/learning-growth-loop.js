@@ -790,7 +790,7 @@ export function applyCancelRedemption(
   const isLocalScope = !normalizedScope.household_id;
   const redemption = findRedemption(snapshot, redemption_id);
   if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
-  if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
+  if (redemption.status !== "pending" && redemption.status !== "fulfilled") return { snapshot, events: [], error: "redemption_not_pending" };
   if (!isLocalScope && !redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
   const refundRequestId = request_id;

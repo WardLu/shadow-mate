@@ -1483,10 +1483,12 @@ function renderGrow(){
       ? isConfirmed
         ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : (latest.sync_error ? "同步未成功" : "待兑现")
         : (latest.sync_error ? "同步未成功" : "待联网确认")
-      : latest?.status === "fulfilled" ? "已兑现" : latest?.status === "cancelled" ? "已取消" : "";
-    const actionPending = latest?.status === "pending" && (latest.fulfill_requested || latest.cancel_requested);
+      : latest?.status === "fulfilled"
+        ? (latest.cancel_requested ? "取消同步中" : (latest.sync_error ? "同步未成功" : "已兑现"))
+        : latest?.status === "cancelled" ? "已取消" : "";
+    const actionPending = (latest?.status === "pending" || latest?.status === "fulfilled") && (latest.fulfill_requested || latest.cancel_requested);
     const canFulfill = latest?.status === "pending" && isConfirmed && !actionPending;
-    const canCancel = canFulfill;
+    const canCancel = (latest?.status === "pending" || latest?.status === "fulfilled") && isConfirmed && !actionPending;
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
       <div class="reward-info">
@@ -1498,7 +1500,7 @@ function renderGrow(){
       <div class="reward-actions">
         <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost || latest?.status === "pending" ? "disabled" : ""}>${status || "兑换"}</button>
         ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "标记已兑现"}</button>` : ""}
-        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">${latest.sync_error ? "补偿退款 (取消)" : "取消兑换"}</button>` : ""}
+        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">${latest.sync_error ? "补偿退款 (取消)" : (latest.status === "fulfilled" ? "撤销兑换" : "取消兑换")}</button>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -1579,15 +1581,24 @@ function renderGrow(){
   });
   rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
     button.onclick = async () => {
+      const redemptionId = button.dataset.cancelId;
+      const redemption = growthLoopSnapshot.redemptions.find((item) => item.id === redemptionId);
+      const isFulfilled = redemption?.status === "fulfilled";
+      const cost = redemption?.cost_points_snapshot || 0;
+      const rewardName = redemption?.reward_name_snapshot || "该奖励";
       const confirmMsg = isCloudConnected
-        ? "确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。"
-        : "确定取消这次兑换吗？已扣减的积分将立即恢复。";
+        ? (isFulfilled
+            ? `确定撤销“${rewardName}”的兑换并退回 ${cost} 积分吗？云端确认后积分将退回。`
+            : "确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。")
+        : (isFulfilled
+            ? `确定撤销“${rewardName}”的兑换并退回 ${cost} 积分吗？已扣减的积分将立即恢复。`
+            : "确定取消这次兑换吗？已扣减的积分将立即恢复。");
       if (!window.confirm(confirmMsg)) return;
       button.disabled = true;
       const result = await window.growthLoop.cancelRedemption({
-        redemption_id: button.dataset.cancelId,
+        redemption_id: redemptionId,
         request_id: clientRequestId("redemption-cancel"),
-        note: "本次暂不兑现",
+        note: isFulfilled ? "撤销兑换退款" : "本次暂不兑现",
       });
       if (result.error) {
         button.disabled = false;

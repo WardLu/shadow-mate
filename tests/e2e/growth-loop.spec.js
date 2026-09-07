@@ -23,6 +23,13 @@ test.describe("Growth Loop local-first boundary", () => {
     await expect(reward).toContainText("待兑现");
     await reward.locator(".reward-fulfill").click();
     await expect(reward).toContainText("已兑现");
+
+    page.on("dialog", (dialog) => dialog.accept());
+    const cancelButton = reward.locator(".reward-cancel");
+    await expect(cancelButton).toContainText("撤销兑换");
+    await cancelButton.click();
+    await expect(reward).toContainText("已取消");
+    await expect(page.locator(".stat").filter({ hasText: "当前可用积分" })).toContainText("2");
   });
 
   test("cancels an unauthenticated redemption with immediate local refund", async ({ page }) => {
