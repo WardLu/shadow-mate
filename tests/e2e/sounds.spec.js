@@ -38,6 +38,8 @@ test.describe("Sound effects settings and playback", () => {
     await page.click('[data-mod="settings"]');
     await expect(page.locator("#snd-master")).toBeVisible();
     await expect(page.locator("#snd-volume")).toBeVisible();
+    await expect(page.locator("#speech-volume")).toBeVisible();
+    await expect(page.locator("#speech-preview")).toBeVisible();
     await expect(page.locator("#snd-reset")).toBeVisible();
     await expect(page.locator("[data-event]")).toHaveCount(5);
     for (const key of ["action_completed", "points_earned", "try_again", "points_deducted", "reward_fulfilled"]) {
@@ -75,6 +77,18 @@ test.describe("Sound effects settings and playback", () => {
     await expect(page.locator("#snd-volume-label")).toHaveText("总音量 30%");
   });
 
+  test("speech volume persists independently on this device", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="settings"]');
+    await page.locator("#speech-volume").evaluate((input) => {
+      input.value = "80";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const saved = await storedSettings(page);
+    expect(saved.speechVolume).toBe(0.8);
+    await expect(page.locator("#speech-volume-label")).toHaveText("朗读音量 80%");
+  });
+
   test("event toggle and variant selection persist", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="settings"]');
@@ -95,11 +109,16 @@ test.describe("Sound effects settings and playback", () => {
       input.value = "20";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    await page.locator("#speech-volume").evaluate((input) => {
+      input.value = "40";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await page.locator("#snd-master").click();
     await page.locator("#snd-reset").click();
     const settings = await page.evaluate(() => window.soundEffects.getSettings());
     expect(settings.enabled).toBe(true);
     expect(settings.volume).toBe(0.6);
+    expect(settings.speechVolume).toBe(1.0);
     expect(settings.events.points_earned.variant).toBe("star_collect");
   });
 

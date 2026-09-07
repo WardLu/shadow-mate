@@ -165,9 +165,27 @@ describe("settings normalization and persistence", () => {
     const { engine } = makeEngine();
     engine.setEnabled(false);
     engine.setVolume(0.1);
+    engine.setSpeechVolume(0.3);
     engine.setEventVariant("points_earned", "star_triple");
     engine.resetDefaults();
     expect(engine.getSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(engine.getSpeechVolume()).toBe(1.0);
+  });
+
+  it("manages speech volume independently with normalization and persistence", () => {
+    const { engine, storage } = makeEngine();
+    expect(engine.getSpeechVolume()).toBe(1.0);
+    engine.setSpeechVolume(0.75);
+    expect(engine.getSpeechVolume()).toBe(0.75);
+    expect(engine.getSettings().speechVolume).toBe(0.75);
+    const saved = JSON.parse(storage.raw("shadow_mate_sound_settings_v1"));
+    expect(saved.speechVolume).toBe(0.75);
+
+    // Clamps values out of range
+    engine.setSpeechVolume(1.5);
+    expect(engine.getSpeechVolume()).toBe(1.0);
+    engine.setSpeechVolume(-0.2);
+    expect(engine.getSpeechVolume()).toBe(0.0);
   });
 });
 

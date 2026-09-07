@@ -1,5 +1,7 @@
 import { TENCENT_TTS_MANIFEST_URL } from "./tencent-tts-catalog.js";
 
+export const SPEECH_GAIN_MULTIPLIER = 1.8;
+
 export class PublishedSpeechError extends Error {
   constructor(code, cause) {
     super(code, cause ? { cause } : undefined);
@@ -17,17 +19,47 @@ function mapFetchError(error) {
     : new PublishedSpeechError("published-audio-http", error);
 }
 
+function decodeAudio(audioContext, arrayBuffer) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const ok = (buf) => {
+      if (!settled) {
+        settled = true;
+        resolve(buf);
+      }
+    };
+    const fail = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+    try {
+      const res = audioContext.decodeAudioData(arrayBuffer, ok, fail);
+      if (res && typeof res.then === "function") {
+        res.then(ok, fail);
+      }
+    } catch (e) {
+      fail(e);
+    }
+  });
+}
+
 export function createPublishedSpeechPlayer({
   fetchImpl = globalThis.fetch?.bind(globalThis),
   AudioCtor = globalThis.Audio,
+  getAudioContext = () => (globalThis.AudioContext || globalThis.webkitAudioContext ? new (globalThis.AudioContext || globalThis.webkitAudioContext)() : null),
   manifestUrl = TENCENT_TTS_MANIFEST_URL,
   timeoutMs = 12000,
   playbackTimeoutMs = 20000,
   createObjectURL = globalThis.URL?.createObjectURL?.bind(globalThis.URL),
   revokeObjectURL = globalThis.URL?.revokeObjectURL?.bind(globalThis.URL),
+  gainMultiplier = SPEECH_GAIN_MULTIPLIER,
 } = {}) {
   let manifestPromise;
   const inFlight = new Map();
+  const bufferCache = new Map();
+  let currentPlayback = null;
 
   function loadManifest() {
     if (!manifestPromise) {
@@ -45,10 +77,168 @@ export function createPublishedSpeechPlayer({
     return manifestPromise;
   }
 
-  async function playOnce(contentId) {
+  function stop() {
+    if (currentPlayback) {
+      const active = currentPlayback;
+      currentPlayback = null;
+      try {
+        active.stop();
+      } catch (_) {}
+    }
+  }
+
+  function playViaWebAudio(audioContext, audioBuffer, volume, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let playbackTimer = null;
+      let source = null;
+      let gainNode = null;
+      let limiter = null;
+
+      const cleanup = () => {
+        if (playbackTimer !== null) {
+          clearTimeout(playbackTimer);
+          playbackTimer = null;
+        }
+        if (currentPlayback?.source === source) {
+          currentPlayback = null;
+        }
+        if (source) {
+          try { source.disconnect(); } catch (_) {}
+          source = null;
+        }
+        if (gainNode) {
+          try { gainNode.disconnect(); } catch (_) {}
+          gainNode = null;
+        }
+        if (limiter) {
+          try { limiter.disconnect(); } catch (_) {}
+          limiter = null;
+        }
+      };
+
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve({ status: "played", source: "cdn" });
+      };
+
+      try {
+        source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+
+        gainNode = audioContext.createGain();
+        const normalizedVol = Math.max(0, Math.min(1, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
+        const targetGain = normalizedVol * gainMultiplier;
+        if (typeof gainNode.gain?.setValueAtTime === "function") {
+          gainNode.gain.setValueAtTime(targetGain, audioContext.currentTime ?? 0);
+        } else if (gainNode.gain) {
+          gainNode.gain.value = targetGain;
+        }
+
+        let lastNode = gainNode;
+        if (typeof audioContext.createDynamicsCompressor === "function") {
+          limiter = audioContext.createDynamicsCompressor();
+          if (typeof limiter.threshold?.setValueAtTime === "function") {
+            limiter.threshold.setValueAtTime(-1.5, audioContext.currentTime ?? 0);
+            limiter.knee.setValueAtTime(3.0, audioContext.currentTime ?? 0);
+            limiter.ratio.setValueAtTime(12.0, audioContext.currentTime ?? 0);
+            limiter.attack.setValueAtTime(0.003, audioContext.currentTime ?? 0);
+            limiter.release.setValueAtTime(0.05, audioContext.currentTime ?? 0);
+          }
+          gainNode.connect(limiter);
+          lastNode = limiter;
+        }
+        lastNode.connect(audioContext.destination);
+        source.connect(gainNode);
+
+        source.onended = () => finish();
+
+        playbackTimer = setTimeout(() => finish(new PublishedSpeechError("published-audio-playback")), timeoutMs);
+
+        currentPlayback = {
+          source,
+          stop: () => {
+            try { source?.stop(); } catch (_) {}
+            finish();
+          },
+        };
+
+        source.start(0);
+      } catch (err) {
+        finish(new PublishedSpeechError("published-audio-playback", err));
+      }
+    });
+  }
+
+  function playViaAudioElement(blob, volume, timeoutMs) {
+    const objectUrl = createObjectURL(blob);
+    const audio = new AudioCtor(objectUrl);
+    const normalizedVol = Math.max(0, Math.min(1, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
+    try {
+      if (typeof audio.volume === "number") {
+        audio.volume = normalizedVol;
+      }
+    } catch (_) {}
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let playbackTimer = null;
+
+      const cleanup = () => {
+        if (playbackTimer !== null) {
+          clearTimeout(playbackTimer);
+          playbackTimer = null;
+        }
+        if (currentPlayback?.audio === audio) {
+          currentPlayback = null;
+        }
+        try { audio.pause?.(); } catch (_) {}
+        revokeObjectURL?.(objectUrl);
+      };
+
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve({ status: "played", source: "cdn" });
+      };
+
+      playbackTimer = setTimeout(() => finish(new PublishedSpeechError("published-audio-playback")), timeoutMs);
+      audio.onended = () => finish();
+      audio.onerror = () => finish(new PublishedSpeechError("published-audio-playback"));
+
+      currentPlayback = {
+        audio,
+        stop: () => finish(),
+      };
+
+      Promise.resolve(audio.play()).catch((error) => finish(new PublishedSpeechError("published-audio-playback", error)));
+    });
+  }
+
+  async function playOnce(contentId, { volume = 1 } = {}) {
     const entries = await loadManifest();
     const entry = entries.get(contentId);
     if (!entry) throw new PublishedSpeechError("published-audio-not-found");
+
+    stop();
+
+    let audioContext = null;
+    try {
+      audioContext = typeof getAudioContext === "function" ? getAudioContext() : null;
+    } catch (_) {
+      audioContext = null;
+    }
+
+    if (audioContext && bufferCache.has(contentId)) {
+      const cachedBuffer = bufferCache.get(contentId);
+      return playViaWebAudio(audioContext, cachedBuffer, volume, playbackTimeoutMs);
+    }
+
     let response;
     try {
       response = await fetchImpl(entry.url, {
@@ -64,34 +254,32 @@ export function createPublishedSpeechPlayer({
       throw new PublishedSpeechError("published-audio-invalid-type");
     }
     const blob = await response.blob();
-    const objectUrl = createObjectURL(blob);
-    const audio = new AudioCtor(objectUrl);
-    try {
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(playbackTimer);
-          error ? reject(error) : resolve();
-        };
-        const playbackTimer = setTimeout(() => finish(new PublishedSpeechError("published-audio-playback")), playbackTimeoutMs);
-        audio.onended = () => finish();
-        audio.onerror = () => finish(new PublishedSpeechError("published-audio-playback"));
-        Promise.resolve(audio.play()).catch((error) => finish(new PublishedSpeechError("published-audio-playback", error)));
-      });
-      return { status: "played", source: "cdn" };
-    } finally {
-      audio.pause?.();
-      revokeObjectURL?.(objectUrl);
+
+    if (audioContext && typeof audioContext.decodeAudioData === "function") {
+      try {
+        if (audioContext.state === "suspended") {
+          await audioContext.resume().catch(() => {});
+        }
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await decodeAudio(audioContext, arrayBuffer.slice(0));
+        if (audioBuffer) {
+          bufferCache.set(contentId, audioBuffer);
+          return await playViaWebAudio(audioContext, audioBuffer, volume, playbackTimeoutMs);
+        }
+      } catch (_) {
+        // Fall back to HTMLAudioElement below
+      }
     }
+
+    return playViaAudioElement(blob, volume, playbackTimeoutMs);
   }
 
   return {
     loadManifest,
-    play(contentId) {
+    stop,
+    play(contentId, { volume = 1 } = {}) {
       if (inFlight.has(contentId)) return inFlight.get(contentId);
-      const promise = playOnce(contentId).finally(() => inFlight.delete(contentId));
+      const promise = playOnce(contentId, { volume }).finally(() => inFlight.delete(contentId));
       inFlight.set(contentId, promise);
       return promise;
     },

@@ -47,7 +47,9 @@ import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-so
 inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
-const publishedSpeechPlayer = createPublishedSpeechPlayer();
+const publishedSpeechPlayer = createPublishedSpeechPlayer({
+  getAudioContext: () => getAudioContext(),
+});
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -597,6 +599,12 @@ function releaseAudio(audio, url) {
 }
 
 function stopActivePlayback() {
+  try {
+    publishedSpeechPlayer?.stop?.();
+  } catch (_) {}
+  try {
+    soundEffects?.setTtsActive?.(false);
+  } catch (_) {}
   if (activeAudioSource) {
     const source = activeAudioSource;
     activeAudioSource = null;
@@ -719,6 +727,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     shouldRestoreButtonFocus = false;
   };
   const restore = () => {
+    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     clearSystemTimer();
     if (!isCurrentSpeech()) return;
     if (!button) {
@@ -738,6 +747,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     restoreButtonFocus();
   };
   const fail = (message) => {
+    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
@@ -779,9 +789,11 @@ async function speak(t, button, locale = "en-US", contentId = ""){
 
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
+  try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
+  const speechVolume = soundEffects?.getSpeechVolume?.() ?? 1.0;
   try {
-    await publishedSpeechPlayer.play(contentId);
+    await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
     restore();
     return;
   } catch (publishedError) {
@@ -799,6 +811,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
       let started = false;
       utterance.lang = locale;
       utterance.rate = 0.9;
+      utterance.volume = Math.max(0, Math.min(1, speechVolume));
       utterance.voice = systemVoice;
       utterance.onstart = () => { started = true; clearSystemTimer(); };
       utterance.onend = () => { restore(); resolve(); };
@@ -1897,11 +1910,11 @@ function renderBook(){
    ========================================================= */
 function renderSettings(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("settings","音效设置"));
+  main.appendChild(modTitle("settings","音效与语音设置"));
   const settings = soundEffects.getSettings();
   main.appendChild($(`
     <div class="card">
-      <h3>${icon("volume")} 音效总开关与音量</h3>
+      <h3>${icon("volume")} 界面音效总开关与音量</h3>
       <div class="sound-row">
         <span class="sound-label">启用界面音效</span>
         <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
@@ -1910,6 +1923,19 @@ function renderSettings(){
         <span class="sound-label" id="snd-volume-label">总音量 ${Math.round(settings.volume*100)}%</span>
         <input class="sound-range" type="range" id="snd-volume" min="0" max="100" step="5" value="${Math.round(settings.volume*100)}" aria-label="总音量">
       </div>
+    </div>
+  `));
+  main.appendChild($(`
+    <div class="card">
+      <h3>${icon("volume")} 课程语音朗读音量</h3>
+      <div class="sound-row">
+        <span class="sound-label" id="speech-volume-label">朗读音量 ${Math.round((settings.speechVolume ?? 1)*100)}%</span>
+        <input class="sound-range" type="range" id="speech-volume" min="0" max="100" step="5" value="${Math.round((settings.speechVolume ?? 1)*100)}" aria-label="课程语音朗读音量">
+      </div>
+      <div class="sound-event-controls" style="margin-top: 10px;">
+        <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
+      </div>
+      <div class="desc">控制汉字发音、英文单词和字意朗读的音量（内置声音增益增强）。即使关闭界面音效，课程朗读仍可独立使用。</div>
     </div>
   `));
   const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
@@ -1936,11 +1962,11 @@ function renderSettings(){
   }
   main.appendChild($(`
     <div class="card">
-      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认音效设置</button>
-      <div class="desc">恢复为默认的总开关、音量与每个事件的变体选择。</div>
+      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认设置</button>
+      <div class="desc">恢复为默认的总开关、音效音量、语音朗读音量与每个事件的变体选择。</div>
     </div>
   `));
-  main.appendChild($(`<div class="footer">${icon("settings")} 音效设置只保存在当前设备，不会同步到云端。</div>`));
+  main.appendChild($(`<div class="footer">${icon("settings")} 声音设置只保存在当前设备，不会同步到云端。</div>`));
 
   el("snd-master").onclick = () => {
     soundEffects.setEnabled(!soundEffects.getSettings().enabled);
@@ -1954,6 +1980,18 @@ function renderSettings(){
   el("snd-volume").onchange = () => {
     soundEffects.preview("points_earned");
   };
+  el("speech-volume").oninput = (event) => {
+    soundEffects.setSpeechVolume(Number(event.target.value) / 100);
+    const label = el("speech-volume-label");
+    if (label) label.textContent = `朗读音量 ${Math.round(soundEffects.getSettings().speechVolume*100)}%`;
+  };
+  const triggerSpeechPreview = () => {
+    const previewBtn = el("speech-preview");
+    speak("日", previewBtn, "zh-CN", "hz-001:glyph");
+  };
+  el("speech-volume").onchange = triggerSpeechPreview;
+  el("speech-preview").onclick = triggerSpeechPreview;
+
   el("snd-reset").onclick = () => {
     soundEffects.resetDefaults();
     renderSettings();

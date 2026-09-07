@@ -233,10 +233,12 @@ export function normalizeSettings(input = {}) {
     };
   }
   const rawVolume = Number(input?.volume);
+  const rawSpeechVolume = Number(input?.speechVolume);
   return {
     schema_version: 1,
     enabled: input?.enabled !== false,
     volume: Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 0.6,
+    speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(1, rawSpeechVolume)) : 1.0,
     events,
   };
 }
@@ -382,6 +384,16 @@ export function createSoundEngine({
     persist();
   }
 
+  function setSpeechVolume(value) {
+    const speechVolume = Number(value);
+    settings = { ...settings, speechVolume: Number.isFinite(speechVolume) ? Math.max(0, Math.min(1, speechVolume)) : settings.speechVolume };
+    persist();
+  }
+
+  function getSpeechVolume() {
+    return settings.speechVolume;
+  }
+
   function setEventEnabled(event, value) {
     if (!SOUND_EVENTS[event]) return;
     settings = {
@@ -472,6 +484,8 @@ export function createSoundEngine({
     getSettings,
     setEnabled,
     setVolume,
+    setSpeechVolume,
+    getSpeechVolume,
     setEventEnabled,
     setEventVariant,
     resetDefaults,
