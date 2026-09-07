@@ -93,6 +93,30 @@ describe("Growth Loop local projection", () => {
     expect(merged.point_items[0].name).toBe("云端名称");
   });
 
+  it("deduplicates legacy :refund entries when remote has raw request_id refund", () => {
+    const remote = createGrowthLoopState(scope);
+    remote.ledger = [{
+      id: "remote-refund-1",
+      request_id: "cancel-1",
+      entry_type: "refund",
+      delta: 5,
+      status: "confirmed",
+    }];
+    const local = createGrowthLoopState(scope);
+    local.ledger = [{
+      id: "local-refund-1",
+      request_id: "cancel-1:refund",
+      entry_type: "refund",
+      delta: 5,
+      status: "pending",
+    }];
+
+    const merged = mergeGrowthLoopSnapshot(remote, local);
+    expect(merged.ledger).toHaveLength(1);
+    expect(merged.ledger[0].request_id).toBe("cancel-1");
+    expect(merged.ledger[0].status).toBe("confirmed");
+  });
+
   it("keeps a newly created local definition when the cloud already has other definitions", () => {
     const remote = createGrowthLoopState(scope);
     remote.point_items = [{ id: "remote-item", name: "云端项目", default_points: 2 }];
@@ -199,7 +223,7 @@ describe("Growth Loop local projection", () => {
       entry_type: "refund",
       status: "pending",
       redemption_id: "redemption-1",
-      request_id: "cancel-1:refund",
+      request_id: "cancel-1",
       note: "孩子临时改约",
     }));
     expect(result.events).toEqual([expect.objectContaining({

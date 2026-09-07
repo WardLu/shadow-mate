@@ -329,9 +329,12 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     return redeemEvent && redeemEvent.status !== "confirmed" ? [redemption.request_id] : [];
   }
 
+  const sessionFulfillRequests = new Set();
+
   async function fulfillRedemption({ redemption_id, request_id = createId("redemption-fulfill") } = {}) {
     const result = applyFulfillRedemption(snapshot, { scope, redemption_id, request_id });
     if (result.error) return { ...clone(snapshot), error: result.error };
+    sessionFulfillRequests.add(request_id);
     result.events[0].depends_on = await redemptionDependencies(result.redemption);
     await persist(result.snapshot, result.events);
     return clone(snapshot);
@@ -431,13 +434,16 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
       const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
       if (redemption && remote?.status === "fulfilled") {
         const alreadyFulfilled = redemption.status === "fulfilled";
+        const wasUserInitiated = sessionFulfillRequests.has(event.request_id);
+        sessionFulfillRequests.delete(event.request_id);
         Object.assign(redemption, remote, {
           status: "fulfilled",
           confirmed: true,
           fulfill_requested: false,
+          sync_error: null,
         });
         if (!alreadyFulfilled && typeof onRewardFulfilled === "function") {
-          onRewardFulfilled({ redemption: clone(redemption) });
+          onRewardFulfilled({ redemption: clone(redemption), userInitiated: wasUserInitiated });
         }
       }
     } else if (event.type === "redemption_cancel") {
@@ -447,8 +453,9 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
           status: "cancelled",
           confirmed: true,
           cancel_requested: false,
+          sync_error: null,
         });
-        const refund = next.ledger.find((entry) => entry.request_id === `${event.request_id}:refund`);
+        const refund = next.ledger.find((entry) => entry.request_id === event.request_id || entry.request_id === `${event.request_id}:refund`);
         if (refund) Object.assign(refund, { status: "confirmed", redemption_id: redemption.id, sync_error: null });
       }
     }
@@ -480,10 +487,11 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
       if (debit) Object.assign(debit, { status: result.status, sync_error: result.error_code || "rejected" });
     }
     if (event.type === "redemption_fulfill") {
+      sessionFulfillRequests.delete(event.request_id);
       const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
       if (redemption) {
         Object.assign(redemption, {
-          fulfill_requested: result.status === "retryable",
+          fulfill_requested: false,
           sync_error: result.error_code || "rejected",
         });
       }
@@ -492,11 +500,11 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
       const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
       if (redemption) {
         Object.assign(redemption, {
-          cancel_requested: result.status === "retryable",
+          cancel_requested: false,
           sync_error: result.error_code || "rejected",
         });
       }
-      const refund = next.ledger.find((entry) => entry.request_id === `${event.request_id}:refund`);
+      const refund = next.ledger.find((entry) => entry.request_id === event.request_id || entry.request_id === `${event.request_id}:refund`);
       if (refund) Object.assign(refund, {
         status: result.status,
         sync_error: result.error_code || "rejected",

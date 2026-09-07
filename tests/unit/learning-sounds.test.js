@@ -307,6 +307,16 @@ describe("preview and variant selection", () => {
     expect(result.played).toBe(true);
     expect(result.variant).toBe("finish_chord");
   });
+
+  it("throttles rapid repeated previews and does not overlap sounds", () => {
+    const { engine, advance } = makeEngine();
+    expect(engine.preview("action_completed").played).toBe(true);
+    advance(50);
+    expect(engine.preview("action_completed").reason).toBe("throttled");
+    expect(engine.preview("points_earned").reason).toBe("busy");
+    advance(500);
+    expect(engine.preview("points_earned").played).toBe(true);
+  });
 });
 
 describe("web audio rendering", () => {

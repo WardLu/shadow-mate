@@ -185,8 +185,8 @@ const growthLoopController = createGrowthLoopController({
     && window.cloudSync?.canWriteLocalState?.() !== false,
   canTransition: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteScopeTransition?.() !== false,
-  onRewardFulfilled: ({ redemption }) => {
-    if (redemption?.status === "fulfilled") soundEffects.play("reward_fulfilled");
+  onRewardFulfilled: ({ redemption, userInitiated }) => {
+    if (userInitiated && redemption?.status === "fulfilled") soundEffects.play("reward_fulfilled");
   },
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
@@ -1097,8 +1097,8 @@ function renderMath(){
     const v = el("qa").value;
     const f = el("qf");
     if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; soundEffects.play("action_completed"); }
-    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; soundEffects.play("try_again"); }
+    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
+    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
   };
 
   // 数感：数字填写 1-100 找缺失
@@ -1477,20 +1477,24 @@ function renderGrow(){
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
     const status = latest?.status === "pending"
       ? latest.confirmed
-        ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : "待兑现"
-        : "待联网确认"
+        ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : (latest.sync_error ? "同步未成功" : "待兑现")
+        : (latest.sync_error ? "同步未成功" : "待联网确认")
       : latest?.status === "fulfilled" ? "已兑现" : latest?.status === "cancelled" ? "已取消" : "";
     const actionPending = latest?.status === "pending" && (latest.fulfill_requested || latest.cancel_requested);
     const canFulfill = latest?.status === "pending" && latest.confirmed && !actionPending;
     const canCancel = canFulfill;
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
-      <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
+      <div class="reward-info">
+        <strong>${escapeHtml(reward.name)}</strong>
+        <span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span>
+        ${latest?.sync_error ? `<span class="reward-sync-error" style="color:var(--c-danger,#d9534f);font-size:12px;display:block;margin-top:2px;">⚠️ 同步未成功（${escapeHtml(latest.sync_error)}），可重试兑现或取消退款</span>` : ""}
+      </div>
       <span class="pts-badge">${cost}分</span>
       <div class="reward-actions">
         <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost || latest?.status === "pending" ? "disabled" : ""}>${status || "兑换"}</button>
-        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">标记已兑现</button>` : ""}
-        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">取消兑换</button>` : ""}
+        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "标记已兑现"}</button>` : ""}
+        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">${latest.sync_error ? "补偿退款 (取消)" : "取消兑换"}</button>` : ""}
       </div>
     </div>`;
   }).join("");

@@ -519,11 +519,21 @@ export function createSoundEngine({
   function preview(event, { variant = null, force = false } = {}) {
     const def = SOUND_EVENTS[event];
     if (!def) return { played: false, reason: "unknown_event" };
-    if (!force && ttsActive) return { played: false, reason: "tts_active" };
+    if (!force) {
+      if (ttsActive) return { played: false, reason: "tts_active" };
+      const time = now();
+      if (time - lastPlayedAt[event] < REPEAT_THROTTLE_MS) return { played: false, reason: "throttled" };
+      if (time < activeUntil) return { played: false, reason: "busy" };
+    }
     const resolved = resolveRecipe(event, variant);
     if (!resolved) return { played: false, reason: "no_recipe" };
     const duration = render(resolved.recipe, { volume: settings.volume, getAudioContext });
     if (duration === null) return { played: false, reason: "unavailable" };
+    if (!force) {
+      const time = now();
+      lastPlayedAt[event] = time;
+      activeUntil = time + duration + PLAY_GAP_MS;
+    }
     return { played: true, duration, event, variant: resolved.variantKey };
   }
 

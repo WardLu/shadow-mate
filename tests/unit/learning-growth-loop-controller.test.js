@@ -298,6 +298,86 @@ describe("Growth Loop redemption actions", () => {
       expect.objectContaining({ id: "remote-redemption-2", status: "fulfilled", fulfill_requested: false }),
     ]));
   });
+
+  it("passes userInitiated flag to onRewardFulfilled only when initiated in session", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.redemptions = [{ id: "remote-redemption-1", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state);
+
+    const fulfilledEvents = [];
+    const controller = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    await controller.loadScope(scope);
+
+    // 1. User initiated in current session
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-user" });
+    await controller.sync({
+      transport: {
+        send: async () => ({ status: "confirmed", data: { id: "remote-redemption-1", status: "fulfilled" } }),
+      },
+    });
+    expect(fulfilledEvents).toHaveLength(1);
+    expect(fulfilledEvents[0].userInitiated).toBe(true);
+    expect(fulfilledEvents[0].redemption.id).toBe("remote-redemption-1");
+
+    // 2. Background sync / hydration of an existing unfulfilled redemption that is fulfilled remotely
+    const controller2 = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    const state2 = createGrowthLoopState(scope);
+    state2.redemptions = [{ id: "remote-redemption-2", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state2);
+    await controller2.loadScope(scope);
+
+    // Remote sync confirms fulfillment without controller2 having called fulfillRedemption
+    // We simulate remote reconciliation of an outbox event that came from another tab / sync
+    await controller2.sync({
+      transport: {
+        send: async () => ({ status: "confirmed", data: { id: "remote-redemption-2", status: "fulfilled" } }),
+      },
+    });
+    // No outbox event was in controller2, so no onRewardFulfilled was triggered
+    expect(fulfilledEvents).toHaveLength(1);
+  });
+
+  it("resets fulfill_requested and sets sync_error on sync failure allowing retry", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.redemptions = [{ id: "remote-redemption-1", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state);
+
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope(scope);
+
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-1" });
+    expect(controller.getSnapshot().redemptions[0].fulfill_requested).toBe(true);
+
+    // Sync fails with retryable status
+    await controller.sync({
+      transport: {
+        send: async () => ({ status: "retryable", error_code: "network_timeout" }),
+      },
+    });
+
+    // fulfill_requested should be reset to false and sync_error set so retry/cancel is unblocked
+    const afterFail = controller.getSnapshot().redemptions[0];
+    expect(afterFail.fulfill_requested).toBe(false);
+    expect(afterFail.sync_error).toBe("network_timeout");
+
+    // Retry should now succeed locally without error
+    const retryResult = await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-retry" });
+    expect(retryResult.error).toBeUndefined();
+    expect(controller.getSnapshot().redemptions[0].fulfill_requested).toBe(true);
+    expect(controller.getSnapshot().redemptions[0].sync_error).toBeNull();
+  });
 });
 
 describe("Growth Loop controller legacy points import", () => {

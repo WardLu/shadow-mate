@@ -753,6 +753,7 @@ export function applyFulfillRedemption(
   const nextRedemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
   nextRedemption.fulfill_requested = true;
   nextRedemption.fulfill_request_id = request_id;
+  nextRedemption.sync_error = null;
   nextRedemption.updated_at = new Date().toISOString();
   return {
     snapshot,
@@ -773,7 +774,7 @@ export function applyCancelRedemption(
   if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
 
-  const refundRequestId = `${request_id}:refund`;
+  const refundRequestId = request_id;
   const refund = normalizeLedgerEntry({
     id: createId("ledger"),
     household_id: normalizedScope.household_id,
@@ -792,6 +793,7 @@ export function applyCancelRedemption(
   snapshot.ledger.push(refund);
   redemption.cancel_requested = true;
   redemption.cancel_request_id = request_id;
+  redemption.sync_error = null;
   redemption.updated_at = new Date().toISOString();
   return {
     snapshot,
@@ -818,6 +820,12 @@ export function mergeGrowthLoopSnapshot(remote, local) {
     return [...rows.values()];
   };
   const remoteRequests = new Set(remoteSnapshot.ledger.map((entry) => entry.request_id).filter(Boolean));
+  const isCoveredByRemote = (entry) => {
+    if (!entry.request_id) return false;
+    if (remoteRequests.has(entry.request_id)) return true;
+    if (entry.request_id.endsWith(":refund") && remoteRequests.has(entry.request_id.slice(0, -7))) return true;
+    return false;
+  };
   const merged = {
     ...remoteSnapshot,
     point_items: mergeRows(remoteSnapshot.point_items, localSnapshot.point_items),
@@ -834,7 +842,7 @@ export function mergeGrowthLoopSnapshot(remote, local) {
     ),
     ledger: [
       ...remoteSnapshot.ledger,
-      ...localSnapshot.ledger.filter((entry) => !remoteRequests.has(entry.request_id)),
+      ...localSnapshot.ledger.filter((entry) => !isCoveredByRemote(entry)),
     ],
     redemptions: mergeRows(
       remoteSnapshot.redemptions,
