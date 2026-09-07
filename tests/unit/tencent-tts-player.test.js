@@ -17,7 +17,7 @@ function createFakeAudioContext() {
     connect: vi.fn(),
     disconnect: vi.fn(),
   };
-  const presenceNode = {
+  const warmFilterNode = {
     type: "",
     frequency: { setValueAtTime: vi.fn() },
     Q: { setValueAtTime: vi.fn() },
@@ -66,11 +66,11 @@ function createFakeAudioContext() {
       return sourceNode;
     },
     createGain: () => gainNode,
-    createBiquadFilter: () => presenceNode,
+    createBiquadFilter: () => warmFilterNode,
     createWaveShaper: () => waveShaperNode,
     createDynamicsCompressor: makeCompressor,
   };
-  return { ctx, getSource: () => sourceNode, gainNode, presenceNode, waveShaperNode, compressors, fakeBuffer };
+  return { ctx, getSource: () => sourceNode, gainNode, warmFilterNode, waveShaperNode, compressors, fakeBuffer };
 }
 
 describe("published speech player", () => {
@@ -120,7 +120,7 @@ describe("published speech player", () => {
     await expect(player.play(entry.contentId)).rejects.toMatchObject({ code: "published-audio-playback" });
   });
 
-  it("amplifies published speech via Web Audio gain, presence filter and routes through soft-clipper wave shaper", async () => {
+  it("amplifies published speech via Web Audio gain, soft-clipper wave shaper and warm lowpass filter", async () => {
     const fake = createFakeAudioContext();
     const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
       ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
@@ -139,15 +139,14 @@ describe("published speech player", () => {
     expect(source.connect).toHaveBeenCalledWith(fake.compressors[0]);
     expect(fake.compressors[0].threshold.setValueAtTime).toHaveBeenCalledWith(-20.0, fake.ctx.currentTime);
     expect(fake.compressors[0].ratio.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
-    expect(fake.compressors[0].connect).toHaveBeenCalledWith(fake.presenceNode);
-    expect(fake.presenceNode.frequency.setValueAtTime).toHaveBeenCalledWith(3000, fake.ctx.currentTime);
-    expect(fake.presenceNode.gain.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
-    expect(fake.presenceNode.connect).toHaveBeenCalledWith(fake.gainNode);
+    expect(fake.compressors[0].connect).toHaveBeenCalledWith(fake.gainNode);
     expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.5, fake.ctx.currentTime);
     expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.waveShaperNode);
     expect(fake.waveShaperNode.oversample).toBe("2x");
     expect(fake.waveShaperNode.curve).toBeInstanceOf(Float32Array);
-    expect(fake.waveShaperNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
+    expect(fake.waveShaperNode.connect).toHaveBeenCalledWith(fake.warmFilterNode);
+    expect(fake.warmFilterNode.frequency.setValueAtTime).toHaveBeenCalledWith(7500, fake.ctx.currentTime);
+    expect(fake.warmFilterNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
     expect(source.start).toHaveBeenCalledWith(0);
 
     source.onended();
@@ -172,7 +171,8 @@ describe("published speech player", () => {
     expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.compressors[1]);
     expect(fake.compressors[1].threshold.setValueAtTime).toHaveBeenCalledWith(-1.0, fake.ctx.currentTime);
     expect(fake.compressors[1].ratio.setValueAtTime).toHaveBeenCalledWith(4.0, fake.ctx.currentTime);
-    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.ctx.destination);
+    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.warmFilterNode);
+    expect(fake.warmFilterNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
 
     fake.getSource().onended();
     await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });

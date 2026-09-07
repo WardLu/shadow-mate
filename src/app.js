@@ -1929,7 +1929,7 @@ function renderSettings(){
         <span class="sound-label" id="snd-volume-label">${masterLabelText}</span>
         <input class="sound-range" type="range" id="snd-volume" min="0" max="200" step="5" value="${masterVol}" aria-label="总音量" ${settings.enabled?"":"disabled"}>
       </div>
-      <div class="desc">控制点击、打卡、获得积分等界面操作音效（集成 2.8kHz 清晰度增强与动态限幅防爆音，支持最高 200% 超额放大）。</div>
+      <div class="desc">控制点击、打卡、获得积分等界面操作音效。</div>
     </div>
   `));
   const speechVol = Math.round((settings.speechVolume ?? 0.6)*100);
@@ -1944,7 +1944,7 @@ function renderSettings(){
       <div class="sound-event-controls" style="margin-top: 10px;">
         <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
       </div>
-      <div class="desc">控制汉字发音、英文单词和字意朗读的音量（集成广播级人声动态压缩与 3kHz 临场感增强，支持最高 200% 超额放大）。即使关闭界面音效，课程朗读仍可独立使用。</div>
+      <div class="desc">控制汉字发音、英文单词和字意朗读的音量。</div>
     </div>
   `));
   const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);

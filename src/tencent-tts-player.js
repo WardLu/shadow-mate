@@ -7,7 +7,7 @@ export function getSoftClipperCurve() {
   if (!sharedSoftClipperCurve) {
     const n = 4096;
     const curve = new Float32Array(n);
-    const k = 1.5;
+    const k = 1.0;
     const norm = Math.tanh(k);
     for (let i = 0; i < n; i++) {
       const x = (i * 2) / (n - 1) - 1;
@@ -118,10 +118,10 @@ export function createPublishedSpeechPlayer({
       let playbackTimer = null;
       let source = null;
       let preComp = null;
-      let presenceFilter = null;
       let gainNode = null;
       let shaper = null;
       let limiter = null;
+      let warmFilter = null;
 
       const cleanup = () => {
         if (playbackTimer !== null) {
@@ -139,10 +139,6 @@ export function createPublishedSpeechPlayer({
           try { preComp.disconnect(); } catch (_) {}
           preComp = null;
         }
-        if (presenceFilter) {
-          try { presenceFilter.disconnect(); } catch (_) {}
-          presenceFilter = null;
-        }
         if (gainNode) {
           try { gainNode.disconnect(); } catch (_) {}
           gainNode = null;
@@ -154,6 +150,10 @@ export function createPublishedSpeechPlayer({
         if (limiter) {
           try { limiter.disconnect(); } catch (_) {}
           limiter = null;
+        }
+        if (warmFilter) {
+          try { warmFilter.disconnect(); } catch (_) {}
+          warmFilter = null;
         }
       };
 
@@ -191,24 +191,7 @@ export function createPublishedSpeechPlayer({
           chain = preComp;
         }
 
-        // 2. Presence Filter: clarifies 3000 Hz vocal presence on small speakers
-        if (typeof audioContext.createBiquadFilter === "function") {
-          presenceFilter = audioContext.createBiquadFilter();
-          presenceFilter.type = "peaking";
-          if (typeof presenceFilter.frequency?.setValueAtTime === "function") {
-            presenceFilter.frequency.setValueAtTime(3000, audioContext.currentTime ?? 0);
-            presenceFilter.Q.setValueAtTime(1.0, audioContext.currentTime ?? 0);
-            presenceFilter.gain.setValueAtTime(2.5, audioContext.currentTime ?? 0);
-          } else {
-            if (presenceFilter.frequency) presenceFilter.frequency.value = 3000;
-            if (presenceFilter.Q) presenceFilter.Q.value = 1.0;
-            if (presenceFilter.gain) presenceFilter.gain.value = 2.5;
-          }
-          chain.connect(presenceFilter);
-          chain = presenceFilter;
-        }
-
-        // 3. Post-Leveler User Volume Gain with psychoacoustic power scaling (60% baseline = 1.5x)
+        // 2. Post-Leveler User Volume Gain with psychoacoustic power scaling (60% baseline = 1.5x)
         gainNode = audioContext.createGain();
         const targetGain = calculatePerceptualSpeechGain(volume, (gainMultiplier / 2.5) * 1.5, 0.6);
         if (typeof gainNode.gain?.setValueAtTime === "function") {
@@ -219,7 +202,7 @@ export function createPublishedSpeechPlayer({
         chain.connect(gainNode);
         chain = gainNode;
 
-        // 4. Soft-Clipper WaveShaper: prevents DAC clipping while preserving dynamic range and clear loudness growth
+        // 3. Soft-Clipper WaveShaper: prevents DAC clipping while preserving dynamic range and clear loudness growth
         if (typeof audioContext.createWaveShaper === "function") {
           shaper = audioContext.createWaveShaper();
           shaper.curve = getSoftClipperCurve();
@@ -244,6 +227,22 @@ export function createPublishedSpeechPlayer({
           chain.connect(limiter);
           chain = limiter;
         }
+
+        // 4. Warm smoothing filter: gently tames high-frequency sibilance/fizz above 7.5kHz for a natural, round vocal tone
+        if (typeof audioContext.createBiquadFilter === "function") {
+          warmFilter = audioContext.createBiquadFilter();
+          warmFilter.type = "lowpass";
+          if (typeof warmFilter.frequency?.setValueAtTime === "function") {
+            warmFilter.frequency.setValueAtTime(7500, audioContext.currentTime ?? 0);
+            warmFilter.Q.setValueAtTime(0.707, audioContext.currentTime ?? 0);
+          } else {
+            if (warmFilter.frequency) warmFilter.frequency.value = 7500;
+            if (warmFilter.Q) warmFilter.Q.value = 0.707;
+          }
+          chain.connect(warmFilter);
+          chain = warmFilter;
+        }
+
         chain.connect(audioContext.destination);
 
         source.onended = () => finish();

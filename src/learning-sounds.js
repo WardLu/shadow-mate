@@ -229,7 +229,7 @@ export function getSoundClipperCurve() {
   if (!sharedSoundClipperCurve) {
     const n = 4096;
     const curve = new Float32Array(n);
-    const k = 1.5;
+    const k = 1.0;
     const norm = Math.tanh(k);
     for (let i = 0; i < n; i++) {
       const x = (i * 2) / (n - 1) - 1;
@@ -329,24 +329,6 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
     }
 
     let lastNode = master;
-    if (typeof ctx.createBiquadFilter === "function") {
-      try {
-        const presence = ctx.createBiquadFilter();
-        presence.type = "peaking";
-        if (typeof presence.frequency?.setValueAtTime === "function") {
-          presence.frequency.setValueAtTime(2800, ctx.currentTime ?? 0);
-          presence.Q.setValueAtTime(1.0, ctx.currentTime ?? 0);
-          presence.gain.setValueAtTime(2.5, ctx.currentTime ?? 0);
-        } else {
-          if (presence.frequency) presence.frequency.value = 2800;
-          if (presence.Q) presence.Q.value = 1.0;
-          if (presence.gain) presence.gain.value = 2.5;
-        }
-        lastNode.connect(presence);
-        lastNode = presence;
-      } catch (_) {}
-    }
-
     if (typeof ctx.createWaveShaper === "function") {
       try {
         const shaper = ctx.createWaveShaper();
@@ -373,6 +355,22 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
         }
         lastNode.connect(compressor);
         lastNode = compressor;
+      } catch (_) {}
+    }
+
+    if (typeof ctx.createBiquadFilter === "function") {
+      try {
+        const warmFilter = ctx.createBiquadFilter();
+        warmFilter.type = "lowpass";
+        if (typeof warmFilter.frequency?.setValueAtTime === "function") {
+          warmFilter.frequency.setValueAtTime(8000, ctx.currentTime ?? 0);
+          warmFilter.Q.setValueAtTime(0.707, ctx.currentTime ?? 0);
+        } else {
+          if (warmFilter.frequency) warmFilter.frequency.value = 8000;
+          if (warmFilter.Q) warmFilter.Q.value = 0.707;
+        }
+        lastNode.connect(warmFilter);
+        lastNode = warmFilter;
       } catch (_) {}
     }
     lastNode.connect(ctx.destination);
