@@ -222,6 +222,8 @@ export const SOUND_EVENTS = {
   },
 };
 
+export const SOUND_GAIN_MULTIPLIER = 2.5;
+
 export function normalizeSettings(input = {}) {
   const events = {};
   for (const key of SOUND_EVENT_KEYS) {
@@ -237,7 +239,7 @@ export function normalizeSettings(input = {}) {
   return {
     schema_version: 1,
     enabled: input?.enabled !== false,
-    volume: Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 0.6,
+    volume: Number.isFinite(rawVolume) ? Math.max(0, Math.min(2, rawVolume)) : 0.6,
     speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(2, rawSpeechVolume)) : 0.6,
     events,
   };
@@ -284,7 +286,7 @@ function defaultGetAudioContext() {
   return sharedContext;
 }
 
-export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetAudioContext } = {}) {
+export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetAudioContext, gainMultiplier = SOUND_GAIN_MULTIPLIER } = {}) {
   const ctx = getAudioContext();
   if (!ctx) return null;
   try {
@@ -296,26 +298,55 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
       }
     }
     const master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, Number(volume) || 0));
-    master.connect(ctx.destination);
+    const normalizedVol = Math.max(0, Math.min(2, Number(volume) || 0));
+    const targetGain = Math.round(normalizedVol * gainMultiplier * 10000) / 10000;
+    if (typeof master.gain?.setValueAtTime === "function") {
+      master.gain.setValueAtTime(targetGain, ctx.currentTime ?? 0);
+    } else if (master.gain) {
+      master.gain.value = targetGain;
+    }
 
-    let busInput = master;
+    let lastNode = master;
+    if (typeof ctx.createBiquadFilter === "function") {
+      try {
+        const presence = ctx.createBiquadFilter();
+        presence.type = "peaking";
+        if (typeof presence.frequency?.setValueAtTime === "function") {
+          presence.frequency.setValueAtTime(2800, ctx.currentTime ?? 0);
+          presence.Q.setValueAtTime(1.0, ctx.currentTime ?? 0);
+          presence.gain.setValueAtTime(2.5, ctx.currentTime ?? 0);
+        } else {
+          if (presence.frequency) presence.frequency.value = 2800;
+          if (presence.Q) presence.Q.value = 1.0;
+          if (presence.gain) presence.gain.value = 2.5;
+        }
+        lastNode.connect(presence);
+        lastNode = presence;
+      } catch (_) {}
+    }
+
     if (typeof ctx.createDynamicsCompressor === "function") {
       try {
         const compressor = ctx.createDynamicsCompressor();
-        if (compressor && compressor.threshold && typeof compressor.threshold.setValueAtTime === "function") {
-          compressor.threshold.setValueAtTime(-6, ctx.currentTime);
-          compressor.knee.setValueAtTime(6, ctx.currentTime);
-          compressor.ratio.setValueAtTime(6, ctx.currentTime);
-          compressor.attack.setValueAtTime(0.002, ctx.currentTime);
-          compressor.release.setValueAtTime(0.08, ctx.currentTime);
+        if (typeof compressor.threshold?.setValueAtTime === "function") {
+          compressor.threshold.setValueAtTime(-6, ctx.currentTime ?? 0);
+          compressor.knee.setValueAtTime(4, ctx.currentTime ?? 0);
+          compressor.ratio.setValueAtTime(6, ctx.currentTime ?? 0);
+          compressor.attack.setValueAtTime(0.002, ctx.currentTime ?? 0);
+          compressor.release.setValueAtTime(0.08, ctx.currentTime ?? 0);
+        } else {
+          if (compressor.threshold) compressor.threshold.value = -6;
+          if (compressor.knee) compressor.knee.value = 4;
+          if (compressor.ratio) compressor.ratio.value = 6;
+          if (compressor.attack) compressor.attack.value = 0.002;
+          if (compressor.release) compressor.release.value = 0.08;
         }
-        compressor.connect(master);
-        busInput = compressor;
-      } catch (_) {
-        busInput = master;
-      }
+        lastNode.connect(compressor);
+        lastNode = compressor;
+      } catch (_) {}
     }
+    lastNode.connect(ctx.destination);
+    const busInput = master;
     for (const note of recipe.notes || []) {
       const start = ctx.currentTime + (note.t || 0) / 1000;
       const duration = Math.max(0.03, (note.dur || 100) / 1000);
@@ -380,7 +411,7 @@ export function createSoundEngine({
 
   function setVolume(value) {
     const volume = Number(value);
-    settings = { ...settings, volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : settings.volume };
+    settings = { ...settings, volume: Number.isFinite(volume) ? Math.max(0, Math.min(2, volume)) : settings.volume };
     persist();
   }
 

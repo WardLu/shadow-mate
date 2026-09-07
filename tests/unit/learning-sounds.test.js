@@ -6,6 +6,7 @@ import {
   renderRecipe,
   SOUND_EVENT_KEYS,
   SOUND_EVENTS,
+  SOUND_GAIN_MULTIPLIER,
 } from "../../src/learning-sounds.js";
 
 function createFakeAudioContext() {
@@ -138,7 +139,7 @@ describe("settings normalization and persistence", () => {
       events: { action_completed: { enabled: false, variant: "not_a_variant" } },
     });
     expect(normalized.enabled).toBe(true);
-    expect(normalized.volume).toBe(1);
+    expect(normalized.volume).toBe(2);
     expect(normalized.speechVolume).toBe(0.6);
     expect(normalized.events.action_completed.enabled).toBe(false);
     expect(normalized.events.action_completed.variant).toBe("block_click");
@@ -155,6 +156,15 @@ describe("settings normalization and persistence", () => {
     expect(saved.volume).toBe(0.4);
     expect(saved.events.points_earned.enabled).toBe(false);
     expect(saved.events.reward_fulfilled.variant).toBe("chest_open");
+
+    // Allows values up to 2.0 (200% boost) and clamps values out of range
+    engine.setVolume(1.5);
+    expect(engine.getSettings().volume).toBe(1.5);
+    engine.setVolume(2.5);
+    expect(engine.getSettings().volume).toBe(2.0);
+    engine.setVolume(-0.2);
+    expect(engine.getSettings().volume).toBe(0.0);
+    engine.setVolume(0.4);
 
     const reloaded = createSoundEngine({ storage, now: () => 0 }).getSettings();
     expect(reloaded.enabled).toBe(false);
@@ -324,5 +334,63 @@ describe("web audio rendering", () => {
     };
     expect(() => renderRecipe(SOUND_EVENTS.points_earned.variants.star_collect.recipe, { getAudioContext: () => broken })).not.toThrow();
     expect(renderRecipe(SOUND_EVENTS.points_earned.variants.star_collect.recipe, { getAudioContext: () => broken })).toBe(null);
+  });
+
+  it("amplifies master gain proportionally using SOUND_GAIN_MULTIPLIER up to 200%", () => {
+    const gainNodes = [];
+    const ctx = {
+      currentTime: 100,
+      state: "running",
+      destination: { label: "destination" },
+      createGain: () => {
+        const node = {
+          gain: { value: 0, setValueAtTime: vi.fn((val) => { node.gain.value = val; }) },
+          connect: vi.fn(),
+        };
+        gainNodes.push(node);
+        return node;
+      },
+      createBiquadFilter: () => ({
+        type: "peaking",
+        frequency: { value: 0, setValueAtTime: vi.fn() },
+        Q: { value: 0, setValueAtTime: vi.fn() },
+        gain: { value: 0, setValueAtTime: vi.fn() },
+        connect: vi.fn(),
+      }),
+      createDynamicsCompressor: () => ({
+        threshold: { setValueAtTime: vi.fn() },
+        knee: { setValueAtTime: vi.fn() },
+        ratio: { setValueAtTime: vi.fn() },
+        attack: { setValueAtTime: vi.fn() },
+        release: { setValueAtTime: vi.fn() },
+        connect: vi.fn(),
+      }),
+      createOscillator: () => ({
+        type: "sine",
+        frequency: { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }),
+    };
+
+    // 60% default -> 1.5x
+    renderRecipe(SOUND_EVENTS.action_completed.variants.block_click.recipe, {
+      volume: 0.6,
+      getAudioContext: () => ctx,
+    });
+    const master = gainNodes[0];
+    expect(master.gain.setValueAtTime).toHaveBeenCalledWith(0.6 * SOUND_GAIN_MULTIPLIER, ctx.currentTime);
+    expect(master.gain.setValueAtTime).toHaveBeenCalledWith(1.5, ctx.currentTime);
+
+    // 200% excess boost -> 5.0x
+    gainNodes.length = 0;
+    renderRecipe(SOUND_EVENTS.action_completed.variants.block_click.recipe, {
+      volume: 2.0,
+      getAudioContext: () => ctx,
+    });
+    const master2 = gainNodes[0];
+    expect(master2.gain.setValueAtTime).toHaveBeenCalledWith(2.0 * SOUND_GAIN_MULTIPLIER, ctx.currentTime);
+    expect(master2.gain.setValueAtTime).toHaveBeenCalledWith(5.0, ctx.currentTime);
   });
 });

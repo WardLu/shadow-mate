@@ -1916,6 +1916,8 @@ function renderSettings(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("settings","音效与语音设置"));
   const settings = soundEffects.getSettings();
+  const masterVol = Math.round((settings.volume ?? 0.6)*100);
+  const masterLabelText = `总音量 ${masterVol}%${masterVol > 100 ? " (超额增强)" : ""}`;
   main.appendChild($(`
     <div class="card">
       <h3>${icon("volume")} 界面音效总开关与音量</h3>
@@ -1924,9 +1926,10 @@ function renderSettings(){
         <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
       </div>
       <div class="sound-row">
-        <span class="sound-label" id="snd-volume-label">总音量 ${Math.round(settings.volume*100)}%</span>
-        <input class="sound-range" type="range" id="snd-volume" min="0" max="100" step="5" value="${Math.round(settings.volume*100)}" aria-label="总音量">
+        <span class="sound-label" id="snd-volume-label">${masterLabelText}</span>
+        <input class="sound-range" type="range" id="snd-volume" min="0" max="200" step="5" value="${masterVol}" aria-label="总音量" ${settings.enabled?"":"disabled"}>
       </div>
+      <div class="desc">控制点击、打卡、获得积分等界面操作音效（集成 2.8kHz 清晰度增强与动态限幅防爆音，支持最高 200% 超额放大）。</div>
     </div>
   `));
   const speechVol = Math.round((settings.speechVolume ?? 0.6)*100);
@@ -1979,13 +1982,18 @@ function renderSettings(){
     renderSettings();
   };
   el("snd-volume").oninput = (event) => {
-    soundEffects.setVolume(Number(event.target.value) / 100);
+    const val = Number(event.target.value);
+    soundEffects.setVolume(val / 100);
     const label = el("snd-volume-label");
-    if (label) label.textContent = `总音量 ${Math.round(soundEffects.getSettings().volume*100)}%`;
+    if (label) {
+      label.textContent = `总音量 ${val}%${val > 100 ? " (超额增强)" : ""}`;
+    }
   };
   el("snd-volume").onchange = () => {
+    primeSpeechAudio();
     soundEffects.preview("points_earned");
   };
+  el("snd-volume").addEventListener?.("pointerdown", primeSpeechAudio, { passive: true });
   el("speech-volume").oninput = (event) => {
     const val = Number(event.target.value);
     soundEffects.setSpeechVolume(val / 100);

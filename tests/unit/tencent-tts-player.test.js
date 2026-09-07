@@ -25,14 +25,19 @@ function createFakeAudioContext() {
     connect: vi.fn(),
     disconnect: vi.fn(),
   };
-  const limiterNode = {
-    threshold: { setValueAtTime: vi.fn() },
-    knee: { setValueAtTime: vi.fn() },
-    ratio: { setValueAtTime: vi.fn() },
-    attack: { setValueAtTime: vi.fn() },
-    release: { setValueAtTime: vi.fn() },
-    connect: vi.fn(),
-    disconnect: vi.fn(),
+  const compressors = [];
+  const makeCompressor = () => {
+    const node = {
+      threshold: { setValueAtTime: vi.fn() },
+      knee: { setValueAtTime: vi.fn() },
+      ratio: { setValueAtTime: vi.fn() },
+      attack: { setValueAtTime: vi.fn() },
+      release: { setValueAtTime: vi.fn() },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    compressors.push(node);
+    return node;
   };
   const fakeBuffer = { duration: 1.2, numberOfChannels: 1, sampleRate: 16000 };
   const ctx = {
@@ -56,9 +61,9 @@ function createFakeAudioContext() {
     },
     createGain: () => gainNode,
     createBiquadFilter: () => presenceNode,
-    createDynamicsCompressor: () => limiterNode,
+    createDynamicsCompressor: makeCompressor,
   };
-  return { ctx, getSource: () => sourceNode, gainNode, presenceNode, limiterNode, fakeBuffer };
+  return { ctx, getSource: () => sourceNode, gainNode, presenceNode, compressors, fakeBuffer };
 }
 
 describe("published speech player", () => {
@@ -124,15 +129,18 @@ describe("published speech player", () => {
 
     const source = fake.getSource();
     expect(source.buffer).toBe(fake.fakeBuffer);
-    expect(source.connect).toHaveBeenCalledWith(fake.gainNode);
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(3.0, fake.ctx.currentTime);
-    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.presenceNode);
+    expect(source.connect).toHaveBeenCalledWith(fake.compressors[0]);
+    expect(fake.compressors[0].threshold.setValueAtTime).toHaveBeenCalledWith(-20.0, fake.ctx.currentTime);
+    expect(fake.compressors[0].ratio.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
+    expect(fake.compressors[0].connect).toHaveBeenCalledWith(fake.presenceNode);
     expect(fake.presenceNode.frequency.setValueAtTime).toHaveBeenCalledWith(3000, fake.ctx.currentTime);
-    expect(fake.presenceNode.gain.setValueAtTime).toHaveBeenCalledWith(3.5, fake.ctx.currentTime);
-    expect(fake.presenceNode.connect).toHaveBeenCalledWith(fake.limiterNode);
-    expect(fake.limiterNode.threshold.setValueAtTime).toHaveBeenCalledWith(-12.0, fake.ctx.currentTime);
-    expect(fake.limiterNode.ratio.setValueAtTime).toHaveBeenCalledWith(4.0, fake.ctx.currentTime);
-    expect(fake.limiterNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
+    expect(fake.presenceNode.gain.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
+    expect(fake.presenceNode.connect).toHaveBeenCalledWith(fake.gainNode);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.5, fake.ctx.currentTime);
+    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.compressors[1]);
+    expect(fake.compressors[1].threshold.setValueAtTime).toHaveBeenCalledWith(-0.5, fake.ctx.currentTime);
+    expect(fake.compressors[1].ratio.setValueAtTime).toHaveBeenCalledWith(20.0, fake.ctx.currentTime);
+    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.ctx.destination);
     expect(source.start).toHaveBeenCalledWith(0);
 
     source.onended();
@@ -150,19 +158,19 @@ describe("published speech player", () => {
       getAudioContext: () => fake.ctx,
     });
 
-    // 100% volume -> 5.0x
+    // 100% volume -> 2.5x
     const playPromise1 = player.play(entry.contentId, { volume: 1.0 });
     await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
 
     expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.0 * SPEECH_GAIN_MULTIPLIER, fake.ctx.currentTime);
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(5.0, fake.ctx.currentTime);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
     fake.getSource().onended();
     await expect(playPromise1).resolves.toEqual({ status: "played", source: "cdn" });
 
-    // 200% volume -> 10.0x
+    // 200% volume -> 5.0x
     const playPromise2 = player.play(entry.contentId, { volume: 2.0 });
     await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(10.0, fake.ctx.currentTime);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(5.0, fake.ctx.currentTime);
     fake.getSource().onended();
     await expect(playPromise2).resolves.toEqual({ status: "played", source: "cdn" });
   });

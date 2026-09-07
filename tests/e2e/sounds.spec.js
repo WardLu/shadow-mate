@@ -60,7 +60,7 @@ test.describe("Sound effects settings and playback", () => {
     expect(previewed).toEqual(["action_completed", "points_earned", "try_again", "points_deducted", "reward_fulfilled"]);
   });
 
-  test("master switch and volume persist on this device only", async ({ page }) => {
+  test("master switch and volume persist on this device only including excess boost up to 200%", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="settings"]');
     await page.locator("#snd-master").click();
@@ -75,6 +75,15 @@ test.describe("Sound effects settings and playback", () => {
     expect(saved.enabled).toBe(true);
     expect(saved.volume).toBe(0.3);
     await expect(page.locator("#snd-volume-label")).toHaveText("总音量 30%");
+
+    // Test excess boost (>100%)
+    await page.locator("#snd-volume").evaluate((input) => {
+      input.value = "150";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const savedExcess = await storedSettings(page);
+    expect(savedExcess.volume).toBe(1.5);
+    await expect(page.locator("#snd-volume-label")).toHaveText("总音量 150% (超额增强)");
   });
 
   test("speech volume persists independently on this device including excess boost up to 200%", async ({ page }) => {
