@@ -159,17 +159,24 @@ export function createGrowthLoopState(scope = {}) {
 export function normalizeGrowthLoopState(input = {}, scope = input.scope || {}) {
   const base = createGrowthLoopState(scope);
   const source = isRecord(input) ? input : {};
+  const normalizedScope = normalizeScope(source.scope || scope);
+  const isLocalScope = !normalizedScope.household_id;
   return {
     ...base,
     ...clone(source),
     schema_version: GROWTH_LOOP_SCHEMA_VERSION,
-    scope: normalizeScope(source.scope || scope),
+    scope: normalizedScope,
     point_items: Array.isArray(source.point_items) ? source.point_items.map(normalizePointItem) : [],
     profile_point_items: Array.isArray(source.profile_point_items) ? clone(source.profile_point_items) : [],
     rewards: Array.isArray(source.rewards) ? source.rewards.map(normalizeReward) : [],
     profile_rewards: Array.isArray(source.profile_rewards) ? clone(source.profile_rewards) : [],
     ledger: Array.isArray(source.ledger) ? source.ledger.map((entry) => normalizeLedgerEntry(entry, scope)) : [],
-    redemptions: Array.isArray(source.redemptions) ? clone(source.redemptions) : [],
+    redemptions: Array.isArray(source.redemptions)
+      ? clone(source.redemptions).map((redemption) => ({
+          ...redemption,
+          confirmed: isLocalScope ? true : Boolean(redemption.confirmed),
+        }))
+      : [],
     sync: { ...base.sync, ...(isRecord(source.sync) ? clone(source.sync) : {}) },
   };
 }
@@ -751,13 +758,13 @@ export function applyFulfillRedemption(
 ) {
   const snapshot = normalizeGrowthLoopState(current, scope);
   const normalizedScope = normalizeScope(scope);
+  const isLocalScope = !normalizedScope.household_id;
   const redemption = findRedemption(snapshot, redemption_id);
   if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
   if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
-  if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (!isLocalScope && !redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.fulfill_requested) return { snapshot, events: [], error: "redemption_action_pending" };
 
-  const isLocalScope = !normalizedScope.household_id;
   const nextRedemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
   nextRedemption.fulfill_requested = isLocalScope ? false : true;
   nextRedemption.fulfill_request_id = request_id;
@@ -780,13 +787,12 @@ export function applyCancelRedemption(
 ) {
   const snapshot = normalizeGrowthLoopState(current, scope);
   const normalizedScope = normalizeScope(scope);
+  const isLocalScope = !normalizedScope.household_id;
   const redemption = findRedemption(snapshot, redemption_id);
   if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
   if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
-  if (!redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (!isLocalScope && !redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
   if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
-
-  const isLocalScope = !normalizedScope.household_id;
   const refundRequestId = request_id;
   const refund = normalizeLedgerEntry({
     id: createId("ledger"),

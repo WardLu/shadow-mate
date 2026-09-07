@@ -1477,13 +1477,15 @@ function renderGrow(){
     const latest = growthLoopSnapshot.redemptions
       .filter((item) => item.reward_id === reward.id)
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
+    const isLocalMode = !isCloudConnected;
+    const isConfirmed = isLocalMode || Boolean(latest?.confirmed);
     const status = latest?.status === "pending"
-      ? latest.confirmed
+      ? isConfirmed
         ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : (latest.sync_error ? "同步未成功" : "待兑现")
         : (latest.sync_error ? "同步未成功" : "待联网确认")
       : latest?.status === "fulfilled" ? "已兑现" : latest?.status === "cancelled" ? "已取消" : "";
     const actionPending = latest?.status === "pending" && (latest.fulfill_requested || latest.cancel_requested);
-    const canFulfill = latest?.status === "pending" && latest.confirmed && !actionPending;
+    const canFulfill = latest?.status === "pending" && isConfirmed && !actionPending;
     const canCancel = canFulfill;
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
