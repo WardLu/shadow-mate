@@ -43,6 +43,7 @@ import { createGrowthLoopController } from "./learning-growth-loop-controller.js
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
 import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-sounds.js";
+import { praise, flyStars, shake } from "./learning-feedback.js";
 
 inject();
 installRapidActionGuard(document);
@@ -442,7 +443,11 @@ function toggleCheckin(mod){
       recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
     }
   }
-  if (isChecked(mod)) soundEffects.play("action_completed");
+  if (isChecked(mod)) {
+    soundEffects.play("action_completed");
+    praise("太棒了！");
+    flyStars(8);
+  }
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
     { source: "checkin", entry_type: "manual" },
@@ -683,7 +688,7 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
-async function speak(t, button, locale = "en-US", contentId = ""){
+async function speak(t, button, locale = "en-US", contentId = "", options = {}){
   primeSpeechAudio();
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
@@ -699,7 +704,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     }
     stopActivePlayback();
   }
-  const speechRequest = { button, cancelled: false, restore: null };
+  const speechRequest = { button, cancelled: false, restore: null, isPoemSpeech: Boolean(options.isPoemSpeech) };
   activeSpeechRequest = speechRequest;
   const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
   if (button) button.dataset.speechInFlight = "true";
@@ -957,6 +962,20 @@ function renderLearning(){
 /* =========================================================
    渲染：语文
    ========================================================= */
+let currentPoemSpeechId = 0;
+function stopPoemSpeech() {
+  currentPoemSpeechId++;
+  if (activeSpeechRequest?.isPoemSpeech) {
+    const prev = activeSpeechRequest;
+    activeSpeechRequest = null;
+    prev.cancelled = true;
+    prev.restore?.();
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+    stopActivePlayback();
+  }
+  document.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+}
+
 function renderChinese(){
   const di = dayIndex();
   const main = el("main"); main.innerHTML="";
@@ -984,18 +1003,80 @@ function renderChinese(){
 
   // 古诗词
   const p = POEMS[di%POEMS.length];
+  const linesHtml = p.c.map((line, idx) => `
+    <div class="poem-line" role="button" tabindex="0" data-poem-line="${idx}" aria-label="点读第 ${idx + 1} 句：${escapeHtml(line)}">
+      <span class="poem-line-text">${escapeHtml(line)}</span>
+      <span class="poem-line-icon" aria-hidden="true">${icon("volume")}</span>
+    </div>
+  `).join("");
+
   const card2 = $(`
-    <div class="card">
-      <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${p.g}</span></h3>
-      <div class="poem-title">《${p.t}》</div>
-      <div class="poem-meta">${p.a} · 人教版</div>
-      <div class="poem-body">${p.c.join("<br>")}</div>
-      <div class="text-center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">${icon("play")} 跟读视频</a></div>
-      <div class="spacer-12"></div>
+    <div class="card poem-box">
+      <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${escapeHtml(p.g)}</span></h3>
+      <div class="poem-title">《${escapeHtml(p.t)}》</div>
+      <div class="poem-meta">${escapeHtml(p.a)} · 人教版</div>
+      <div class="poem-lines" role="region" aria-label="古诗诗句">${linesHtml}</div>
+      <div class="poem-controls">
+        <button class="checkin poem-read-all" type="button">${icon("volume")} 朗读整首</button>
+        <a class="video-link poem-video" href="${bilibili(p.t+" 朗诵")}" target="_blank" rel="noopener noreferrer">${icon("play")} 跟读视频</a>
+      </div>
+      <div class="desc text-center mt-8">小提示：点击任意一句，可单独朗读该句</div>
+      <div class="spacer-10"></div>
       ${checkinBtn("chinese-poem","古诗")}
     </div>
   `);
   main.appendChild(card2);
+
+  card2.querySelectorAll(".poem-line").forEach((lineEl) => {
+    const idx = Number(lineEl.dataset.poemLine);
+    const lineText = p.c[idx];
+    lineEl.onclick = async () => {
+      stopPoemSpeech();
+      card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+      lineEl.classList.add("hi");
+      const clean = lineText.replace(/[，。！？、；：]/g, "");
+      try {
+        await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+      } catch (_) {}
+    };
+  });
+
+  const readAllBtn = card2.querySelector(".poem-read-all");
+  if (readAllBtn) {
+    readAllBtn.onclick = async () => {
+      stopPoemSpeech();
+      const thisSeqId = ++currentPoemSpeechId;
+      readAllBtn.disabled = true;
+      readAllBtn.setAttribute("aria-busy", "true");
+
+      try {
+        await speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+        if (currentPoemSpeechId !== thisSeqId) return;
+
+        for (let i = 0; i < p.c.length; i++) {
+          if (currentPoemSpeechId !== thisSeqId) return;
+          const lineEl = card2.querySelector(`[data-poem-line="${i}"]`);
+          card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+          if (lineEl) lineEl.classList.add("hi");
+
+          const clean = p.c[i].replace(/[，。！？、；：]/g, "");
+          await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+          if (currentPoemSpeechId !== thisSeqId) return;
+        }
+
+        card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+        soundEffects.play("points_earned");
+        praise("念得真好！");
+        flyStars(8);
+      } catch (_) {
+      } finally {
+        if (currentPoemSpeechId === thisSeqId) {
+          readAllBtn.disabled = false;
+          readAllBtn.removeAttribute("aria-busy");
+        }
+      }
+    };
+  }
 
   // 写字打卡
   const worksheet = resolveWritingWorksheet();
@@ -1069,6 +1150,14 @@ function genQuiz(){
   if(op==="+"){ mathAns=a+b; return `${a} ${op} ${b} = ?`; }
   else { const big=Math.max(a,b), small=Math.min(a,b); mathAns=big-small; return `${big} ${op} ${small} = ?`; }
 }
+function mathSpeechText(q) {
+  const match = String(q).match(/^(\d+)\s*([+\-−])\s*(\d+)/);
+  if (!match) return q.replace("=", "等于几").replace("?", "");
+  const a = match[1];
+  const op = (match[2] === "+" ? "加" : "减");
+  const b = match[3];
+  return `${a} ${op} ${b} 等于几？`;
+}
 function renderMath(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("calculator","数学与数感"));
@@ -1082,7 +1171,10 @@ function renderMath(){
       <h3>${icon("calculator")} 口算打卡 <span class="pill">10/20/50/100 以内加减</span></h3>
       <div class="lvl-row">${lvlHtml}</div>
       <div class="quiz-box">
-        <div class="quiz-q" id="qq">${q}</div>
+        <div class="quiz-q-row">
+          <div class="quiz-q" id="qq">${q}</div>
+          <button class="btn-read-q" type="button" aria-label="朗读题目">${icon("volume")} 读题目</button>
+        </div>
         <input class="quiz-input" id="qa" type="number" inputmode="numeric" aria-labelledby="qq" placeholder="?">
         <div class="feedback" id="qf"></div>
       </div>
@@ -1093,12 +1185,34 @@ function renderMath(){
   `);
   main.appendChild(card1);
   card1.querySelectorAll("[data-lvl]").forEach(b=>b.onclick=()=>{ mathLevel=+b.dataset.lvl; renderMath(); });
+  const readQBtn = card1.querySelector(".btn-read-q");
+  if (readQBtn) {
+    readQBtn.onclick = () => {
+      speak(mathSpeechText(q), readQBtn, "zh-CN");
+    };
+  }
   el("qsubmit").onclick=()=>{
-    const v = el("qa").value;
+    const qa = el("qa");
+    const v = qa.value;
     const f = el("qf");
-    if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
-    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
+    if(v===""){
+      f.textContent="请先写出答案哦";
+      f.className="feedback no";
+      shake(qa);
+      return;
+    }
+    if(+v===mathAns){
+      f.innerHTML=`${icon("party")} 答对啦，真棒！`;
+      f.className="feedback ok";
+      soundEffects.play("points_earned");
+      praise("答对啦！");
+      flyStars(6);
+    } else {
+      f.textContent=`再想想～正确答案是 ${mathAns}`;
+      f.className="feedback no";
+      soundEffects.play("try_again");
+      shake(qa);
+    }
   };
 
   // 数感：数字填写 1-100 找缺失
@@ -1116,14 +1230,57 @@ function renderMath(){
   const card2 = $(`
     <div class="card">
       <h3>${icon("brain")} 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
-      <div class="desc">点击问号格，说出它应该是哪个数字（按 1 递增顺序）。</div>
+      <div class="desc">点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</div>
       <div class="num-grid">${cells}</div>
+      <div class="math-pad" id="mathPad" style="display:none;"></div>
       <div class="feedback text-center" id="nf"></div>
     </div>
   `);
   main.appendChild(card2);
   const missCell = card2.querySelector(".num-cell.miss");
-  missCell.onclick=()=>{ const nf=el("nf"); const ans=prompt("这个格子应该是数字几？"); if(ans!==null){ if(+ans===miss){ nf.innerHTML=`${icon("checkCircle")} 正确！数列规律是每次 +1`; nf.className="feedback ok"; missCell.classList.add("found"); missCell.innerHTML=`${icon("check")} ${miss}`; missCell.setAttribute("aria-label", `缺失数字为 ${miss}`); missCell.disabled=true; } else { nf.textContent=`不对哦，看看前后数字～`; nf.className="feedback no"; } } };
+  const mathPad = card2.querySelector("#mathPad");
+  const nf = card2.querySelector("#nf");
+
+  if (missCell && mathPad && nf) {
+    const candidates = [];
+    const startOpt = Math.max(1, miss - 2);
+    for (let opt = startOpt; opt < startOpt + 5; opt++) {
+      candidates.push(opt);
+    }
+
+    missCell.onclick = () => {
+      if (missCell.disabled) return;
+      mathPad.style.display = "flex";
+      mathPad.innerHTML = `
+        <div class="math-pad-title">请选择缺失的数字：</div>
+        <div class="math-pad-options">
+          ${candidates.map((num) => `<button class="math-pad-btn" type="button" data-val="${num}">${num}</button>`).join("")}
+        </div>
+      `;
+      mathPad.querySelectorAll(".math-pad-btn").forEach((btn) => {
+        btn.onclick = () => {
+          const val = Number(btn.dataset.val);
+          if (val === miss) {
+            nf.innerHTML = `${icon("checkCircle")} 正确！缺失数字是 ${miss}，数列按 1 递增`;
+            nf.className = "feedback ok";
+            missCell.classList.add("found");
+            missCell.innerHTML = `${icon("check")} ${miss}`;
+            missCell.setAttribute("aria-label", `缺失数字为 ${miss}`);
+            missCell.disabled = true;
+            mathPad.style.display = "none";
+            soundEffects.play("points_earned");
+            praise("太棒了！");
+            flyStars(8);
+          } else {
+            nf.textContent = "不对哦，看看前后数字～";
+            nf.className = "feedback no";
+            soundEffects.play("try_again");
+            shake(btn);
+          }
+        };
+      });
+    };
+  }
 
   // 数独 4x4
   const card3 = $(`
@@ -2128,6 +2285,7 @@ function checkinBtn(mod,label){
 function switchMod(mod){
   CURRENT_MOD = mod;
   removeWritingPrintRoot();
+  stopPoemSpeech();
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
     b.classList.toggle("active", active);
