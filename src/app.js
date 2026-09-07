@@ -735,6 +735,12 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
   }
+  const isContainer = Boolean(
+    button?.classList.contains("speech-tap") ||
+    button?.classList.contains("mini-card") ||
+    button?.dataset.speechTap !== undefined ||
+    (button && button.firstElementChild && !button.matches(".btn, .speak-btn, .checkin, .btn-read-prompt, .btn-read-q"))
+  );
   let shouldRestoreButtonFocus = false;
   const restoreButtonFocus = () => {
     if (!button || !shouldRestoreButtonFocus) return;
@@ -748,16 +754,25 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     clearSystemTimer();
     if (button) {
-      button.innerHTML = buttonContent("volume", originalLabel);
-      button.setAttribute("aria-label", originalAriaLabel);
-      if (originalTitle) button.title = originalTitle;
-      else button.removeAttribute("title");
-      button.disabled = false;
-      button.removeAttribute("aria-busy");
-      button.removeAttribute("data-speech-failure");
-      button.removeAttribute("data-published-speech-error");
-      button.removeAttribute("data-speech-in-flight");
-      restoreButtonFocus();
+      if (isContainer) {
+        button.classList.remove("speech-playing");
+        button.removeAttribute("aria-busy");
+        button.removeAttribute("data-speech-failure");
+        button.removeAttribute("data-published-speech-error");
+        button.removeAttribute("data-speech-in-flight");
+        restoreButtonFocus();
+      } else {
+        button.innerHTML = buttonContent("volume", originalLabel);
+        button.setAttribute("aria-label", originalAriaLabel);
+        if (originalTitle) button.title = originalTitle;
+        else button.removeAttribute("title");
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.removeAttribute("data-speech-failure");
+        button.removeAttribute("data-published-speech-error");
+        button.removeAttribute("data-speech-in-flight");
+        restoreButtonFocus();
+      }
     }
     if (activeSpeechRequest === speechRequest) {
       activeSpeechRequest = null;
@@ -769,10 +784,18 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
-    button.innerHTML = buttonContent("alert", message);
-    button.setAttribute("aria-label", message);
-    button.title = message;
-    button.dataset.speechFailure = "true";
+    if (isContainer) {
+      button.classList.remove("speech-playing");
+      button.removeAttribute("aria-busy");
+      button.dataset.speechFailure = "true";
+      button.title = message;
+      shake(button, { durationMs: 400 });
+    } else {
+      button.innerHTML = buttonContent("alert", message);
+      button.setAttribute("aria-label", message);
+      button.title = message;
+      button.dataset.speechFailure = "true";
+    }
     if (button.isConnected) recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
@@ -787,6 +810,12 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
   const setBusy = (label = "播放中…") => {
     if (!button) return;
     if (document.activeElement === button) shouldRestoreButtonFocus = true;
+    if (isContainer) {
+      button.classList.add("speech-playing");
+      button.setAttribute("aria-busy", "true");
+      button.removeAttribute("data-speech-failure");
+      return;
+    }
     button.dataset.label = originalLabel;
     button.innerHTML = buttonContent("volume", label);
     button.setAttribute("aria-label", originalAriaLabel);
@@ -1175,12 +1204,20 @@ function renderChinese(){
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
     button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
-    button.onclick = () => speak(
-      button.dataset.speechText || "",
-      button,
-      button.dataset.speechLocale || "en-US",
-      button.dataset.speechContentId || "",
-    );
+    button.onclick = () => {
+      const meaningRow = button.hasAttribute("data-hanzi-meaning-speak")
+        ? button.closest(".writing-row, [data-writing-row], .hanzi-learning-card")?.querySelector("[data-hanzi-meaning-row]")
+        : null;
+      if (meaningRow) meaningRow.classList.add("speech-playing");
+      return speak(
+        button.dataset.speechText || "",
+        button,
+        button.dataset.speechLocale || "en-US",
+        button.dataset.speechContentId || "",
+      ).finally(() => {
+        if (meaningRow) meaningRow.classList.remove("speech-playing");
+      });
+    };
   });
   card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-speech-tap]").forEach((el) => {
     el.setAttribute("aria-live", "polite");
@@ -1188,9 +1225,17 @@ function renderChinese(){
     el.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     const playSpeechTap = () => {
       stopPoemSpeech();
+      if (el.hasAttribute("data-hanzi-meaning-row")) {
+        const card = el.closest(".writing-row, [data-writing-row], .hanzi-learning-card");
+        const meaningBtn = card?.querySelector("[data-hanzi-meaning-speak]");
+        if (meaningBtn) {
+          meaningBtn.click();
+          return;
+        }
+      }
       const rawText = el.dataset.speechText || el.textContent || "";
       const textToSpeak = cleanSpeechText(rawText);
-      if (textToSpeak) speak(textToSpeak, null, "zh-CN");
+      if (textToSpeak) speak(textToSpeak, el, "zh-CN");
     };
     el.onclick = playSpeechTap;
     el.onkeydown = (e) => {
@@ -1773,8 +1818,8 @@ function renderGrow(){
       </div>
       <span class="pts-badge">${cost}分</span>
       <div class="reward-actions">
-        <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost || latest?.status === "pending" ? "disabled" : ""}>${status || "兑换"}</button>
-        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "标记已兑现"}</button>` : ""}
+        ${latest?.status !== "pending" ? `<button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${latest?.status === "fulfilled" && balance >= cost ? "再次兑换" : (status || "兑换")}</button>` : ""}
+        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "确认兑现"}</button>` : ""}
         ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}">${latest.sync_error ? "补偿退款 (取消)" : (latest.status === "fulfilled" ? "撤销兑换" : "取消兑换")}</button>` : ""}
       </div>
     </div>`;
@@ -1855,8 +1900,6 @@ function renderGrow(){
       }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
-      praise("奖励已兑现！🎉");
-      flyStars(10);
     };
   });
   rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
@@ -1904,7 +1947,22 @@ function renderGrow(){
         ? `<ul class="growth-history-list">
              ${historyEntries.map((entry) => {
                const dateLabel = escapeHtml(entry.occurred_on || "");
-               const nameLabel = escapeHtml(entry.item_name_snapshot || "积分调整");
+               const isUndo = Boolean(
+                 entry.metadata?.undo_of ||
+                 entry.entry_type === "adjustment" ||
+                 (typeof entry.note === "string" && entry.note.includes("撤销"))
+               );
+               const isRefund = Boolean(
+                 entry.entry_type === "refund" ||
+                 entry.metadata?.cancel_of
+               );
+               let rawName = entry.item_name_snapshot || "积分调整";
+               if (isUndo) {
+                 rawName = `${rawName}（撤销）`;
+               } else if (isRefund) {
+                 rawName = `${rawName}（兑换取消）`;
+               }
+               const nameLabel = escapeHtml(rawName);
                const entryClass = entry.entry_type === "redemption" ? "neg" : entry.delta > 0 ? "pos" : "neg";
                return `<li><span class="date">${dateLabel}</span><span class="name">${nameLabel}</span><span class="pts ${entryClass}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></li>`;
              }).join("")}
@@ -2358,8 +2416,35 @@ function renderGuide(){
         </div>
       </section>
 
+      <section class="guide-card" data-guide-section="speech-features">
+        <div class="guide-section-heading"><span>02</span><div><h3>儿童全场景点读与自主学习</h3><p>让孩子无需家长一直陪读，点到哪里读到哪里。</p></div></div>
+        <div class="guide-steps">
+          <article class="guide-step"><span class="guide-step-no">文</span><div><h4>语文识字、古诗与写字</h4><p>点击生字卡片即听拼读组词；点击古诗任意行或标题听诵读；写字练习中点击字意、词语、例句与笔顺口诀均支持纯净发音辅导。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">数</span><div><h4>数学题目与游戏规则</h4><p>加减习题点击“读题目”；数感星球点“读要求”；数独入门点“读规则”，语音自动播报通俗易懂的儿童规则。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">英</span><div><h4>英语拼读与往期回顾</h4><p>今日核心词支持中英文发音引导；往期回顾直接点击单词标签即可听美式标准发音，温故而知新。</p></div></article>
+        </div>
+      </section>
+
+      <section class="guide-card" data-guide-section="growth-loop">
+        <div class="guide-section-heading"><span>03</span><div><h3>习惯积分与心愿兑换成长闭环</h3><p>把好习惯变成动力，建立看得见、守信用的家庭激励约定。</p></div></div>
+        <div class="guide-facts">
+          <div><strong>习惯打卡</strong><span>鼓励做家务、认真学习等好习惯；误操作可再次点击撤销，明细中清晰显示“（撤销）”。</span></div>
+          <div><strong>自主兑换</strong><span>孩子用攒下的积分挑选心愿奖励，发起兑换后进入“待兑现”状态。</span></div>
+          <div><strong>确认兑现</strong><span>家长在现实生活中履约后，点击「确认兑现」完成激励闭环；若有变化可点击「取消兑换」退回积分。</span></div>
+        </div>
+      </section>
+
+      <section class="guide-card" data-guide-section="sound-settings">
+        <div class="guide-section-heading"><span>04</span><div><h3>音效与语音独立调节</h3><p>界面交互星星动效与课程朗读音量分轨调节，适应不同家庭环境。</p></div></div>
+        <div class="guide-facts">
+          <div><strong>界面音效</strong><span>打卡成功、连胜与获得积分时的星星音效，可开启/关闭并自由调节总音量。</span></div>
+          <div><strong>朗读音量</strong><span>专门调节课程朗读、古诗跟读与题目规则的音量大小，支持即时点击试听。</span></div>
+          <div><strong>本机记忆</strong><span>声音与音量设置保存在当前设备，切换设备时不会互相干扰。</span></div>
+        </div>
+      </section>
+
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音与共享语音</h3><p>影伴优先播放发布前生成的共享 AI 语音；共享音频不可用时才尝试同语言系统语音。不会上传录音。</p></div></div>
+        <div class="guide-section-heading"><span>05</span><div><h3>发音来源与备用系统语音</h3><p>影伴优先播放经过专业调优的高质量预录音频；离线时自动尝试同语言系统语音。绝不上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
@@ -2372,12 +2457,12 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="sync">
-        <div class="guide-section-heading"><span>03</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
+        <div class="guide-section-heading"><span>06</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
         <div class="guide-facts"><div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div><div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div><div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div></div>
       </section>
 
       <section class="guide-card" data-guide-section="install">
-        <div class="guide-section-heading"><span>04</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
+        <div class="guide-section-heading"><span>07</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
         <div class="guide-install-grid"><div><strong>iPhone / iPad</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div><div><strong>Android</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕。</span></div><div><strong>电脑</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div></div>
       </section>
 

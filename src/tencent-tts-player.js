@@ -18,7 +18,7 @@ export function getSoftClipperCurve() {
   return sharedSoftClipperCurve;
 }
 
-export function calculatePerceptualSpeechGain(volume, baselineGain = 1.5, baselineVol = 0.6) {
+export function calculatePerceptualSpeechGain(volume, baselineGain = 1.0, baselineVol = 0.6) {
   const normalizedVol = Math.max(0, Math.min(2, typeof volume === "number" && !Number.isNaN(volume) ? volume : baselineVol));
   if (normalizedVol <= 0) return 0;
   const rawGain = Math.pow(normalizedVol / baselineVol, 1.35) * baselineGain;
@@ -193,7 +193,7 @@ export function createPublishedSpeechPlayer({
 
         // 2. Post-Leveler User Volume Gain with psychoacoustic power scaling (60% baseline = 1.5x)
         gainNode = audioContext.createGain();
-        const targetGain = calculatePerceptualSpeechGain(volume, (gainMultiplier / 2.5) * 1.5, 0.6);
+        const targetGain = calculatePerceptualSpeechGain(volume, (gainMultiplier / 2.5) * 1.0, 0.6);
         if (typeof gainNode.gain?.setValueAtTime === "function") {
           gainNode.gain.setValueAtTime(targetGain, audioContext.currentTime ?? 0);
         } else if (gainNode.gain) {

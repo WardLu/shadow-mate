@@ -140,7 +140,7 @@ describe("published speech player", () => {
     expect(fake.compressors[0].threshold.setValueAtTime).toHaveBeenCalledWith(-20.0, fake.ctx.currentTime);
     expect(fake.compressors[0].ratio.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
     expect(fake.compressors[0].connect).toHaveBeenCalledWith(fake.gainNode);
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.5, fake.ctx.currentTime);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.0, fake.ctx.currentTime);
     expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.waveShaperNode);
     expect(fake.waveShaperNode.oversample).toBe("2x");
     expect(fake.waveShaperNode.curve).toBeInstanceOf(Float32Array);

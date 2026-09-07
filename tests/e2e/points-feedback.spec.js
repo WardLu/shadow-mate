@@ -25,10 +25,17 @@ test.describe("Points and reward redemption feedback animations", () => {
       const subToggle = subCard.first().locator(".pts-toggle");
       await subToggle.click();
       await expect(page.locator(".card-shake").first()).toBeAttached();
+
+      // Undo the deduction
+      await subToggle.click();
+      await page.click('[data-mod="grow"]');
+      const historyList = page.locator(".growth-history-list");
+      await expect(historyList).toBeVisible();
+      await expect(historyList).toContainText("（撤销）");
     }
   });
 
-  test("shows celebration praise and stars when redeeming a reward", async ({ page }) => {
+  test("shows celebration praise and stars when redeeming a reward, streamlined 确认兑现 button", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
 
@@ -57,5 +64,18 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     const stars = page.locator(".fxstar");
     expect(await stars.count()).toBeGreaterThanOrEqual(1);
+
+    // Verify the redundant disabled "待兑现" button is NOT displayed
+    await expect(page.locator('.reward-card button:has-text("待兑现")')).toHaveCount(0);
+
+    // Verify "确认兑现" and "取消兑换" are present
+    const fulfillBtn = page.locator('.reward-card .reward-fulfill').first();
+    await expect(fulfillBtn).toBeVisible();
+    await expect(fulfillBtn).toHaveText("确认兑现");
+    await expect(page.locator('.reward-card .reward-cancel').first()).toHaveText("取消兑换");
+
+    // Click 确认兑现 and verify fulfillment praise
+    await fulfillBtn.click();
+    await expect(page.locator(".big-praise").filter({ hasText: "奖励已兑现" })).toBeVisible();
   });
 });

@@ -128,12 +128,24 @@
   .hanzi-visual.speech-tap:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.06);}
   .hanzi-example-word.speech-tap{cursor:pointer;transition:all .15s ease;display:inline-block;}
   .hanzi-example-word.speech-tap:hover{background:var(--yellow-soft, #fff6dc);border-color:#f6d289;transform:translateY(-1px);}
+  .hanzi-meaning.speech-tap{cursor:pointer;border-radius:8px;padding:2px 6px;transition:background-color .15s ease;}
+  .hanzi-meaning.speech-tap:hover{background:rgba(42,166,80,0.08);}
   .hanzi-sentence.speech-tap{cursor:pointer;border-radius:8px;padding:2px 6px;transition:background-color .15s ease;}
   .hanzi-sentence.speech-tap:hover{background:rgba(42,166,80,0.08);}
   .hanzi-writing-hint.speech-tap{cursor:pointer;transition:filter .15s ease;}
   .hanzi-writing-hint.speech-tap:hover{filter:brightness(0.96);}
   .mr-chip.speech-tap{cursor:pointer;transition:all .15s ease;}
   .mr-chip.speech-tap:hover{background:var(--green-soft);border-color:var(--green);transform:translateY(-1px);}
+
+  /* 点读播放中微光呼吸动效（保持原有容器盒模型不变） */
+  .speech-playing {
+    box-shadow: 0 0 0 2px var(--green, #2aa650), 0 6px 18px rgba(42, 166, 80, 0.32) !important;
+    animation: speech-pulse 1.3s ease-in-out infinite;
+  }
+  @keyframes speech-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+  }
 
   /* 打卡按钮 */
   .checkin{

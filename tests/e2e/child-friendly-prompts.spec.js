@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 async function installSpeechMocks(page) {
+  await page.route("**/*manifest.json*", (route) => route.fulfill({ status: 503, body: "fallback" }));
   await page.addInitScript(() => {
     window.__speechUtterances = [];
     Object.defineProperty(window, "speechSynthesis", {
@@ -45,11 +46,19 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     // 1. Click today's new character card
     const miniCard = page.locator('[data-hanzi-mini="0"]');
     await expect(miniCard).toBeVisible();
+    await expect(miniCard.locator(".big")).toBeVisible();
+    await expect(miniCard.locator(".py")).toBeVisible();
+    await expect(miniCard.locator(".label")).toBeVisible();
     await miniCard.click();
 
     await expect.poll(async () => {
       return await page.evaluate(() => window.__speechUtterances.map((u) => u.text));
     }).toHaveLength(1);
+
+    // Verify card layout is preserved and not overwritten with plain text or button markup
+    await expect(miniCard.locator(".big")).toBeVisible();
+    await expect(miniCard.locator(".py")).toBeVisible();
+    await expect(miniCard.locator(".label")).toBeVisible();
 
     // 2. Click poem title
     const poemTitle = page.locator(".poem-title");
@@ -96,6 +105,12 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await expect(hint).toBeVisible();
     await hint.click();
     await expect.poll(async () => page.evaluate(() => window.__speechUtterances.length)).toBe(4);
+
+    // Meaning row tap
+    const meaning = worksheet.locator('.hanzi-meaning[data-hanzi-meaning-row]').first();
+    await expect(meaning).toBeVisible();
+    await meaning.click();
+    await expect.poll(async () => page.evaluate(() => window.__speechUtterances.length)).toBe(5);
   });
 
   test("provides read prompt buttons in math (number sense and sudoku)", async ({ page }) => {
@@ -152,5 +167,15 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await expect.poll(async () => {
       return (await page.evaluate(() => window.__speechUtterances.length));
     }).toBe(2);
+  });
+
+  test("renders updated guide page with speech, growth loop and sound sections", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="guide"]');
+
+    await expect(page.locator('[data-guide-section="speech-features"]')).toBeVisible();
+    await expect(page.locator('[data-guide-section="growth-loop"]')).toBeVisible();
+    await expect(page.locator('[data-guide-section="sound-settings"]')).toBeVisible();
+    await expect(page.locator(".guide-page")).toContainText("确认兑现");
   });
 });

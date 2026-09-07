@@ -176,6 +176,10 @@ function renderRow(row, { includeSpeech = false, print = false } = {}) {
   const hintSpeech = includeSpeech
     ? ` data-speech-tap data-speech-text="${text(row?.writing?.hint)}" role="button" tabindex="0" aria-label="点读书写口诀：${text(row?.writing?.hint)}"`
     : "";
+  const characterMeaning = row?.concept?.characterMeaning || row?.concept?.visual?.alt || row?.concept?.label || "";
+  const meaningSpeech = includeSpeech
+    ? ` data-hanzi-meaning-row data-speech-tap data-speech-text="${text(characterMeaning)}" role="button" tabindex="0" aria-label="朗读字意：${text(characterMeaning)}"`
+    : "";
   return `<article class="writing-row hanzi-learning-card${print ? " hanzi-learning-card-print" : ""}" data-hanzi-learning-card data-writing-row data-writing-row-id="${text(row?.rowId)}" data-writing-item-id="${text(row?.itemId)}">
     <div class="hanzi-learning-visual">${renderVisual(row, { interactive: includeSpeech })}</div>
     <div class="hanzi-learning-word">
@@ -187,7 +191,7 @@ function renderRow(row, { includeSpeech = false, print = false } = {}) {
       <span class="hanzi-target-pinyin" data-hanzi-pinyin data-writing-pinyin>${text(row?.pinyin)}</span>
       ${includeSpeech ? renderSpeechButtons(row) : ""}
     </div>
-    <div class="hanzi-meaning" data-hanzi-meaning><span class="hanzi-meaning-label">字意：</span><span class="hanzi-meaning-text" data-hanzi-meaning-text>${text(row?.concept?.characterMeaning || row?.concept?.visual?.alt || row?.concept?.label)}</span></div>
+    <div class="hanzi-meaning${includeSpeech ? " speech-tap" : ""}" data-hanzi-meaning${meaningSpeech}><span class="hanzi-meaning-label">字意：</span><span class="hanzi-meaning-text" data-hanzi-meaning-text>${text(characterMeaning)}</span></div>
     <p class="hanzi-sentence${includeSpeech ? " speech-tap" : ""}" data-hanzi-sentence${sentenceSpeech}>例句：${text(row?.sentence)}</p>
     <div class="hanzi-writing-meta" data-hanzi-writing-meta>
       <span data-hanzi-stroke-count>${text(row?.writing?.strokeCount)} 画</span>
