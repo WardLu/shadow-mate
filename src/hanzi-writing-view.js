@@ -63,10 +63,14 @@ function renderHighlightedText(value, glyph) {
   return fragments.join("");
 }
 
-function renderVisual(row) {
+function renderVisual(row, { interactive = false } = {}) {
   const visual = row?.concept?.visual || {};
   const alt = visual.alt ?? "";
-  return `<div class="hanzi-visual" data-hanzi-visual data-hanzi-visual-kind="${text(visual.kind)}" data-hanzi-visual-alt="${text(alt)}" role="img" aria-label="${text(alt)}">
+  const label = row?.concept?.label ?? "";
+  const tapAttr = interactive
+    ? ` data-speech-tap data-speech-text="${text(`${label}，${alt}`)}" role="button" tabindex="0"`
+    : ` role="img"`;
+  return `<div class="hanzi-visual${interactive ? " speech-tap" : ""}" data-hanzi-visual data-hanzi-visual-kind="${text(visual.kind)}" data-hanzi-visual-alt="${text(alt)}"${tapAttr} aria-label="${text(alt)}">
     <span class="hanzi-visual-value">${text(visual.value)}</span>
     <span class="hanzi-concept-label" data-hanzi-concept-label>${text(row?.concept?.label)}</span>
     <span class="hanzi-english-label" data-hanzi-english-label>${text(row?.concept?.englishLabel)}</span>
@@ -74,12 +78,17 @@ function renderVisual(row) {
   </div>`;
 }
 
-function renderExampleWords(row) {
+function renderExampleWords(row, { interactive = false } = {}) {
   const words = Array.isArray(row?.exampleWords) && row.exampleWords.length > 0
     ? row.exampleWords
     : [row?.exampleWord];
 
-  return words.map((word, index) => `<span class="hanzi-example-word" data-hanzi-example-word data-writing-example-word data-hanzi-example-word-index="${index}">${renderHighlightedText(word, row?.glyph)}</span>`).join("");
+  return words.map((word, index) => {
+    const tapAttr = interactive
+      ? ` data-speech-tap data-speech-text="${text(word)}" role="button" tabindex="0" aria-label="点读词语：${text(word)}"`
+      : "";
+    return `<span class="hanzi-example-word${interactive ? " speech-tap" : ""}" data-hanzi-example-word data-writing-example-word data-hanzi-example-word-index="${index}"${tapAttr}>${renderHighlightedText(word, row?.glyph)}</span>`;
+  }).join("");
 }
 
 function renderSpeechButtons(row) {
@@ -161,11 +170,17 @@ function renderPrintCard(row, index) {
 }
 
 function renderRow(row, { includeSpeech = false, print = false } = {}) {
+  const sentenceSpeech = includeSpeech
+    ? ` data-speech-tap data-speech-text="${text(`例句：${row?.sentence}`)}" role="button" tabindex="0" aria-label="点读例句：${text(row?.sentence)}"`
+    : "";
+  const hintSpeech = includeSpeech
+    ? ` data-speech-tap data-speech-text="${text(row?.writing?.hint)}" role="button" tabindex="0" aria-label="点读书写口诀：${text(row?.writing?.hint)}"`
+    : "";
   return `<article class="writing-row hanzi-learning-card${print ? " hanzi-learning-card-print" : ""}" data-hanzi-learning-card data-writing-row data-writing-row-id="${text(row?.rowId)}" data-writing-item-id="${text(row?.itemId)}">
-    <div class="hanzi-learning-visual">${renderVisual(row)}</div>
+    <div class="hanzi-learning-visual">${renderVisual(row, { interactive: includeSpeech })}</div>
     <div class="hanzi-learning-word">
       <span class="hanzi-section-label">认识词语</span>
-      <div class="hanzi-example-words" data-hanzi-example-words>${renderExampleWords(row)}</div>
+      <div class="hanzi-example-words" data-hanzi-example-words>${renderExampleWords(row, { interactive: includeSpeech })}</div>
     </div>
     <div class="hanzi-learning-target">
       <span class="hanzi-target-glyph" data-hanzi-target-glyph data-hanzi-glyph data-writing-glyph>${text(row?.glyph)}</span>
@@ -173,13 +188,13 @@ function renderRow(row, { includeSpeech = false, print = false } = {}) {
       ${includeSpeech ? renderSpeechButtons(row) : ""}
     </div>
     <div class="hanzi-meaning" data-hanzi-meaning><span class="hanzi-meaning-label">字意：</span><span class="hanzi-meaning-text" data-hanzi-meaning-text>${text(row?.concept?.characterMeaning || row?.concept?.visual?.alt || row?.concept?.label)}</span></div>
-    <p class="hanzi-sentence" data-hanzi-sentence>例句：${text(row?.sentence)}</p>
+    <p class="hanzi-sentence${includeSpeech ? " speech-tap" : ""}" data-hanzi-sentence${sentenceSpeech}>例句：${text(row?.sentence)}</p>
     <div class="hanzi-writing-meta" data-hanzi-writing-meta>
       <span data-hanzi-stroke-count>${text(row?.writing?.strokeCount)} 画</span>
       <span data-hanzi-structure>${text(row?.writing?.structure)}</span>
       <span data-hanzi-stroke-order>笔顺：${text(strokeOrderSymbolsFor(row))}</span>
     </div>
-    <p class="hanzi-writing-hint" data-hanzi-writing-hint>${text(row?.writing?.hint)}</p>
+    <p class="hanzi-writing-hint${includeSpeech ? " speech-tap" : ""}" data-hanzi-writing-hint${hintSpeech}>${text(row?.writing?.hint)}</p>
   </article>`;
 }
 

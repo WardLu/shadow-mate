@@ -11,6 +11,7 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { cleanSpeechText } from "./speech-text-utils.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
@@ -187,7 +188,11 @@ const growthLoopController = createGrowthLoopController({
   canTransition: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteScopeTransition?.() !== false,
   onRewardFulfilled: ({ redemption, userInitiated }) => {
-    if (userInitiated && redemption?.status === "fulfilled") soundEffects.play("reward_fulfilled");
+    if (userInitiated && redemption?.status === "fulfilled") {
+      soundEffects.play("reward_fulfilled");
+      praise("奖励已兑现！🎉");
+      flyStars(10);
+    }
   },
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
@@ -518,8 +523,13 @@ function togglePoint(itemId, day){
       soundEffects.play("try_again");
     } else if (delta < 0) {
       soundEffects.play("points_deducted");
+      const card = document.querySelector(`.pts-card[data-pts-card="${item.id}"]`)
+        || document.querySelector(`.pts-card[data-pts-name="${item.name}"]`);
+      if (card) shake(card, { durationMs: 600 });
     } else {
       soundEffects.play("points_earned");
+      praise(`+${delta} 积分！`);
+      flyStars(6);
     }
   }).catch((error) => {
     console.error("Growth Loop local point write failed:", error);
@@ -990,8 +1000,8 @@ function renderChinese(){
       <h3>${icon("pen")} 识字打卡 <span class="pill">每日 2 新字 + 复习</span></h3>
       <div class="desc">3000 常用字按频次排序，每天学 2 个新字并复习旧字。今日新字：</div>
       <div class="grid2">
-        <div class="mini-card"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
-        <div class="mini-card"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
+        <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="0" aria-label="点读生字：${escapeHtml(c1[0])}，${escapeHtml(c1[2])}"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
+        <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="1" aria-label="点读生字：${escapeHtml(c2[0])}，${escapeHtml(c2[2])}"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
       </div>
       <div class="desc mt-12">${icon("rotate")} 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
       <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">${icon("play")} B站教学视频</a>
@@ -1000,6 +1010,22 @@ function renderChinese(){
     </div>
   `);
   main.appendChild(card1);
+
+  card1.querySelectorAll("[data-hanzi-mini]").forEach((mc) => {
+    const isFirst = mc.dataset.hanziMini === "0";
+    const item = isFirst ? c1 : c2;
+    const playHanzi = () => {
+      stopPoemSpeech();
+      speak(`${item[0]}，${item[2]}`, mc, "zh-CN");
+    };
+    mc.onclick = playHanzi;
+    mc.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playHanzi();
+      }
+    };
+  });
 
   // 古诗词
   const p = POEMS[di%POEMS.length];
@@ -1013,8 +1039,8 @@ function renderChinese(){
   const card2 = $(`
     <div class="card poem-box">
       <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${escapeHtml(p.g)}</span></h3>
-      <div class="poem-title">《${escapeHtml(p.t)}》</div>
-      <div class="poem-meta">${escapeHtml(p.a)} · 人教版</div>
+      <div class="poem-title speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.t)}，${escapeHtml(p.a)}">《${escapeHtml(p.t)}》</div>
+      <div class="poem-meta speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.t)}，${escapeHtml(p.a)}">${escapeHtml(p.a)} · 人教版</div>
       <div class="poem-lines" role="region" aria-label="古诗诗句">${linesHtml}</div>
       <div class="poem-controls">
         <button class="checkin poem-read-all" type="button">${icon("volume")} 朗读整首</button>
@@ -1026,6 +1052,25 @@ function renderChinese(){
     </div>
   `);
   main.appendChild(card2);
+
+  const poemTitleEl = card2.querySelector(".poem-title");
+  const poemMetaEl = card2.querySelector(".poem-meta");
+  const playPoemHeader = () => {
+    stopPoemSpeech();
+    speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+  };
+  if (poemTitleEl) {
+    poemTitleEl.onclick = playPoemHeader;
+    poemTitleEl.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+    };
+  }
+  if (poemMetaEl) {
+    poemMetaEl.onclick = playPoemHeader;
+    poemMetaEl.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+    };
+  }
 
   card2.querySelectorAll(".poem-line").forEach((lineEl) => {
     const idx = Number(lineEl.dataset.poemLine);
@@ -1137,6 +1182,24 @@ function renderChinese(){
       button.dataset.speechContentId || "",
     );
   });
+  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-speech-tap]").forEach((el) => {
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
+    el.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
+    const playSpeechTap = () => {
+      stopPoemSpeech();
+      const rawText = el.dataset.speechText || el.textContent || "";
+      const textToSpeak = cleanSpeechText(rawText);
+      if (textToSpeak) speak(textToSpeak, null, "zh-CN");
+    };
+    el.onclick = playSpeechTap;
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playSpeechTap();
+      }
+    };
+  });
 }
 
 /* =========================================================
@@ -1230,13 +1293,24 @@ function renderMath(){
   const card2 = $(`
     <div class="card">
       <h3>${icon("brain")} 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
-      <div class="desc">点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</div>
+      <div class="desc desc-with-audio">
+        <span>点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读题目要求">${icon("volume")} 读要求</button>
+      </div>
       <div class="num-grid">${cells}</div>
       <div class="math-pad" id="mathPad" style="display:none;"></div>
       <div class="feedback text-center" id="nf"></div>
     </div>
   `);
   main.appendChild(card2);
+
+  const mathPromptBtn = card2.querySelector(".btn-read-prompt");
+  if (mathPromptBtn) {
+    mathPromptBtn.onclick = () => {
+      speak("点击问号格，选出它应该是哪个数字，按一递增顺序。", mathPromptBtn, "zh-CN");
+    };
+  }
+
   const missCell = card2.querySelector(".num-cell.miss");
   const mathPad = card2.querySelector("#mathPad");
   const nf = card2.querySelector("#nf");
@@ -1286,7 +1360,10 @@ function renderMath(){
   const card3 = $(`
     <div class="card">
       <h3>${icon("grid")} 数独游戏 <span class="pill">数感阶段</span></h3>
-      <div class="desc">把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</div>
+      <div class="desc desc-with-audio">
+        <span>把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读游戏规则">${icon("volume")} 读规则</button>
+      </div>
       <div class="sudoku" id="sudoku"></div>
       <div class="feedback text-center" id="sf"></div>
       <div class="spacer-10"></div>
@@ -1294,6 +1371,13 @@ function renderMath(){
     </div>
   `);
   main.appendChild(card3);
+
+  const sudokuPromptBtn = card3.querySelector(".btn-read-prompt");
+  if (sudokuPromptBtn) {
+    sudokuPromptBtn.onclick = () => {
+      speak("把一到四填入每行每列，四乘四入门版，含比较、分类、形状思维。", sudokuPromptBtn, "zh-CN");
+    };
+  }
   buildSudoku();
 }
 
@@ -1347,7 +1431,10 @@ function renderEnglish(){
   const card1 = $(`
     <div class="card">
       <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
-      <div class="desc">拼读并朗读下面的单词，读完点「完成今日打卡」。</div>
+      <div class="desc desc-with-audio">
+        <span>拼读并朗读下面的单词，读完点「完成今日打卡」。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读今日单词要求">${icon("volume")} 读指引</button>
+      </div>
       <div class="word-card">
         <div class="word-en">${w1[0]}</div>
         <div class="word-ph">${w1[1]}</div>
@@ -1365,6 +1452,14 @@ function renderEnglish(){
     </div>
   `);
   main.appendChild(card1);
+
+  const englishPromptBtn = card1.querySelector(".btn-read-prompt");
+  if (englishPromptBtn) {
+    englishPromptBtn.onclick = () => {
+      speak("拼读并朗读下面的单词，读完点完成今日打卡。", englishPromptBtn, "zh-CN");
+    };
+  }
+
   const spokenWords = [w1[0], w2[0]];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
     button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
@@ -1372,21 +1467,44 @@ function renderEnglish(){
   });
 
   // 按月回看往期单词
-  const m = new Date().getMonth();
-  let chips="";
-  for(let d=1; d<=Math.min(28,new Date().getDate()+0); d++){
-    const k = (m*31 + d*2)%ENGLISH.length; // 与推送算法一致的近似回看
-    const w = ENGLISH[(di - d + ENGLISH.length*10)%ENGLISH.length];
-    chips += `<span class="mr-chip">${w[0]}</span>`;
+  const pastDays = Math.min(28, new Date().getDate());
+  let chips = "";
+  for (let d = 1; d <= pastDays; d++) {
+    const w = ENGLISH[(di - d + ENGLISH.length * 10) % ENGLISH.length];
+    chips += `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(w[0])}" aria-label="听发音：${escapeHtml(w[0])}">${w[0]}</span>`;
   }
   const card2 = $(`
     <div class="card">
       <h3>${icon("calendar")} 往期单词回看 <span class="pill">本月</span></h3>
-      <div class="desc">按月回看之前朗读过的单词（最近 ${Math.min(28,new Date().getDate())} 天）：</div>
+      <div class="desc desc-with-audio">
+        <span>按月回看之前朗读过的单词（最近 ${pastDays} 天）：</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读往期回看说明">${icon("volume")} 读指引</button>
+      </div>
       <div class="month-review">${chips}</div>
     </div>
   `);
   main.appendChild(card2);
+
+  const reviewPromptBtn = card2.querySelector(".btn-read-prompt");
+  if (reviewPromptBtn) {
+    reviewPromptBtn.onclick = () => {
+      speak(`按月回看之前朗读过的单词，最近 ${pastDays} 天。`, reviewPromptBtn, "zh-CN");
+    };
+  }
+  card2.querySelectorAll(".mr-chip[data-word]").forEach((chip) => {
+    chip.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
+    const playChip = () => {
+      stopPoemSpeech();
+      speak(chip.dataset.word, chip, "en-US");
+    };
+    chip.onclick = playChip;
+    chip.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playChip();
+      }
+    };
+  });
 }
 
 /* =========================================================
@@ -1717,6 +1835,8 @@ function renderGrow(){
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
       soundEffects.play("points_deducted");
+      praise("兑换成功！🎁");
+      flyStars(8);
     };
   });
   rewardCard.querySelectorAll("[data-fulfill-id]").forEach((button) => {
@@ -1735,6 +1855,8 @@ function renderGrow(){
       }
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
+      praise("奖励已兑现！🎉");
+      flyStars(10);
     };
   });
   rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
@@ -1806,7 +1928,7 @@ function ptsCardHTML(it, day){
   const description = it.description ?? it.desc ?? "";
   const sub = points < 0;
   const ptsIcon = it.icon_key || PTS_ICON[it.name] || (sub ? "alert" : "star");
-  return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
+  return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}" data-pts-card="${escapeHtml(it.id)}" data-pts-name="${escapeHtml(it.name)}">
     <div class="pts-ic">${icon(ptsIcon)}</div>
     <div class="pts-info">
       <div class="pts-name">${escapeHtml(it.name)}</div>

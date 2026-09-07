@@ -104,6 +104,36 @@
   .card-action h3{color:var(--ink);}
   .card h3{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:6px;}
   .card .desc{font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin:6px 0 12px;}
+  .desc-with-audio{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .btn-read-prompt{
+    display:inline-flex;align-items:center;gap:4px;padding:5px 12px;
+    border-radius:999px;background:var(--yellow-soft, #fff6dc);color:#7a5200;
+    border:1.5px solid #ffd770;font-size:12.5px;font-weight:800;cursor:pointer;
+    transition:all .15s ease;-webkit-tap-highlight-color:transparent;white-space:nowrap;
+    min-height:28px;
+  }
+  .btn-read-prompt:hover{background:#ffedbe;border-color:#f2c161;transform:translateY(-1px);}
+  .btn-read-prompt:active{transform:scale(0.96);}
+  .btn-read-prompt svg{width:14px;height:14px;}
+
+  /* 点读可触控交互 */
+  .speech-tap{cursor:pointer;user-select:none;transition:transform .15s ease,box-shadow .15s ease,background-color .15s ease;}
+  .speech-tap:active{transform:scale(0.97);}
+  .mini-card.speech-tap:hover{box-shadow:0 4px 14px rgba(42,166,80,0.18);border-color:var(--green);}
+  .poem-title.speech-tap{cursor:pointer;display:inline-block;transition:color .15s ease;}
+  .poem-title.speech-tap:hover{color:var(--green-deep);}
+  .poem-meta.speech-tap{cursor:pointer;transition:color .15s ease;}
+  .poem-meta.speech-tap:hover{color:var(--green-deep);}
+  .hanzi-visual.speech-tap{cursor:pointer;transition:all .15s ease;}
+  .hanzi-visual.speech-tap:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.06);}
+  .hanzi-example-word.speech-tap{cursor:pointer;transition:all .15s ease;display:inline-block;}
+  .hanzi-example-word.speech-tap:hover{background:var(--yellow-soft, #fff6dc);border-color:#f6d289;transform:translateY(-1px);}
+  .hanzi-sentence.speech-tap{cursor:pointer;border-radius:8px;padding:2px 6px;transition:background-color .15s ease;}
+  .hanzi-sentence.speech-tap:hover{background:rgba(42,166,80,0.08);}
+  .hanzi-writing-hint.speech-tap{cursor:pointer;transition:filter .15s ease;}
+  .hanzi-writing-hint.speech-tap:hover{filter:brightness(0.96);}
+  .mr-chip.speech-tap{cursor:pointer;transition:all .15s ease;}
+  .mr-chip.speech-tap:hover{background:var(--green-soft);border-color:var(--green);transform:translateY(-1px);}
 
   /* 打卡按钮 */
   .checkin{
