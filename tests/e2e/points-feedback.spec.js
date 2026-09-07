@@ -76,7 +76,7 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // Click 确认兑现 and verify fulfillment praise
     await fulfillBtn.click();
-    await expect(page.locator(".big-praise").filter({ hasText: "奖励已兑现" })).toBeVisible();
+    await expect(page.locator(".big-praise").filter({ hasText: "奖励已兑现" }).first()).toBeVisible();
   });
 
   test("fulfilled reward shows 24h undo window badge and revocation button, allows repeat redemption, and archives after 24h", async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // 2. Fulfill redemption
     await rewardCard.locator(".reward-fulfill").click();
-    await expect(page.locator(".big-praise").filter({ hasText: "奖励已兑现" })).toBeVisible();
+    await expect(page.locator(".big-praise").filter({ hasText: "奖励已兑现" }).first()).toBeVisible();
 
     // 3. Verify 24h undo window badge and revoke button
     const undoBadge = rewardCard.locator(".reward-undo-hint");
