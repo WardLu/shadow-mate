@@ -1,6 +1,6 @@
 import { TENCENT_TTS_MANIFEST_URL } from "./tencent-tts-catalog.js";
 
-export const SPEECH_GAIN_MULTIPLIER = 3.0;
+export const SPEECH_GAIN_MULTIPLIER = 5.0;
 
 export class PublishedSpeechError extends Error {
   constructor(code, cause) {
@@ -95,6 +95,7 @@ export function createPublishedSpeechPlayer({
       let playbackTimer = null;
       let source = null;
       let gainNode = null;
+      let presenceFilter = null;
       let limiter = null;
 
       const cleanup = () => {
@@ -112,6 +113,10 @@ export function createPublishedSpeechPlayer({
         if (gainNode) {
           try { gainNode.disconnect(); } catch (_) {}
           gainNode = null;
+        }
+        if (presenceFilter) {
+          try { presenceFilter.disconnect(); } catch (_) {}
+          presenceFilter = null;
         }
         if (limiter) {
           try { limiter.disconnect(); } catch (_) {}
@@ -132,7 +137,7 @@ export function createPublishedSpeechPlayer({
         source.buffer = audioBuffer;
 
         gainNode = audioContext.createGain();
-        const normalizedVol = Math.max(0, Math.min(1, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
+        const normalizedVol = Math.max(0, Math.min(2, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
         const rawGain = normalizedVol * gainMultiplier;
         const targetGain = Math.round(rawGain * 10000) / 10000;
         if (typeof gainNode.gain?.setValueAtTime === "function") {
@@ -142,16 +147,39 @@ export function createPublishedSpeechPlayer({
         }
 
         let lastNode = gainNode;
+
+        if (typeof audioContext.createBiquadFilter === "function") {
+          presenceFilter = audioContext.createBiquadFilter();
+          presenceFilter.type = "peaking";
+          if (typeof presenceFilter.frequency?.setValueAtTime === "function") {
+            presenceFilter.frequency.setValueAtTime(3000, audioContext.currentTime ?? 0);
+            presenceFilter.Q.setValueAtTime(1.2, audioContext.currentTime ?? 0);
+            presenceFilter.gain.setValueAtTime(3.5, audioContext.currentTime ?? 0);
+          } else {
+            if (presenceFilter.frequency) presenceFilter.frequency.value = 3000;
+            if (presenceFilter.Q) presenceFilter.Q.value = 1.2;
+            if (presenceFilter.gain) presenceFilter.gain.value = 3.5;
+          }
+          lastNode.connect(presenceFilter);
+          lastNode = presenceFilter;
+        }
+
         if (typeof audioContext.createDynamicsCompressor === "function") {
           limiter = audioContext.createDynamicsCompressor();
           if (typeof limiter.threshold?.setValueAtTime === "function") {
-            limiter.threshold.setValueAtTime(-1.5, audioContext.currentTime ?? 0);
-            limiter.knee.setValueAtTime(3.0, audioContext.currentTime ?? 0);
-            limiter.ratio.setValueAtTime(12.0, audioContext.currentTime ?? 0);
+            limiter.threshold.setValueAtTime(-12.0, audioContext.currentTime ?? 0);
+            limiter.knee.setValueAtTime(6.0, audioContext.currentTime ?? 0);
+            limiter.ratio.setValueAtTime(4.0, audioContext.currentTime ?? 0);
             limiter.attack.setValueAtTime(0.003, audioContext.currentTime ?? 0);
-            limiter.release.setValueAtTime(0.05, audioContext.currentTime ?? 0);
+            limiter.release.setValueAtTime(0.15, audioContext.currentTime ?? 0);
+          } else {
+            if (limiter.threshold) limiter.threshold.value = -12.0;
+            if (limiter.knee) limiter.knee.value = 6.0;
+            if (limiter.ratio) limiter.ratio.value = 4.0;
+            if (limiter.attack) limiter.attack.value = 0.003;
+            if (limiter.release) limiter.release.value = 0.15;
           }
-          gainNode.connect(limiter);
+          lastNode.connect(limiter);
           lastNode = limiter;
         }
         lastNode.connect(audioContext.destination);
@@ -297,6 +325,12 @@ export function createPublishedSpeechPlayer({
     loadManifest,
     stop,
     play(contentId, { volume = 1 } = {}) {
+      try {
+        const ctx = typeof getAudioContext === "function" ? getAudioContext() : null;
+        if (ctx && ctx.state === "suspended") {
+          void ctx.resume().catch(() => {});
+        }
+      } catch (_) {}
       if (inFlight.has(contentId)) return inFlight.get(contentId);
       const promise = playOnce(contentId, { volume }).finally(() => inFlight.delete(contentId));
       inFlight.set(contentId, promise);

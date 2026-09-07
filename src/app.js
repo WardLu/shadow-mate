@@ -684,6 +684,7 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
 }
 
 async function speak(t, button, locale = "en-US", contentId = ""){
+  primeSpeechAudio();
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
     if (activeSpeechRequest.button === button) return;
@@ -1928,17 +1929,19 @@ function renderSettings(){
       </div>
     </div>
   `));
+  const speechVol = Math.round((settings.speechVolume ?? 0.6)*100);
+  const speechLabelText = `朗读音量 ${speechVol}%${speechVol > 100 ? " (超额增强)" : ""}`;
   main.appendChild($(`
     <div class="card">
       <h3>${icon("volume")} 课程语音朗读音量</h3>
       <div class="sound-row">
-        <span class="sound-label" id="speech-volume-label">朗读音量 ${Math.round((settings.speechVolume ?? 0.6)*100)}%</span>
-        <input class="sound-range" type="range" id="speech-volume" min="0" max="100" step="5" value="${Math.round((settings.speechVolume ?? 0.6)*100)}" aria-label="课程语音朗读音量">
+        <span class="sound-label" id="speech-volume-label">${speechLabelText}</span>
+        <input class="sound-range" type="range" id="speech-volume" min="0" max="200" step="5" value="${speechVol}" aria-label="课程语音朗读音量">
       </div>
       <div class="sound-event-controls" style="margin-top: 10px;">
         <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
       </div>
-      <div class="desc">控制汉字发音、英文单词和字意朗读的音量（内置声音增益增强）。即使关闭界面音效，课程朗读仍可独立使用。</div>
+      <div class="desc">控制汉字发音、英文单词和字意朗读的音量（集成广播级人声动态压缩与 3kHz 临场感增强，支持最高 200% 超额放大）。即使关闭界面音效，课程朗读仍可独立使用。</div>
     </div>
   `));
   const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
@@ -1984,16 +1987,21 @@ function renderSettings(){
     soundEffects.preview("points_earned");
   };
   el("speech-volume").oninput = (event) => {
-    soundEffects.setSpeechVolume(Number(event.target.value) / 100);
+    const val = Number(event.target.value);
+    soundEffects.setSpeechVolume(val / 100);
     const label = el("speech-volume-label");
-    if (label) label.textContent = `朗读音量 ${Math.round(soundEffects.getSettings().speechVolume*100)}%`;
+    if (label) {
+      label.textContent = `朗读音量 ${val}%${val > 100 ? " (超额增强)" : ""}`;
+    }
   };
   const triggerSpeechPreview = () => {
+    primeSpeechAudio();
     const previewBtn = el("speech-preview");
     speak("日", previewBtn, "zh-CN", "hz-001:glyph");
   };
   el("speech-volume").onchange = triggerSpeechPreview;
   el("speech-preview").onclick = triggerSpeechPreview;
+  el("speech-preview").addEventListener?.("pointerdown", primeSpeechAudio, { passive: true });
 
   el("snd-reset").onclick = () => {
     soundEffects.resetDefaults();

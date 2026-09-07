@@ -238,7 +238,7 @@ export function normalizeSettings(input = {}) {
     schema_version: 1,
     enabled: input?.enabled !== false,
     volume: Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 0.6,
-    speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(1, rawSpeechVolume)) : 0.6,
+    speechVolume: Number.isFinite(rawSpeechVolume) ? Math.max(0, Math.min(2, rawSpeechVolume)) : 0.6,
     events,
   };
 }
@@ -386,7 +386,7 @@ export function createSoundEngine({
 
   function setSpeechVolume(value) {
     const speechVolume = Number(value);
-    settings = { ...settings, speechVolume: Number.isFinite(speechVolume) ? Math.max(0, Math.min(1, speechVolume)) : settings.speechVolume };
+    settings = { ...settings, speechVolume: Number.isFinite(speechVolume) ? Math.max(0, Math.min(2, speechVolume)) : settings.speechVolume };
     persist();
   }
 

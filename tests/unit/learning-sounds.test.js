@@ -183,9 +183,11 @@ describe("settings normalization and persistence", () => {
     const saved = JSON.parse(storage.raw("shadow_mate_sound_settings_v1"));
     expect(saved.speechVolume).toBe(0.75);
 
-    // Clamps values out of range
+    // Allows values up to 2.0 (200% boost) and clamps values out of range
     engine.setSpeechVolume(1.5);
-    expect(engine.getSpeechVolume()).toBe(1.0);
+    expect(engine.getSpeechVolume()).toBe(1.5);
+    engine.setSpeechVolume(2.5);
+    expect(engine.getSpeechVolume()).toBe(2.0);
     engine.setSpeechVolume(-0.2);
     expect(engine.getSpeechVolume()).toBe(0.0);
   });
