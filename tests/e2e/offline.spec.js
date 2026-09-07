@@ -268,8 +268,8 @@ test.describe("Offline mode (no login)", () => {
   test("keeps exact top-level navigation and enters subjects from learning", async ({ page }) => {
     await page.goto("/");
     const topLevelNav = page.locator(".navbtn");
-    await expect(topLevelNav).toHaveCount(5);
-    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南"]);
+    await expect(topLevelNav).toHaveCount(6);
+    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南", "设置"]);
     for (const mod of ["chinese", "math", "english", "book"]) {
       await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveCount(0);
     }
