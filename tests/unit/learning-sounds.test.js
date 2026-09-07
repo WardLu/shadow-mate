@@ -7,6 +7,7 @@ import {
   SOUND_EVENT_KEYS,
   SOUND_EVENTS,
   SOUND_GAIN_MULTIPLIER,
+  calculatePerceptualSoundGain,
 } from "../../src/learning-sounds.js";
 
 function createFakeAudioContext() {
@@ -336,8 +337,9 @@ describe("web audio rendering", () => {
     expect(renderRecipe(SOUND_EVENTS.points_earned.variants.star_collect.recipe, { getAudioContext: () => broken })).toBe(null);
   });
 
-  it("amplifies master gain proportionally using SOUND_GAIN_MULTIPLIER up to 200%", () => {
+  it("amplifies master gain perceptually using power curve up to 200%", () => {
     const gainNodes = [];
+    const waveShaperNodes = [];
     const ctx = {
       currentTime: 100,
       state: "running",
@@ -357,6 +359,15 @@ describe("web audio rendering", () => {
         gain: { value: 0, setValueAtTime: vi.fn() },
         connect: vi.fn(),
       }),
+      createWaveShaper: () => {
+        const node = {
+          curve: null,
+          oversample: "none",
+          connect: vi.fn(),
+        };
+        waveShaperNodes.push(node);
+        return node;
+      },
       createDynamicsCompressor: () => ({
         threshold: { setValueAtTime: vi.fn() },
         knee: { setValueAtTime: vi.fn() },
@@ -380,17 +391,16 @@ describe("web audio rendering", () => {
       getAudioContext: () => ctx,
     });
     const master = gainNodes[0];
-    expect(master.gain.setValueAtTime).toHaveBeenCalledWith(0.6 * SOUND_GAIN_MULTIPLIER, ctx.currentTime);
     expect(master.gain.setValueAtTime).toHaveBeenCalledWith(1.5, ctx.currentTime);
+    expect(waveShaperNodes[0].oversample).toBe("2x");
 
-    // 200% excess boost -> 5.0x
+    // 200% excess boost -> calculatePerceptualSoundGain(2.0)
     gainNodes.length = 0;
     renderRecipe(SOUND_EVENTS.action_completed.variants.block_click.recipe, {
       volume: 2.0,
       getAudioContext: () => ctx,
     });
     const master2 = gainNodes[0];
-    expect(master2.gain.setValueAtTime).toHaveBeenCalledWith(2.0 * SOUND_GAIN_MULTIPLIER, ctx.currentTime);
-    expect(master2.gain.setValueAtTime).toHaveBeenCalledWith(5.0, ctx.currentTime);
+    expect(master2.gain.setValueAtTime).toHaveBeenCalledWith(calculatePerceptualSoundGain(2.0), ctx.currentTime);
   });
 });

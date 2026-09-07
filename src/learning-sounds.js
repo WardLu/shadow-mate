@@ -224,6 +224,29 @@ export const SOUND_EVENTS = {
 
 export const SOUND_GAIN_MULTIPLIER = 2.5;
 
+let sharedSoundClipperCurve = null;
+export function getSoundClipperCurve() {
+  if (!sharedSoundClipperCurve) {
+    const n = 4096;
+    const curve = new Float32Array(n);
+    const k = 1.5;
+    const norm = Math.tanh(k);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      curve[i] = Math.tanh(x * k) / norm;
+    }
+    sharedSoundClipperCurve = curve;
+  }
+  return sharedSoundClipperCurve;
+}
+
+export function calculatePerceptualSoundGain(volume, baselineGain = 1.5, baselineVol = 0.6) {
+  const normalizedVol = Math.max(0, Math.min(2, typeof volume === "number" && !Number.isNaN(volume) ? volume : baselineVol));
+  if (normalizedVol <= 0) return 0;
+  const rawGain = Math.pow(normalizedVol / baselineVol, 1.35) * baselineGain;
+  return Math.round(rawGain * 10000) / 10000;
+}
+
 export function normalizeSettings(input = {}) {
   const events = {};
   for (const key of SOUND_EVENT_KEYS) {
@@ -298,8 +321,7 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
       }
     }
     const master = ctx.createGain();
-    const normalizedVol = Math.max(0, Math.min(2, Number(volume) || 0));
-    const targetGain = Math.round(normalizedVol * gainMultiplier * 10000) / 10000;
+    const targetGain = calculatePerceptualSoundGain(volume, (gainMultiplier / 2.5) * 1.5, 0.6);
     if (typeof master.gain?.setValueAtTime === "function") {
       master.gain.setValueAtTime(targetGain, ctx.currentTime ?? 0);
     } else if (master.gain) {
@@ -325,19 +347,27 @@ export function renderRecipe(recipe, { volume = 1, getAudioContext = defaultGetA
       } catch (_) {}
     }
 
-    if (typeof ctx.createDynamicsCompressor === "function") {
+    if (typeof ctx.createWaveShaper === "function") {
+      try {
+        const shaper = ctx.createWaveShaper();
+        shaper.curve = getSoundClipperCurve();
+        if ("oversample" in shaper) shaper.oversample = "2x";
+        lastNode.connect(shaper);
+        lastNode = shaper;
+      } catch (_) {}
+    } else if (typeof ctx.createDynamicsCompressor === "function") {
       try {
         const compressor = ctx.createDynamicsCompressor();
         if (typeof compressor.threshold?.setValueAtTime === "function") {
-          compressor.threshold.setValueAtTime(-6, ctx.currentTime ?? 0);
-          compressor.knee.setValueAtTime(4, ctx.currentTime ?? 0);
-          compressor.ratio.setValueAtTime(6, ctx.currentTime ?? 0);
+          compressor.threshold.setValueAtTime(-2.0, ctx.currentTime ?? 0);
+          compressor.knee.setValueAtTime(6.0, ctx.currentTime ?? 0);
+          compressor.ratio.setValueAtTime(4.0, ctx.currentTime ?? 0);
           compressor.attack.setValueAtTime(0.002, ctx.currentTime ?? 0);
           compressor.release.setValueAtTime(0.08, ctx.currentTime ?? 0);
         } else {
-          if (compressor.threshold) compressor.threshold.value = -6;
-          if (compressor.knee) compressor.knee.value = 4;
-          if (compressor.ratio) compressor.ratio.value = 6;
+          if (compressor.threshold) compressor.threshold.value = -2.0;
+          if (compressor.knee) compressor.knee.value = 6.0;
+          if (compressor.ratio) compressor.ratio.value = 4.0;
           if (compressor.attack) compressor.attack.value = 0.002;
           if (compressor.release) compressor.release.value = 0.08;
         }

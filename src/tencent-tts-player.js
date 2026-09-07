@@ -2,6 +2,29 @@ import { TENCENT_TTS_MANIFEST_URL } from "./tencent-tts-catalog.js";
 
 export const SPEECH_GAIN_MULTIPLIER = 2.5;
 
+let sharedSoftClipperCurve = null;
+export function getSoftClipperCurve() {
+  if (!sharedSoftClipperCurve) {
+    const n = 4096;
+    const curve = new Float32Array(n);
+    const k = 1.5;
+    const norm = Math.tanh(k);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      curve[i] = Math.tanh(x * k) / norm;
+    }
+    sharedSoftClipperCurve = curve;
+  }
+  return sharedSoftClipperCurve;
+}
+
+export function calculatePerceptualSpeechGain(volume, baselineGain = 1.5, baselineVol = 0.6) {
+  const normalizedVol = Math.max(0, Math.min(2, typeof volume === "number" && !Number.isNaN(volume) ? volume : baselineVol));
+  if (normalizedVol <= 0) return 0;
+  const rawGain = Math.pow(normalizedVol / baselineVol, 1.35) * baselineGain;
+  return Math.round(rawGain * 10000) / 10000;
+}
+
 export class PublishedSpeechError extends Error {
   constructor(code, cause) {
     super(code, cause ? { cause } : undefined);
@@ -97,6 +120,7 @@ export function createPublishedSpeechPlayer({
       let preComp = null;
       let presenceFilter = null;
       let gainNode = null;
+      let shaper = null;
       let limiter = null;
 
       const cleanup = () => {
@@ -122,6 +146,10 @@ export function createPublishedSpeechPlayer({
         if (gainNode) {
           try { gainNode.disconnect(); } catch (_) {}
           gainNode = null;
+        }
+        if (shaper) {
+          try { shaper.disconnect(); } catch (_) {}
+          shaper = null;
         }
         if (limiter) {
           try { limiter.disconnect(); } catch (_) {}
@@ -169,22 +197,20 @@ export function createPublishedSpeechPlayer({
           presenceFilter.type = "peaking";
           if (typeof presenceFilter.frequency?.setValueAtTime === "function") {
             presenceFilter.frequency.setValueAtTime(3000, audioContext.currentTime ?? 0);
-            presenceFilter.Q.setValueAtTime(1.2, audioContext.currentTime ?? 0);
+            presenceFilter.Q.setValueAtTime(1.0, audioContext.currentTime ?? 0);
             presenceFilter.gain.setValueAtTime(2.5, audioContext.currentTime ?? 0);
           } else {
             if (presenceFilter.frequency) presenceFilter.frequency.value = 3000;
-            if (presenceFilter.Q) presenceFilter.Q.value = 1.2;
+            if (presenceFilter.Q) presenceFilter.Q.value = 1.0;
             if (presenceFilter.gain) presenceFilter.gain.value = 2.5;
           }
           chain.connect(presenceFilter);
           chain = presenceFilter;
         }
 
-        // 3. Post-Leveler User Volume Gain: UNCOMPRESSED, REAL DECIBEL SCALING
+        // 3. Post-Leveler User Volume Gain with psychoacoustic power scaling (60% baseline = 1.5x)
         gainNode = audioContext.createGain();
-        const normalizedVol = Math.max(0, Math.min(2, typeof volume === "number" && !Number.isNaN(volume) ? volume : 1.0));
-        const rawGain = normalizedVol * gainMultiplier;
-        const targetGain = Math.round(rawGain * 10000) / 10000;
+        const targetGain = calculatePerceptualSpeechGain(volume, (gainMultiplier / 2.5) * 1.5, 0.6);
         if (typeof gainNode.gain?.setValueAtTime === "function") {
           gainNode.gain.setValueAtTime(targetGain, audioContext.currentTime ?? 0);
         } else if (gainNode.gain) {
@@ -193,19 +219,25 @@ export function createPublishedSpeechPlayer({
         chain.connect(gainNode);
         chain = gainNode;
 
-        // 4. Safety Peak Limiter at -0.5 dBFS: only acts as safety ceiling at 200% on loud clips
-        if (typeof audioContext.createDynamicsCompressor === "function") {
+        // 4. Soft-Clipper WaveShaper: prevents DAC clipping while preserving dynamic range and clear loudness growth
+        if (typeof audioContext.createWaveShaper === "function") {
+          shaper = audioContext.createWaveShaper();
+          shaper.curve = getSoftClipperCurve();
+          if ("oversample" in shaper) shaper.oversample = "2x";
+          chain.connect(shaper);
+          chain = shaper;
+        } else if (typeof audioContext.createDynamicsCompressor === "function") {
           limiter = audioContext.createDynamicsCompressor();
           if (typeof limiter.threshold?.setValueAtTime === "function") {
-            limiter.threshold.setValueAtTime(-0.5, audioContext.currentTime ?? 0);
-            limiter.knee.setValueAtTime(0.0, audioContext.currentTime ?? 0);
-            limiter.ratio.setValueAtTime(20.0, audioContext.currentTime ?? 0);
+            limiter.threshold.setValueAtTime(-1.0, audioContext.currentTime ?? 0);
+            limiter.knee.setValueAtTime(6.0, audioContext.currentTime ?? 0);
+            limiter.ratio.setValueAtTime(4.0, audioContext.currentTime ?? 0);
             limiter.attack.setValueAtTime(0.001, audioContext.currentTime ?? 0);
             limiter.release.setValueAtTime(0.05, audioContext.currentTime ?? 0);
           } else {
-            if (limiter.threshold) limiter.threshold.value = -0.5;
-            if (limiter.knee) limiter.knee.value = 0.0;
-            if (limiter.ratio) limiter.ratio.value = 20.0;
+            if (limiter.threshold) limiter.threshold.value = -1.0;
+            if (limiter.knee) limiter.knee.value = 6.0;
+            if (limiter.ratio) limiter.ratio.value = 4.0;
             if (limiter.attack) limiter.attack.value = 0.001;
             if (limiter.release) limiter.release.value = 0.05;
           }

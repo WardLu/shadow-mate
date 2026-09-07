@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPublishedSpeechPlayer, SPEECH_GAIN_MULTIPLIER } from "../../src/tencent-tts-player.js";
+import { createPublishedSpeechPlayer, SPEECH_GAIN_MULTIPLIER, calculatePerceptualSpeechGain } from "../../src/tencent-tts-player.js";
 
 const entry = {
   contentId: "hz-001:glyph",
@@ -22,6 +22,12 @@ function createFakeAudioContext() {
     frequency: { setValueAtTime: vi.fn() },
     Q: { setValueAtTime: vi.fn() },
     gain: { setValueAtTime: vi.fn() },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  };
+  const waveShaperNode = {
+    curve: null,
+    oversample: "none",
     connect: vi.fn(),
     disconnect: vi.fn(),
   };
@@ -61,9 +67,10 @@ function createFakeAudioContext() {
     },
     createGain: () => gainNode,
     createBiquadFilter: () => presenceNode,
+    createWaveShaper: () => waveShaperNode,
     createDynamicsCompressor: makeCompressor,
   };
-  return { ctx, getSource: () => sourceNode, gainNode, presenceNode, compressors, fakeBuffer };
+  return { ctx, getSource: () => sourceNode, gainNode, presenceNode, waveShaperNode, compressors, fakeBuffer };
 }
 
 describe("published speech player", () => {
@@ -113,7 +120,7 @@ describe("published speech player", () => {
     await expect(player.play(entry.contentId)).rejects.toMatchObject({ code: "published-audio-playback" });
   });
 
-  it("amplifies published speech via Web Audio gain, presence filter and routes through compressor/limiter", async () => {
+  it("amplifies published speech via Web Audio gain, presence filter and routes through soft-clipper wave shaper", async () => {
     const fake = createFakeAudioContext();
     const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
       ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
@@ -137,17 +144,41 @@ describe("published speech player", () => {
     expect(fake.presenceNode.gain.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
     expect(fake.presenceNode.connect).toHaveBeenCalledWith(fake.gainNode);
     expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.5, fake.ctx.currentTime);
-    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.compressors[1]);
-    expect(fake.compressors[1].threshold.setValueAtTime).toHaveBeenCalledWith(-0.5, fake.ctx.currentTime);
-    expect(fake.compressors[1].ratio.setValueAtTime).toHaveBeenCalledWith(20.0, fake.ctx.currentTime);
-    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.ctx.destination);
+    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.waveShaperNode);
+    expect(fake.waveShaperNode.oversample).toBe("2x");
+    expect(fake.waveShaperNode.curve).toBeInstanceOf(Float32Array);
+    expect(fake.waveShaperNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
     expect(source.start).toHaveBeenCalledWith(0);
 
     source.onended();
     await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
   });
 
-  it("scales gain proportionally with volume option including excess boost up to 200%", async () => {
+  it("falls back to compressor/limiter if createWaveShaper is unavailable", async () => {
+    const fake = createFakeAudioContext();
+    delete fake.ctx.createWaveShaper;
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    const playPromise = player.play(entry.contentId, { volume: 0.6 });
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.compressors[1]);
+    expect(fake.compressors[1].threshold.setValueAtTime).toHaveBeenCalledWith(-1.0, fake.ctx.currentTime);
+    expect(fake.compressors[1].ratio.setValueAtTime).toHaveBeenCalledWith(4.0, fake.ctx.currentTime);
+    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.ctx.destination);
+
+    fake.getSource().onended();
+    await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
+  });
+
+  it("scales gain perceptually with volume option including excess boost up to 200%", async () => {
     const fake = createFakeAudioContext();
     const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
       ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
@@ -158,19 +189,18 @@ describe("published speech player", () => {
       getAudioContext: () => fake.ctx,
     });
 
-    // 100% volume -> 2.5x
+    // 100% volume -> perceptual boost (~2.9894)
     const playPromise1 = player.play(entry.contentId, { volume: 1.0 });
     await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
 
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.0 * SPEECH_GAIN_MULTIPLIER, fake.ctx.currentTime);
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(calculatePerceptualSpeechGain(1.0), fake.ctx.currentTime);
     fake.getSource().onended();
     await expect(playPromise1).resolves.toEqual({ status: "played", source: "cdn" });
 
-    // 200% volume -> 5.0x
+    // 200% volume -> perceptual boost (~7.6204)
     const playPromise2 = player.play(entry.contentId, { volume: 2.0 });
     await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
-    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(5.0, fake.ctx.currentTime);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(calculatePerceptualSpeechGain(2.0), fake.ctx.currentTime);
     fake.getSource().onended();
     await expect(playPromise2).resolves.toEqual({ status: "played", source: "cdn" });
   });
