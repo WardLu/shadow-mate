@@ -2,6 +2,31 @@
 
 > This file lists user-visible product changes for each published version.
 
+## v1.5.0 - 2026-09-08
+
+### Growth loop and rewards redemption
+
+- Streamlined the reward card lifecycle: redeemed rewards decouple from the card shelf state so parents can immediately initiate repeat redemptions without waiting.
+- Added a 24-hour protection window for fulfilled rewards with a visible status badge and instant revocation to refund points upon misoperation.
+- Instant fulfillment and cancellation for unauthenticated local-first mode without waiting for cloud confirmation.
+
+### Web Audio sound effects
+
+- Integrated native Web Audio effects for check-ins, deductions, reward redemption, fulfillment, and retries with 15 dynamic sound variants.
+- Added independent master and speech volume controls supporting excess boost up to 200% with real-time preview and safe soft-clipping for mobile speakers.
+
+### Layout and information architecture
+
+- Redesigned daily views to prioritize learning and habit-forming actions: placed learning modules first and promoted point actions and reward redemption to primary hero sections.
+- Created a dedicated Settings top-level tab that consolidates cloud synchronization, sound settings, data backup/import, PWA installation guides, and privacy notices.
+- Compacted calendar views with collapsible 30-day timelines and persistent user preference state across sessions.
+
+### Multi-device sync and offline reliability
+
+- Enabled persistent session storage so parents stay signed in across browser restarts and device reboots.
+- Resolved cloud state synchronization permission baseline for authenticated family workspaces.
+- Added guest cloud sync guidance and expanded PWA installation instructions for iOS, Android Chrome, and tablets.
+
 ## v1.4.0 - 2026-09-05
 
 ### Print preview

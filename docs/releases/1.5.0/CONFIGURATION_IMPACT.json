@@ -1,0 +1,27 @@
+{
+  "release": "shadow-mate-v1.5.0",
+  "updated_at": "2026-09-08",
+  "reason": "Launch MVP full closure with Growth Loop redemption lifecycle, Web Audio sound effects, child-friendly UX, and information architecture overhaul.",
+  "changes": [
+    {
+      "id": "growth-loop-redemption-lifecycle",
+      "type": "production_impact_feature",
+      "test": {
+        "status": "preview_accepted",
+        "origin": "https://preview-sm.shadow.wang",
+        "accepted_on": "real_devices"
+      },
+      "live": {
+        "status": "authorized_pending_deployment",
+        "origin": "https://sm.shadow.wang"
+      },
+      "validation": "Verify points check-in, reward redemption, 24h undo window, sound effects, and cloud sync on production.",
+      "rollback": "Revert to v1.4.0 deployment."
+    }
+  ],
+  "database": {
+    "migration_class": "none",
+    "status": "N/A",
+    "reason": "No new schema, table, RLS, function, or shared control-plane migration. Production private schema usage permission was verified and active."
+  }
+}
