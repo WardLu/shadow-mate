@@ -86,11 +86,12 @@ describe("selectCacheNamesToDelete", () => {
       selectCacheNamesToDelete([
         "shadow-mate-app-v3",
         "shadow-mate-app-v4",
+        "shadow-mate-app-v5",
         "shadow-mate-v3",
         "shadow-mate-voice",
         "shadow-mate-piper-en_US-ljspeech-medium-v1",
       ])
-    ).toEqual(["shadow-mate-app-v3", "shadow-mate-v3"]);
+    ).toEqual(["shadow-mate-app-v3", "shadow-mate-app-v4", "shadow-mate-v3"]);
   });
 });
 
@@ -115,6 +116,7 @@ describe("reloadToLatest", () => {
     const cachesByName = new Map([
       ["shadow-mate-app-v3", {}],
       ["shadow-mate-app-v4", {}],
+      ["shadow-mate-app-v5", {}],
       ["shadow-mate-v3", {}],
       [piperCacheName, completedPiperCache],
     ]);
@@ -127,9 +129,9 @@ describe("reloadToLatest", () => {
 
     await reloadToLatest({ cacheStorage, markReload, reload });
 
-    expect(cacheStorage.delete).toHaveBeenCalledTimes(2);
+    expect(cacheStorage.delete).toHaveBeenCalledTimes(3);
     expect(new Set(cachesByName.keys())).toEqual(new Set([
-      "shadow-mate-app-v4",
+      "shadow-mate-app-v5",
       piperCacheName,
     ]));
     expect(cachesByName.get(piperCacheName)).toBe(completedPiperCache);

@@ -1,4 +1,4 @@
-export const APP_SHELL_CACHE_NAME = "shadow-mate-app-v4";
+export const APP_SHELL_CACHE_NAME = "shadow-mate-app-v5";
 
 export function isAppShellCacheName(name) {
   return /^shadow-mate-app-v\d+$/.test(name) || /^shadow-mate-v\d+$/.test(name);

@@ -4,7 +4,7 @@ import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 test.describe("Published voice errors", () => {
   test.use({ serviceWorkers: "block" });
 
-  test("shows a stable error when published and same-language system speech are unavailable", async ({ page }) => {
+  test("shows a stable error when published audio fails and the browser rejects system speech", async ({ page }) => {
     await captureAnalytics(page);
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -16,7 +16,11 @@ test.describe("Published voice errors", () => {
     await page.addInitScript(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
-        value: { cancel() {}, getVoices() { return []; }, speak() {} },
+        value: {
+          cancel() {},
+          getVoices() { return []; },
+          speak(utterance) { queueMicrotask(() => utterance.onerror?.({ error: "synthesis-failed" })); },
+        },
       });
       Object.defineProperty(window, "SpeechSynthesisUtterance", {
         configurable: true,
@@ -29,7 +33,7 @@ test.describe("Published voice errors", () => {
     const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await button.click();
 
-    await expect(button).toContainText("AI 发音暂不可用，且未检测到对应系统语音，请稍后重试");
+    await expect(button).toContainText("AI 发音不可用，系统语音播放也失败，请重试");
     expect(pageErrors).toEqual([]);
     expect((await readAnalytics(page)).filter((event) => event.name === "tts_failed")).toEqual([{ name: "tts_failed" }]);
   });

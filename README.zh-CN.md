@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <code>v1.5.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="https://sm.shadow.wang/"><strong>立即使用</strong></a>　·　<a href="./docs/user-guide.md">使用指南</a> · <a href="./docs/README.md">文档导航</a> · <a href="./RELEASE_NOTES.zh-CN.md">中文发布说明</a>
+  <a href="./README.md">English</a> · <a href="https://sm.shadow.wang/"><strong>立即使用</strong></a> · <a href="https://shadow.wang/zh/products/shadow-mate"><strong>Shadow Lab 官方详情</strong></a> · <a href="./docs/user-guide.md">使用指南</a> · <a href="./docs/README.md">文档导航</a> · <a href="./RELEASE_NOTES.zh-CN.md">中文发布说明</a>
 </p>
 
 ## 先看产品
@@ -69,63 +69,60 @@
 
 ### 使用应用
 
-```powershell
-npm.cmd ci
-npm.cmd run dev
+```bash
+npm ci
+npm run dev
 ```
 
-打开终端输出的本地地址即可。不要直接双击 `index.html`，因为浏览器在 `file://` 协议下无法正常加载 ES Module。
+打开 Vite 输出的本地地址。不要通过 `file://` 直接打开 `index.html`，浏览器模块需要开发服务器。
 
-隐私页本地入口为 [http://localhost:5173/privacy](http://localhost:5173/privacy)；它与主应用共用 Vite 开发服务器，但会直接展示独立的双语隐私 HTML。
+本地隐私页为 [http://localhost:5173/privacy](http://localhost:5173/privacy)，与主应用共用 Vite 开发服务器。
 
 ### 验证项目
 
-```powershell
-npm.cmd run check
-npm.cmd run build
-npm.cmd run test:fast
-npm.cmd run test:ui
+```bash
+npm run check
+npm run build
+npm run test:fast
+npm run test:ui
 ```
 
-需要本地数据库测试时，先启动 Docker Desktop：
+需要数据库测试时，先启动 Docker Desktop：
 
-```powershell
+```bash
 npm run local-dev
 npm run local-dev -- plan --projects shadow-mate --json
 ```
 
-日常开发优先使用中央多项目入口：它会预选 Shadow Mate，并只补齐当前缺少的
-shared_test、Schema、Edge generation 和 5173 产品进程；已运行且身份匹配的资源会复用。
-`supabase:local:start` 与 `supabase:local:functions:serve` 仍保留为一版兼容排查入口，
-不应与中央 Edge generation 同时启动。
+## 本地开发边界
 
-仅需兼容分步入口时：
+中央本地入口协调共享 Supabase、Mailpit、数据库测试和 Edge Functions，复用已运行且身份匹配的资源，仅启动缺失资源：
 
-```powershell
-npm run supabase:local:start
-npm run test:db
+```bash
+npm run local-dev
 ```
 
-`supabase:local:start` 会转到同级 `shadow-size/merchant-admin`，启动共享本地 Supabase，并按 Shadow Portal 控制面的 SHA-256 校验结果加载 Shadow Mate 的 `learning_*` 业务 schema。控制面历史快照只会应用到 `127.0.0.1:54322`，不会复制到生产迁移目录，也不会连接生产数据库。
+共享本地 Supabase API 仅限本机使用，Mailpit 位于 [http://127.0.0.1:54324](http://127.0.0.1:54324)。功能工作区直接启动 Vite 不会自动启动 Mailpit 或切换数据库，需要显式设置 loopback Supabase URL 和 publishable key。
 
-如果要验收登录、找回密码或其他 Edge Function，再开一个终端运行：
+非生产和 Preview 来源默认禁止连接生产 Supabase；只有明确授权的临时验证覆盖项才能允许远程生产访问。生产凭据和 service-role key 不得进入仓库。
 
-```powershell
+需要分步排查时仍可使用兼容入口，不应与中央 Edge generation 同时启动：
+
+```bash
+npm run supabase:local:start
 npm run supabase:local:functions:serve
 ```
 
-该命令会准备共享函数覆盖层并以前台方式运行本地函数服务；关闭该终端就会停止函数服务。
+兼容入口通过同级 merchant-admin 和 Shadow Portal 控制面校验的来源准备本地 schema 与函数覆盖层。不要在本仓库根目录运行裸 `supabase start` 代替共享入口。前台函数服务随其终端关闭而停止。
 
-如果要对共享本地数据库执行 lint，请在 merchant-admin 目录运行：
+本地数据库 lint：
 
-```powershell
+```bash
 cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-`test:coverage` 覆盖核心纯函数、学习状态机和防重复操作锁，语句、分支、函数和行覆盖率门槛均为 80%。`test:e2e` 覆盖离线导航、打卡、积分、日历、家庭空间、重复点击保护、邮箱验证码/密码登录、找回密码、数据生命周期和云端冲突限次重试；真实 Supabase E2E 需要额外配置环境变量。
-
-日常开发按改动范围选择最小充分的检查：页面改动运行目标 UI 测试，数据库/认证/同步改动补充对应集成测试；合并或发布前运行 `npm.cmd run test:full`。`test:fast` 是静态检查加全部 unit test，不是 changed-only 测试。
+日常按变更范围选择检查；发布候选运行 `npm run test:full`。`test:fast` 包含静态检查与全部单元测试，真实 Supabase E2E 需要相应环境。覆盖率门槛以测试配置为准。
 
 ## 工作方式
 
@@ -165,59 +162,27 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## Supabase 与安全边界
 
-当前部署配置位于 `src/config.js`，浏览器端只使用 publishable key。真正的数据隔离由 Supabase RLS、家庭成员关系和产品 ID 共同完成；绝不能把 secret key 或 `service_role` key 放进仓库。
+浏览器仅使用 publishable key；数据隔离由 Supabase RLS、家庭成员关系和产品 ID 共同执行。secret 或 service-role key 不得进入浏览器代码。
 
-### 共享 Supabase 与迁移边界
+本仓库包含迁移提案和隔离 CI 测试副本。共享生产迁移由 Shadow Portal 控制面管理，不得从本仓库执行生产 `db push`、`migration repair`、`--include-all`、linked SQL 或手工编辑 `schema_migrations`。
 
-影伴接入共享 Supabase 后，日常本地验收通过中央 `npm run local-dev`，由同级
-`shadow-size/merchant-admin` 启动共享本地实例，并加载经 Shadow Portal 控制面校验的
-Shadow Mate `learning_*` schema。需要仅排查数据库或兼容 Edge 时，才使用上面的两个旧 npm
-wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper，但保留
-`supabase/functions/_shared/README.md` 作为受控空 shared bundle，供中央 Edge generation
-做来源校验和增量重建。
-
-仓库中的 `supabase/migrations/` 仍用于保存与代码同步的迁移提案和隔离 CI 测试副本，不是共享生产库的唯一发布目录。共享生产迁移的 canonical 文件、审批、发布和台账由 `shadow-portal/supabase/control-plane` 管理；不要在本仓库直接执行生产 `db push`、`migration repair` 或 linked SQL。
-
-当前本地 Growth Loop 9 条迁移已按控制面登记来源恢复并逐条核验 SHA-256：8 条来自 `origin/feat/growth-loop-integration`，期初积分迁移来自 `origin/main`。这只恢复本地 Schema 来源，不代表产品仓库获得生产迁移发布权限。
-
-`supabase/config.toml` 的独立端口和迁移配置仅供 CI/隔离测试使用。不要在影伴仓库根目录直接运行裸 `supabase start` 来代替共享本地启动。
-
-数据库迁移提案包括：
-
-- 项目登记和共享多租户兼容性
-- 家庭、成员、学习者和学习状态表
-- 产品约束、年级兼容性和索引
-- 家庭删除生命周期、Auth 身份删除和服务端执行权限
-
-数据范围见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
-
-## 文档导航
-
-| 文档 | 用途 |
-| --- | --- |
-| [文档导航中心](docs/README.md) | 系统架构、工程规范、发布管理、合规许可完整索引 |
-| [使用指南](docs/user-guide.md) | 家长登录、家庭空间、打卡、日历、同步、语音和安装 |
-| [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
-| [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
-| [第三方许可清单](THIRD_PARTY_NOTICES.md) | npm、语音模型和 vendored 资源的来源与许可状态 |
-| [Changelog](CHANGELOG.md) | 详细变更记录 |
-| [Release Notes](RELEASE_NOTES.md) | 版本发布说明 |
+共享本地开发契约会校验 Supabase 配置和迁移来源；本地验证不授予生产迁移权限。
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.5.0，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴当前仓库版本为 v1.5.1，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
-### 中英文发音
+## 中英文发音
 
-“听发音”优先使用与中文或英文匹配的设备系统语音。没有可用系统语音的国产 Android（尤其是无 GMS 设备）会切换到浏览器本地 Matcha，首次使用会从 `voice.shadow.wang` CDN 下载一套约 154.6MB 的 `matcha-icefall-zh-en` 中英双语离线包。移动兼容运行时将 WebAssembly 起始内存从官方构建预占的 512MB 降为 256MB，并保留按需增长；已校验过 149MB 模型数据的浏览器只需替换约 12MB 运行时。下载完成后，同一浏览器配置文件和当前域名中的中文、英文都使用这套模型，无需分别下载。
+固定课程语音在发布准备阶段由腾讯云合成，并通过 `voice.shadow.wang` 提供不可变 MP3 文件。中文使用智柯（`101030`），英文使用 WeJack（`101050`）。播放无需下载本地模型，也不会调用腾讯云合成接口；影伴不采集麦克风录音。
 
-缓存受浏览器安全边界限制：Chrome、夸克、小米浏览器、无痕模式及不同域名不能共享，因此需要分别下载。模型已通过“花、雨、风、牛”、对应英文单词及中英文长句试听；当前音色偏机械是已接受、后续再优化的限制。离线合成不会上传录音。
+当前工作区清单共 634 条：98 张识字卡；32 个写字条目的 256 条音频（中文发音、英文发音、字意、图片说明、两个词语、例句和书写提示）；80 条古诗音频；65 个英语单词；104 条数学片段；31 条引导语。随机口算按两个数字、运算符和“等于几”组合朗读；每日内容在已覆盖的完整字库与词库中轮换。新增或修改文案后需要重新预热。浏览器按标准 HTTP 规则缓存音频，离线可用性取决于缓存是否仍被保留。
 
-更换模型的原因是旧 Chaowen 在原生与浏览器推理中都会错读部分孤立汉字，Kokoro 和 MeloTTS 也未通过试听；`matcha-icefall-zh-en` 的中英文发音与完整性通过后才进入实现。
+CDN 播放失败时尝试匹配语言的系统语音；语音列表为空时按请求语言尝试浏览器默认语音，不保证设备具备相应能力。2026-09-09，用户已通过局域网开发服务确认小米手机夸克浏览器发音可用；此结果仅代表该设备与浏览器组合，不代表所有移动浏览器或生产部署。生成与校验命令见[语音维护说明](docs/architecture.md#speech-catalog-maintenance)。
 
 ## 致谢
 
-影伴的“听发音”优先使用匹配语言的系统语音；系统语音不可用、无响应或播放失败时，使用浏览器本地 sherpa-onnx/Matcha 合成兜底。系统 TTS 是否联网取决于设备和浏览器的语音引擎；影伴不采集麦克风录音。相关开源项目和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
+当前固定课程使用腾讯云预生成音频。以下已停用的本地语音资源暂时保留，用于回滚历史和手动清理旧浏览器缓存；当前播放流程不会自动下载或启用它们。相关来源和许可证见 [第三方许可清单](THIRD_PARTY_NOTICES.md)：
 
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（Apache-2.0）：浏览器 WebAssembly TTS 运行时
 - [matcha-icefall-zh-en](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html)：统一中英双语模型
@@ -231,6 +196,20 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 - [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)：英语 `en_US-ljspeech-medium` 和中文 `zh_CN-chaowen-medium` 语音模型（经 `voice.shadow.wang` CDN 分发）
 
 第三方资源的来源、版本指纹和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 文档导航
+
+| 文档 | 用途 |
+| --- | --- |
+| [文档索引](docs/README.md) | 架构、工程、发布与合规完整索引 |
+| [English README](README.md) | 完整英文产品与开发指南 |
+| [使用指南](docs/user-guide.md) | 登录、家庭空间、打卡、同步、语音和安装 |
+| [Logo 使用说明](docs/logo-usage.md) | Shadow Mate Logo 使用规范 |
+| [英文发布说明](RELEASE_NOTES.md) | 英文用户变更说明 |
+| [中文发布说明](RELEASE_NOTES.zh-CN.md) | 中文用户变更说明 |
+| [第三方许可](THIRD_PARTY_NOTICES.md) | 库与资源的来源、版本及许可 |
+| [隐私](PRIVACY.md) · [安全](SECURITY.md) | 数据处理与漏洞披露政策 |
+| [商标政策](TRADEMARKS.md) · [变更记录](CHANGELOG.md) | 品牌使用边界与版本历史 |
 
 ## 联系我
 
@@ -253,4 +232,4 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 ## License
 
-代码采用 MIT License。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容、模型或商标的使用权。Shadow Mate 品牌边界见 [TRADEMARKS.md](TRADEMARKS.md)。
+代码采用 [MIT License](LICENSE)。仓库中提到的第三方书名、品牌、视频平台和内容链接仍归各自权利人所有；MIT License 不授予第三方内容、模型或商标的使用权。Shadow Mate 品牌边界见 [TRADEMARKS.md](TRADEMARKS.md)。

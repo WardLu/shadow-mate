@@ -84,6 +84,18 @@ test.describe("Published speech and system fallback", () => {
     expect((await readAnalytics(page)).filter((event) => event.name === "tts_failed")).toEqual([]);
   });
 
+  test("still asks the browser to speak when its voice list is empty", async ({ page }) => {
+    await installSystemSpeech(page, []);
+    await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+    await openChinese(page);
+    const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    const expectedText = await button.getAttribute("data-speech-text");
+    await button.click();
+    await expect.poll(() => page.evaluate(() => window.__speechUtterances)).toEqual([
+      { text: expectedText, lang: "zh-CN", voiceLang: undefined },
+    ]);
+  });
+
   test("never uses an English voice for Chinese fallback and never requests Piper", async ({ page }) => {
     await installSystemSpeech(page, [{ lang: "en-US", name: "English" }]);
     let piperRequests = 0;

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-Ting" }]) {
+  await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
   await page.addInitScript((configuredVoices) => {
     window.__speechUtterances = [];
     Object.defineProperty(window, "speechSynthesis", {

@@ -63,8 +63,8 @@ if (
 }
 
 const serviceWorker = await readFile("dist/sw.js", "utf8");
-if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
-  throw new Error("Built service worker must use shadow-mate-app-v4");
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v5"')) {
+  throw new Error("Built service worker must use shadow-mate-app-v5");
 }
 if (!serviceWorker.includes("keys.filter((key) => isAppShellCacheName(key) && key !== CACHE_NAME).map((key) => caches.delete(key))")) {
   throw new Error("Built service worker must delete only stale app-shell caches");

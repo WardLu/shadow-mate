@@ -1,4 +1,4 @@
-const CACHE_NAME = "shadow-mate-app-v4";
+const CACHE_NAME = "shadow-mate-app-v5";
 const APP_SHELL = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 function isAppShellCacheName(name) {
