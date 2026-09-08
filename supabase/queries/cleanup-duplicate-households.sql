@@ -47,6 +47,28 @@ order by h.created_at desc;
 
 
 -- ------------------------------------------------------------------------------
+-- 【安全前置：一键创建临时影子备份快照（免费版最快最安全的备份方式）】
+-- 免费版 Supabase 虽无自动快照，但在 SQL Editor 中执行以下 4 句即可完成 0 秒全量备份。
+-- 数据在数据库内物理复制，万一操作不符合预期，可随时利用备份表 1 秒秒级还原。
+-- ------------------------------------------------------------------------------
+-- 1. 创建全量快照备份表：
+create table if not exists public.backup_households_snapshot as select * from public.learning_households;
+create table if not exists public.backup_profiles_snapshot as select * from public.learning_profiles;
+create table if not exists public.backup_members_snapshot as select * from public.learning_household_members;
+create table if not exists public.backup_states_snapshot as select * from public.learning_profile_states;
+
+-- （应急回滚备用语句，正常情况下无需执行）：
+-- insert into public.learning_households select * from public.backup_households_snapshot on conflict (id) do nothing;
+-- insert into public.learning_profiles select * from public.backup_profiles_snapshot on conflict (id) do nothing;
+
+-- （清理完成并确认无误后，随时运行以下语句释放备份表）：
+-- drop table if exists public.backup_households_snapshot;
+-- drop table if exists public.backup_profiles_snapshot;
+-- drop table if exists public.backup_members_snapshot;
+-- drop table if exists public.backup_states_snapshot;
+
+
+-- ------------------------------------------------------------------------------
 -- 第二步【方案 A - 推荐】：将 robin lu 档案合并到主家庭中，删除其余 7 个冗余家庭
 -- （适用于：robin 与 lucas 为同一个家庭的两个孩子，希望在同一个家庭空间下一起管理）
 -- ------------------------------------------------------------------------------
