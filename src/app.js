@@ -2582,11 +2582,44 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="install">
-        <div class="guide-section-heading"><span>07</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
-        <div class="guide-install-grid">
-          <div><strong>iPad / iPhone</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div>
-          <div><strong>Android 平板 / 手机</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕或安装。</span></div>
-          <div><strong>电脑（PC / Mac）</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div>
+        <div class="guide-section-heading"><span>07</span><div><h3>添加到主屏幕：实现像原生 App 一样的独立安装体验</h3><p>影伴支持现代 PWA 渐进式 Web 应用标准，无需在应用商店搜索或下载臃肿安装包，添加到主屏幕即可像独立 App 一样打开使用。</p></div></div>
+        
+        <div class="guide-pwa-benefits">
+          <div><strong>全屏沉浸无干扰</strong><span>隐藏浏览器地址栏与前进后退按键，全屏纯净展示，孩子点读学习更专注、防误触。</span></div>
+          <div><strong>系统独立进程长久保活</strong><span>系统为桌面图标分配专属独立沙盒，登录状态长效保持，彻底告别频繁掉登录。</span></div>
+          <div><strong>秒开与离线能力</strong><span>学习界面与课程发音由本地智能缓存，网络不佳或离线时也能秒开并完成打卡。</span></div>
+        </div>
+
+        <div class="guide-install-steps">
+          <article class="guide-install-card">
+            <h4>🍎 iPad / iPhone (Safari 浏览器)</h4>
+            <ol>
+              <li>在系统自带的 <strong>Safari 浏览器</strong> 中打开影伴（若在微信内，先点右上角「···」选择“在 Safari 中打开”）。</li>
+              <li>点击屏幕底栏（iPhone）或顶栏（iPad）的 <strong>「分享」图标</strong>（带向上箭头的方框）。</li>
+              <li>在弹出的分享菜单中向下滑动，找到并点击 <strong>「添加到主屏幕」</strong>（Add to Home Screen）。</li>
+              <li>在右上角确认点击 <strong>「添加」</strong>，桌面就会出现绿色的“影伴”独立应用图标。</li>
+            </ol>
+          </article>
+
+          <article class="guide-install-card">
+            <h4>🤖 Android 平板 / 手机 (Chrome 浏览器)</h4>
+            <ol>
+              <li>使用系统自带或下载的 <strong>Google Chrome 浏览器</strong> 打开影伴。</li>
+              <li>点击浏览器右上角的 <strong>三个点「⋮」</strong> 菜单。</li>
+              <li>选择 <strong>「添加到主屏幕」</strong> 或 <strong>「安装应用」</strong>（部分系统底部会直接提示“安装影伴”横幅）。</li>
+              <li>点击确认，系统即可在桌面自动生成独立的影伴应用图标。</li>
+            </ol>
+          </article>
+
+          <article class="guide-install-card">
+            <h4>💻 电脑 (Windows PC / Mac)</h4>
+            <ol>
+              <li>使用 Chrome 或 Edge 浏览器打开影伴网页。</li>
+              <li>观察浏览器地址栏最右侧，会看到一个 <strong>显示屏带箭头的「安装应用」小图标</strong>。</li>
+              <li>点击该图标并选择 <strong>「安装」</strong>（或在浏览器菜单选择“安装影伴”）。</li>
+              <li>安装后自动生成独立桌面快捷方式，支持固定到任务栏或 Dock 栏独立窗口运行。</li>
+            </ol>
+          </article>
         </div>
       </section>
 

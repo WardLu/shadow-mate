@@ -41,13 +41,33 @@ const AUTH_STORAGE_KEY = supabaseUrl
   : null;
 const cloudEnabled = Boolean(supabaseUrl && publishableKey);
 const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin;
+const authStorage = {
+  getItem: (key) => {
+    try {
+      return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    } catch (_) {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (_) {}
+  },
+  removeItem: (key) => {
+    try {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    } catch (_) {}
+  },
+};
 const supabase = cloudEnabled
   ? createClient(supabaseUrl, publishableKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: window.sessionStorage,
+        storage: authStorage,
       },
     })
   : null;
@@ -470,7 +490,10 @@ async function clearLocalAccountState() {
     signOutError = error;
   }
   try {
-    if (AUTH_STORAGE_KEY) sessionStorage.clear();
+    if (AUTH_STORAGE_KEY) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      sessionStorage.clear();
+    }
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
     await window.growthLoop?.clearAllLocalData?.();
     window.learningDesk.clearLocalData({ reload: false });

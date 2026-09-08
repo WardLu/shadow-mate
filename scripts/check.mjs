@@ -222,7 +222,7 @@ const cloud = await readFile("src/cloud.js", "utf8");
 for (const marker of [
   'from "@supabase/supabase-js"',
   'const ACTIVE_PROFILE_KEY = `${PRODUCT_ID.replaceAll("-", "_")}_active_profile`',
-  "storage: window.sessionStorage",
+  "storage: authStorage",
   "const AUTH_REDIRECT_ORIGIN = CLOUD_CONFIG.authRedirectOrigin || window.location.origin",
   "readRememberedProfileId()",
   '"serviceWorker" in navigator && window.isSecureContext',

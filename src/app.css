@@ -833,6 +833,16 @@
   .guide-facts>div,.guide-install-grid>div{display:grid;gap:2px;padding:10px 11px;border-left:3px solid var(--green);background:#f7fbf8;border-radius:0 12px 12px 0;}
   .guide-facts strong,.guide-install-grid strong{font-size:12px;color:var(--green-deep);}
   .guide-facts span,.guide-install-grid span{font-size:12px;color:var(--ink-soft);line-height:1.5;}
+  .guide-pwa-benefits{display:grid;gap:8px;margin-bottom:12px;}
+  .guide-pwa-benefits>div{display:grid;gap:2px;padding:10px 11px;border-left:3px solid var(--green);background:#f7fbf8;border-radius:0 12px 12px 0;}
+  .guide-pwa-benefits strong{font-size:12px;color:var(--green-deep);}
+  .guide-pwa-benefits span{font-size:12px;color:var(--ink-soft);line-height:1.5;}
+  .guide-install-steps{display:grid;gap:10px;}
+  .guide-install-card{padding:12px 14px;border-radius:15px;background:#f7fbf8;border:1px solid var(--line);}
+  .guide-install-card h4{margin:0 0 8px;font-size:13px;font-weight:800;color:var(--ink);}
+  .guide-install-card ol{margin:0;padding-left:18px;display:grid;gap:6px;}
+  .guide-install-card li{font-size:12px;color:var(--ink-soft);line-height:1.55;}
+  .guide-install-card li strong{color:var(--ink);font-weight:700;}
   .guide-help-card{background:linear-gradient(135deg,#fffaf0,#fff4d6);border-color:#ffe1a0;}
   .guide-help-card h3{margin:0 0 5px;font-size:15px;color:#7d5b10;}
   .guide-help-card p{margin:0;color:#8a6a1f;font-size:12px;line-height:1.6;}
@@ -959,7 +969,7 @@
     .guide-recommend-badge.chrome{background:#143144;color:#7dd3fc;}
     .guide-recommend-badge.cloud{background:#3d2f16;color:#fde047;}
     .guide-sync-status-tip{background:#1b3223;color:#81e29a;}
-    .guide-device,.guide-facts>div,.guide-install-grid>div{background:#1b2c22;border-color:var(--line);}
+    .guide-device,.guide-facts>div,.guide-install-grid>div,.guide-pwa-benefits>div,.guide-install-card{background:#1b2c22;border-color:var(--line);}
     .piper-resource-estimate,.piper-resource-row{background:#1b2c22;border-color:var(--line);}
     .guide-note,.guide-help-card{background:#2f291b;border-color:#66552e;}
     .guide-note{color:#e1c77b;}
