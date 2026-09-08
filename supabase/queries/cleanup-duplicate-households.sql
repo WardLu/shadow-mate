@@ -69,36 +69,25 @@ create table if not exists public.backup_states_snapshot as select * from public
 
 
 -- ------------------------------------------------------------------------------
--- 第二步【方案 A - 推荐】：将 robin lu 档案合并到主家庭中，删除其余 7 个冗余家庭
--- （适用于：robin 与 lucas 为同一个家庭的两个孩子，希望在同一个家庭空间下一起管理）
+-- 第二步【方案 A - 推荐】：在主家庭保留 robin lu，并安全删除其余 7 个冗余家庭
+-- （无需 UPDATE 避免外键冲突；ON DELETE CASCADE 会自动级联删除对应的空记录）
 -- ------------------------------------------------------------------------------
 -- 提示：请将下方的 'parent@example.com' 替换为真实家长邮箱后执行：
 begin;
 
--- 1. 将 robin lu 的档案归属安全更新为主家庭 90daa0ca
-update public.learning_profiles
-set household_id = '90daa0ca-bc5d-49d0-97df-592c6356ff91'
-where display_name = 'robin lu'
-  and household_id = 'f824ce1b-486c-44f3-9feb-1b8048a2dc47'
-  and exists (
-    select 1 from public.learning_households
-    where id = '90daa0ca-bc5d-49d0-97df-592c6356ff91'
-      and owner_user_id = (select id from auth.users where email = 'parent@example.com')
-  );
+-- 1. 在主活跃家庭 90daa0ca 下安全添加 robin lu 档案（继承原年级设置）
+insert into public.learning_profiles (household_id, display_name, grade_level)
+select '90daa0ca-bc5d-49d0-97df-592c6356ff91', 'robin lu', coalesce(p.grade_level, 1)
+from public.learning_profiles p
+where p.household_id = 'f824ce1b-486c-44f3-9feb-1b8048a2dc47'
+  and p.display_name = 'robin lu'
+limit 1;
 
--- 2. 删除其余 7 个冗余家庭（外键约束 on delete cascade 会自动级联删除对应的空成员与授权记录）
+-- 2. 删除其余 7 个冗余家庭（外键均配置了 ON DELETE CASCADE，会自动安全级联清理对应数据）
 delete from public.learning_households
-where id in (
-  'f824ce1b-486c-44f3-9feb-1b8048a2dc47',
-  '07863981-99ba-438f-960a-9467be128a13',
-  'e0051577-9ea7-4aaa-9ce2-870c59533b0f',
-  'e659ef81-91f3-492c-b2a1-c4ca007a3e78',
-  '08b5dbc2-0300-40dd-ac20-69923129bfc2',
-  'f6bc5d81-52d1-4e0b-b7be-7df8f5302e07',
-  '3c004e5d-4344-4b96-8a35-c210ae6796ea'
-)
-and owner_user_id = (select id from auth.users where email = 'parent@example.com')
-and project_id = 'shadow-mate';
+where id != '90daa0ca-bc5d-49d0-97df-592c6356ff91'
+  and owner_user_id = (select id from auth.users where email = 'parent@example.com')
+  and project_id = 'shadow-mate';
 
 commit;
 
