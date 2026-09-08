@@ -1,6 +1,7 @@
 {
   "forbidden_paths": [
     "(^|/)(?:auth-setup|security-baseline|test-scope|architecture-internal|product-direction|release-closure|privacy-policy-publishing|branch-integration-policy|release-notes-template(?:\\.[^/]*)?)\\.md$",
-    "(^|/)(?:child-privacy-and-consent|ip-legal-review|dogfooding-checklist|tts-decision|piper-ljspeech-model-card)\\.md$"
+    "(^|/)(?:child-privacy-and-consent|ip-legal-review|dogfooding-checklist|tts-decision|piper-ljspeech-model-card)\\.md$",
+    "(^|/)adr/"
   ]
 }

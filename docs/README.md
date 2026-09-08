@@ -15,12 +15,11 @@
 
 ---
 
-### 2. 🏛️ 系统架构与设计决策 (Architecture & Decisions)
+### 2. 🏛️ 系统架构与技术规范 (Architecture & Engineering)
 
 | 文档 | 说明 | 适用对象 |
 | :--- | :--- | :--- |
 | [系统架构与数据模型 (Architecture)](architecture.md) | 整体技术栈、Web Audio 声音引擎、Local-first 兑现闭环与数据隔离 | 开发者 / 架构师 |
-| [架构决策记录 (ADR)](adr/0001-one-preschool-system-three-stage-packs.md) | 幼儿启蒙学习包三阶段架构决策 (ADR-0001) | 开发者 / 架构师 |
 
 ---
 

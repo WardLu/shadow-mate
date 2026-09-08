@@ -53,6 +53,7 @@ shadow-wang-home.png
 /docs/release-notes-template.md
 /docs/release-notes-template.zh-CN.md
 /docs/releases/
+/docs/adr/
 
 # Local large media & marketing project workspaces
 /assets/fonts/

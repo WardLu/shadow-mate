@@ -14,6 +14,7 @@ const forbiddenPaths = [
   /(^|\/)(?:internal|private|legal|commercial|finance|billing|entitlement|secrets?)(?:[-_][^/]*)?\//i,
   /(^|\/)(?:auth-setup|security-baseline|test-scope|architecture-internal|product-direction|release-closure|privacy-policy-publishing|branch-integration-policy|release-notes-template(?:\.[^/]*)?)\.md$/i,
   /(^|\/)(?:child-privacy-and-consent|ip-legal-review|dogfooding-checklist|tts-decision|piper-ljspeech-model-card)\.md$/i,
+  /(^|\/)adr\//i,
   /(^|\/)(?:\.env|\.vercel|\.supabase|\.codex|\.agents|\.claude|\.superpowers|superpowers)(?:\/|\.|$)/i,
   /(^|\/)(?:production|prod|customer|user-data|exports?)(?:[-_][^/]*)?\.(?:csv|json|sql|dump|db|sqlite|zip)$/i,
 ];
