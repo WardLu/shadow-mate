@@ -306,8 +306,8 @@ test.describe("Offline mode (no login)", () => {
     await page.click('[data-mod="guide"]');
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("共享 AI 语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("发音来源与备用系统语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("高质量预录音频");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("不需要下载本地模型");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("旧离线包只需在需要释放空间时手动删除");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource-action="download"]')).toHaveCount(0);
