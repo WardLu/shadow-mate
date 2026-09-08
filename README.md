@@ -204,7 +204,6 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and li
 | [Logo usage](docs/logo-usage.md) | Adopted Shadow Mate Logo usage |
 | [Release notes](RELEASE_NOTES.md) | English user-facing changes |
 | [Chinese release notes](RELEASE_NOTES.zh-CN.md) | Chinese user-facing changes |
-| [Release Notes template](docs/release-notes-template.md) | Authoring rules and structure |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Included libraries and assets |
 | [Privacy](PRIVACY.md) · [Security](SECURITY.md) | Data and responsible disclosure policies |
 
