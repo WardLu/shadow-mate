@@ -40,6 +40,32 @@ async function expectPublishedPlays(page, count) {
 test.describe("Core learning published speech", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("can restart the whole poem after a line tap cancels CDN playback", async ({ page }) => {
+    await installPublishedSpeechOnly(page);
+    await page.addInitScript(() => {
+      window.Audio.prototype.play = function () {
+        window.__publishedAudioPlays += 1;
+        return Promise.resolve();
+      };
+    });
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    const button = page.locator(".poem-read-all");
+    await button.click();
+    await expectPublishedPlays(page, 1);
+    await expect(button).toBeDisabled();
+    await page.locator(".poem-line").first().click();
+    await expectPublishedPlays(page, 2);
+    await expect(button).toBeEnabled();
+    await expect(button).not.toHaveAttribute("aria-busy", "true");
+    // Wait out the application's 500 ms duplicate-click guard before restarting.
+    await page.waitForTimeout(550);
+    await button.click();
+    await expectPublishedPlays(page, 3);
+    await expect(button).toBeDisabled();
+  });
+
   test("reads both literacy cards and every worksheet tap without system speech", async ({ page }) => {
     await installPublishedSpeechOnly(page);
     await page.goto("/");

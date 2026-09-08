@@ -972,6 +972,11 @@ function renderLearning(){
 let currentPoemSpeechId = 0;
 function stopPoemSpeech() {
   currentPoemSpeechId++;
+  const readAllButton = document.querySelector(".poem-read-all");
+  if (readAllButton) {
+    readAllButton.disabled = false;
+    readAllButton.removeAttribute("aria-busy");
+  }
   if (activeSpeechRequest?.isPoemSpeech) {
     const prev = activeSpeechRequest;
     activeSpeechRequest = null;
