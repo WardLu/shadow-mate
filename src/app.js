@@ -11,7 +11,7 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
-import { cleanSpeechText } from "./speech-text-utils.js";
+import { cleanSpeechText, findMatchingVoice } from "./speech-text-utils.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
@@ -52,6 +52,17 @@ startVersionGuard({ checkIntervalMs: 60_000 });
 const publishedSpeechPlayer = createPublishedSpeechPlayer({
   getAudioContext: () => getAudioContext(),
 });
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  try {
+    window.speechSynthesis.getVoices?.();
+    window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+      try { window.speechSynthesis.getVoices?.(); } catch (_) {}
+    });
+  } catch (_) {}
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerdown", primeSpeechAudio, { passive: true, capture: true });
+}
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -598,8 +609,18 @@ function getAudioContext() {
 
 function primeSpeechAudio() {
   const audioContext = getAudioContext();
-  if (!audioContext || audioContext.state !== "suspended") return;
-  void audioContext.resume().catch(() => {});
+  if (audioContext && audioContext.state === "suspended") {
+    void audioContext.resume().catch(() => {});
+  }
+  const synth = window.speechSynthesis;
+  if (synth) {
+    try {
+      synth.getVoices?.();
+      if (synth.paused) {
+        synth.resume();
+      }
+    } catch (_) {}
+  }
 }
 
 function releaseObjectUrl(url) {
@@ -646,30 +667,11 @@ function stopActivePlayback() {
   }
 }
 
-function isMandarinChineseVoiceLocale(locale) {
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
-  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
-  if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
-  if (normalizedLocale === "zh") return true;
-  if (!/^zh-/.test(normalizedLocale)) return false;
-
-  const subtags = normalizedLocale.split("-").slice(1);
-  return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg");
-}
-
 function findSystemVoice(locale) {
   const synth = window.speechSynthesis;
   if (!(synth && typeof window.SpeechSynthesisUtterance === "function")) return null;
   const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
-  if (!Array.isArray(voices)) return null;
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
-  const language = normalizedLocale.split("-")[0];
-  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
-  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
-    || voices.find((voice) => locale === "zh-CN"
-      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
-      : normalizeVoiceLocale(voice) === language)
-    || null;
+  return findMatchingVoice(voices, locale);
 }
 
 function waitForSystemVoice(locale, timeoutMs = 1200) {
@@ -678,6 +680,11 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
 
   const synth = window.speechSynthesis;
   if (!synth || typeof synth.addEventListener !== "function") return Promise.resolve(null);
+
+  const currentVoices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
+  if (Array.isArray(currentVoices) && currentVoices.length > 0) {
+    return Promise.resolve(null);
+  }
 
   return new Promise((resolve) => {
     let timer = null;
@@ -839,51 +846,62 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
   try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
   const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
-  try {
-    await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
-    if (!isCurrentSpeech()) return;
-    restore();
-    return;
-  } catch (publishedError) {
-    if (!isCurrentSpeech()) return;
-    if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
-    const systemVoice = await waitForSystemVoice(locale, 1200);
-    if (!isCurrentSpeech()) return;
-    if (!(synth && typeof Utterance === "function") || !systemVoice) {
-      const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
-      fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
+  const hasContentId = Boolean(contentId);
+  let publishedError = null;
+  if (hasContentId) {
+    try {
+      await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
+      if (!isCurrentSpeech()) return;
+      restore();
       return;
+    } catch (err) {
+      publishedError = err;
+      if (!isCurrentSpeech()) return;
+      if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
     }
-    await new Promise((resolve) => {
-      const utterance = new Utterance(t);
-      let started = false;
-      utterance.lang = locale;
-      utterance.rate = 0.9;
-      utterance.volume = Math.max(0, Math.min(1, speechVolume));
-      utterance.voice = systemVoice;
-      utterance.onstart = () => { started = true; clearSystemTimer(); };
-      utterance.onend = () => { restore(); resolve(); };
-      utterance.onerror = (event) => {
-        if (event?.error === "canceled" || event?.error === "interrupted") restore();
-        else fail("AI 发音不可用，系统语音播放也失败，请重试");
-        resolve();
-      };
-      try {
-        synth.cancel();
-        synth.speak(utterance);
-        systemTimer = window.setTimeout(() => {
-          if (!started) {
-            try { synth.cancel(); } catch (_) {}
-            fail("AI 发音不可用，系统语音未能启动，请重试");
-            resolve();
-          }
-        }, 4000);
-      } catch (_) {
-        fail("AI 发音不可用，系统语音播放也失败，请重试");
-        resolve();
-      }
-    });
+  } else {
+    publishedError = new Error("published-audio-not-found");
+    publishedError.code = "published-audio-not-found";
   }
+
+  const systemVoice = await waitForSystemVoice(locale, 1200);
+  if (!isCurrentSpeech()) return;
+  if (!(synth && typeof Utterance === "function") || !systemVoice) {
+    const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
+    fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
+    return;
+  }
+  await new Promise((resolve) => {
+    const utterance = new Utterance(t);
+    let started = false;
+    utterance.lang = locale;
+    utterance.rate = 0.9;
+    utterance.volume = Math.max(0, Math.min(1, speechVolume));
+    utterance.voice = systemVoice;
+    utterance.onstart = () => { started = true; clearSystemTimer(); };
+    utterance.onend = () => { restore(); resolve(); };
+    utterance.onerror = (event) => {
+      if (event?.error === "canceled" || event?.error === "interrupted") restore();
+      else fail("AI 发音不可用，系统语音播放也失败，请重试");
+      resolve();
+    };
+    try {
+      if (synth.speaking) {
+        synth.cancel();
+      }
+      synth.speak(utterance);
+      systemTimer = window.setTimeout(() => {
+        if (!started) {
+          try { synth.cancel(); } catch (_) {}
+          fail("AI 发音不可用，系统语音未能启动，请重试");
+          resolve();
+        }
+      }, 4000);
+    } catch (_) {
+      fail("AI 发音不可用，系统语音播放也失败，请重试");
+      resolve();
+    }
+  });
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
