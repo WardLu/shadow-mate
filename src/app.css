@@ -791,6 +791,22 @@
   .guide-badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;position:relative;z-index:1;}
   .guide-badges span{padding:5px 9px;border:1px solid rgba(255,255,255,.35);border-radius:999px;font-size:11px;font-weight:700;background:rgba(255,255,255,.12);}
   .guide-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:var(--shadow);}
+  .guide-recommend-card{background:#f7fbf8;border:1.5px solid rgba(47,168,79,.3);}
+  .guide-rec-icon{background:linear-gradient(135deg,#ffd166,#ffb703) !important;color:#573a00 !important;font-size:15px !important;}
+  .guide-recommend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0 14px;}
+  .guide-recommend-item{display:grid;gap:6px;padding:14px;border-radius:16px;background:#fff;border:1px solid var(--line);}
+  .guide-recommend-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;width:fit-content;}
+  .guide-recommend-badge.tablet{background:#e6f7eb;color:var(--green-deep);}
+  .guide-recommend-badge.chrome{background:#e0f2fe;color:#0369a1;}
+  .guide-recommend-badge.cloud{background:#fef3c7;color:#b45309;}
+  .guide-recommend-item h4{margin:2px 0 0;font-size:13.5px;font-weight:800;color:var(--ink);}
+  .guide-recommend-item p{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.6;}
+  .guide-recommend-item p strong{color:var(--ink);font-weight:700;}
+  .guide-recommend-actions{display:flex;align-items:center;justify-content:center;padding-top:4px;}
+  .guide-login-action-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:380px;padding:11px 18px;border:none;border-radius:999px;background:linear-gradient(135deg,#2fa84f,#1f7a39);color:#fff;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(31,122,57,.25);transition:transform .12s ease,box-shadow .12s ease;}
+  .guide-login-action-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(31,122,57,.3);}
+  .guide-login-action-btn:active{transform:scale(.98);}
+  .guide-sync-status-tip{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--green-soft);color:var(--green-deep);font-size:12px;font-weight:700;}
   .guide-section-heading{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;}
   .guide-section-heading>span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex:0 0 auto;border-radius:10px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:900;}
   .guide-section-heading h3{margin:1px 0 3px;font-size:16px;}
@@ -937,6 +953,12 @@
 
     .guide-hero{background:linear-gradient(135deg,#1b6235 0%,#238b46 60%,#3a9e59 100%);}
     .guide-card{background:var(--card);border-color:var(--line);}
+    .guide-card.guide-recommend-card{background:var(--card);border-color:var(--line);}
+    .guide-recommend-item{background:#1b2c22;border-color:var(--line);}
+    .guide-recommend-badge.tablet{background:#1e3c29;color:#7ee79b;}
+    .guide-recommend-badge.chrome{background:#143144;color:#7dd3fc;}
+    .guide-recommend-badge.cloud{background:#3d2f16;color:#fde047;}
+    .guide-sync-status-tip{background:#1b3223;color:#81e29a;}
     .guide-device,.guide-facts>div,.guide-install-grid>div{background:#1b2c22;border-color:var(--line);}
     .piper-resource-estimate,.piper-resource-row{background:#1b2c22;border-color:var(--line);}
     .guide-note,.guide-help-card{background:#2f291b;border-color:#66552e;}

@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
 import { ANALYTICS_EVENTS, recordAnalyticsEvent } from "./analytics.js";
 import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateHasData, mergeObjects, mergeState, latestUpdatedAt, GRADE_OPTIONS, gradeLabel, gradeOptionsSelected } from "./lib.js";
@@ -1052,6 +1052,24 @@ function renderSetup() {
         showToast("请先确认你是家长或监护人并阅读隐私说明。", 5000);
         return;
       }
+      if (memberships.length) {
+        showToast("已存在家庭学习空间，无需重复创建。");
+        renderPanel();
+        return;
+      }
+      // 防御性并发校验：如果在当前账号下已经存在家庭，直接载入现有空间避免重复建空家庭
+      const { data: existingMembers } = await supabase
+        .from("learning_household_members")
+        .select("household_id")
+        .eq("user_id", session.user.id)
+        .limit(1);
+      if (existingMembers && existingMembers.length > 0) {
+        await fetchWorkspace();
+        renderPanel();
+        showToast("已检测到已存在的家庭空间，已为您自动载入。");
+        return;
+      }
+
       const householdId = crypto.randomUUID();
       const profileId = crypto.randomUUID();
       const payload = {
@@ -1077,6 +1095,7 @@ function renderSetup() {
         });
       if (memberError) {
         console.error("Member error:", memberError);
+        await supabase.rpc("learning_delete_household", { p_household_id: householdId }).catch(() => {});
         showToast(formatCloudError(memberError, "创建成员失败，请稍后再试。"), 5000);
         return;
       }
@@ -1085,6 +1104,7 @@ function renderSetup() {
         .insert(guardianConsentPayload(householdId));
       if (consentError) {
         console.error("Guardian consent error:", consentError);
+        await supabase.rpc("learning_delete_household", { p_household_id: householdId }).catch(() => {});
         showToast(formatCloudError(consentError, "保存家长同意失败，请稍后再试。"), 5000);
         return;
       }
@@ -1098,6 +1118,7 @@ function renderSetup() {
         });
       if (profileError) {
         console.error("Profile error:", profileError);
+        await supabase.rpc("learning_delete_household", { p_household_id: householdId }).catch(() => {});
         showToast(formatCloudError(profileError, "创建学习者失败，请稍后再试。"), 5000);
         return;
       }
@@ -1471,7 +1492,8 @@ async function fetchWorkspace() {
   const { data: memberRows, error: memberError } = await supabase
     .from("learning_household_members")
     .select("household_id, role")
-    .eq("user_id", requestSession.user.id);
+    .eq("user_id", requestSession.user.id)
+    .order("created_at");
   if (memberError) throw memberError;
   if (session !== requestSession) return;
   memberships = memberRows || [];

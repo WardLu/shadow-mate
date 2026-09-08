@@ -173,6 +173,10 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await page.goto("/");
     await page.click('[data-mod="guide"]');
 
+    await expect(page.locator('[data-guide-section="recommendations"]')).toBeVisible();
+    await expect(page.locator('[data-guide-section="recommendations"]')).toContainText("Chrome");
+    await expect(page.locator('[data-guide-section="recommendations"]')).toContainText("平板电脑");
+    await expect(page.locator('[data-guide-section="recommendations"]')).toContainText("免费云同步");
     await expect(page.locator('[data-guide-section="speech-features"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="growth-loop"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="sound-settings"]')).toBeVisible();

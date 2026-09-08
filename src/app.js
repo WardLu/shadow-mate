@@ -2458,6 +2458,9 @@ function renderSettings(){
 }
 
 function renderGuide(){
+  const accountBtn = document.querySelector("#accountButton");
+  const isOnline = accountBtn?.dataset?.state === "online";
+
   const main = el("main");
   main.innerHTML = "";
   main.appendChild($(`
@@ -2465,8 +2468,58 @@ function renderGuide(){
       <section class="guide-hero">
         <div class="guide-kicker">给家长的快速上手</div>
         <h2>使用指南</h2>
-        <p>第一次使用影伴，照着这条路线走一遍：登录、建立家庭、选择孩子，然后开始今天的学习。</p>
-        <div class="guide-badges"><span>约 3 分钟开始</span><span>手机 · 平板 · 电脑</span></div>
+        <p>第一次使用影伴，照着这条路线走一遍：推荐使用 Chrome 与大屏平板、登录开启免费云同步，让孩子轻松开始自主学习。</p>
+        <div class="guide-badges">
+          <span>约 3 分钟上手</span>
+          <span>推荐 Chrome</span>
+          <span>大屏平板优先</span>
+          <span>免费云同步</span>
+        </div>
+      </section>
+
+      <section class="guide-card guide-recommend-card" data-guide-section="recommendations">
+        <div class="guide-section-heading">
+          <span class="guide-rec-icon">${icon("star")}</span>
+          <div>
+            <h3>最佳体验建议：Chrome + 平板电脑 + 登录开启免费云同步</h3>
+            <p>为保障孩子的专注力、视力健康与发音顺畅，推荐按以下搭配使用影伴：</p>
+          </div>
+        </div>
+
+        <div class="guide-recommend-grid">
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge tablet">${icon("book")} 平板首选</div>
+            <h4>首推平板电脑（iPad / 安卓平板）</h4>
+            <p><strong>大屏护眼防疲劳</strong>：大屏幕下生字卡片、笔画笔顺和图文更清晰，减少孩子低头与视力疲劳。</p>
+            <p><strong>自主触控点读</strong>：放置在书桌支架上，孩子伸手指即可自主点读汉字、古诗与题目，无需家长全程举着手机陪读。</p>
+          </article>
+
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge chrome">${icon("compass")} 极速浏览器</div>
+            <h4>推荐使用 Google Chrome 浏览器</h4>
+            <p><strong>现代音频与硬件加速</strong>：完整支持 Web Audio 引擎与 PWA 离线技术，发音响应即点即播、音质洪亮清晰。</p>
+            <p><strong>避开应用内限制</strong>：微信内置浏览器容易限制音频自动播放或离线缓存，使用系统 Chrome 体验最流畅。</p>
+          </article>
+
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge cloud">${icon("cloud")} 数据安全</div>
+            <h4>家长免费登录开启云端同步</h4>
+            <p><strong>防丢失防误清</strong>：未登录数据仅保存在当前设备，清理缓存会导致记录丢失；登录后自动多副本安全备份。</p>
+            <p><strong>多端无缝协同</strong>：平板学习打卡、家长手机查看进度实时同步；家庭积分与心愿契约多端拉齐，换机无忧。</p>
+          </article>
+        </div>
+
+        <div class="guide-recommend-actions">
+          ${isOnline ? `
+            <div class="guide-sync-status-tip">
+              ${icon("checkCircle")} <span>已开启家庭空间：您的打卡与积分数据正在享受免费实时云端同步。</span>
+            </div>
+          ` : `
+            <button class="guide-login-action-btn" type="button" data-action="guide-login">
+              ${icon("cloud")} 立即免费登录 · 开启家庭空间与数据云同步
+            </button>
+          `}
+        </div>
       </section>
 
       <section class="guide-card" data-guide-section="quickstart">
@@ -2520,12 +2573,21 @@ function renderGuide(){
 
       <section class="guide-card" data-guide-section="sync">
         <div class="guide-section-heading"><span>06</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
-        <div class="guide-facts"><div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div><div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div><div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div></div>
+        <div class="guide-facts">
+          <div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div>
+          <div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div>
+          <div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div>
+          <div><strong>跨端免配置</strong><span>无论在平板、手机还是电脑上登录同一家长账号，孩子学习数据实时拉齐。</span></div>
+        </div>
       </section>
 
       <section class="guide-card" data-guide-section="install">
         <div class="guide-section-heading"><span>07</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
-        <div class="guide-install-grid"><div><strong>iPhone / iPad</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div><div><strong>Android</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕。</span></div><div><strong>电脑</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div></div>
+        <div class="guide-install-grid">
+          <div><strong>iPad / iPhone</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div>
+          <div><strong>Android 平板 / 手机</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕或安装。</span></div>
+          <div><strong>电脑（PC / Mac）</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div>
+        </div>
       </section>
 
       <section class="guide-card guide-help-card">
@@ -2535,6 +2597,11 @@ function renderGuide(){
     </div>
   `));
   mountPiperResourceManager(main.querySelector("[data-piper-resource-manager]"));
+
+  const guideLoginBtn = main.querySelector("[data-action='guide-login']");
+  if (guideLoginBtn) {
+    guideLoginBtn.onclick = () => document.querySelector("#accountButton")?.click();
+  }
 }
 
 /* =========================================================
