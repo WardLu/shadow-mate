@@ -1677,6 +1677,56 @@ function formatLedgerDateHeader(dateKey) {
   return dateKey;
 }
 
+function makeCollapsible(cardEl, storageKey, defaultCollapsed = false) {
+  let isCollapsed;
+  try {
+    const saved = localStorage.getItem(`shadow_mate_collapse_${storageKey}`);
+    isCollapsed = saved === "true" ? true : (saved === "false" ? false : defaultCollapsed);
+  } catch {
+    isCollapsed = defaultCollapsed;
+  }
+
+  const header = cardEl.querySelector(".card-collapse-header");
+  const body = cardEl.querySelector(".card-collapse-body");
+  const toggleBtn = cardEl.querySelector(".card-collapse-toggle");
+  const iconSpan = cardEl.querySelector(".card-collapse-icon");
+  const labelSpan = cardEl.querySelector(".card-collapse-label");
+
+  function update(collapsed) {
+    if (!body) return;
+    if (collapsed) {
+      body.classList.add("collapsed");
+      if (iconSpan) iconSpan.classList.add("collapsed");
+      if (labelSpan) labelSpan.textContent = "展开";
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "false");
+    } else {
+      body.classList.remove("collapsed");
+      if (iconSpan) iconSpan.classList.remove("collapsed");
+      if (labelSpan) labelSpan.textContent = "收起";
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  update(isCollapsed);
+
+  const toggle = () => {
+    if (!body) return;
+    const next = !body.classList.contains("collapsed");
+    update(next);
+    try {
+      localStorage.setItem(`shadow_mate_collapse_${storageKey}`, String(next));
+    } catch {}
+  };
+
+  if (header) {
+    header.onclick = (e) => {
+      if (e.target.closest("button") && e.target.closest("button") !== toggleBtn) return;
+      if (e.target.closest("input, select, textarea, a")) return;
+      toggle();
+    };
+  }
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
   const titleRow = $(`
@@ -1687,62 +1737,6 @@ function renderGrow(){
   `);
   main.appendChild(titleRow);
   titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "growth" });
-  const enabled = enabledModuleIds();
-  const learningOn = enabled.length > 0;
-
-  if (learningOn) {
-    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
-    const overview = $(`
-      <div class="card">
-        <h3>${icon("trophy")} 打卡总览</h3>
-        <div class="stat-grid">
-          ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
-        </div>
-        <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
-        <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
-        <div class="progressbar"><i></i></div>
-        <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
-      </div>
-    `);
-    main.appendChild(overview);
-    overview.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
-
-    // 日历式最近记录（只统计已启用模块）
-    let cells="";
-    for(let i=29;i>=0;i--){
-      const k=dateKeyOffset(i);
-      const c=store.checkins[k];
-      const n = enabled.filter((module) => hasCheckin(c, module)).length;
-      const day = Number(k.slice(-2));
-      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
-      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
-    }
-    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
-      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
-    ).join("");
-    const cal = $(`
-      <div class="card">
-        <h3>${icon("calendar")} 近 30 天打卡日历</h3>
-        <div class="cal-grid">${cells}</div>
-        <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
-        <div class="cal-legend" aria-label="成长日历图例">
-          ${legendLevels}
-          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
-        </div>
-      </div>
-    `);
-    main.appendChild(cal);
-  } else {
-    const hint = $(`
-      <div class="card">
-        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
-        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
-        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
-      </div>
-    `);
-    main.appendChild(hint);
-    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
-  }
 
   const balance = getBalance(growthLoopSnapshot);
   const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1791,20 +1785,30 @@ function renderGrow(){
       </div>
     </div>`;
   }).join("");
-  const rewardCard = $(`<div class="card growth-reward-card">
-      <h3>${icon("gift")} 奖励兑换</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
-        <div class="stat"><div class="n">${isCloudConnected && unconfirmedRedemptions > 0 ? unconfirmedRedemptions : pendingRedemptions}</div><div class="t">${isCloudConnected && unconfirmedRedemptions > 0 ? "待联网确认" : "待兑现约定"}</div></div>
+
+  // 1. 置顶核心：奖励兑换（可折叠，默认展开）
+  const rewardCard = $(`<div class="card growth-reward-card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("gift")} 奖励兑换</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起奖励兑换">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <div class="desc">${
-        isCloudConnected
-          ? (unconfirmedRedemptions > 0
-            ? "离线兑换会先记为“待联网确认”，联网并完成服务端确认后生效。"
-            : "奖励兑换已与云端同步，兑现约定后可标记完成；若属误触，兑现后 24 小时内支持撤回。")
-          : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。"
-      }</div>
-      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励约定，可在右上角「成长设置」中添加。</div>'}</div>
+      <div class="card-collapse-body">
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
+          <div class="stat"><div class="n">${isCloudConnected && unconfirmedRedemptions > 0 ? unconfirmedRedemptions : pendingRedemptions}</div><div class="t">${isCloudConnected && unconfirmedRedemptions > 0 ? "待联网确认" : "待兑现约定"}</div></div>
+        </div>
+        <div class="desc">${
+          isCloudConnected
+            ? (unconfirmedRedemptions > 0
+              ? "离线兑换会先记为“待联网确认”，联网并完成服务端确认后生效。"
+              : "奖励兑换已与云端同步，兑现约定后可标记完成；若属误触，兑现后 24 小时内支持撤回。")
+            : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。"
+        }</div>
+        <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励约定，可在右上角「成长设置」中添加。</div>'}</div>
+      </div>
     </div>`);
   main.appendChild(rewardCard);
   rewardCard.querySelectorAll("[data-reward-id]").forEach((button) => {
@@ -1878,7 +1882,9 @@ function renderGrow(){
       soundEffects.play("try_again");
     };
   });
+  makeCollapsible(rewardCard, "grow_rewards", false);
 
+  // 2. 次级高频：最近积分明细（可折叠，默认展开）
   const allLedgerEntries = growthLoopSnapshot.ledger
     .filter((entry) => !["rejected", "conflict"].includes(entry.status))
     .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
@@ -1994,21 +2000,29 @@ function renderGrow(){
     </div>`;
   }).join("");
 
-  const historyCard = $(`<div class="card growth-history-card">
-      <h3>${icon("list")} 最近积分明细</h3>
-      <div class="ledger-filter-bar">
-        <button class="ledger-filter-chip ${LEDGER_FILTER === "all" ? "active" : ""}" type="button" data-filter="all">全部 (${allLedgerEntries.length})</button>
-        <button class="ledger-filter-chip ${LEDGER_FILTER === "earned" ? "active" : ""}" type="button" data-filter="earned">获得 🌟</button>
-        <button class="ledger-filter-chip ${LEDGER_FILTER === "redeemed" ? "active" : ""}" type="button" data-filter="redeemed">兑换 🎁</button>
-        <button class="ledger-filter-chip ${LEDGER_FILTER === "undo" ? "active" : ""}" type="button" data-filter="undo">撤销/调整 ↩️</button>
+  const historyCard = $(`<div class="card growth-history-card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("list")} 最近积分明细</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起积分明细">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      ${allLedgerEntries.length === 0
-        ? `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`
-        : displayedEntries.length === 0
-          ? `<div class="desc" style="text-align:center;padding:16px 0;">暂无对应分类记录</div>`
-          : `<div class="growth-history-list">${groupsHtml}</div>`
-      }
-      ${hasMore ? `<button class="checkin secondary ledger-more-btn" type="button" id="ledgerMoreBtn">加载更多记录（剩余 ${totalFilteredCount - displayedEntries.length} 条）</button>` : ""}
+      <div class="card-collapse-body">
+        <div class="ledger-filter-bar">
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "all" ? "active" : ""}" type="button" data-filter="all">全部 (${allLedgerEntries.length})</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "earned" ? "active" : ""}" type="button" data-filter="earned">获得 🌟</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "redeemed" ? "active" : ""}" type="button" data-filter="redeemed">兑换 🎁</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "undo" ? "active" : ""}" type="button" data-filter="undo">撤销/调整 ↩️</button>
+        </div>
+        ${allLedgerEntries.length === 0
+          ? `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`
+          : displayedEntries.length === 0
+            ? `<div class="desc" style="text-align:center;padding:16px 0;">暂无对应分类记录</div>`
+            : `<div class="growth-history-list">${groupsHtml}</div>`
+        }
+        ${hasMore ? `<button class="checkin secondary ledger-more-btn" type="button" id="ledgerMoreBtn">加载更多记录（剩余 ${totalFilteredCount - displayedEntries.length} 条）</button>` : ""}
+      </div>
     </div>`);
   main.appendChild(historyCard);
 
@@ -2026,6 +2040,69 @@ function renderGrow(){
       LEDGER_LIMIT += 15;
       renderGrow();
     };
+  }
+  makeCollapsible(historyCard, "grow_ledger", false);
+
+  // 3. 辅助功能：学习打卡总览与近 30 天日历（置于底部，可折叠）
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
+
+  if (learningOn) {
+    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
+    // 日历式最近记录（只统计已启用模块）
+    let cells="";
+    for(let i=29;i>=0;i--){
+      const k=dateKeyOffset(i);
+      const c=store.checkins[k];
+      const n = enabled.filter((module) => hasCheckin(c, module)).length;
+      const day = Number(k.slice(-2));
+      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
+      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
+    }
+    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
+      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
+    ).join("");
+    const learningCard = $(`
+      <div class="card card-collapsible growth-learning-card">
+        <div class="card-collapse-header">
+          <h3>${icon("trophy")} 学习打卡总览与近 30 天趋势</h3>
+          <button class="card-collapse-toggle" type="button" aria-label="展开或收起学习打卡总览与日历">
+            <span class="card-collapse-label">收起</span>
+            <span class="card-collapse-icon">${icon("chevronDown")}</span>
+          </button>
+        </div>
+        <div class="card-collapse-body">
+          <div class="stat-grid">
+            ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
+          </div>
+          <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
+          <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
+          <div class="progressbar"><i></i></div>
+          <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
+          <div class="spacer-12"></div>
+          <div class="pts-sec">${icon("calendar")} 近 30 天打卡日历</div>
+          <div class="cal-grid">${cells}</div>
+          <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
+          <div class="cal-legend" aria-label="成长日历图例">
+            ${legendLevels}
+            <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+          </div>
+        </div>
+      </div>
+    `);
+    main.appendChild(learningCard);
+    learningCard.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+    makeCollapsible(learningCard, "grow_overview", false);
+  } else {
+    const hint = $(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
+        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
+        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
+      </div>
+    `);
+    main.appendChild(hint);
+    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
   }
 
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
@@ -2092,39 +2169,23 @@ function renderPoints(){
       </div>
     </div>`));
 
-  // 积分日历（圆角 chip，可补打卡）
-  let chips="";
-  for(let d=1;d<=daysInMonth;d++){
-    const state=pointDayState(d);
-    const stateText=state.kind==="pos"?"有加分":state.kind==="neg"?"有扣分":state.kind==="mixed"?"有加分和扣分":"无积分";
-    const cls=[d===activeDay?"active":"",state.kind].filter(Boolean).join(" ");
-    const selectedText=d===activeDay?"，当前选中":"";
-    chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
-  }
-  const calCard=$(`<div class="card">
-      <h3>${icon("calendar")} 积分日历 <span class="pill">${ymLabel}</span></h3>
-      <div class="cal-helper">点击日期选择要补打卡的日期；边框表示当前选中日期。</div>
-      <div class="cal-legend" aria-label="积分日历图例">
-        <span class="cal-legend-item"><i class="cal-swatch neutral" aria-hidden="true"></i>无积分</span>
-        <span class="cal-legend-item"><i class="cal-swatch pos" aria-hidden="true"></i>有加分</span>
-        <span class="cal-legend-item"><i class="cal-swatch neg" aria-hidden="true"></i>有扣分</span>
-        <span class="cal-legend-item"><i class="cal-swatch mixed" aria-hidden="true"></i>加分和扣分</span>
-        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>当前选中</span>
-      </div>
-      <div class="cal">${chips}</div>
-    </div>`);
-  main.appendChild(calCard);
-  calCard.querySelectorAll(".cal-chip").forEach(c=>c.onclick=()=>{PT_DAY=+c.dataset.d; renderPoints();});
-
-  // 打卡区（卡片化）
+  // 1. 打卡区（卡片化，置顶核心）
   const isToday = activeDay===today;
-  const head = $(`<div class="card">
-      <div class="pts-sec">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
-      ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
-      <div class="pts-sec">${icon("plus")} 加分项</div>
-      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
-      <div class="pts-sec">${icon("minus")} 减分项目</div>
-      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+  const head = $(`<div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <div class="pts-sec" style="margin-bottom:0;">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起打卡区">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
+        <div class="pts-sec">${icon("plus")} 加分项</div>
+        ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+        <div class="pts-sec">${icon("minus")} 减分项目</div>
+        ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+      </div>
     </div>`);
   main.appendChild(head);
   head.querySelectorAll(".pts-toggle").forEach((button)=>{
@@ -2133,7 +2194,41 @@ function renderPoints(){
       button.disabled = true;
     };
   });
-  const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
+  const bt = head.querySelector("#backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
+  makeCollapsible(head, "points_checkin", false);
+
+  // 2. 积分日历（圆角 chip，紧凑置底，可折叠）
+  let chips="";
+  for(let d=1;d<=daysInMonth;d++){
+    const state=pointDayState(d);
+    const stateText=state.kind==="pos"?"有加分":state.kind==="neg"?"有扣分":state.kind==="mixed"?"有加分和扣分":"无积分";
+    const cls=[d===activeDay?"active":"",state.kind].filter(Boolean).join(" ");
+    const selectedText=d===activeDay?"，当前选中":"";
+    chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
+  }
+  const calCard=$(`<div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("calendar")} 补打卡日历 <span class="pill">${ymLabel}</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起补打卡日历">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="cal-helper">点击日期选择要补打卡的日期；边框表示当前选中日期。</div>
+        <div class="cal-legend" aria-label="积分日历图例">
+          <span class="cal-legend-item"><i class="cal-swatch neutral" aria-hidden="true"></i>无积分</span>
+          <span class="cal-legend-item"><i class="cal-swatch pos" aria-hidden="true"></i>有加分</span>
+          <span class="cal-legend-item"><i class="cal-swatch neg" aria-hidden="true"></i>有扣分</span>
+          <span class="cal-legend-item"><i class="cal-swatch mixed" aria-hidden="true"></i>加分和扣分</span>
+          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>当前选中</span>
+        </div>
+        <div class="cal">${chips}</div>
+      </div>
+    </div>`);
+  main.appendChild(calCard);
+  calCard.querySelectorAll(".cal-chip").forEach(c=>c.onclick=()=>{PT_DAY=+c.dataset.d; renderPoints();});
+  makeCollapsible(calCard, "points_cal", false);
 
   main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
 }

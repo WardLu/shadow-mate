@@ -589,8 +589,18 @@
     .growth-form .checkin{width:100%;}
   }
 
-  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
-  .cal-chip{width:100%;height:auto;aspect-ratio:1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:#f1f7f2;border:2px solid transparent;cursor:pointer;color:var(--ink-soft);transition:transform .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease;font-family:inherit;appearance:none;}
+  /* 可折叠卡片 */
+  .card-collapse-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;}
+  .card-collapse-header h3{margin:0;display:flex;align-items:center;gap:6px;}
+  .card-collapse-toggle{display:inline-flex;align-items:center;gap:4px;background:none;border:1px solid var(--line);padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:all .15s ease;}
+  .card-collapse-toggle:hover{border-color:var(--green);color:var(--ink);}
+  .card-collapse-icon{display:inline-flex;align-items:center;transition:transform .2s ease;}
+  .card-collapse-icon.collapsed{transform:rotate(-90deg);}
+  .card-collapse-body{margin-top:12px;}
+  .card-collapse-body.collapsed{display:none;}
+
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:380px;margin-left:auto;margin-right:auto;}
+  .cal-chip{width:100%;height:auto;aspect-ratio:1;max-width:48px;max-height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:#f1f7f2;border:2px solid transparent;cursor:pointer;color:var(--ink-soft);transition:transform .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease;font-family:inherit;appearance:none;}
   .cal-chip:active{transform:scale(.96);}
   .cal-chip.active{border-color:var(--yellow);box-shadow:0 0 0 2px rgba(255,200,61,.28);color:var(--ink);transform:scale(1.04);}
   .cal-chip.active:not(.pos):not(.neg):not(.mixed){background:#f1f7f2;color:var(--ink-soft);}
@@ -599,7 +609,7 @@
   .cal-chip.mixed{background:linear-gradient(135deg,var(--green-soft) 0 50%,#fde8e8 50% 100%);color:var(--ink);}
 
   .cal-helper{margin-top:10px;font-size:12px;color:var(--ink-soft);line-height:1.6;}
-  .cal-legend{display:flex;flex-wrap:wrap;gap:7px 12px;margin-top:8px;font-size:11px;color:var(--ink-soft);}
+  .cal-legend{display:flex;flex-wrap:wrap;gap:7px 12px;margin-top:8px;font-size:11px;color:var(--ink-soft);max-width:380px;margin-left:auto;margin-right:auto;}
   .cal-legend + .cal{margin-top:12px;}
   .cal-legend-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
   .cal-swatch{width:12px;height:12px;display:inline-block;flex:0 0 auto;border-radius:4px;border:1px solid transparent;}
@@ -828,8 +838,8 @@
   .spacer-10{height:10px;}
   .spacer-8{height:8px;}
   .text-center{text-align:center;}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
-  .cal-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;font-weight:700;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:380px;margin-left:auto;margin-right:auto;}
+  .cal-cell{aspect-ratio:1;max-width:48px;max-height:48px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;font-weight:700;}
   .cal-cell.lvl-0{background:#eef3ef;color:#718273;}
   .cal-cell.lvl-1{background:var(--yellow-soft);color:var(--ink);}
   .cal-cell.lvl-2{background:var(--green-light);color:var(--ink);}
@@ -1063,6 +1073,8 @@
     .growth-history-list .pts.pos{background:#1e3c29;color:#7ee79b;}
     .growth-history-list .pts.neg{background:#3d1c1c;color:#f87171;}
     .growth-history-list .pts.undo{background:#1e293b;color:#94a3b8;}
+    .card-collapse-toggle{background:#1b2c22;border-color:var(--line);color:var(--ink-soft);}
+    .card-collapse-toggle:hover{border-color:var(--green);color:#7ee79b;}
 
     .voice-dialog{background:var(--card);color:var(--ink);}
   }
