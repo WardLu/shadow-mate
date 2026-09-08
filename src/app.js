@@ -909,6 +909,56 @@ function renderHome(){
     </div>
   `));
 
+  const accountBtn = document.querySelector("#accountButton");
+  const isOnline = accountBtn?.dataset?.state === "online";
+  let guestDismissed = false;
+  try {
+    guestDismissed = sessionStorage.getItem("shadow_mate_guest_banner_dismissed") === "1";
+  } catch (_) {}
+
+  if (!isOnline && !guestDismissed) {
+    const isWeChat = typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent || "");
+    const guestCard = $(`
+      <div class="guest-sync-prompt" data-guest-card>
+        <div class="guest-onboarding-header">
+          <div class="guest-onboarding-badge">${icon("cloud")} 离线试用中 · 本机保存</div>
+          <button class="guest-onboarding-close" type="button" aria-label="暂不提醒" data-dismiss-guest>×</button>
+        </div>
+        <div class="guest-onboarding-title">开启家庭空间，打卡记录换手机不丢失</div>
+        <div class="guest-onboarding-desc">
+          当前数据仅保存在此设备。家长免费登录后即可建立家庭档案，手机、平板或电脑跨端实时同步。
+        </div>
+        ${isWeChat ? `<div class="guest-onboarding-wechat">${icon("compass")} 微信提示：点击右上角「···」在系统浏览器中打开，体验完整发音并可添加到桌面独立使用。</div>` : ""}
+        <div class="guest-onboarding-actions">
+          <button class="guest-onboarding-btn primary" type="button" data-action="guest-login">
+            ${icon("learner")} 家长登录 / 开启家庭空间
+          </button>
+          <button class="guest-onboarding-btn secondary" type="button" data-action="guest-guide">
+            ${icon("compass")} 使用指南
+          </button>
+        </div>
+      </div>
+    `);
+    const loginBtn = guestCard.querySelector("[data-action='guest-login']");
+    if (loginBtn) {
+      loginBtn.onclick = () => document.querySelector("#accountButton")?.click();
+    }
+    const guideBtn = guestCard.querySelector("[data-action='guest-guide']");
+    if (guideBtn) {
+      guideBtn.onclick = () => switchMod("guide");
+    }
+    const closeBtn = guestCard.querySelector("[data-dismiss-guest]");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        try {
+          sessionStorage.setItem("shadow_mate_guest_banner_dismissed", "1");
+        } catch (_) {}
+        guestCard.remove();
+      };
+    }
+    main.appendChild(guestCard);
+  }
+
   if (learningOn) {
     const moduleStats = enabled.map((module) => ({
       value: module === "chinese" ? streak("chinese") : totalChecked(module),

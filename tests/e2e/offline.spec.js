@@ -177,6 +177,29 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".stat-grid .stat")).toHaveCount(5);
   });
 
+  test("home page presents guest cloud sync prompt and allows dismissing it", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("[data-guest-card]")).toBeVisible();
+    await expect(page.locator("[data-guest-card]")).toContainText("开启家庭空间，打卡记录换手机不丢失");
+    await expect(page.locator('[data-action="guest-login"]')).toBeVisible();
+
+    // Click guide button inside guest card
+    await page.locator('[data-action="guest-guide"]').click();
+    await expect(page.locator(".guide-page")).toBeVisible();
+
+    // Back to home
+    await page.click('[data-mod="home"]');
+    await expect(page.locator("[data-guest-card]")).toBeVisible();
+
+    // Dismiss prompt
+    await page.locator("[data-dismiss-guest]").click();
+    await expect(page.locator("[data-guest-card]")).toHaveCount(0);
+
+    // Reload keeps dismissed state in same session
+    await page.reload();
+    await expect(page.locator("[data-guest-card]")).toHaveCount(0);
+  });
+
   test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".site-footer")).toBeVisible();
