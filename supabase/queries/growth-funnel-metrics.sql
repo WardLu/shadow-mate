@@ -2,9 +2,10 @@
 -- Shadow Mate (影伴) Growth Loop MVP 业务事实漏斗与健康度统计
 -- 适用范围：Supabase Dashboard SQL Editor (项目: monetization-service)
 -- 说明：
---   1. 纯只读聚合查询，不修改任何数据，不泄露儿童个人隐私。
---   2. 严格按产品事实（家庭空间、孩子档案、打卡状态）计算 F0~F6 转化。
---   3. 可直接在 Supabase 控制台的 SQL Editor 中全选运行。
+--   1. 纯只读聚合查询，不修改任何数据。
+--   2. 包含家长登录邮箱，用于冷启动回访、内测沟通与问题支持。
+--   3. 严格按产品事实（家庭空间、孩子档案、打卡状态）计算 F0~F6 转化。
+--   4. 可直接在 Supabase 控制台的 SQL Editor 中全选或分段运行。
 -- ====================================================================
 
 -- --------------------------------------------------------------------
@@ -83,7 +84,7 @@ left join profile_states ps on ps.household_id = h.household_id;
 
 
 -- --------------------------------------------------------------------
--- 报表 2：家庭明细与当前状态 (查看具体是哪几个家庭，卡在哪一步)
+-- 报表 2：家庭明细与家长邮箱 (用于内测家庭回访、深度沟通与服务支持)
 -- --------------------------------------------------------------------
 with profile_summary as (
   select 
@@ -106,20 +107,43 @@ with profile_summary as (
 )
 
 select 
-  h.id as household_id,
-  h.name as household_name,
-  h.created_at as created_at,
-  coalesce(ps.learner_count, 0) as learner_count,
-  coalesce(ps.learner_names, '未添加孩子') as learner_names,
-  coalesce(ps.total_checkin_days, 0) as total_checkin_days,
-  ps.latest_sync_time,
+  u.email as "家长邮箱 (Parent Email)",
+  h.name as "家庭空间名称",
+  h.created_at as "创建时间",
+  u.last_sign_in_at as "家长最后登录时间",
+  coalesce(ps.learner_count, 0) as "孩子档案数",
+  coalesce(ps.learner_names, '未添加孩子') as "孩子昵称",
+  coalesce(ps.total_checkin_days, 0) as "累计打卡天数",
+  ps.latest_sync_time as "最后同步时间",
   case 
     when coalesce(ps.learner_count, 0) = 0 then '待创建孩子档案 (未达 F0)'
     when coalesce(ps.total_checkin_days, 0) = 0 then '已建档无打卡 (F0 已达，待 F2)'
     when coalesce(ps.total_checkin_days, 0) between 1 and 2 then '初次尝试打卡 (F2 激活)'
     when coalesce(ps.total_checkin_days, 0) >= 3 then '多日活跃家庭 (高价值 WMGH 候选)'
-  end as current_status_bucket
+  end as "当前转化阶段",
+  h.id as household_id
 from public.learning_households h
+join auth.users u on u.id = h.owner_user_id
 left join profile_summary ps on ps.household_id = h.id
 where h.project_id = 'shadow-mate'
 order by h.created_at desc;
+
+
+-- --------------------------------------------------------------------
+-- 报表 3：已登录注册但尚未创建家庭的流失家长 (可主动发邮件提供帮助)
+-- --------------------------------------------------------------------
+select 
+  u.email as "家长邮箱 (Parent Email)",
+  u.created_at as "注册时间",
+  u.last_sign_in_at as "最后登录时间",
+  '已注册但未创建家庭空间 (需轻量邮件跟进与使用指引)' as "跟进建议"
+from auth.users u
+where (
+    u.raw_user_meta_data->>'product_id' = 'shadow-mate'
+    or exists (select 1 from public.learning_households h where h.owner_user_id = u.id)
+  )
+  and not exists (
+    select 1 from public.learning_households h 
+    where h.owner_user_id = u.id and h.project_id = 'shadow-mate'
+  )
+order by u.created_at desc;
