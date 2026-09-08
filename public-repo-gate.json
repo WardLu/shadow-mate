@@ -1,0 +1,6 @@
+{
+  "forbidden_paths": [
+    "(^|/)(?:auth-setup|security-baseline|test-scope|architecture-internal)\\\\.md$",
+    "(^|/)(?:child-privacy-and-consent|ip-legal-review|dogfooding-checklist|tts-decision|piper-ljspeech-model-card)\\\\.md$"
+  ]
+}

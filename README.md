@@ -17,6 +17,7 @@
   <a href="./README.zh-CN.md">简体中文</a> ·
   <a href="https://sm.shadow.wang/"><strong>Open Shadow Mate</strong></a> ·
   <a href="./docs/user-guide.md">User guide</a> ·
+  <a href="./docs/README.md">Docs</a> ·
   <a href="./RELEASE_NOTES.md">Release notes</a>
 </p>
 
@@ -197,6 +198,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and li
 
 | Document | Purpose |
 | --- | --- |
+| [Documentation index](docs/README.md) | Full architectural, engineering, release, and compliance documentation index |
 | [Chinese README](README.zh-CN.md) | Complete Chinese product and development guide |
 | [User guide](docs/user-guide.md) | Sign-in, family space, check-ins, sync, speech, and installation |
 | [Logo usage](docs/logo-usage.md) | Adopted Shadow Mate Logo usage |

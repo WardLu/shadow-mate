@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="https://sm.shadow.wang/"><strong>立即使用</strong></a>　·　<a href="./docs/user-guide.md">使用指南</a> · <a href="./RELEASE_NOTES.zh-CN.md">中文发布说明</a>
+  <a href="./README.md">English</a> · <a href="https://sm.shadow.wang/"><strong>立即使用</strong></a>　·　<a href="./docs/user-guide.md">使用指南</a> · <a href="./docs/README.md">文档导航</a> · <a href="./RELEASE_NOTES.zh-CN.md">中文发布说明</a>
 </p>
 
 ## 先看产品
@@ -195,6 +195,7 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 | 文档 | 用途 |
 | --- | --- |
+| [文档导航中心](docs/README.md) | 系统架构、工程规范、发布管理、合规许可完整索引 |
 | [使用指南](docs/user-guide.md) | 家长登录、家庭空间、打卡、日历、同步、语音和安装 |
 | [Logo 使用说明](docs/logo-usage.md) | 绿色版、霓虹版与功能子标的适用场景 |
 | [商标使用政策](TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 |
