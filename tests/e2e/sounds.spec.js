@@ -144,11 +144,13 @@ test.describe("Sound effects settings and playback", () => {
     await page.goto("/");
     await installPlaySpies(page);
     await page.click('[data-mod="points"]');
+    await page.click('[data-go-settings="points"]');
 
     // 创建正分项并加分 → points_earned
     await page.fill('#pointItemForm input[name="name"]', "自己刷牙");
     await page.fill('#pointItemForm input[name="points"]', "2");
     await page.click('#pointItemForm button[type="submit"]');
+    await page.click('[data-mod="points"]');
     let card = page.locator(".pts-card").filter({ hasText: "自己刷牙" });
     await expect(card).toBeVisible();
     await card.locator(".pts-toggle").click();
@@ -163,9 +165,11 @@ test.describe("Sound effects settings and playback", () => {
 
     // 创建减分项并扣分 → points_deducted
     await page.waitForTimeout(600);
+    await page.click('[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "不收玩具");
     await page.fill('#pointItemForm input[name="points"]', "-1");
     await page.click('#pointItemForm button[type="submit"]');
+    await page.click('[data-mod="points"]');
     card = page.locator(".pts-card").filter({ hasText: "不收玩具" });
     await expect(card).toBeVisible();
     await card.locator(".pts-toggle").click();
@@ -187,9 +191,11 @@ test.describe("Sound effects settings and playback", () => {
 
     // 1. 打卡累积积分
     await page.click('[data-mod="points"]');
+    await page.click('[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "整理书桌");
     await page.fill('#pointItemForm input[name="points"]', "10");
     await page.click('#pointItemForm button[type="submit"]');
+    await page.click('[data-mod="points"]');
     const pointCard = page.locator(".pts-card").filter({ hasText: "整理书桌" });
     await pointCard.locator(".pts-toggle").click();
     await expect.poll(async () => (await playedEvents(page, "play"))).toContain("points_earned");
@@ -197,9 +203,11 @@ test.describe("Sound effects settings and playback", () => {
     // 2. 进入成长页兑换奖励 → 播放 points_deducted
     await page.waitForTimeout(600);
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
     await page.fill('#rewardForm input[name="name"]', "听故事");
     await page.fill('#rewardForm input[name="cost"]', "5");
     await page.click('#rewardForm button[type="submit"]');
+    await page.click('[data-mod="grow"]');
     const rewardCard = page.locator(".reward-card").filter({ hasText: "听故事" });
     await expect(rewardCard).toBeVisible();
     await rewardCard.locator(".reward-redeem").click();

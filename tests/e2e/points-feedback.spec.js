@@ -49,11 +49,13 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // Go to grow page
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
 
     // Add a cheap reward to guarantee redeemability
     await page.fill('#rewardForm input[name="name"]', "小红花贴纸");
     await page.fill('#rewardForm input[name="cost"]', "1");
     await page.click('#rewardForm button[type="submit"]');
+    await page.click('[data-mod="grow"]');
 
     const redeemBtn = page.locator('.reward-card .reward-redeem:not([disabled])').first();
     await expect(redeemBtn).toBeVisible();
@@ -93,11 +95,13 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // Go to grow page
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
 
     // Add a reward
     await page.fill('#rewardForm input[name="name"]', "绘本自选");
     await page.fill('#rewardForm input[name="cost"]', "1");
     await page.click('#rewardForm button[type="submit"]');
+    await page.click('[data-mod="grow"]');
 
     const rewardCard = page.locator(".reward-card").filter({ hasText: "绘本自选" });
     await expect(rewardCard).toBeVisible();

@@ -1645,6 +1645,38 @@ function legacyImportPresentation(status) {
   }
 }
 
+let LEDGER_FILTER = "all";
+let LEDGER_LIMIT = 15;
+
+function isUndoEntry(entry) {
+  return Boolean(
+    entry.metadata?.undo_of ||
+    entry.entry_type === "adjustment" ||
+    (typeof entry.note === "string" && entry.note.includes("撤销"))
+  );
+}
+
+function isRefundEntry(entry) {
+  return Boolean(
+    entry.entry_type === "refund" ||
+    entry.metadata?.cancel_of
+  );
+}
+
+function formatLedgerDateHeader(dateKey) {
+  if (!dateKey || dateKey === "其他记录") return "其他记录";
+  const parts = dateKey.split("-");
+  if (parts.length === 3) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const dateFormatted = `${Number(parts[1])}月${Number(parts[2])}日`;
+    if (dateKey === todayStr) return `${dateFormatted} · 今天`;
+    if (dateKey === yesterday) return `${dateFormatted} · 昨天`;
+    return `${parts[0]}年${dateFormatted}`;
+  }
+  return dateKey;
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
   const titleRow = $(`
@@ -1713,125 +1745,6 @@ function renderGrow(){
   }
 
   const balance = getBalance(growthLoopSnapshot);
-  const opening = getOpeningBalance(growthLoopSnapshot);
-  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
-  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
-  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
-  const legacyPreview = legacyEntries.slice(-6).reverse();
-
-  let openingCard;
-  if (opening) {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("checkCircle")} 期初积分已确认</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
-          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
-        </div>
-        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
-      </div>
-    `);
-  } else if (legacyImport) {
-    const presentation = legacyImportPresentation(legacyImport.status);
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
-          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
-          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
-        </div>
-        <div class="desc">${presentation.description}</div>
-        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
-      </div>
-    `);
-  } else if (legacyEntries.length > 0) {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("download")} 恢复旧积分</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
-          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
-        </div>
-        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
-        <div class="legacy-preview">
-          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
-          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
-        </div>
-        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
-      </div>
-    `);
-  } else {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("star")} 期初积分</h3>
-        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
-        <form id="openingBalanceForm" class="growth-form">
-          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
-          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
-        </form>
-      </div>
-    `);
-  }
-  main.appendChild(openingCard);
-  const openingForm = openingCard.querySelector("#openingBalanceForm");
-  if (openingForm) {
-    openingForm.onsubmit = async (event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const value = Number(form.get("balance"));
-      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
-        alert("请填写 1 到 1000000 的整数积分。");
-        return;
-      }
-      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
-      try {
-        const result = await window.growthLoop.confirmOpeningBalance({
-          balance: value,
-          note: "期初积分",
-          request_id: clientRequestId("opening"),
-        });
-        if (result.error === "opening_balance_already_confirmed") {
-          alert("这个孩子的期初积分已经确认过了。");
-        } else if (result.error) {
-          alert("期初积分确认失败，请稍后重试。");
-        } else {
-          window.cloudSync?.scheduleGrowthLoop?.();
-          renderGrow();
-        }
-      } catch (error) {
-        console.error("Growth Loop opening balance confirm failed:", error);
-        alert("期初积分没有保存成功，请稍后重试。");
-      }
-    };
-  }
-  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
-  if (legacyImportBtn) {
-    legacyImportBtn.onclick = async () => {
-      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
-      legacyImportBtn.disabled = true;
-      try {
-        const result = await window.growthLoop.importLegacyPoints({
-          entries: legacyEntries,
-          request_id: clientRequestId("legacy-import"),
-        });
-        if (result.error === "legacy_points_already_imported") {
-          alert("这个孩子的旧积分已经导入过了。");
-        } else if (result.error) {
-          alert("旧积分导入失败，请稍后重试。");
-        } else {
-          window.cloudSync?.scheduleGrowthLoop?.();
-          renderGrow();
-        }
-      } catch (error) {
-        console.error("Growth Loop legacy points import failed:", error);
-        alert("旧积分没有导入成功，请稍后重试。");
-      } finally {
-        legacyImportBtn.disabled = false;
-      }
-    };
-  }
-
   const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
   const rewards = window.growthLoop?.getRewards?.() || [];
   const isCloudConnected = Boolean(growthLoopController.getScope()?.household_id);
@@ -1891,35 +1804,9 @@ function renderGrow(){
             : "奖励兑换已与云端同步，兑现约定后可标记完成；若属误触，兑现后 24 小时内支持撤回。")
           : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。"
       }</div>
-      <form id="rewardForm" class="growth-form">
-        <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
-        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加奖励</button>
-      </form>
-      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励，先添加一个约定吧。</div>'}</div>
+      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励约定，可在右上角「成长设置」中添加。</div>'}</div>
     </div>`);
   main.appendChild(rewardCard);
-  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") || "").trim();
-    const cost = Number(form.get("cost"));
-    if (!name || !Number.isInteger(cost) || cost < 1 || cost > 100000) {
-      alert("请填写奖励名称，并输入 1 到 100000 的整数积分。");
-      return;
-    }
-    try {
-      await window.growthLoop.createReward({
-        request_id: clientRequestId("reward"),
-        reward: { name, description: "家庭约定奖励", cost_points: cost, category: "family", icon_key: "gift" },
-      });
-      window.cloudSync?.scheduleGrowthLoop?.();
-      renderGrow();
-    } catch (error) {
-      console.error("Growth Loop reward creation failed:", error);
-      alert("奖励没有保存成功，请稍后重试。");
-    }
-  };
   rewardCard.querySelectorAll("[data-reward-id]").forEach((button) => {
     button.onclick = async () => {
       const requestId = clientRequestId("redemption");
@@ -1992,40 +1879,154 @@ function renderGrow(){
     };
   });
 
-  const historyEntries = growthLoopSnapshot.ledger
+  const allLedgerEntries = growthLoopSnapshot.ledger
     .filter((entry) => !["rejected", "conflict"].includes(entry.status))
     .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
-      || String(right.created_at || "").localeCompare(String(left.created_at || "")))
-    .slice(0, 20);
+      || String(right.created_at || "").localeCompare(String(left.created_at || "")));
+
+  const filteredEntries = allLedgerEntries.filter((entry) => {
+    const isUndo = isUndoEntry(entry);
+    const isRefund = isRefundEntry(entry);
+    if (LEDGER_FILTER === "earned") {
+      return entry.delta > 0 && !isUndo && !isRefund && entry.entry_type !== "redemption";
+    }
+    if (LEDGER_FILTER === "redeemed") {
+      return entry.entry_type === "redemption" || isRefund;
+    }
+    if (LEDGER_FILTER === "undo") {
+      return isUndo || isRefund || entry.entry_type === "adjustment";
+    }
+    return true;
+  });
+
+  const totalFilteredCount = filteredEntries.length;
+  const displayedEntries = filteredEntries.slice(0, LEDGER_LIMIT);
+  const hasMore = totalFilteredCount > displayedEntries.length;
+
+  const groups = [];
+  const groupMap = new Map();
+
+  for (const entry of displayedEntries) {
+    const dateKey = entry.occurred_on || (entry.created_at ? entry.created_at.slice(0, 10) : "") || "其他记录";
+    if (!groupMap.has(dateKey)) {
+      const group = { dateKey, entries: [], netPoints: 0 };
+      groupMap.set(dateKey, group);
+      groups.push(group);
+    }
+    const group = groupMap.get(dateKey);
+    group.entries.push(entry);
+    group.netPoints += Number(entry.delta || 0);
+  }
+
+  const groupsHtml = groups.map((group) => {
+    const headerTitle = formatLedgerDateHeader(group.dateKey);
+    const netSign = group.netPoints > 0 ? "+" : "";
+    const netCls = group.netPoints > 0 ? "pos" : group.netPoints < 0 ? "neg" : "";
+    const netLabel = `当日净得 ${netSign}${group.netPoints} 分`;
+
+    const itemsHtml = group.entries.map((entry) => {
+      const isUndo = isUndoEntry(entry);
+      const isRefund = isRefundEntry(entry);
+      let rawName = entry.item_name_snapshot || "积分调整";
+      let title = escapeHtml(rawName);
+      if (isUndo) {
+        title = `${escapeHtml(rawName)}（撤销）`;
+      } else if (isRefund) {
+        title = `${escapeHtml(rawName)}（兑换取消）`;
+      }
+
+      let iconClass = "icon-pos";
+      let iconSvg = icon("star");
+      let tagClass = "tag-habit";
+      let tagLabel = "日常打卡";
+
+      if (isUndo) {
+        iconClass = "icon-undo";
+        iconSvg = icon("rotate");
+        tagClass = "tag-undo";
+        tagLabel = "已撤销";
+      } else if (isRefund) {
+        iconClass = "icon-undo";
+        iconSvg = icon("rotate");
+        tagClass = "tag-undo";
+        tagLabel = "已退还";
+      } else if (entry.entry_type === "redemption") {
+        iconClass = "icon-reward";
+        iconSvg = icon("gift");
+        tagClass = "tag-reward";
+        tagLabel = "心愿兑换";
+      } else if (entry.entry_type === "legacy_import" || entry.entry_type === "opening_balance") {
+        iconClass = "icon-pos";
+        iconSvg = icon("download");
+        tagClass = "tag-habit";
+        tagLabel = "积分结转";
+      } else if (entry.delta < 0) {
+        iconClass = "icon-neg";
+        iconSvg = icon("alert");
+        tagClass = "tag-habit";
+        tagLabel = "习惯扣分";
+      }
+
+      const ptsClass = isUndo ? "undo" : entry.delta > 0 ? "pos" : "neg";
+      const deltaSign = entry.delta > 0 ? "+" : "";
+      const ptsText = `${deltaSign}${entry.delta}`;
+
+      return `<li>
+        <div class="ledger-item-icon ${iconClass}">${iconSvg}</div>
+        <div class="ledger-item-info">
+          <span class="ledger-item-title">${title}</span>
+          <div class="ledger-item-tags">
+            <span class="ledger-tag ${tagClass}">${tagLabel}</span>
+          </div>
+        </div>
+        <span class="pts ${ptsClass}">${ptsText}</span>
+      </li>`;
+    }).join("");
+
+    return `<div class="ledger-group">
+      <div class="ledger-group-header">
+        <span>${headerTitle}</span>
+        <span class="ledger-group-net ${netCls}">${netLabel}</span>
+      </div>
+      <ul class="ledger-group-items">
+        ${itemsHtml}
+      </ul>
+    </div>`;
+  }).join("");
+
   const historyCard = $(`<div class="card growth-history-card">
       <h3>${icon("list")} 最近积分明细</h3>
-      ${historyEntries.length
-        ? `<ul class="growth-history-list">
-             ${historyEntries.map((entry) => {
-               const dateLabel = escapeHtml(entry.occurred_on || "");
-               const isUndo = Boolean(
-                 entry.metadata?.undo_of ||
-                 entry.entry_type === "adjustment" ||
-                 (typeof entry.note === "string" && entry.note.includes("撤销"))
-               );
-               const isRefund = Boolean(
-                 entry.entry_type === "refund" ||
-                 entry.metadata?.cancel_of
-               );
-               let rawName = entry.item_name_snapshot || "积分调整";
-               if (isUndo) {
-                 rawName = `${rawName}（撤销）`;
-               } else if (isRefund) {
-                 rawName = `${rawName}（兑换取消）`;
-               }
-               const nameLabel = escapeHtml(rawName);
-               const entryClass = entry.entry_type === "redemption" ? "neg" : entry.delta > 0 ? "pos" : "neg";
-               return `<li><span class="date">${dateLabel}</span><span class="name">${nameLabel}</span><span class="pts ${entryClass}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></li>`;
-             }).join("")}
-           </ul>`
-        : `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`}
+      <div class="ledger-filter-bar">
+        <button class="ledger-filter-chip ${LEDGER_FILTER === "all" ? "active" : ""}" type="button" data-filter="all">全部 (${allLedgerEntries.length})</button>
+        <button class="ledger-filter-chip ${LEDGER_FILTER === "earned" ? "active" : ""}" type="button" data-filter="earned">获得 🌟</button>
+        <button class="ledger-filter-chip ${LEDGER_FILTER === "redeemed" ? "active" : ""}" type="button" data-filter="redeemed">兑换 🎁</button>
+        <button class="ledger-filter-chip ${LEDGER_FILTER === "undo" ? "active" : ""}" type="button" data-filter="undo">撤销/调整 ↩️</button>
+      </div>
+      ${allLedgerEntries.length === 0
+        ? `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`
+        : displayedEntries.length === 0
+          ? `<div class="desc" style="text-align:center;padding:16px 0;">暂无对应分类记录</div>`
+          : `<div class="growth-history-list">${groupsHtml}</div>`
+      }
+      ${hasMore ? `<button class="checkin secondary ledger-more-btn" type="button" id="ledgerMoreBtn">加载更多记录（剩余 ${totalFilteredCount - displayedEntries.length} 条）</button>` : ""}
     </div>`);
   main.appendChild(historyCard);
+
+  historyCard.querySelectorAll(".ledger-filter-chip").forEach((chip) => {
+    chip.onclick = () => {
+      LEDGER_FILTER = chip.dataset.filter;
+      LEDGER_LIMIT = 15;
+      renderGrow();
+    };
+  });
+
+  const moreBtn = historyCard.querySelector("#ledgerMoreBtn");
+  if (moreBtn) {
+    moreBtn.onclick = () => {
+      LEDGER_LIMIT += 15;
+      renderGrow();
+    };
+  }
 
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
@@ -2134,59 +2135,6 @@ function renderPoints(){
   });
   const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
 
-  const customCard = $(`<div class="card growth-custom-card">
-      <h3>${icon("pencil")} 自定义积分项</h3>
-      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
-      <form id="pointItemForm" class="growth-form">
-        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
-        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
-      </form>
-    </div>`);
-  main.appendChild(customCard);
-  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") || "").trim();
-    const points = Number(form.get("points"));
-    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
-      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
-      return;
-    }
-    try {
-      await window.growthLoop.createPointItem({
-        request_id: clientRequestId("point-item"),
-        item: {
-          name,
-          description: "自定义成长任务",
-          default_points: points,
-          category: "growth",
-          icon_key: points > 0 ? "star" : "alert",
-          item_kind: "custom",
-        },
-      });
-      window.cloudSync?.scheduleGrowthLoop?.();
-      renderPoints();
-    } catch (error) {
-      console.error("Growth Loop custom point item creation failed:", error);
-      alert("积分项没有保存成功，请稍后重试。");
-    }
-  };
-
-  // 结束当前积分周期：保留历史，通过不可变的反向调整归零当前月。
-  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 结束本月积分周期</button><div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div></div>`));
-  el("ptclear").onclick=async()=>{
-    if(confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")){
-      try {
-        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
-        window.cloudSync?.scheduleGrowthLoop?.();
-        PT_DAY=today; renderPoints();
-      } catch (error) {
-        console.error("Growth Loop point period close failed:", error);
-        alert("积分周期没有结束成功，请稍后重试。");
-      }
-    }
-  };
   main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
 }
 
@@ -2423,19 +2371,26 @@ function renderSettingsLearning(main){
 }
 
 function renderSettingsPoints(main){
+  const customItems = (growthLoopSnapshot.items || []).filter(it => it.item_kind === "custom");
   const customCard = $(`
     <div class="card growth-custom-card">
       <h3>${icon("pencil")} 自定义积分项</h3>
       <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
-      <form id="settingsPointItemForm" class="growth-form">
+      <form id="pointItemForm" class="growth-form">
         <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
         <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
         <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
       </form>
+      ${customItems.length ? `
+        <div class="desc mt-12" style="font-weight:700;">已添加的自定义积分项：</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+          ${customItems.map(it => `<span class="pill" style="padding:4px 8px;font-size:12px;">${escapeHtml(it.name)} (${Number(it.default_points) > 0 ? '+' : ''}${it.default_points}分)</span>`).join("")}
+        </div>
+      ` : ""}
     </div>
   `);
   main.appendChild(customCard);
-  customCard.querySelector("#settingsPointItemForm").onsubmit = async (event) => {
+  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") || "").trim();
@@ -2458,6 +2413,8 @@ function renderSettingsPoints(main){
       });
       window.cloudSync?.scheduleGrowthLoop?.();
       renderSettings({ tab: "points" });
+      praise("积分项已添加！✨");
+      flyStars(6);
     } catch (error) {
       console.error("Growth Loop custom point item creation failed:", error);
       alert("积分项没有保存成功，请稍后重试。");
@@ -2468,11 +2425,11 @@ function renderSettingsPoints(main){
     <div class="card">
       <h3>${icon("trash")} 结束本月积分周期</h3>
       <div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div>
-      <button class="checkin danger" id="settingsPtClear" type="button">${icon("trash")} 结束本月积分周期</button>
+      <button class="checkin danger" id="ptclear" type="button">${icon("trash")} 结束本月积分周期</button>
     </div>
   `);
   main.appendChild(periodCard);
-  periodCard.querySelector("#settingsPtClear").onclick = async () => {
+  periodCard.querySelector("#ptclear").onclick = async () => {
     if (confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")) {
       try {
         await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
@@ -2517,7 +2474,7 @@ function renderSettingsGrowth(main){
           <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
         </div>
         <div class="desc">${presentation.description}</div>
-        ${presentation.canRetry ? `<button class="checkin" id="settingsLegacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
+        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
       </div>
     `);
   } else if (legacyEntries.length > 0) {
@@ -2533,7 +2490,7 @@ function renderSettingsGrowth(main){
           ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
           ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
         </div>
-        <button class="checkin" id="settingsLegacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
+        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
       </div>
     `);
   } else {
@@ -2541,7 +2498,7 @@ function renderSettingsGrowth(main){
       <div class="card growth-opening-card">
         <h3>${icon("star")} 期初积分</h3>
         <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
-        <form id="settingsOpeningBalanceForm" class="growth-form">
+        <form id="openingBalanceForm" class="growth-form">
           <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
           <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
         </form>
@@ -2549,7 +2506,7 @@ function renderSettingsGrowth(main){
     `);
   }
   main.appendChild(openingCard);
-  const openingForm = openingCard.querySelector("#settingsOpeningBalanceForm");
+  const openingForm = openingCard.querySelector("#openingBalanceForm");
   if (openingForm) {
     openingForm.onsubmit = async (event) => {
       event.preventDefault();
@@ -2580,7 +2537,7 @@ function renderSettingsGrowth(main){
       }
     };
   }
-  const legacyImportBtn = openingCard.querySelector("#settingsLegacyImportBtn");
+  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
   if (legacyImportBtn) {
     legacyImportBtn.onclick = async () => {
       if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
@@ -2607,35 +2564,58 @@ function renderSettingsGrowth(main){
     };
   }
 
+  const existingRewards = window.growthLoop?.getRewards?.() || [];
   const rewardCard = $(`
     <div class="card growth-custom-card">
       <h3>${icon("gift")} 添加心愿奖品</h3>
       <div class="desc">设定孩子期待兑换的心愿奖品与兑换所需积分。</div>
-      <form id="settingsRewardForm" class="growth-form">
+      <form id="rewardForm" class="growth-form">
         <label>奖品名称<input name="name" maxlength="60" required placeholder="例如：去一次游乐园"></label>
-        <label>所需积分<input name="cost" type="number" min="1" max="10000" step="1" required placeholder="例如：50"></label>
+        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
         <button class="checkin" type="submit">${icon("plus")} 添加心愿奖品</button>
       </form>
+      ${existingRewards.length ? `
+        <div class="desc mt-12" style="font-weight:700;">已设定的心愿奖品：</div>
+        <div class="reward-list mt-8">
+          ${existingRewards.map(r => `
+            <div class="reward-card">
+              <div class="reward-icon">${icon(r.icon_key || "gift")}</div>
+              <div class="reward-info">
+                <strong>${escapeHtml(r.name)}</strong>
+                <span>${escapeHtml(r.description || "家庭约定奖励")}</span>
+              </div>
+              <span class="pts-badge">${r.cost_points || 0}分</span>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
     </div>
   `);
   main.appendChild(rewardCard);
-  rewardCard.querySelector("#settingsRewardForm").onsubmit = async (event) => {
+  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") || "").trim();
     const cost = Number(form.get("cost"));
-    if (!name || !Number.isInteger(cost) || cost <= 0 || cost > 10000) {
-      alert("请填写奖品名称，并输入 1 到 10000 的所需积分。");
+    if (!name || !Number.isInteger(cost) || cost <= 0 || cost > 100000) {
+      alert("请填写奖品名称，并输入 1 到 100000 的所需积分。");
       return;
     }
     try {
       await window.growthLoop.createReward({
-        request_id: clientRequestId("reward-create"),
-        name,
-        cost_points: cost,
+        request_id: clientRequestId("reward"),
+        reward: {
+          name,
+          description: "家庭约定奖励",
+          cost_points: cost,
+          category: "family",
+          icon_key: "gift",
+        },
       });
       window.cloudSync?.scheduleGrowthLoop?.();
       renderSettings({ tab: "growth" });
+      praise("心愿奖品已添加！🎁");
+      flyStars(6);
     } catch (error) {
       console.error("Growth Loop create reward failed:", error);
       alert("心愿奖品添加失败，请稍后重试。");

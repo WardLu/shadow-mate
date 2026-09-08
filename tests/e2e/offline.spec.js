@@ -574,7 +574,9 @@ test.describe("Offline mode (no login)", () => {
     await toggle.click();
     await expect(card).toHaveClass(/done/);
     page.once("dialog", (dialog) => dialog.accept());
+    await page.click('[data-go-settings="points"]');
     await page.click("#ptclear");
+    await page.click('[data-mod="points"]');
     await expect(card).not.toHaveClass(/done/);
   });
 

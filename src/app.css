@@ -536,15 +536,54 @@
   .legacy-row .pos{color:var(--green-deep);font-weight:800;}
   .legacy-row .neg{color:#d9534f;font-weight:800;}
   .legacy-more{font-size:11.5px;color:var(--ink-soft);text-align:center;padding:4px 0 2px;}
-  .growth-opening-card #legacyImportBtn{width:100%;margin-top:8px;}
+  /* 积分明细时间线与分组 */
+  .ledger-filter-bar{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .ledger-filter-bar::-webkit-scrollbar{display:none;}
+  .ledger-filter-chip{
+    padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+    border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+    cursor:pointer;transition:all .15s ease;white-space:nowrap;
+  }
+  .ledger-filter-chip:hover{color:var(--ink);}
+  .ledger-filter-chip.active{background:var(--green-soft);border-color:var(--green);color:var(--green-deep);}
+  .ledger-group{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
+  .ledger-group:last-child{margin-bottom:0;}
+  .ledger-group-header{
+    display:flex;justify-content:space-between;align-items:center;padding:7px 12px;
+    background:#f6fbf7;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--ink);
+  }
+  .ledger-group-net{font-size:11px;font-weight:700;color:var(--ink-soft);}
+  .ledger-group-net.pos{color:var(--green-deep);}
+  .ledger-group-net.neg{color:#d9534f;}
   .growth-history-list{list-style:none;margin:0;padding:0;display:grid;gap:0;}
-  .growth-history-list li{display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line);font-size:12.5px;color:var(--ink);}
+  .ledger-group-items{list-style:none;margin:0;padding:0;display:grid;gap:0;}
+  .growth-history-list li{
+    display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.04);
+    font-size:12.5px;color:var(--ink);
+  }
   .growth-history-list li:last-child{border-bottom:none;}
-  .growth-history-list .date{color:var(--ink-soft);font-variant-numeric:tabular-nums;flex:0 0 auto;}
-  .growth-history-list .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .growth-history-list .pts{font-weight:800;flex:0 0 auto;}
-  .growth-history-list .pts.pos{color:var(--green-deep);}
-  .growth-history-list .pts.neg{color:#d9534f;}
+  .ledger-item-icon{
+    width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .ledger-item-icon svg{width:14px;height:14px;}
+  .ledger-item-icon.icon-pos{background:#e6f7eb;color:var(--green-deep);}
+  .ledger-item-icon.icon-neg{background:#fee2e2;color:#dc2626;}
+  .ledger-item-icon.icon-reward{background:#e0f2fe;color:#0284c7;}
+  .ledger-item-icon.icon-undo{background:#f1f5f9;color:#64748b;}
+  .ledger-item-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+  .ledger-item-title{font-size:12.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ledger-item-tags{display:flex;gap:4px;align-items:center;}
+  .ledger-tag{font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600;}
+  .ledger-tag.tag-habit{background:#edf6ee;color:var(--green-deep);}
+  .ledger-tag.tag-reward{background:#e0f2fe;color:#0369a1;}
+  .ledger-tag.tag-undo{background:#f1f5f9;color:#64748b;text-decoration:line-through;}
+  .growth-history-list .pts{
+    font-size:12px;font-weight:800;flex:0 0 auto;padding:2px 8px;border-radius:999px;
+  }
+  .growth-history-list .pts.pos{background:#e6f7eb;color:var(--green-deep);}
+  .growth-history-list .pts.neg{background:#fee2e2;color:#dc2626;}
+  .growth-history-list .pts.undo{background:#f1f5f9;color:#64748b;opacity:0.8;}
+  .ledger-more-btn{width:100%;justify-content:center;margin-top:8px;}
   @media (max-width:360px){
     .growth-form{grid-template-columns:1fr;}
     .growth-form .checkin{width:100%;}
@@ -1009,8 +1048,21 @@
     .settings-tab{color:var(--ink-soft);}
     .settings-tab:hover{color:var(--ink);}
     .settings-tab.active{background:#233a2a;color:#7ee79b;box-shadow:0 2px 8px rgba(0,0,0,0.3);}
-    .btn-subtle{background:#1b2c22;border-color:var(--line);color:var(--ink-soft);}
-    .btn-subtle:hover{background:#233d2c;border-color:var(--green);color:#7ee79b;}
+    .ledger-group{background:#18271e;border-color:var(--line);}
+    .ledger-group-header{background:#132118;border-color:var(--line);}
+    .growth-history-list li{border-bottom-color:rgba(255,255,255,0.06);}
+    .ledger-filter-chip{background:#1b2c22;border-color:var(--line);color:var(--ink-soft);}
+    .ledger-filter-chip.active{background:#233d2c;border-color:var(--green);color:#7ee79b;}
+    .ledger-item-icon.icon-pos{background:#1e3c29;color:#7ee79b;}
+    .ledger-item-icon.icon-neg{background:#3d1c1c;color:#f87171;}
+    .ledger-item-icon.icon-reward{background:#162f45;color:#38bdf8;}
+    .ledger-item-icon.icon-undo{background:#1e293b;color:#94a3b8;}
+    .ledger-tag.tag-habit{background:#1e3c29;color:#7ee79b;}
+    .ledger-tag.tag-reward{background:#162f45;color:#38bdf8;}
+    .ledger-tag.tag-undo{background:#1e293b;color:#94a3b8;}
+    .growth-history-list .pts.pos{background:#1e3c29;color:#7ee79b;}
+    .growth-history-list .pts.neg{background:#3d1c1c;color:#f87171;}
+    .growth-history-list .pts.undo{background:#1e293b;color:#94a3b8;}
 
     .voice-dialog{background:var(--card);color:var(--ink);}
   }
