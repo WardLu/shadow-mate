@@ -32,6 +32,8 @@ shadow-wang-home.png
 # Local-only internal planning and deployment docs
 /TODO.md
 /ROADMAP.md
+/AGENTS.md
+/CLAUDE.md
 /docs/internal/
 /docs/private/
 /docs/legal/
