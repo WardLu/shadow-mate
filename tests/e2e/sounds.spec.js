@@ -33,9 +33,14 @@ test.describe("Sound effects settings and playback", () => {
     return page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
   }
 
-  test("renders the sound settings page with the five fixed events", async ({ page }) => {
+  async function openSoundSettings(page) {
     await page.goto("/");
     await page.click('[data-mod="settings"]');
+    await page.click('[data-tab="sound"]');
+  }
+
+  test("renders the sound settings page with the five fixed events", async ({ page }) => {
+    await openSoundSettings(page);
     await expect(page.locator("#snd-master")).toBeVisible();
     await expect(page.locator("#snd-volume")).toBeVisible();
     await expect(page.locator("#speech-volume")).toBeVisible();
@@ -48,8 +53,7 @@ test.describe("Sound effects settings and playback", () => {
   });
 
   test("previews each of the five events", async ({ page }) => {
-    await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openSoundSettings(page);
     await installPlaySpies(page);
     for (const key of ["action_completed", "points_earned", "try_again", "points_deducted", "reward_fulfilled"]) {
       await page.locator(`[data-event-preview="${key}"]`).click();
@@ -61,8 +65,7 @@ test.describe("Sound effects settings and playback", () => {
   });
 
   test("master switch and volume persist on this device only including excess boost up to 200%", async ({ page }) => {
-    await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openSoundSettings(page);
     await page.locator("#snd-master").click();
     expect((await storedSettings(page)).enabled).toBe(false);
 
@@ -87,8 +90,7 @@ test.describe("Sound effects settings and playback", () => {
   });
 
   test("speech volume persists independently on this device including excess boost up to 200%", async ({ page }) => {
-    await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openSoundSettings(page);
     await page.locator("#speech-volume").evaluate((input) => {
       input.value = "80";
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -108,8 +110,7 @@ test.describe("Sound effects settings and playback", () => {
   });
 
   test("event toggle and variant selection persist", async ({ page }) => {
-    await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openSoundSettings(page);
     await page.locator('[data-event-enable="points_earned"]').click();
     expect((await storedSettings(page)).events.points_earned.enabled).toBe(false);
 
@@ -121,8 +122,7 @@ test.describe("Sound effects settings and playback", () => {
   });
 
   test("resets all sound settings to defaults", async ({ page }) => {
-    await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openSoundSettings(page);
     await page.locator("#snd-volume").evaluate((input) => {
       input.value = "20";
       input.dispatchEvent(new Event("input", { bubbles: true }));

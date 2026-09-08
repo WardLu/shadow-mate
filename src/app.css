@@ -94,6 +94,36 @@
   .module-title{display:flex;align-items:center;gap:8px;margin:2px 2px 12px;}
   .module-title .em{font-size:22px;display:inline-flex;align-items:center;}
   .module-title h2{font-size:17px;margin:0;font-weight:800;}
+  .module-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 2px 12px;}
+  .module-title-row .module-title{margin:0;}
+  .btn-subtle{
+    display:inline-flex;align-items:center;gap:5px;padding:6px 12px;
+    border-radius:999px;background:var(--card);color:var(--ink-soft);
+    border:1px solid var(--line);font-size:12px;font-weight:700;cursor:pointer;
+    transition:all .15s ease;-webkit-tap-highlight-color:transparent;
+  }
+  .btn-subtle:hover{color:var(--green-deep);border-color:var(--green);background:var(--green-soft);}
+  .btn-subtle:active{transform:scale(0.96);}
+  .btn-subtle svg{width:13px;height:13px;}
+
+  /* 设置页面分类标签页 */
+  .settings-tabs{
+    display:flex;gap:6px;padding:4px;background:#edf6ee;
+    border-radius:14px;margin-bottom:14px;overflow-x:auto;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .settings-tabs::-webkit-scrollbar{display:none;}
+  .settings-tab{
+    flex:1;min-width:max-content;display:inline-flex;align-items:center;justify-content:center;
+    gap:6px;padding:8px 12px;border-radius:10px;border:none;background:transparent;
+    color:var(--ink-soft);font-size:12.5px;font-weight:700;cursor:pointer;
+    transition:all .15s ease;white-space:nowrap;
+  }
+  .settings-tab:hover{color:var(--ink);}
+  .settings-tab.active{
+    background:var(--card);color:var(--green-deep);box-shadow:0 2px 6px rgba(0,0,0,0.06);
+  }
+  .settings-tab svg{width:14px;height:14px;}
 
   /* 圆角卡片 */
   .card{
@@ -975,7 +1005,12 @@
     .guide-note{color:#e1c77b;}
     .guide-help-card h3{color:#ffd875;}
     .guide-help-card p{color:#d8c58e;}
-    .guide-device-tip{background:var(--green-light);color:var(--green-deep);}
+    .settings-tabs{background:#17291f;}
+    .settings-tab{color:var(--ink-soft);}
+    .settings-tab:hover{color:var(--ink);}
+    .settings-tab.active{background:#233a2a;color:#7ee79b;box-shadow:0 2px 8px rgba(0,0,0,0.3);}
+    .btn-subtle{background:#1b2c22;border-color:var(--line);color:var(--ink-soft);}
+    .btn-subtle:hover{background:#233d2c;border-color:var(--green);color:#7ee79b;}
 
     .voice-dialog{background:var(--card);color:var(--ink);}
   }

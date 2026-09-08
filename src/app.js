@@ -994,32 +994,15 @@ function renderHome(){
 
 function renderLearning(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("graduation","学习"));
-  const config = normalizeContentConfig(store.content_config);
-  const enabled = enabledModuleIds();
-  const settings = $(`
-    <div class="card">
-      <h3>${icon("grid")} 学习包设置</h3>
-      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
-      <label class="switch-row">
-        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
-        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
-      </label>
-      ${FOUNDATION_PACKAGE.modules.map((module) => `
-      <label class="switch-row">
-        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
-        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
-      </label>`).join("")}
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("graduation")}</span><h2>学习</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button>
     </div>
   `);
-  main.appendChild(settings);
-  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
-    input.onchange = () => updateContentPackage(input.checked);
-  });
-  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
-    input.onchange = () => updateContentModule(input.dataset.moduleId, input.checked);
-  });
+  main.appendChild(titleRow);
 
+  const enabled = enabledModuleIds();
   if (enabled.length) {
     const entries = enabled.map((moduleId) => {
       const module = getContentModuleDefinition(moduleId);
@@ -1040,11 +1023,15 @@ function renderLearning(){
   } else {
     main.appendChild($(`
       <div class="card">
-        <h3>${icon("sprout")} 学习包未启用</h3>
-        <div class="desc">开启上方「启用学习包」后，才能看到并进入学习模块。</div>
+        <h3>${icon("sprout")} 学习模块未启用</h3>
+        <div class="desc">当前孩子的启蒙学习包未开启或各学科已关闭。可在「学习设置」中开启学习包并勾选需要的学科。</div>
+        <button class="checkin" type="button" data-go-settings="learning">${icon("settings")} 前往设置开启模块</button>
       </div>
     `));
   }
+  main.querySelectorAll("[data-go-settings]").forEach((btn) => {
+    btn.onclick = () => switchMod("settings", { tab: btn.dataset.goSettings });
+  });
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
@@ -1660,7 +1647,14 @@ function legacyImportPresentation(status) {
 
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("sprout","成长记录"));
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("sprout")}</span><h2>成长记录</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="growth" aria-label="成长设置">${icon("settings")} 成长设置</button>
+    </div>
+  `);
+  main.appendChild(titleRow);
+  titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "growth" });
   const enabled = enabledModuleIds();
   const learningOn = enabled.length > 0;
 
@@ -2061,7 +2055,14 @@ function ptsCardHTML(it, day){
 
 function renderPoints(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("star","积分打卡"));
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("star")}</span><h2>积分打卡</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="points" aria-label="积分设置">${icon("settings")} 积分设置</button>
+    </div>
+  `);
+  main.appendChild(titleRow);
+  titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "points" });
   const currentDate = new Date();
   const today = currentDate.getDate();
   const year = currentDate.getFullYear();
@@ -2339,11 +2340,312 @@ function renderBook(){
 
 
 /* =========================================================
-   渲染：音效设置（设备级，仅本机）
+   渲染：系统设置（分类标签页）
    ========================================================= */
-function renderSettings(){
+let currentSettingsTab = "learning";
+
+function renderSettings(options = {}){
+  if (options?.tab) {
+    currentSettingsTab = options.tab;
+  }
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("settings","音效与语音设置"));
+  main.appendChild(modTitle("settings","设置"));
+
+  const tabs = [
+    { id: "learning", icon: "graduation", label: "学习设置" },
+    { id: "points", icon: "star", label: "积分规则" },
+    { id: "growth", icon: "sprout", label: "愿望成长" },
+    { id: "sound", icon: "volume", label: "声音音效" },
+  ];
+  const tabsBar = $(`
+    <div class="settings-tabs" role="tablist" aria-label="设置分类">
+      ${tabs.map((tab) => `
+        <button class="settings-tab ${currentSettingsTab === tab.id ? "active" : ""}" 
+                type="button" 
+                role="tab" 
+                data-tab="${tab.id}" 
+                aria-selected="${currentSettingsTab === tab.id}">
+          ${icon(tab.icon)} ${tab.label}
+        </button>
+      `).join("")}
+    </div>
+  `);
+  main.appendChild(tabsBar);
+  tabsBar.querySelectorAll(".settings-tab").forEach((btn) => {
+    btn.onclick = () => {
+      currentSettingsTab = btn.dataset.tab;
+      renderSettings();
+    };
+  });
+
+  if (currentSettingsTab === "learning") {
+    renderSettingsLearning(main);
+  } else if (currentSettingsTab === "points") {
+    renderSettingsPoints(main);
+  } else if (currentSettingsTab === "growth") {
+    renderSettingsGrowth(main);
+  } else if (currentSettingsTab === "sound") {
+    renderSettingsSound(main);
+  }
+}
+
+function renderSettingsLearning(main){
+  const config = normalizeContentConfig(store.content_config);
+  const settings = $(`
+    <div class="card">
+      <h3>${icon("grid")} 启蒙学习包设置</h3>
+      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
+      <label class="switch-row">
+        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
+        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
+      </label>
+      ${FOUNDATION_PACKAGE.modules.map((module) => `
+      <label class="switch-row">
+        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
+        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
+      </label>`).join("")}
+    </div>
+  `);
+  main.appendChild(settings);
+  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
+    input.onchange = () => {
+      updateContentPackage(input.checked);
+      renderSettings({ tab: "learning" });
+    };
+  });
+  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
+    input.onchange = () => {
+      updateContentModule(input.dataset.moduleId, input.checked);
+      renderSettings({ tab: "learning" });
+    };
+  });
+  main.appendChild($(`<div class="footer">${icon("graduation")} 学习包配置按孩子独立保存 · 登录后跨设备同步</div>`));
+}
+
+function renderSettingsPoints(main){
+  const customCard = $(`
+    <div class="card growth-custom-card">
+      <h3>${icon("pencil")} 自定义积分项</h3>
+      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
+      <form id="settingsPointItemForm" class="growth-form">
+        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
+        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
+      </form>
+    </div>
+  `);
+  main.appendChild(customCard);
+  customCard.querySelector("#settingsPointItemForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const points = Number(form.get("points"));
+    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
+      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
+      return;
+    }
+    try {
+      await window.growthLoop.createPointItem({
+        request_id: clientRequestId("point-item"),
+        item: {
+          name,
+          description: "自定义成长任务",
+          default_points: points,
+          category: "growth",
+          icon_key: points > 0 ? "star" : "alert",
+          item_kind: "custom",
+        },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderSettings({ tab: "points" });
+    } catch (error) {
+      console.error("Growth Loop custom point item creation failed:", error);
+      alert("积分项没有保存成功，请稍后重试。");
+    }
+  };
+
+  const periodCard = $(`
+    <div class="card">
+      <h3>${icon("trash")} 结束本月积分周期</h3>
+      <div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div>
+      <button class="checkin danger" id="settingsPtClear" type="button">${icon("trash")} 结束本月积分周期</button>
+    </div>
+  `);
+  main.appendChild(periodCard);
+  periodCard.querySelector("#settingsPtClear").onclick = async () => {
+    if (confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")) {
+      try {
+        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
+        window.cloudSync?.scheduleGrowthLoop?.();
+        renderSettings({ tab: "points" });
+      } catch (error) {
+        console.error("Growth Loop point period close failed:", error);
+        alert("积分周期没有结束成功，请稍后重试。");
+      }
+    }
+  };
+  main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
+}
+
+function renderSettingsGrowth(main){
+  const opening = getOpeningBalance(growthLoopSnapshot);
+  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
+  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
+  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
+  const legacyPreview = legacyEntries.slice(-6).reverse();
+
+  let openingCard;
+  if (opening) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("checkCircle")} 期初积分已确认</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
+          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
+      </div>
+    `);
+  } else if (legacyImport) {
+    const presentation = legacyImportPresentation(legacyImport.status);
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
+          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
+          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">${presentation.description}</div>
+        ${presentation.canRetry ? `<button class="checkin" id="settingsLegacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
+      </div>
+    `);
+  } else if (legacyEntries.length > 0) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("download")} 恢复旧积分</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
+          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
+        </div>
+        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
+        <div class="legacy-preview">
+          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
+          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
+        </div>
+        <button class="checkin" id="settingsLegacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
+      </div>
+    `);
+  } else {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("star")} 期初积分</h3>
+        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
+        <form id="settingsOpeningBalanceForm" class="growth-form">
+          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
+          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+        </form>
+      </div>
+    `);
+  }
+  main.appendChild(openingCard);
+  const openingForm = openingCard.querySelector("#settingsOpeningBalanceForm");
+  if (openingForm) {
+    openingForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const value = Number(form.get("balance"));
+      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
+        alert("请填写 1 到 1000000 的整数积分。");
+        return;
+      }
+      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
+      try {
+        const result = await window.growthLoop.confirmOpeningBalance({
+          balance: value,
+          note: "期初积分",
+          request_id: clientRequestId("opening"),
+        });
+        if (result.error === "opening_balance_already_confirmed") {
+          alert("这个孩子的期初积分已经确认过了。");
+        } else if (result.error) {
+          alert("期初积分确认失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderSettings({ tab: "growth" });
+        }
+      } catch (error) {
+        console.error("Growth Loop opening balance confirm failed:", error);
+        alert("期初积分没有保存成功，请稍后重试。");
+      }
+    };
+  }
+  const legacyImportBtn = openingCard.querySelector("#settingsLegacyImportBtn");
+  if (legacyImportBtn) {
+    legacyImportBtn.onclick = async () => {
+      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
+      legacyImportBtn.disabled = true;
+      try {
+        const result = await window.growthLoop.importLegacyPoints({
+          entries: legacyEntries,
+          request_id: clientRequestId("legacy-import"),
+        });
+        if (result.error === "legacy_points_already_imported") {
+          alert("这个孩子的旧积分已经导入过了。");
+        } else if (result.error) {
+          alert("旧积分导入失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderSettings({ tab: "growth" });
+        }
+      } catch (error) {
+        console.error("Growth Loop legacy points import failed:", error);
+        alert("旧积分没有导入成功，请稍后重试。");
+      } finally {
+        legacyImportBtn.disabled = false;
+      }
+    };
+  }
+
+  const rewardCard = $(`
+    <div class="card growth-custom-card">
+      <h3>${icon("gift")} 添加心愿奖品</h3>
+      <div class="desc">设定孩子期待兑换的心愿奖品与兑换所需积分。</div>
+      <form id="settingsRewardForm" class="growth-form">
+        <label>奖品名称<input name="name" maxlength="60" required placeholder="例如：去一次游乐园"></label>
+        <label>所需积分<input name="cost" type="number" min="1" max="10000" step="1" required placeholder="例如：50"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加心愿奖品</button>
+      </form>
+    </div>
+  `);
+  main.appendChild(rewardCard);
+  rewardCard.querySelector("#settingsRewardForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const cost = Number(form.get("cost"));
+    if (!name || !Number.isInteger(cost) || cost <= 0 || cost > 10000) {
+      alert("请填写奖品名称，并输入 1 到 10000 的所需积分。");
+      return;
+    }
+    try {
+      await window.growthLoop.createReward({
+        request_id: clientRequestId("reward-create"),
+        name,
+        cost_points: cost,
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderSettings({ tab: "growth" });
+    } catch (error) {
+      console.error("Growth Loop create reward failed:", error);
+      alert("心愿奖品添加失败，请稍后重试。");
+    }
+  };
+
+  main.appendChild($(`<div class="footer">${icon("sprout")} 期初积分与心愿奖品按孩子独立管理 · 登录后跨设备同步</div>`));
+}
+
+function renderSettingsSound(main){
   const settings = soundEffects.getSettings();
   const masterVol = Math.round((settings.volume ?? 0.6)*100);
   const masterLabelText = `总音量 ${masterVol}%${masterVol > 100 ? " (超额增强)" : ""}`;
@@ -2408,7 +2710,7 @@ function renderSettings(){
 
   el("snd-master").onclick = () => {
     soundEffects.setEnabled(!soundEffects.getSettings().enabled);
-    renderSettings();
+    renderSettings({ tab: "sound" });
   };
   el("snd-volume").oninput = (event) => {
     const val = Number(event.target.value);
@@ -2442,15 +2744,15 @@ function renderSettings(){
 
   el("snd-reset").onclick = () => {
     soundEffects.resetDefaults();
-    renderSettings();
+    renderSettings({ tab: "sound" });
   };
   main.querySelectorAll("[data-event-enable]").forEach((button) => button.onclick = () => {
     soundEffects.setEventEnabled(button.dataset.eventEnable, !soundEffects.getSettings().events[button.dataset.eventEnable].enabled);
-    renderSettings();
+    renderSettings({ tab: "sound" });
   });
   main.querySelectorAll("[data-event-variant]").forEach((select) => select.onchange = () => {
     soundEffects.setEventVariant(select.dataset.eventVariant, select.value);
-    renderSettings();
+    renderSettings({ tab: "sound" });
   });
   main.querySelectorAll("[data-event-preview]").forEach((button) => button.onclick = () => {
     soundEffects.preview(button.dataset.eventPreview);
@@ -2651,7 +2953,7 @@ function checkinBtn(mod,label){
 /* =========================================================
    导航切换
    ========================================================= */
-function switchMod(mod){
+function switchMod(mod, options = {}){
   CURRENT_MOD = mod;
   removeWritingPrintRoot();
   stopPoemSpeech();
@@ -2670,13 +2972,13 @@ function switchMod(mod){
   else if(mod==="points") renderPoints();
   else if(mod==="grow") renderGrow();
   else if(mod==="guide") renderGuide();
-  else if(mod==="settings") renderSettings();
+  else if(mod==="settings") renderSettings(options);
   // 绑定打卡按钮
   el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
     btn.onclick=()=>{
       const m=btn.dataset.cmod;
       toggleCheckin(m);
-      switchMod(mod);
+      switchMod(mod, options);
     };
   });
   el("main").scrollTop=0;
