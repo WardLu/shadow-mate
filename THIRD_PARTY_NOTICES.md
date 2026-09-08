@@ -44,7 +44,7 @@
 
 当前 active 发音路径在发布准备阶段调用腾讯云语音合成：中文使用精品音色智柯（VoiceType `101030`），英文使用精品音色 WeJack（VoiceType `101050`），输出 16 kHz MP3，并以内容寻址路径保存到项目 COS/CDN。运行时只读取已生成音频，不携带腾讯云凭据，也不动态调用付费合成接口。发布脚本使用锁定版本的 `tencentcloud-sdk-nodejs-tts`（Apache-2.0）和 `cos-nodejs-sdk-v5`（ISC）；二者不进入浏览器 bundle。
 
-腾讯云服务条款对生成音频共享分发的适用范围仍有歧义。产品负责人已于 2026-09-05 接受该不确定性，仅用于 Preview MVP 私有验收；Production 上线前必须取得腾讯云书面确认，详见 `docs/superpowers/specs/2026-09-05-tencent-cloud-tts-mvp-design.md`。
+腾讯云服务条款对生成音频共享分发的适用范围仍有歧义。产品负责人已于 2026-09-05 接受该不确定性，仅用于 Preview MVP 私有验收；Production 上线前必须取得腾讯云书面确认。
 
 ### 已停用的统一中英双语 Matcha CDN 资源
 

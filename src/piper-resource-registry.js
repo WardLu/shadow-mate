@@ -325,7 +325,7 @@ const BUNDLED_PIPER_RUNTIME = {
       bytes: 2057,
       sha256: "e6274d02b08ca502ae910cdbd3084cda557ee52a12bc020a96187af43a0dd4ca",
       license: "Apache-2.0 with Shadow Mate integration changes",
-      provenance: "docs/superpowers/specs/2026-09-04-unified-offline-voice-design.md",
+      provenance: "sherpa-onnx v1.13.2 upstream release",
     },
   ],
 };
