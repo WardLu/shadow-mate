@@ -159,17 +159,24 @@ export function createGrowthLoopState(scope = {}) {
 export function normalizeGrowthLoopState(input = {}, scope = input.scope || {}) {
   const base = createGrowthLoopState(scope);
   const source = isRecord(input) ? input : {};
+  const normalizedScope = normalizeScope(source.scope || scope);
+  const isLocalScope = !normalizedScope.household_id;
   return {
     ...base,
     ...clone(source),
     schema_version: GROWTH_LOOP_SCHEMA_VERSION,
-    scope: normalizeScope(source.scope || scope),
+    scope: normalizedScope,
     point_items: Array.isArray(source.point_items) ? source.point_items.map(normalizePointItem) : [],
     profile_point_items: Array.isArray(source.profile_point_items) ? clone(source.profile_point_items) : [],
     rewards: Array.isArray(source.rewards) ? source.rewards.map(normalizeReward) : [],
     profile_rewards: Array.isArray(source.profile_rewards) ? clone(source.profile_rewards) : [],
     ledger: Array.isArray(source.ledger) ? source.ledger.map((entry) => normalizeLedgerEntry(entry, scope)) : [],
-    redemptions: Array.isArray(source.redemptions) ? clone(source.redemptions) : [],
+    redemptions: Array.isArray(source.redemptions)
+      ? clone(source.redemptions).map((redemption) => ({
+          ...redemption,
+          confirmed: isLocalScope ? true : Boolean(redemption.confirmed),
+        }))
+      : [],
     sync: { ...base.sync, ...(isRecord(source.sync) ? clone(source.sync) : {}) },
   };
 }
@@ -684,6 +691,7 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
   if (!reward || !profileReward) return { snapshot, events: [], error: "reward_not_enabled" };
   const cost = Number(profileReward.cost_override ?? reward.cost_points);
   if (getBalance(snapshot) < cost) return { snapshot, events: [], error: "insufficient_points" };
+  const isLocalScope = !normalizedScope.household_id;
   const redemption = {
     id: request_id,
     household_id: normalizedScope.household_id,
@@ -692,6 +700,12 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
     reward_name_snapshot: reward.name,
     cost_points_snapshot: cost,
     status: "pending",
+    confirmed: isLocalScope ? true : false,
+    fulfill_requested: false,
+    fulfill_request_id: null,
+    cancel_requested: false,
+    cancel_request_id: null,
+    sync_error: null,
     request_id,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -706,10 +720,10 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
     delta: -cost,
     entry_type: "redemption",
     item_name_snapshot: reward.name,
-    note: "待联网确认的奖励兑换",
+    note: isLocalScope ? "奖励兑换" : "待联网确认的奖励兑换",
     request_id: `${request_id}:debit`,
     occurred_on: new Date().toISOString().slice(0, 10),
-    status: "pending",
+    status: isLocalScope ? "confirmed" : "pending",
     redemption_id: request_id,
   }, normalizedScope));
   return {
@@ -724,6 +738,102 @@ export function applyRedemption(current, { scope = current.scope, reward_id, req
   };
 }
 
+function findRedemption(snapshot, redemptionId) {
+  return snapshot.redemptions.find((entry) => entry.id === redemptionId) || null;
+}
+
+function redemptionActionEvent(scope, type, requestId, redemptionId, dependsOn = []) {
+  return localEvent({
+    type,
+    scope,
+    request_id: requestId,
+    depends_on: dependsOn,
+    payload: { redemption_id: redemptionId },
+  });
+}
+
+export function applyFulfillRedemption(
+  current,
+  { scope = current.scope, redemption_id, request_id = createId("redemption-fulfill") } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  const isLocalScope = !normalizedScope.household_id;
+  const redemption = findRedemption(snapshot, redemption_id);
+  if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
+  if (redemption.status !== "pending") return { snapshot, events: [], error: "redemption_not_pending" };
+  if (!isLocalScope && !redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (redemption.fulfill_requested) return { snapshot, events: [], error: "redemption_action_pending" };
+
+  const nextRedemption = snapshot.redemptions.find((entry) => entry.id === redemption_id);
+  nextRedemption.fulfill_requested = isLocalScope ? false : true;
+  nextRedemption.fulfill_request_id = request_id;
+  nextRedemption.sync_error = null;
+  if (isLocalScope) {
+    nextRedemption.status = "fulfilled";
+    nextRedemption.confirmed = true;
+  }
+  nextRedemption.updated_at = new Date().toISOString();
+  return {
+    snapshot,
+    redemption: nextRedemption,
+    events: [redemptionActionEvent(normalizedScope, "redemption_fulfill", request_id, redemption_id)],
+  };
+}
+
+export function applyCancelRedemption(
+  current,
+  { scope = current.scope, redemption_id, request_id = createId("redemption-cancel"), note = "本次暂不兑现" } = {},
+) {
+  const snapshot = normalizeGrowthLoopState(current, scope);
+  const normalizedScope = normalizeScope(scope);
+  const isLocalScope = !normalizedScope.household_id;
+  const redemption = findRedemption(snapshot, redemption_id);
+  if (!redemption) return { snapshot, events: [], error: "redemption_not_found" };
+  if (redemption.status !== "pending" && redemption.status !== "fulfilled") return { snapshot, events: [], error: "redemption_not_pending" };
+  if (!isLocalScope && !redemption.confirmed) return { snapshot, events: [], error: "redemption_waiting_for_confirmation" };
+  if (redemption.cancel_requested) return { snapshot, events: [], error: "redemption_action_pending" };
+  const refundRequestId = request_id;
+  const refund = normalizeLedgerEntry({
+    id: createId("ledger"),
+    household_id: normalizedScope.household_id,
+    profile_id: normalizedScope.profile_id,
+    point_item_id: null,
+    delta: Number(redemption.cost_points_snapshot || 0),
+    entry_type: "refund",
+    item_name_snapshot: redemption.reward_name_snapshot,
+    note: note ? String(note).slice(0, 200) : null,
+    request_id: refundRequestId,
+    occurred_on: new Date().toISOString().slice(0, 10),
+    status: isLocalScope ? "confirmed" : "pending",
+    redemption_id: redemption.id,
+    metadata: { cancel_of: redemption.request_id },
+  }, normalizedScope);
+  snapshot.ledger.push(refund);
+  redemption.cancel_requested = isLocalScope ? false : true;
+  redemption.cancel_request_id = request_id;
+  redemption.sync_error = null;
+  if (isLocalScope) {
+    redemption.status = "cancelled";
+    redemption.confirmed = true;
+  }
+  redemption.updated_at = new Date().toISOString();
+  return {
+    snapshot,
+    redemption,
+    refund,
+    events: [localEvent({
+      type: "redemption_cancel",
+      scope: normalizedScope,
+      request_id,
+      payload: {
+        redemption_id,
+        note: refund.note,
+      },
+    })],
+  };
+}
+
 export function mergeGrowthLoopSnapshot(remote, local) {
   const remoteSnapshot = normalizeGrowthLoopState(remote, remote?.scope || local?.scope || {});
   const localSnapshot = normalizeGrowthLoopState(local, remoteSnapshot.scope);
@@ -733,6 +843,12 @@ export function mergeGrowthLoopSnapshot(remote, local) {
     return [...rows.values()];
   };
   const remoteRequests = new Set(remoteSnapshot.ledger.map((entry) => entry.request_id).filter(Boolean));
+  const isCoveredByRemote = (entry) => {
+    if (!entry.request_id) return false;
+    if (remoteRequests.has(entry.request_id)) return true;
+    if (entry.request_id.endsWith(":refund") && remoteRequests.has(entry.request_id.slice(0, -7))) return true;
+    return false;
+  };
   const merged = {
     ...remoteSnapshot,
     point_items: mergeRows(remoteSnapshot.point_items, localSnapshot.point_items),
@@ -749,7 +865,7 @@ export function mergeGrowthLoopSnapshot(remote, local) {
     ),
     ledger: [
       ...remoteSnapshot.ledger,
-      ...localSnapshot.ledger.filter((entry) => !remoteRequests.has(entry.request_id)),
+      ...localSnapshot.ledger.filter((entry) => !isCoveredByRemote(entry)),
     ],
     redemptions: mergeRows(
       remoteSnapshot.redemptions,

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.4.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -30,8 +30,8 @@
 ## 它能做什么
 
 - **四个学习模块**：语文、数学、英语、绘本；每个模块内部的任务可以独立打卡和取消。
-- **统一学习入口**：先从左侧“学习”进入，再选择语文、数学、英语或绘本；积分、成长和指南仍是独立的一级页面。
-- **成长记录**：近 30 天按学习模块统计完成情况，用 `已完成/4` 直接说明当天进度。
+- **统一学习入口**：先从左侧“学习”进入，再选择语文、数学、英语或绘本；积分、成长、指南和设置仍是独立的一级页面。
+- **成长与约定兑现**：近 30 天按模块汇总学习成果；约定奖励在未登录单机即可即时兑换与兑现，登录后自动同步云端账本防多端并发。
 - **积分日历**：行为积分单独记录，与学习模块分开，支持按日期查看和补记。
 - **家庭空间**：一个家长管理多个学习者，切换孩子后加载对应的学习记录。
 - **共享账号登录**：支持邮箱验证码和邮箱密码；可设置、修改或找回适用于 Shadow 系列产品的共享密码。
@@ -204,7 +204,7 @@ wrapper；当前两个 Shadow Mate Edge Function 不依赖应用级共享 helper
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.4.0，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴当前仓库版本为 v1.5.0，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](https://sm.shadow.wang/privacy)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 ### 中英文发音
 

@@ -3,6 +3,8 @@ import {
   applyOpeningBalance,
   applyPointAction,
   applyPointItemCreation,
+  applyCancelRedemption,
+  applyFulfillRedemption,
   applyRedemption,
   applyRewardCreation,
   closePointPeriod,
@@ -65,7 +67,7 @@ function rebindSnapshotScope(input, scope) {
   return next;
 }
 
-export function createGrowthLoopController({ db, canWrite = () => true, canTransition = canWrite } = {}) {
+export function createGrowthLoopController({ db, canWrite = () => true, canTransition = canWrite, onRewardFulfilled = null } = {}) {
   if (!db) throw new Error("growth_loop_local_db_required");
   let scope = { household_id: null, profile_id: null };
   let scopeKey = scopeKeyForGrowthLoop(scope);
@@ -322,6 +324,37 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     return clone(snapshot);
   }
 
+  async function redemptionDependencies(redemption) {
+    const redeemEvent = await db.getOutbox?.(redemption?.request_id);
+    return redeemEvent && redeemEvent.status !== "confirmed" ? [redemption.request_id] : [];
+  }
+
+  const sessionFulfillRequests = new Set();
+
+  async function fulfillRedemption({ redemption_id, request_id = createId("redemption-fulfill") } = {}) {
+    const result = applyFulfillRedemption(snapshot, { scope, redemption_id, request_id });
+    if (result.error) return { ...clone(snapshot), error: result.error };
+    const isLocalScope = !scope?.household_id;
+    if (isLocalScope) {
+      if (typeof onRewardFulfilled === "function") {
+        onRewardFulfilled({ redemption: clone(result.redemption), userInitiated: true });
+      }
+    } else {
+      sessionFulfillRequests.add(request_id);
+    }
+    result.events[0].depends_on = await redemptionDependencies(result.redemption);
+    await persist(result.snapshot, result.events);
+    return clone(snapshot);
+  }
+
+  async function cancelRedemption({ redemption_id, request_id = createId("redemption-cancel"), note = "本次暂不兑现" } = {}) {
+    const result = applyCancelRedemption(snapshot, { scope, redemption_id, request_id, note });
+    if (result.error) return { ...clone(snapshot), error: result.error };
+    result.events[0].depends_on = await redemptionDependencies(result.redemption);
+    await persist(result.snapshot, result.events);
+    return clone(snapshot);
+  }
+
   async function queueActivity({ event_type, payload = {}, occurred_at, client_version, timezone, event_id }) {
     if (!isWriteAllowed()) return null;
     const canCommit = currentWriteGuard();
@@ -399,9 +432,38 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     } else if (event.type === "reward_redeem") {
       const redemption = next.redemptions.find((entry) => entry.request_id === event.request_id);
       if (redemption) {
-        Object.assign(redemption, remote || {}, { status: remote?.status || "pending" });
-        const debit = next.ledger.find((entry) => entry.redemption_id === redemption.id);
+        const localRedemptionId = redemption.id;
+        Object.assign(redemption, remote || {}, { status: remote?.status || "pending", confirmed: true });
+        const debit = next.ledger.find((entry) => entry.redemption_id === localRedemptionId);
         if (debit && remote?.id) debit.redemption_id = remote.id;
+      }
+    } else if (event.type === "redemption_fulfill") {
+      const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
+      if (redemption && remote?.status === "fulfilled") {
+        const alreadyFulfilled = redemption.status === "fulfilled";
+        const wasUserInitiated = sessionFulfillRequests.has(event.request_id);
+        sessionFulfillRequests.delete(event.request_id);
+        Object.assign(redemption, remote, {
+          status: "fulfilled",
+          confirmed: true,
+          fulfill_requested: false,
+          sync_error: null,
+        });
+        if (!alreadyFulfilled && typeof onRewardFulfilled === "function") {
+          onRewardFulfilled({ redemption: clone(redemption), userInitiated: wasUserInitiated });
+        }
+      }
+    } else if (event.type === "redemption_cancel") {
+      const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
+      if (redemption && remote?.status === "cancelled") {
+        Object.assign(redemption, remote, {
+          status: "cancelled",
+          confirmed: true,
+          cancel_requested: false,
+          sync_error: null,
+        });
+        const refund = next.ledger.find((entry) => entry.request_id === event.request_id || entry.request_id === `${event.request_id}:refund`);
+        if (refund) Object.assign(refund, { status: "confirmed", redemption_id: redemption.id, sync_error: null });
       }
     }
     await persist(next, [], { canCommit });
@@ -430,6 +492,30 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
       if (redemption) Object.assign(redemption, { status: result.status, sync_error: result.error_code || "rejected" });
       const debit = next.ledger.find((entry) => entry.request_id === `${event.request_id}:debit`);
       if (debit) Object.assign(debit, { status: result.status, sync_error: result.error_code || "rejected" });
+    }
+    if (event.type === "redemption_fulfill") {
+      sessionFulfillRequests.delete(event.request_id);
+      const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
+      if (redemption) {
+        Object.assign(redemption, {
+          fulfill_requested: false,
+          sync_error: result.error_code || "rejected",
+        });
+      }
+    }
+    if (event.type === "redemption_cancel") {
+      const redemption = next.redemptions.find((entry) => entry.id === event.payload.redemption_id);
+      if (redemption) {
+        Object.assign(redemption, {
+          cancel_requested: false,
+          sync_error: result.error_code || "rejected",
+        });
+      }
+      const refund = next.ledger.find((entry) => entry.request_id === event.request_id || entry.request_id === `${event.request_id}:refund`);
+      if (refund) Object.assign(refund, {
+        status: result.status,
+        sync_error: result.error_code || "rejected",
+      });
     }
     await persist(next, [], { canCommit });
   }
@@ -533,6 +619,8 @@ export function createGrowthLoopController({ db, canWrite = () => true, canTrans
     closePeriod,
     createReward,
     redeemReward,
+    fulfillRedemption,
+    cancelRedemption,
     queueActivity,
     mergeRemote,
     sync,

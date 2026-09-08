@@ -177,6 +177,29 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".stat-grid .stat")).toHaveCount(5);
   });
 
+  test("home page presents guest cloud sync prompt and allows dismissing it", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("[data-guest-card]")).toBeVisible();
+    await expect(page.locator("[data-guest-card]")).toContainText("开启家庭空间，打卡记录换手机不丢失");
+    await expect(page.locator('[data-action="guest-login"]')).toBeVisible();
+
+    // Click guide button inside guest card
+    await page.locator('[data-action="guest-guide"]').click();
+    await expect(page.locator(".guide-page")).toBeVisible();
+
+    // Back to home
+    await page.click('[data-mod="home"]');
+    await expect(page.locator("[data-guest-card]")).toBeVisible();
+
+    // Dismiss prompt
+    await page.locator("[data-dismiss-guest]").click();
+    await expect(page.locator("[data-guest-card]")).toHaveCount(0);
+
+    // Reload keeps dismissed state in same session
+    await page.reload();
+    await expect(page.locator("[data-guest-card]")).toHaveCount(0);
+  });
+
   test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".site-footer")).toBeVisible();
@@ -268,8 +291,8 @@ test.describe("Offline mode (no login)", () => {
   test("keeps exact top-level navigation and enters subjects from learning", async ({ page }) => {
     await page.goto("/");
     const topLevelNav = page.locator(".navbtn");
-    await expect(topLevelNav).toHaveCount(5);
-    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南"]);
+    await expect(topLevelNav).toHaveCount(6);
+    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南", "设置"]);
     for (const mod of ["chinese", "math", "english", "book"]) {
       await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveCount(0);
     }
@@ -306,8 +329,8 @@ test.describe("Offline mode (no login)", () => {
     await page.click('[data-mod="guide"]');
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("听发音");
-    await expect(page.locator('[data-guide-section="speech"]')).toContainText("共享 AI 语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("发音来源与备用系统语音");
+    await expect(page.locator('[data-guide-section="speech"]')).toContainText("高质量预录音频");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("不需要下载本地模型");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("旧离线包只需在需要释放空间时手动删除");
     await expect(page.locator('[data-guide-section="speech"] [data-piper-resource-action="download"]')).toHaveCount(0);
@@ -551,7 +574,9 @@ test.describe("Offline mode (no login)", () => {
     await toggle.click();
     await expect(card).toHaveClass(/done/);
     page.once("dialog", (dialog) => dialog.accept());
+    await page.click('[data-go-settings="points"]');
     await page.click("#ptclear");
+    await page.click('[data-mod="points"]');
     await expect(card).not.toHaveClass(/done/);
   });
 

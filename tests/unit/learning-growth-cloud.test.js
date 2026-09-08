@@ -28,6 +28,29 @@ describe("Growth Loop Supabase transport", () => {
     }));
   });
 
+  it.each([
+    {
+      type: "redemption_fulfill",
+      request_id: "fulfill-1",
+      payload: { redemption_id: "redemption-1" },
+      rpc: "learning_fulfill_redemption",
+      args: { p_redemption_id: "redemption-1" },
+    },
+    {
+      type: "redemption_cancel",
+      request_id: "cancel-1",
+      payload: { redemption_id: "redemption-1", note: "暂不兑现" },
+      rpc: "learning_cancel_redemption",
+      args: { p_redemption_id: "redemption-1", p_request_id: "cancel-1", p_note: "暂不兑现" },
+    },
+  ])("maps $type to its guarded redemption RPC", async ({ type, request_id, payload, rpc: rpcName, args }) => {
+    const rpc = vi.fn(async () => ({ data: [{ id: "redemption-1", status: "pending" }], error: null }));
+    const transport = createGrowthLoopTransport({ client: { rpc } });
+
+    await expect(transport.send({ type, request_id, payload })).resolves.toEqual(expect.objectContaining({ status: "confirmed" }));
+    expect(rpc).toHaveBeenCalledWith(rpcName, args);
+  });
+
   it("classifies network and idempotency errors without exposing a success state", async () => {
     const transport = createGrowthLoopTransport({
       client: { rpc: vi.fn(async () => ({ data: null, error: { status: 409, message: "idempotency_conflict" } })) },

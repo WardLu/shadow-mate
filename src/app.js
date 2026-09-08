@@ -11,6 +11,7 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
+import { cleanSpeechText } from "./speech-text-utils.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
@@ -42,11 +43,15 @@ import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
 import { buildLegacyPointEntries, getActivePointAction, getBalance, getLegacyPeriodTotal, getLegacyPointsImport, getOpeningBalance, getPointDayTotal, getPointPeriodTotal } from "./learning-growth-loop.js";
+import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-sounds.js";
+import { praise, flyStars, shake } from "./learning-feedback.js";
 
 inject();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
-const publishedSpeechPlayer = createPublishedSpeechPlayer();
+const publishedSpeechPlayer = createPublishedSpeechPlayer({
+  getAudioContext: () => getAudioContext(),
+});
 
 /* =========================================================
    影伴学习任务台 —— 数据层
@@ -174,16 +179,26 @@ function isProfileScopeBlocked() {
 const profileScopeBlockedAtStartup = isProfileScopeBlocked();
 if (!profileScopeBlockedAtStartup) recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
+const soundEffects = createSoundEngine();
+window.soundEffects = soundEffects;
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
   canWrite: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteLocalState?.() !== false,
   canTransition: () => !isProfileScopeBlocked()
     && window.cloudSync?.canWriteScopeTransition?.() !== false,
+  onRewardFulfilled: ({ redemption, userInitiated }) => {
+    if (userInitiated && redemption?.status === "fulfilled") {
+      soundEffects.play("reward_fulfilled");
+      praise("奖励已兑现！🎉");
+      flyStars(10);
+    }
+  },
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";
 window.growthLoop = growthLoopController;
+window.switchMod = switchMod;
 
 function clientRequestId(prefix = "growth") {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -433,6 +448,11 @@ function toggleCheckin(mod){
       recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
     }
   }
+  if (isChecked(mod)) {
+    soundEffects.play("action_completed");
+    praise("太棒了！");
+    flyStars(8);
+  }
   void queueGrowthActivity(
     ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
     { source: "checkin", entry_type: "manual" },
@@ -488,6 +508,8 @@ function togglePoint(itemId, day){
   const item = pointItemAt(itemId);
   if(!item) return;
   const requestId = clientRequestId("point");
+  const wasOn = pointOn(itemId, day);
+  const delta = Number(item.default_points ?? item.pts);
   void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
     void queueGrowthActivity(
       ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
@@ -497,6 +519,18 @@ function togglePoint(itemId, day){
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.CORE_ACTIVATION, { source: "point_item" }, "once");
     window.cloudSync?.scheduleGrowthLoop?.();
     renderPoints();
+    if (wasOn) {
+      soundEffects.play("try_again");
+    } else if (delta < 0) {
+      soundEffects.play("points_deducted");
+      const card = document.querySelector(`.pts-card[data-pts-card="${item.id}"]`)
+        || document.querySelector(`.pts-card[data-pts-name="${item.name}"]`);
+      if (card) shake(card, { durationMs: 600 });
+    } else {
+      soundEffects.play("points_earned");
+      praise(`+${delta} 积分！`);
+      flyStars(6);
+    }
   }).catch((error) => {
     console.error("Growth Loop local point write failed:", error);
     alert("本机记录没有保存成功，请稍后重试。");
@@ -580,6 +614,12 @@ function releaseAudio(audio, url) {
 }
 
 function stopActivePlayback() {
+  try {
+    publishedSpeechPlayer?.stop?.();
+  } catch (_) {}
+  try {
+    soundEffects?.setTtsActive?.(false);
+  } catch (_) {}
   if (activeAudioSource) {
     const source = activeAudioSource;
     activeAudioSource = null;
@@ -658,12 +698,15 @@ function waitForSystemVoice(locale, timeoutMs = 1200) {
   });
 }
 
-async function speak(t, button, locale = "en-US", contentId = ""){
+async function speak(t, button, locale = "en-US", contentId = "", options = {}){
+  primeSpeechAudio();
   if (button?.dataset.speechInFlight === "true") return;
   if (activeSpeechRequest) {
-    if (activeSpeechRequest.button?.isConnected) return;
-    activeSpeechRequest.cancelled = true;
+    if (activeSpeechRequest.button === button) return;
+    const prev = activeSpeechRequest;
     activeSpeechRequest = null;
+    prev.cancelled = true;
+    prev.restore?.();
     try {
       window.speechSynthesis?.cancel();
     } catch (_) {
@@ -671,7 +714,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     }
     stopActivePlayback();
   }
-  const speechRequest = { button, cancelled: false };
+  const speechRequest = { button, cancelled: false, restore: null, isPoemSpeech: Boolean(options.isPoemSpeech) };
   activeSpeechRequest = speechRequest;
   const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
   if (button) button.dataset.speechInFlight = "true";
@@ -692,6 +735,12 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
   }
+  const isContainer = Boolean(
+    button?.classList.contains("speech-tap") ||
+    button?.classList.contains("mini-card") ||
+    button?.dataset.speechTap !== undefined ||
+    (button && button.firstElementChild && !button.matches(".btn, .speak-btn, .checkin, .btn-read-prompt, .btn-read-q"))
+  );
   let shouldRestoreButtonFocus = false;
   const restoreButtonFocus = () => {
     if (!button || !shouldRestoreButtonFocus) return;
@@ -702,32 +751,51 @@ async function speak(t, button, locale = "en-US", contentId = ""){
     shouldRestoreButtonFocus = false;
   };
   const restore = () => {
+    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     clearSystemTimer();
-    if (!isCurrentSpeech()) return;
-    if (!button) {
-      activeSpeechRequest = null;
-      return;
+    if (button) {
+      if (isContainer) {
+        button.classList.remove("speech-playing");
+        button.removeAttribute("aria-busy");
+        button.removeAttribute("data-speech-failure");
+        button.removeAttribute("data-published-speech-error");
+        button.removeAttribute("data-speech-in-flight");
+        restoreButtonFocus();
+      } else {
+        button.innerHTML = buttonContent("volume", originalLabel);
+        button.setAttribute("aria-label", originalAriaLabel);
+        if (originalTitle) button.title = originalTitle;
+        else button.removeAttribute("title");
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.removeAttribute("data-speech-failure");
+        button.removeAttribute("data-published-speech-error");
+        button.removeAttribute("data-speech-in-flight");
+        restoreButtonFocus();
+      }
     }
-    button.innerHTML = buttonContent("volume", originalLabel);
-    button.setAttribute("aria-label", originalAriaLabel);
-    if (originalTitle) button.title = originalTitle;
-    else button.removeAttribute("title");
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
-    button.removeAttribute("data-speech-failure");
-    button.removeAttribute("data-published-speech-error");
-    button.removeAttribute("data-speech-in-flight");
-    activeSpeechRequest = null;
-    restoreButtonFocus();
+    if (activeSpeechRequest === speechRequest) {
+      activeSpeechRequest = null;
+    }
   };
+  speechRequest.restore = restore;
   const fail = (message) => {
+    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
-    button.innerHTML = buttonContent("alert", message);
-    button.setAttribute("aria-label", message);
-    button.title = message;
-    button.dataset.speechFailure = "true";
+    if (isContainer) {
+      button.classList.remove("speech-playing");
+      button.removeAttribute("aria-busy");
+      button.dataset.speechFailure = "true";
+      button.title = message;
+      shake(button, { durationMs: 400 });
+    } else {
+      button.innerHTML = buttonContent("alert", message);
+      button.setAttribute("aria-label", message);
+      button.title = message;
+      button.dataset.speechFailure = "true";
+    }
     if (button.isConnected) recordAnalyticsEvent(ANALYTICS_EVENTS.ttsFailed);
     const errorCode = message.includes("超时") ? "timeout" : message.includes("下载") ? "download_failed" : "synthesis_failed";
     void queueGrowthActivity(ACTIVITY_EVENT_TYPES.TTS_FAILED, {
@@ -742,6 +810,12 @@ async function speak(t, button, locale = "en-US", contentId = ""){
   const setBusy = (label = "播放中…") => {
     if (!button) return;
     if (document.activeElement === button) shouldRestoreButtonFocus = true;
+    if (isContainer) {
+      button.classList.add("speech-playing");
+      button.setAttribute("aria-busy", "true");
+      button.removeAttribute("data-speech-failure");
+      return;
+    }
     button.dataset.label = originalLabel;
     button.innerHTML = buttonContent("volume", label);
     button.setAttribute("aria-label", originalAriaLabel);
@@ -762,9 +836,12 @@ async function speak(t, button, locale = "en-US", contentId = ""){
 
   const synth = window.speechSynthesis;
   const Utterance = window.SpeechSynthesisUtterance;
+  try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
+  const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
   try {
-    await publishedSpeechPlayer.play(contentId);
+    await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
+    if (!isCurrentSpeech()) return;
     restore();
     return;
   } catch (publishedError) {
@@ -782,6 +859,7 @@ async function speak(t, button, locale = "en-US", contentId = ""){
       let started = false;
       utterance.lang = locale;
       utterance.rate = 0.9;
+      utterance.volume = Math.max(0, Math.min(1, speechVolume));
       utterance.voice = systemVoice;
       utterance.onstart = () => { started = true; clearSystemTimer(); };
       utterance.onend = () => { restore(); resolve(); };
@@ -831,6 +909,56 @@ function renderHome(){
     </div>
   `));
 
+  const accountBtn = document.querySelector("#accountButton");
+  const isOnline = accountBtn?.dataset?.state === "online";
+  let guestDismissed = false;
+  try {
+    guestDismissed = sessionStorage.getItem("shadow_mate_guest_banner_dismissed") === "1";
+  } catch (_) {}
+
+  if (!isOnline && !guestDismissed) {
+    const isWeChat = typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent || "");
+    const guestCard = $(`
+      <div class="guest-sync-prompt" data-guest-card>
+        <div class="guest-onboarding-header">
+          <div class="guest-onboarding-badge">${icon("cloud")} 离线试用中 · 本机保存</div>
+          <button class="guest-onboarding-close" type="button" aria-label="暂不提醒" data-dismiss-guest>×</button>
+        </div>
+        <div class="guest-onboarding-title">开启家庭空间，打卡记录换手机不丢失</div>
+        <div class="guest-onboarding-desc">
+          当前数据仅保存在此设备。家长免费登录后即可建立家庭档案，手机、平板或电脑跨端实时同步。
+        </div>
+        ${isWeChat ? `<div class="guest-onboarding-wechat">${icon("compass")} 微信提示：点击右上角「···」在系统浏览器中打开，体验完整发音并可添加到桌面独立使用。</div>` : ""}
+        <div class="guest-onboarding-actions">
+          <button class="guest-onboarding-btn primary" type="button" data-action="guest-login">
+            ${icon("learner")} 家长登录 / 开启家庭空间
+          </button>
+          <button class="guest-onboarding-btn secondary" type="button" data-action="guest-guide">
+            ${icon("compass")} 使用指南
+          </button>
+        </div>
+      </div>
+    `);
+    const loginBtn = guestCard.querySelector("[data-action='guest-login']");
+    if (loginBtn) {
+      loginBtn.onclick = () => document.querySelector("#accountButton")?.click();
+    }
+    const guideBtn = guestCard.querySelector("[data-action='guest-guide']");
+    if (guideBtn) {
+      guideBtn.onclick = () => switchMod("guide");
+    }
+    const closeBtn = guestCard.querySelector("[data-dismiss-guest]");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        try {
+          sessionStorage.setItem("shadow_mate_guest_banner_dismissed", "1");
+        } catch (_) {}
+        guestCard.remove();
+      };
+    }
+    main.appendChild(guestCard);
+  }
+
   if (learningOn) {
     const moduleStats = enabled.map((module) => ({
       value: module === "chinese" ? streak("chinese") : totalChecked(module),
@@ -866,32 +994,15 @@ function renderHome(){
 
 function renderLearning(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("graduation","学习"));
-  const config = normalizeContentConfig(store.content_config);
-  const enabled = enabledModuleIds();
-  const settings = $(`
-    <div class="card">
-      <h3>${icon("grid")} 学习包设置</h3>
-      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
-      <label class="switch-row">
-        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
-        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
-      </label>
-      ${FOUNDATION_PACKAGE.modules.map((module) => `
-      <label class="switch-row">
-        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
-        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
-      </label>`).join("")}
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("graduation")}</span><h2>学习</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button>
     </div>
   `);
-  main.appendChild(settings);
-  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
-    input.onchange = () => updateContentPackage(input.checked);
-  });
-  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
-    input.onchange = () => updateContentModule(input.dataset.moduleId, input.checked);
-  });
+  main.appendChild(titleRow);
 
+  const enabled = enabledModuleIds();
   if (enabled.length) {
     const entries = enabled.map((moduleId) => {
       const module = getContentModuleDefinition(moduleId);
@@ -912,17 +1023,35 @@ function renderLearning(){
   } else {
     main.appendChild($(`
       <div class="card">
-        <h3>${icon("sprout")} 学习包未启用</h3>
-        <div class="desc">开启上方「启用学习包」后，才能看到并进入学习模块。</div>
+        <h3>${icon("sprout")} 学习模块未启用</h3>
+        <div class="desc">当前孩子的启蒙学习包未开启或各学科已关闭。可在「学习设置」中开启学习包并勾选需要的学科。</div>
+        <button class="checkin" type="button" data-go-settings="learning">${icon("settings")} 前往设置开启模块</button>
       </div>
     `));
   }
+  main.querySelectorAll("[data-go-settings]").forEach((btn) => {
+    btn.onclick = () => switchMod("settings", { tab: btn.dataset.goSettings });
+  });
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
 /* =========================================================
    渲染：语文
    ========================================================= */
+let currentPoemSpeechId = 0;
+function stopPoemSpeech() {
+  currentPoemSpeechId++;
+  if (activeSpeechRequest?.isPoemSpeech) {
+    const prev = activeSpeechRequest;
+    activeSpeechRequest = null;
+    prev.cancelled = true;
+    prev.restore?.();
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+    stopActivePlayback();
+  }
+  document.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+}
+
 function renderChinese(){
   const di = dayIndex();
   const main = el("main"); main.innerHTML="";
@@ -937,8 +1066,8 @@ function renderChinese(){
       <h3>${icon("pen")} 识字打卡 <span class="pill">每日 2 新字 + 复习</span></h3>
       <div class="desc">3000 常用字按频次排序，每天学 2 个新字并复习旧字。今日新字：</div>
       <div class="grid2">
-        <div class="mini-card"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
-        <div class="mini-card"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
+        <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="0" aria-label="点读生字：${escapeHtml(c1[0])}，${escapeHtml(c1[2])}"><div class="big">${c1[0]}</div><div class="py">${c1[1]}</div><div class="label">${c1[2]}</div></div>
+        <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="1" aria-label="点读生字：${escapeHtml(c2[0])}，${escapeHtml(c2[2])}"><div class="big">${c2[0]}</div><div class="py">${c2[1]}</div><div class="label">${c2[2]}</div></div>
       </div>
       <div class="desc mt-12">${icon("rotate")} 复习昨日字：<b>${HANZI[ri][0]}</b> ${HANZI[ri][1]} · <b>${rc[0]}</b> ${rc[1]}</div>
       <a class="video-link" href="${bilibili("小学语文 识字 "+c1[0]+c2[0])}" target="_blank">${icon("play")} B站教学视频</a>
@@ -948,20 +1077,117 @@ function renderChinese(){
   `);
   main.appendChild(card1);
 
+  card1.querySelectorAll("[data-hanzi-mini]").forEach((mc) => {
+    const isFirst = mc.dataset.hanziMini === "0";
+    const item = isFirst ? c1 : c2;
+    const playHanzi = () => {
+      stopPoemSpeech();
+      speak(`${item[0]}，${item[2]}`, mc, "zh-CN");
+    };
+    mc.onclick = playHanzi;
+    mc.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playHanzi();
+      }
+    };
+  });
+
   // 古诗词
   const p = POEMS[di%POEMS.length];
+  const linesHtml = p.c.map((line, idx) => `
+    <div class="poem-line" role="button" tabindex="0" data-poem-line="${idx}" aria-label="点读第 ${idx + 1} 句：${escapeHtml(line)}">
+      <span class="poem-line-text">${escapeHtml(line)}</span>
+      <span class="poem-line-icon" aria-hidden="true">${icon("volume")}</span>
+    </div>
+  `).join("");
+
   const card2 = $(`
-    <div class="card">
-      <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${p.g}</span></h3>
-      <div class="poem-title">《${p.t}》</div>
-      <div class="poem-meta">${p.a} · 人教版</div>
-      <div class="poem-body">${p.c.join("<br>")}</div>
-      <div class="text-center"><a class="video-link" href="${bilibili(p.t+" 朗诵")}" target="_blank">${icon("play")} 跟读视频</a></div>
-      <div class="spacer-12"></div>
+    <div class="card poem-box">
+      <h3>${icon("bookMarked")} 背诵古诗词 <span class="pill">${escapeHtml(p.g)}</span></h3>
+      <div class="poem-title speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.t)}，${escapeHtml(p.a)}">《${escapeHtml(p.t)}》</div>
+      <div class="poem-meta speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.t)}，${escapeHtml(p.a)}">${escapeHtml(p.a)} · 人教版</div>
+      <div class="poem-lines" role="region" aria-label="古诗诗句">${linesHtml}</div>
+      <div class="poem-controls">
+        <button class="checkin poem-read-all" type="button">${icon("volume")} 朗读整首</button>
+        <a class="video-link poem-video" href="${bilibili(p.t+" 朗诵")}" target="_blank" rel="noopener noreferrer">${icon("play")} 跟读视频</a>
+      </div>
+      <div class="desc text-center mt-8">小提示：点击任意一句，可单独朗读该句</div>
+      <div class="spacer-10"></div>
       ${checkinBtn("chinese-poem","古诗")}
     </div>
   `);
   main.appendChild(card2);
+
+  const poemTitleEl = card2.querySelector(".poem-title");
+  const poemMetaEl = card2.querySelector(".poem-meta");
+  const playPoemHeader = () => {
+    stopPoemSpeech();
+    speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+  };
+  if (poemTitleEl) {
+    poemTitleEl.onclick = playPoemHeader;
+    poemTitleEl.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+    };
+  }
+  if (poemMetaEl) {
+    poemMetaEl.onclick = playPoemHeader;
+    poemMetaEl.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+    };
+  }
+
+  card2.querySelectorAll(".poem-line").forEach((lineEl) => {
+    const idx = Number(lineEl.dataset.poemLine);
+    const lineText = p.c[idx];
+    lineEl.onclick = async () => {
+      stopPoemSpeech();
+      card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+      lineEl.classList.add("hi");
+      const clean = lineText.replace(/[，。！？、；：]/g, "");
+      try {
+        await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+      } catch (_) {}
+    };
+  });
+
+  const readAllBtn = card2.querySelector(".poem-read-all");
+  if (readAllBtn) {
+    readAllBtn.onclick = async () => {
+      stopPoemSpeech();
+      const thisSeqId = ++currentPoemSpeechId;
+      readAllBtn.disabled = true;
+      readAllBtn.setAttribute("aria-busy", "true");
+
+      try {
+        await speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+        if (currentPoemSpeechId !== thisSeqId) return;
+
+        for (let i = 0; i < p.c.length; i++) {
+          if (currentPoemSpeechId !== thisSeqId) return;
+          const lineEl = card2.querySelector(`[data-poem-line="${i}"]`);
+          card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+          if (lineEl) lineEl.classList.add("hi");
+
+          const clean = p.c[i].replace(/[，。！？、；：]/g, "");
+          await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+          if (currentPoemSpeechId !== thisSeqId) return;
+        }
+
+        card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+        soundEffects.play("points_earned");
+        praise("念得真好！");
+        flyStars(8);
+      } catch (_) {
+      } finally {
+        if (currentPoemSpeechId === thisSeqId) {
+          readAllBtn.disabled = false;
+          readAllBtn.removeAttribute("aria-busy");
+        }
+      }
+    };
+  }
 
   // 写字打卡
   const worksheet = resolveWritingWorksheet();
@@ -1015,12 +1241,46 @@ function renderChinese(){
     button.setAttribute("aria-live", "polite");
     button.setAttribute("aria-atomic", "true");
     button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
-    button.onclick = () => speak(
-      button.dataset.speechText || "",
-      button,
-      button.dataset.speechLocale || "en-US",
-      button.dataset.speechContentId || "",
-    );
+    button.onclick = () => {
+      const meaningRow = button.hasAttribute("data-hanzi-meaning-speak")
+        ? button.closest(".writing-row, [data-writing-row], .hanzi-learning-card")?.querySelector("[data-hanzi-meaning-row]")
+        : null;
+      if (meaningRow) meaningRow.classList.add("speech-playing");
+      return speak(
+        button.dataset.speechText || "",
+        button,
+        button.dataset.speechLocale || "en-US",
+        button.dataset.speechContentId || "",
+      ).finally(() => {
+        if (meaningRow) meaningRow.classList.remove("speech-playing");
+      });
+    };
+  });
+  card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-speech-tap]").forEach((el) => {
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
+    el.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
+    const playSpeechTap = () => {
+      stopPoemSpeech();
+      if (el.hasAttribute("data-hanzi-meaning-row")) {
+        const card = el.closest(".writing-row, [data-writing-row], .hanzi-learning-card");
+        const meaningBtn = card?.querySelector("[data-hanzi-meaning-speak]");
+        if (meaningBtn) {
+          meaningBtn.click();
+          return;
+        }
+      }
+      const rawText = el.dataset.speechText || el.textContent || "";
+      const textToSpeak = cleanSpeechText(rawText);
+      if (textToSpeak) speak(textToSpeak, el, "zh-CN");
+    };
+    el.onclick = playSpeechTap;
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playSpeechTap();
+      }
+    };
   });
 }
 
@@ -1035,6 +1295,14 @@ function genQuiz(){
   if(op==="+"){ mathAns=a+b; return `${a} ${op} ${b} = ?`; }
   else { const big=Math.max(a,b), small=Math.min(a,b); mathAns=big-small; return `${big} ${op} ${small} = ?`; }
 }
+function mathSpeechText(q) {
+  const match = String(q).match(/^(\d+)\s*([+\-−])\s*(\d+)/);
+  if (!match) return q.replace("=", "等于几").replace("?", "");
+  const a = match[1];
+  const op = (match[2] === "+" ? "加" : "减");
+  const b = match[3];
+  return `${a} ${op} ${b} 等于几？`;
+}
 function renderMath(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("calculator","数学与数感"));
@@ -1048,7 +1316,10 @@ function renderMath(){
       <h3>${icon("calculator")} 口算打卡 <span class="pill">10/20/50/100 以内加减</span></h3>
       <div class="lvl-row">${lvlHtml}</div>
       <div class="quiz-box">
-        <div class="quiz-q" id="qq">${q}</div>
+        <div class="quiz-q-row">
+          <div class="quiz-q" id="qq">${q}</div>
+          <button class="btn-read-q" type="button" aria-label="朗读题目">${icon("volume")} 读题目</button>
+        </div>
         <input class="quiz-input" id="qa" type="number" inputmode="numeric" aria-labelledby="qq" placeholder="?">
         <div class="feedback" id="qf"></div>
       </div>
@@ -1059,12 +1330,34 @@ function renderMath(){
   `);
   main.appendChild(card1);
   card1.querySelectorAll("[data-lvl]").forEach(b=>b.onclick=()=>{ mathLevel=+b.dataset.lvl; renderMath(); });
+  const readQBtn = card1.querySelector(".btn-read-q");
+  if (readQBtn) {
+    readQBtn.onclick = () => {
+      speak(mathSpeechText(q), readQBtn, "zh-CN");
+    };
+  }
   el("qsubmit").onclick=()=>{
-    const v = el("qa").value;
+    const qa = el("qa");
+    const v = qa.value;
     const f = el("qf");
-    if(v===""){ f.textContent="请先写出答案哦"; f.className="feedback no"; return; }
-    if(+v===mathAns){ f.innerHTML=`${icon("party")} 答对啦，真棒！`; f.className="feedback ok"; }
-    else { f.textContent=`再想想～正确答案是 ${mathAns}`; f.className="feedback no"; }
+    if(v===""){
+      f.textContent="请先写出答案哦";
+      f.className="feedback no";
+      shake(qa);
+      return;
+    }
+    if(+v===mathAns){
+      f.innerHTML=`${icon("party")} 答对啦，真棒！`;
+      f.className="feedback ok";
+      soundEffects.play("points_earned");
+      praise("答对啦！");
+      flyStars(6);
+    } else {
+      f.textContent=`再想想～正确答案是 ${mathAns}`;
+      f.className="feedback no";
+      soundEffects.play("try_again");
+      shake(qa);
+    }
   };
 
   // 数感：数字填写 1-100 找缺失
@@ -1082,20 +1375,77 @@ function renderMath(){
   const card2 = $(`
     <div class="card">
       <h3>${icon("brain")} 数感星球 · 数字填写 <span class="pill">1-100</span></h3>
-      <div class="desc">点击问号格，说出它应该是哪个数字（按 1 递增顺序）。</div>
+      <div class="desc desc-with-audio">
+        <span>点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读题目要求">${icon("volume")} 读要求</button>
+      </div>
       <div class="num-grid">${cells}</div>
+      <div class="math-pad" id="mathPad" style="display:none;"></div>
       <div class="feedback text-center" id="nf"></div>
     </div>
   `);
   main.appendChild(card2);
+
+  const mathPromptBtn = card2.querySelector(".btn-read-prompt");
+  if (mathPromptBtn) {
+    mathPromptBtn.onclick = () => {
+      speak("点击问号格，选出它应该是哪个数字，按一递增顺序。", mathPromptBtn, "zh-CN");
+    };
+  }
+
   const missCell = card2.querySelector(".num-cell.miss");
-  missCell.onclick=()=>{ const nf=el("nf"); const ans=prompt("这个格子应该是数字几？"); if(ans!==null){ if(+ans===miss){ nf.innerHTML=`${icon("checkCircle")} 正确！数列规律是每次 +1`; nf.className="feedback ok"; missCell.classList.add("found"); missCell.innerHTML=`${icon("check")} ${miss}`; missCell.setAttribute("aria-label", `缺失数字为 ${miss}`); missCell.disabled=true; } else { nf.textContent=`不对哦，看看前后数字～`; nf.className="feedback no"; } } };
+  const mathPad = card2.querySelector("#mathPad");
+  const nf = card2.querySelector("#nf");
+
+  if (missCell && mathPad && nf) {
+    const candidates = [];
+    const startOpt = Math.max(1, miss - 2);
+    for (let opt = startOpt; opt < startOpt + 5; opt++) {
+      candidates.push(opt);
+    }
+
+    missCell.onclick = () => {
+      if (missCell.disabled) return;
+      mathPad.style.display = "flex";
+      mathPad.innerHTML = `
+        <div class="math-pad-title">请选择缺失的数字：</div>
+        <div class="math-pad-options">
+          ${candidates.map((num) => `<button class="math-pad-btn" type="button" data-val="${num}">${num}</button>`).join("")}
+        </div>
+      `;
+      mathPad.querySelectorAll(".math-pad-btn").forEach((btn) => {
+        btn.onclick = () => {
+          const val = Number(btn.dataset.val);
+          if (val === miss) {
+            nf.innerHTML = `${icon("checkCircle")} 正确！缺失数字是 ${miss}，数列按 1 递增`;
+            nf.className = "feedback ok";
+            missCell.classList.add("found");
+            missCell.innerHTML = `${icon("check")} ${miss}`;
+            missCell.setAttribute("aria-label", `缺失数字为 ${miss}`);
+            missCell.disabled = true;
+            mathPad.style.display = "none";
+            soundEffects.play("points_earned");
+            praise("太棒了！");
+            flyStars(8);
+          } else {
+            nf.textContent = "不对哦，看看前后数字～";
+            nf.className = "feedback no";
+            soundEffects.play("try_again");
+            shake(btn);
+          }
+        };
+      });
+    };
+  }
 
   // 数独 4x4
   const card3 = $(`
     <div class="card">
       <h3>${icon("grid")} 数独游戏 <span class="pill">数感阶段</span></h3>
-      <div class="desc">把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</div>
+      <div class="desc desc-with-audio">
+        <span>把 1-4 填入每行每列（4×4 入门版，含比较/分类/形状思维）。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读游戏规则">${icon("volume")} 读规则</button>
+      </div>
       <div class="sudoku" id="sudoku"></div>
       <div class="feedback text-center" id="sf"></div>
       <div class="spacer-10"></div>
@@ -1103,6 +1453,13 @@ function renderMath(){
     </div>
   `);
   main.appendChild(card3);
+
+  const sudokuPromptBtn = card3.querySelector(".btn-read-prompt");
+  if (sudokuPromptBtn) {
+    sudokuPromptBtn.onclick = () => {
+      speak("把一到四填入每行每列，四乘四入门版，含比较、分类、形状思维。", sudokuPromptBtn, "zh-CN");
+    };
+  }
   buildSudoku();
 }
 
@@ -1156,7 +1513,10 @@ function renderEnglish(){
   const card1 = $(`
     <div class="card">
       <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
-      <div class="desc">拼读并朗读下面的单词，读完点「完成今日打卡」。</div>
+      <div class="desc desc-with-audio">
+        <span>拼读并朗读下面的单词，读完点「完成今日打卡」。</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读今日单词要求">${icon("volume")} 读指引</button>
+      </div>
       <div class="word-card">
         <div class="word-en">${w1[0]}</div>
         <div class="word-ph">${w1[1]}</div>
@@ -1174,6 +1534,14 @@ function renderEnglish(){
     </div>
   `);
   main.appendChild(card1);
+
+  const englishPromptBtn = card1.querySelector(".btn-read-prompt");
+  if (englishPromptBtn) {
+    englishPromptBtn.onclick = () => {
+      speak("拼读并朗读下面的单词，读完点完成今日打卡。", englishPromptBtn, "zh-CN");
+    };
+  }
+
   const spokenWords = [w1[0], w2[0]];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
     button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
@@ -1181,21 +1549,44 @@ function renderEnglish(){
   });
 
   // 按月回看往期单词
-  const m = new Date().getMonth();
-  let chips="";
-  for(let d=1; d<=Math.min(28,new Date().getDate()+0); d++){
-    const k = (m*31 + d*2)%ENGLISH.length; // 与推送算法一致的近似回看
-    const w = ENGLISH[(di - d + ENGLISH.length*10)%ENGLISH.length];
-    chips += `<span class="mr-chip">${w[0]}</span>`;
+  const pastDays = Math.min(28, new Date().getDate());
+  let chips = "";
+  for (let d = 1; d <= pastDays; d++) {
+    const w = ENGLISH[(di - d + ENGLISH.length * 10) % ENGLISH.length];
+    chips += `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(w[0])}" aria-label="听发音：${escapeHtml(w[0])}">${w[0]}</span>`;
   }
   const card2 = $(`
     <div class="card">
       <h3>${icon("calendar")} 往期单词回看 <span class="pill">本月</span></h3>
-      <div class="desc">按月回看之前朗读过的单词（最近 ${Math.min(28,new Date().getDate())} 天）：</div>
+      <div class="desc desc-with-audio">
+        <span>按月回看之前朗读过的单词（最近 ${pastDays} 天）：</span>
+        <button class="btn-read-prompt" type="button" aria-label="朗读往期回看说明">${icon("volume")} 读指引</button>
+      </div>
       <div class="month-review">${chips}</div>
     </div>
   `);
   main.appendChild(card2);
+
+  const reviewPromptBtn = card2.querySelector(".btn-read-prompt");
+  if (reviewPromptBtn) {
+    reviewPromptBtn.onclick = () => {
+      speak(`按月回看之前朗读过的单词，最近 ${pastDays} 天。`, reviewPromptBtn, "zh-CN");
+    };
+  }
+  card2.querySelectorAll(".mr-chip[data-word]").forEach((chip) => {
+    chip.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
+    const playChip = () => {
+      stopPoemSpeech();
+      speak(chip.dataset.word, chip, "en-US");
+    };
+    chip.onclick = playChip;
+    chip.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        playChip();
+      }
+    };
+  });
 }
 
 /* =========================================================
@@ -1254,237 +1645,172 @@ function legacyImportPresentation(status) {
   }
 }
 
+let LEDGER_FILTER = "all";
+let LEDGER_LIMIT = 15;
+
+function isUndoEntry(entry) {
+  return Boolean(
+    entry.metadata?.undo_of ||
+    entry.entry_type === "adjustment" ||
+    (typeof entry.note === "string" && entry.note.includes("撤销"))
+  );
+}
+
+function isRefundEntry(entry) {
+  return Boolean(
+    entry.entry_type === "refund" ||
+    entry.metadata?.cancel_of
+  );
+}
+
+function formatLedgerDateHeader(dateKey) {
+  if (!dateKey || dateKey === "其他记录") return "其他记录";
+  const parts = dateKey.split("-");
+  if (parts.length === 3) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const dateFormatted = `${Number(parts[1])}月${Number(parts[2])}日`;
+    if (dateKey === todayStr) return `${dateFormatted} · 今天`;
+    if (dateKey === yesterday) return `${dateFormatted} · 昨天`;
+    return `${parts[0]}年${dateFormatted}`;
+  }
+  return dateKey;
+}
+
+function makeCollapsible(cardEl, storageKey, defaultCollapsed = false) {
+  let isCollapsed;
+  try {
+    const saved = localStorage.getItem(`shadow_mate_collapse_${storageKey}`);
+    isCollapsed = saved === "true" ? true : (saved === "false" ? false : defaultCollapsed);
+  } catch {
+    isCollapsed = defaultCollapsed;
+  }
+
+  const header = cardEl.querySelector(".card-collapse-header");
+  const body = cardEl.querySelector(".card-collapse-body");
+  const toggleBtn = cardEl.querySelector(".card-collapse-toggle");
+  const iconSpan = cardEl.querySelector(".card-collapse-icon");
+  const labelSpan = cardEl.querySelector(".card-collapse-label");
+
+  function update(collapsed) {
+    if (!body) return;
+    if (collapsed) {
+      body.classList.add("collapsed");
+      if (iconSpan) iconSpan.classList.add("collapsed");
+      if (labelSpan) labelSpan.textContent = "展开";
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "false");
+    } else {
+      body.classList.remove("collapsed");
+      if (iconSpan) iconSpan.classList.remove("collapsed");
+      if (labelSpan) labelSpan.textContent = "收起";
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  update(isCollapsed);
+
+  const toggle = () => {
+    if (!body) return;
+    const next = !body.classList.contains("collapsed");
+    update(next);
+    try {
+      localStorage.setItem(`shadow_mate_collapse_${storageKey}`, String(next));
+    } catch {}
+  };
+
+  if (header) {
+    header.onclick = (e) => {
+      if (e.target.closest("button") && e.target.closest("button") !== toggleBtn) return;
+      if (e.target.closest("input, select, textarea, a")) return;
+      toggle();
+    };
+  }
+}
+
 function renderGrow(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("sprout","成长记录"));
-  const enabled = enabledModuleIds();
-  const learningOn = enabled.length > 0;
-
-  if (learningOn) {
-    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
-    const overview = $(`
-      <div class="card">
-        <h3>${icon("trophy")} 打卡总览</h3>
-        <div class="stat-grid">
-          ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
-        </div>
-        <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
-        <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
-        <div class="progressbar"><i></i></div>
-        <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
-      </div>
-    `);
-    main.appendChild(overview);
-    overview.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
-
-    // 日历式最近记录（只统计已启用模块）
-    let cells="";
-    for(let i=29;i>=0;i--){
-      const k=dateKeyOffset(i);
-      const c=store.checkins[k];
-      const n = enabled.filter((module) => hasCheckin(c, module)).length;
-      const day = Number(k.slice(-2));
-      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
-      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
-    }
-    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
-      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
-    ).join("");
-    const cal = $(`
-      <div class="card">
-        <h3>${icon("calendar")} 近 30 天打卡日历</h3>
-        <div class="cal-grid">${cells}</div>
-        <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
-        <div class="cal-legend" aria-label="成长日历图例">
-          ${legendLevels}
-          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
-        </div>
-      </div>
-    `);
-    main.appendChild(cal);
-  } else {
-    const hint = $(`
-      <div class="card">
-        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
-        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
-        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
-      </div>
-    `);
-    main.appendChild(hint);
-    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
-  }
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("sprout")}</span><h2>成长记录</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="growth" aria-label="成长设置">${icon("settings")} 成长设置</button>
+    </div>
+  `);
+  main.appendChild(titleRow);
+  titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "growth" });
 
   const balance = getBalance(growthLoopSnapshot);
-  const opening = getOpeningBalance(growthLoopSnapshot);
-  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
-  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
-  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
-  const legacyPreview = legacyEntries.slice(-6).reverse();
-
-  let openingCard;
-  if (opening) {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("checkCircle")} 期初积分已确认</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
-          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
-        </div>
-        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
-      </div>
-    `);
-  } else if (legacyImport) {
-    const presentation = legacyImportPresentation(legacyImport.status);
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
-          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
-          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
-        </div>
-        <div class="desc">${presentation.description}</div>
-        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
-      </div>
-    `);
-  } else if (legacyEntries.length > 0) {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("download")} 恢复旧积分</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
-          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
-        </div>
-        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
-        <div class="legacy-preview">
-          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
-          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
-        </div>
-        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
-      </div>
-    `);
-  } else {
-    openingCard = $(`
-      <div class="card growth-opening-card">
-        <h3>${icon("star")} 期初积分</h3>
-        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
-        <form id="openingBalanceForm" class="growth-form">
-          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
-          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
-        </form>
-      </div>
-    `);
-  }
-  main.appendChild(openingCard);
-  const openingForm = openingCard.querySelector("#openingBalanceForm");
-  if (openingForm) {
-    openingForm.onsubmit = async (event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const value = Number(form.get("balance"));
-      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
-        alert("请填写 1 到 1000000 的整数积分。");
-        return;
-      }
-      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
-      try {
-        const result = await window.growthLoop.confirmOpeningBalance({
-          balance: value,
-          note: "期初积分",
-          request_id: clientRequestId("opening"),
-        });
-        if (result.error === "opening_balance_already_confirmed") {
-          alert("这个孩子的期初积分已经确认过了。");
-        } else if (result.error) {
-          alert("期初积分确认失败，请稍后重试。");
-        } else {
-          window.cloudSync?.scheduleGrowthLoop?.();
-          renderGrow();
-        }
-      } catch (error) {
-        console.error("Growth Loop opening balance confirm failed:", error);
-        alert("期初积分没有保存成功，请稍后重试。");
-      }
-    };
-  }
-  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
-  if (legacyImportBtn) {
-    legacyImportBtn.onclick = async () => {
-      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
-      legacyImportBtn.disabled = true;
-      try {
-        const result = await window.growthLoop.importLegacyPoints({
-          entries: legacyEntries,
-          request_id: clientRequestId("legacy-import"),
-        });
-        if (result.error === "legacy_points_already_imported") {
-          alert("这个孩子的旧积分已经导入过了。");
-        } else if (result.error) {
-          alert("旧积分导入失败，请稍后重试。");
-        } else {
-          window.cloudSync?.scheduleGrowthLoop?.();
-          renderGrow();
-        }
-      } catch (error) {
-        console.error("Growth Loop legacy points import failed:", error);
-        alert("旧积分没有导入成功，请稍后重试。");
-      } finally {
-        legacyImportBtn.disabled = false;
-      }
-    };
-  }
-
+  const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
   const rewards = window.growthLoop?.getRewards?.() || [];
+  const isCloudConnected = Boolean(growthLoopController.getScope()?.household_id);
   const pendingRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending").length;
+  const unconfirmedRedemptions = growthLoopSnapshot.redemptions.filter((item) => item.status === "pending" && !item.confirmed).length;
   const rewardCards = rewards.map((reward) => {
     const cost = Number(reward.cost_points || 0);
     const latest = growthLoopSnapshot.redemptions
       .filter((item) => item.reward_id === reward.id)
       .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0];
-    const status = latest?.status === "pending" ? "待联网确认" : latest?.status === "fulfilled" ? "已兑现" : "";
+    const isLocalMode = !isCloudConnected;
+    const isConfirmed = isLocalMode || Boolean(latest?.confirmed);
+    const isPending = latest?.status === "pending";
+    const isFulfilled = latest?.status === "fulfilled";
+    const fulfilledTime = isFulfilled && (latest.updated_at || latest.created_at)
+      ? new Date(latest.updated_at || latest.created_at).getTime()
+      : 0;
+    const isWithinUndoWindow = isFulfilled && (Date.now() - fulfilledTime <= FULFILL_UNDO_WINDOW_MS);
+    const status = isPending
+      ? isConfirmed
+        ? latest.cancel_requested ? "取消同步中" : latest.fulfill_requested ? "兑现同步中" : (latest.sync_error ? "同步未成功" : "待兑现")
+        : (latest.sync_error ? "同步未成功" : "待联网确认")
+      : isFulfilled
+        ? (latest.cancel_requested ? "取消同步中" : (latest.sync_error ? "同步未成功" : "已兑现"))
+        : "";
+    const actionPending = (isPending || isFulfilled) && (latest.fulfill_requested || latest.cancel_requested);
+    const canFulfill = isPending && isConfirmed && !actionPending;
+    const canCancel = (isPending || isWithinUndoWindow) && isConfirmed && !actionPending;
+    const redeemBtnText = isFulfilled && balance >= cost ? "再次兑换" : "兑换";
     return `<div class="reward-card">
       <div class="reward-icon">${icon(reward.icon_key || "gift")}</div>
-      <div class="reward-info"><strong>${escapeHtml(reward.name)}</strong><span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span></div>
+      <div class="reward-info">
+        <strong>${escapeHtml(reward.name)}</strong>
+        <span>${escapeHtml(reward.description || "家长和孩子一起约定")}</span>
+        ${isPending && status ? `<span class="reward-pending-hint">${status}</span>` : ""}
+        ${isWithinUndoWindow ? `<span class="reward-undo-hint">已兑现 · 24小时内可撤回</span>` : ""}
+        ${latest?.sync_error ? `<span class="reward-sync-error" style="color:var(--c-danger,#d9534f);font-size:12px;display:block;margin-top:2px;">⚠️ 同步未成功（${escapeHtml(latest.sync_error)}），可重试兑现或取消退款</span>` : ""}
+      </div>
       <span class="pts-badge">${cost}分</span>
-      <button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${status || "兑换"}</button>
+      <div class="reward-actions">
+        ${!isPending ? `<button class="checkin reward-redeem" type="button" data-reward-id="${escapeHtml(reward.id)}" ${balance < cost ? "disabled" : ""}>${redeemBtnText}</button>` : ""}
+        ${canFulfill ? `<button class="checkin reward-fulfill" type="button" data-fulfill-id="${escapeHtml(latest.id)}">${latest.sync_error ? "重试兑现" : "确认兑现"}</button>` : ""}
+        ${canCancel ? `<button class="checkin danger reward-cancel" type="button" data-cancel-id="${escapeHtml(latest.id)}" title="${isFulfilled ? "兑现后 24 小时内支持撤销履约并退还积分" : "取消兑换并退回积分"}">${latest.sync_error ? "补偿退款 (取消)" : (isFulfilled ? "撤回兑现" : "取消兑换")}</button>` : ""}
+      </div>
     </div>`;
   }).join("");
-  const rewardCard = $(`<div class="card growth-reward-card">
-      <h3>${icon("gift")} 奖励兑换</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
-        <div class="stat"><div class="n">${pendingRedemptions}</div><div class="t">待联网确认</div></div>
+
+  // 1. 置顶核心：奖励兑换（可折叠，默认展开）
+  const rewardCard = $(`<div class="card growth-reward-card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("gift")} 奖励兑换</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起奖励兑换">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <div class="desc">离线兑换会先记为“待联网确认”，联网并完成服务端确认前不代表最终成功。</div>
-      <form id="rewardForm" class="growth-form">
-        <label>奖励名称<input name="name" maxlength="60" required placeholder="例如：周末去公园"></label>
-        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加奖励</button>
-      </form>
-      <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励，先添加一个约定吧。</div>'}</div>
+      <div class="card-collapse-body">
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${balance}</div><div class="t">当前可用积分</div></div>
+          <div class="stat"><div class="n">${isCloudConnected && unconfirmedRedemptions > 0 ? unconfirmedRedemptions : pendingRedemptions}</div><div class="t">${isCloudConnected && unconfirmedRedemptions > 0 ? "待联网确认" : "待兑现约定"}</div></div>
+        </div>
+        <div class="desc">${
+          isCloudConnected
+            ? (unconfirmedRedemptions > 0
+              ? "离线兑换会先记为“待联网确认”，联网并完成服务端确认后生效。"
+              : "奖励兑换已与云端同步，兑现约定后可标记完成；若属误触，兑现后 24 小时内支持撤回。")
+            : "单机模式：兑换后扣除积分并记为待兑现，实际兑现约定后点击「确认兑现」；若属误触，兑现后 24 小时内支持撤回。"
+        }</div>
+        <div class="reward-list">${rewardCards || '<div class="desc">还没有奖励约定，可在右上角「成长设置」中添加。</div>'}</div>
+      </div>
     </div>`);
   main.appendChild(rewardCard);
-  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") || "").trim();
-    const cost = Number(form.get("cost"));
-    if (!name || !Number.isInteger(cost) || cost < 1 || cost > 100000) {
-      alert("请填写奖励名称，并输入 1 到 100000 的整数积分。");
-      return;
-    }
-    try {
-      await window.growthLoop.createReward({
-        request_id: clientRequestId("reward"),
-        reward: { name, description: "家庭约定奖励", cost_points: cost, category: "family", icon_key: "gift" },
-      });
-      window.cloudSync?.scheduleGrowthLoop?.();
-      renderGrow();
-    } catch (error) {
-      console.error("Growth Loop reward creation failed:", error);
-      alert("奖励没有保存成功，请稍后重试。");
-    }
-  };
   rewardCard.querySelectorAll("[data-reward-id]").forEach((button) => {
     button.onclick = async () => {
       const requestId = clientRequestId("redemption");
@@ -1498,28 +1824,286 @@ function renderGrow(){
       void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
+      soundEffects.play("points_deducted");
+      praise("兑换成功！🎁");
+      flyStars(8);
+    };
+  });
+  rewardCard.querySelectorAll("[data-fulfill-id]").forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      const result = await window.growthLoop.fulfillRedemption({
+        redemption_id: button.dataset.fulfillId,
+        request_id: clientRequestId("redemption-fulfill"),
+      });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "redemption_waiting_for_confirmation"
+          ? "这次兑换还在等待云端确认，请稍后再兑现。"
+          : "这个奖励暂时不能兑现，请稍后重试。");
+        return;
+      }
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+      praise("奖励已兑现！🎉");
+      flyStars(10);
+    };
+  });
+  rewardCard.querySelectorAll("[data-cancel-id]").forEach((button) => {
+    button.onclick = async () => {
+      const redemptionId = button.dataset.cancelId;
+      const redemption = growthLoopSnapshot.redemptions.find((item) => item.id === redemptionId);
+      const isFulfilled = redemption?.status === "fulfilled";
+      const cost = redemption?.cost_points_snapshot || 0;
+      const rewardName = redemption?.reward_name_snapshot || "该奖励";
+      const confirmMsg = isCloudConnected
+        ? (isFulfilled
+            ? `确定撤回“${rewardName}”的兑现并退回 ${cost} 积分吗？（此操作在兑现后 24 小时内有效，云端确认后退款生效）`
+            : "确定取消这次兑换吗？云端确认后积分会通过一条新的退款流水退回。")
+        : (isFulfilled
+            ? `确定撤回“${rewardName}”的兑现并退回 ${cost} 积分吗？（此操作在兑现后 24 小时内有效）已扣减的积分将立即恢复。`
+            : "确定取消这次兑换吗？已扣减的积分将立即恢复。");
+      if (!window.confirm(confirmMsg)) return;
+      button.disabled = true;
+      const result = await window.growthLoop.cancelRedemption({
+        redemption_id: redemptionId,
+        request_id: clientRequestId("redemption-cancel"),
+        note: isFulfilled ? "撤回兑现退款" : "本次暂不兑现",
+      });
+      if (result.error) {
+        button.disabled = false;
+        alert(result.error === "redemption_waiting_for_confirmation"
+          ? "这次兑换还在等待云端确认，请稍后再修正。"
+          : "这个兑换暂时不能取消，请稍后重试。");
+        return;
+      }
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderGrow();
+      soundEffects.play("try_again");
+    };
+  });
+  makeCollapsible(rewardCard, "grow_rewards", false);
+
+  // 2. 次级高频：最近积分明细（可折叠，默认展开）
+  const allLedgerEntries = growthLoopSnapshot.ledger
+    .filter((entry) => !["rejected", "conflict"].includes(entry.status))
+    .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
+      || String(right.created_at || "").localeCompare(String(left.created_at || "")));
+
+  const filteredEntries = allLedgerEntries.filter((entry) => {
+    const isUndo = isUndoEntry(entry);
+    const isRefund = isRefundEntry(entry);
+    if (LEDGER_FILTER === "earned") {
+      return entry.delta > 0 && !isUndo && !isRefund && entry.entry_type !== "redemption";
+    }
+    if (LEDGER_FILTER === "redeemed") {
+      return entry.entry_type === "redemption" || isRefund;
+    }
+    if (LEDGER_FILTER === "undo") {
+      return isUndo || isRefund || entry.entry_type === "adjustment";
+    }
+    return true;
+  });
+
+  const totalFilteredCount = filteredEntries.length;
+  const displayedEntries = filteredEntries.slice(0, LEDGER_LIMIT);
+  const hasMore = totalFilteredCount > displayedEntries.length;
+
+  const groups = [];
+  const groupMap = new Map();
+
+  for (const entry of displayedEntries) {
+    const dateKey = entry.occurred_on || (entry.created_at ? entry.created_at.slice(0, 10) : "") || "其他记录";
+    if (!groupMap.has(dateKey)) {
+      const group = { dateKey, entries: [], netPoints: 0 };
+      groupMap.set(dateKey, group);
+      groups.push(group);
+    }
+    const group = groupMap.get(dateKey);
+    group.entries.push(entry);
+    group.netPoints += Number(entry.delta || 0);
+  }
+
+  const groupsHtml = groups.map((group) => {
+    const headerTitle = formatLedgerDateHeader(group.dateKey);
+    const netSign = group.netPoints > 0 ? "+" : "";
+    const netCls = group.netPoints > 0 ? "pos" : group.netPoints < 0 ? "neg" : "";
+    const netLabel = `当日净得 ${netSign}${group.netPoints} 分`;
+
+    const itemsHtml = group.entries.map((entry) => {
+      const isUndo = isUndoEntry(entry);
+      const isRefund = isRefundEntry(entry);
+      let rawName = entry.item_name_snapshot || "积分调整";
+      let title = escapeHtml(rawName);
+      if (isUndo) {
+        title = `${escapeHtml(rawName)}（撤销）`;
+      } else if (isRefund) {
+        title = `${escapeHtml(rawName)}（兑换取消）`;
+      }
+
+      let iconClass = "icon-pos";
+      let iconSvg = icon("star");
+      let tagClass = "tag-habit";
+      let tagLabel = "日常打卡";
+
+      if (isUndo) {
+        iconClass = "icon-undo";
+        iconSvg = icon("rotate");
+        tagClass = "tag-undo";
+        tagLabel = "已撤销";
+      } else if (isRefund) {
+        iconClass = "icon-undo";
+        iconSvg = icon("rotate");
+        tagClass = "tag-undo";
+        tagLabel = "已退还";
+      } else if (entry.entry_type === "redemption") {
+        iconClass = "icon-reward";
+        iconSvg = icon("gift");
+        tagClass = "tag-reward";
+        tagLabel = "心愿兑换";
+      } else if (entry.entry_type === "legacy_import" || entry.entry_type === "opening_balance") {
+        iconClass = "icon-pos";
+        iconSvg = icon("download");
+        tagClass = "tag-habit";
+        tagLabel = "积分结转";
+      } else if (entry.delta < 0) {
+        iconClass = "icon-neg";
+        iconSvg = icon("alert");
+        tagClass = "tag-habit";
+        tagLabel = "习惯扣分";
+      }
+
+      const ptsClass = isUndo ? "undo" : entry.delta > 0 ? "pos" : "neg";
+      const deltaSign = entry.delta > 0 ? "+" : "";
+      const ptsText = `${deltaSign}${entry.delta}`;
+
+      return `<li>
+        <div class="ledger-item-icon ${iconClass}">${iconSvg}</div>
+        <div class="ledger-item-info">
+          <span class="ledger-item-title">${title}</span>
+          <div class="ledger-item-tags">
+            <span class="ledger-tag ${tagClass}">${tagLabel}</span>
+          </div>
+        </div>
+        <span class="pts ${ptsClass}">${ptsText}</span>
+      </li>`;
+    }).join("");
+
+    return `<div class="ledger-group">
+      <div class="ledger-group-header">
+        <span>${headerTitle}</span>
+        <span class="ledger-group-net ${netCls}">${netLabel}</span>
+      </div>
+      <ul class="ledger-group-items">
+        ${itemsHtml}
+      </ul>
+    </div>`;
+  }).join("");
+
+  const historyCard = $(`<div class="card growth-history-card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("list")} 最近积分明细</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起积分明细">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="ledger-filter-bar">
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "all" ? "active" : ""}" type="button" data-filter="all">全部 (${allLedgerEntries.length})</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "earned" ? "active" : ""}" type="button" data-filter="earned">获得 🌟</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "redeemed" ? "active" : ""}" type="button" data-filter="redeemed">兑换 🎁</button>
+          <button class="ledger-filter-chip ${LEDGER_FILTER === "undo" ? "active" : ""}" type="button" data-filter="undo">撤销/调整 ↩️</button>
+        </div>
+        ${allLedgerEntries.length === 0
+          ? `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`
+          : displayedEntries.length === 0
+            ? `<div class="desc" style="text-align:center;padding:16px 0;">暂无对应分类记录</div>`
+            : `<div class="growth-history-list">${groupsHtml}</div>`
+        }
+        ${hasMore ? `<button class="checkin secondary ledger-more-btn" type="button" id="ledgerMoreBtn">加载更多记录（剩余 ${totalFilteredCount - displayedEntries.length} 条）</button>` : ""}
+      </div>
+    </div>`);
+  main.appendChild(historyCard);
+
+  historyCard.querySelectorAll(".ledger-filter-chip").forEach((chip) => {
+    chip.onclick = () => {
+      LEDGER_FILTER = chip.dataset.filter;
+      LEDGER_LIMIT = 15;
+      renderGrow();
     };
   });
 
-  const historyEntries = growthLoopSnapshot.ledger
-    .filter((entry) => !["rejected", "conflict"].includes(entry.status))
-    .sort((left, right) => String(right.occurred_on || "").localeCompare(String(left.occurred_on || ""))
-      || String(right.created_at || "").localeCompare(String(left.created_at || "")))
-    .slice(0, 20);
-  const historyCard = $(`<div class="card growth-history-card">
-      <h3>${icon("list")} 最近积分明细</h3>
-      ${historyEntries.length
-        ? `<ul class="growth-history-list">
-             ${historyEntries.map((entry) => {
-               const dateLabel = escapeHtml(entry.occurred_on || "");
-               const nameLabel = escapeHtml(entry.item_name_snapshot || "积分调整");
-               const entryClass = entry.entry_type === "redemption" ? "neg" : entry.delta > 0 ? "pos" : "neg";
-               return `<li><span class="date">${dateLabel}</span><span class="name">${nameLabel}</span><span class="pts ${entryClass}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></li>`;
-             }).join("")}
-           </ul>`
-        : `<div class="desc">还没有积分记录。完成打卡或导入旧积分后会显示在这里。</div>`}
-    </div>`);
-  main.appendChild(historyCard);
+  const moreBtn = historyCard.querySelector("#ledgerMoreBtn");
+  if (moreBtn) {
+    moreBtn.onclick = () => {
+      LEDGER_LIMIT += 15;
+      renderGrow();
+    };
+  }
+  makeCollapsible(historyCard, "grow_ledger", false);
+
+  // 3. 辅助功能：学习打卡总览与近 30 天日历（置于底部，可折叠）
+  const enabled = enabledModuleIds();
+  const learningOn = enabled.length > 0;
+
+  if (learningOn) {
+    const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
+    // 日历式最近记录（只统计已启用模块）
+    let cells="";
+    for(let i=29;i>=0;i--){
+      const k=dateKeyOffset(i);
+      const c=store.checkins[k];
+      const n = enabled.filter((module) => hasCheckin(c, module)).length;
+      const day = Number(k.slice(-2));
+      const label = `${k}，${n ? `已完成 ${n}/${enabled.length} 个学习模块` : "未打卡"}`;
+      cells += `<div class="cal-cell lvl-${n}${i===0 ? " today" : ""}" title="${label}" aria-label="${label}"><span class="cal-day">${day}</span><span class="cal-count">${n}/${enabled.length}</span></div>`;
+    }
+    const legendLevels = Array.from({ length: enabled.length + 1 }, (_, level) =>
+      `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
+    ).join("");
+    const learningCard = $(`
+      <div class="card card-collapsible growth-learning-card">
+        <div class="card-collapse-header">
+          <h3>${icon("trophy")} 学习打卡总览与近 30 天趋势</h3>
+          <button class="card-collapse-toggle" type="button" aria-label="展开或收起学习打卡总览与日历">
+            <span class="card-collapse-label">收起</span>
+            <span class="card-collapse-icon">${icon("chevronDown")}</span>
+          </button>
+        </div>
+        <div class="card-collapse-body">
+          <div class="stat-grid">
+            ${enabled.map((module) => `<div class="stat"><div class="n">${totalChecked(module)}</div><div class="t">${contentModuleLabel(module)}累计(天)</div></div>`).join("")}
+          </div>
+          <div class="desc mt-10">${icon("chart")} 累计模块打卡：${total} 次</div>
+          <div class="desc mt-14">${icon("flame")} 连续打卡：${enabled.map((module) => `${contentModuleLabel(module)} ${streak(module)} 天`).join(" · ")}</div>
+          <div class="progressbar"><i></i></div>
+          <div class="desc mt-6 note-sm">目标：累计 30 次打卡解锁「挖掘机小队长」徽章</div>
+          <div class="spacer-12"></div>
+          <div class="pts-sec">${icon("calendar")} 近 30 天打卡日历</div>
+          <div class="cal-grid">${cells}</div>
+          <div class="cal-helper">颜色表示当天完成的学习模块数，格内比例是已完成/共 ${enabled.length} 个模块，边框表示今天。</div>
+          <div class="cal-legend" aria-label="成长日历图例">
+            ${legendLevels}
+            <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>今天</span>
+          </div>
+        </div>
+      </div>
+    `);
+    main.appendChild(learningCard);
+    learningCard.querySelector(".progressbar i").style.width = Math.min(100,total/30*100)+"%";
+    makeCollapsible(learningCard, "grow_overview", false);
+  } else {
+    const hint = $(`
+      <div class="card">
+        <h3>${icon("sprout")} 学习模块统计已隐藏</h3>
+        <div class="desc">当前孩子的学习包未启用，首页和这里不会显示学习模块统计。启用后在「学习」页为这个孩子开启学习模块。</div>
+        <button class="checkin" type="button" data-go="learning">${icon("graduation")} 去开启学习模块</button>
+      </div>
+    `);
+    main.appendChild(hint);
+    hint.querySelector("[data-go]").onclick = () => switchMod("learning");
+  }
 
   main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
@@ -1536,7 +2120,7 @@ function ptsCardHTML(it, day){
   const description = it.description ?? it.desc ?? "";
   const sub = points < 0;
   const ptsIcon = it.icon_key || PTS_ICON[it.name] || (sub ? "alert" : "star");
-  return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}">
+  return `<div class="pts-card ${sub?'sub':''} ${done?'done':''}" data-pts-card="${escapeHtml(it.id)}" data-pts-name="${escapeHtml(it.name)}">
     <div class="pts-ic">${icon(ptsIcon)}</div>
     <div class="pts-info">
       <div class="pts-name">${escapeHtml(it.name)}</div>
@@ -1549,7 +2133,14 @@ function ptsCardHTML(it, day){
 
 function renderPoints(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("star","积分打卡"));
+  const titleRow = $(`
+    <div class="module-title-row">
+      <div class="module-title"><span class="em">${icon("star")}</span><h2>积分打卡</h2></div>
+      <button class="btn-subtle" type="button" data-go-settings="points" aria-label="积分设置">${icon("settings")} 积分设置</button>
+    </div>
+  `);
+  main.appendChild(titleRow);
+  titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "points" });
   const currentDate = new Date();
   const today = currentDate.getDate();
   const year = currentDate.getFullYear();
@@ -1578,39 +2169,23 @@ function renderPoints(){
       </div>
     </div>`));
 
-  // 积分日历（圆角 chip，可补打卡）
-  let chips="";
-  for(let d=1;d<=daysInMonth;d++){
-    const state=pointDayState(d);
-    const stateText=state.kind==="pos"?"有加分":state.kind==="neg"?"有扣分":state.kind==="mixed"?"有加分和扣分":"无积分";
-    const cls=[d===activeDay?"active":"",state.kind].filter(Boolean).join(" ");
-    const selectedText=d===activeDay?"，当前选中":"";
-    chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
-  }
-  const calCard=$(`<div class="card">
-      <h3>${icon("calendar")} 积分日历 <span class="pill">${ymLabel}</span></h3>
-      <div class="cal-helper">点击日期选择要补打卡的日期；边框表示当前选中日期。</div>
-      <div class="cal-legend" aria-label="积分日历图例">
-        <span class="cal-legend-item"><i class="cal-swatch neutral" aria-hidden="true"></i>无积分</span>
-        <span class="cal-legend-item"><i class="cal-swatch pos" aria-hidden="true"></i>有加分</span>
-        <span class="cal-legend-item"><i class="cal-swatch neg" aria-hidden="true"></i>有扣分</span>
-        <span class="cal-legend-item"><i class="cal-swatch mixed" aria-hidden="true"></i>加分和扣分</span>
-        <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>当前选中</span>
-      </div>
-      <div class="cal">${chips}</div>
-    </div>`);
-  main.appendChild(calCard);
-  calCard.querySelectorAll(".cal-chip").forEach(c=>c.onclick=()=>{PT_DAY=+c.dataset.d; renderPoints();});
-
-  // 打卡区（卡片化）
+  // 1. 打卡区（卡片化，置顶核心）
   const isToday = activeDay===today;
-  const head = $(`<div class="card">
-      <div class="pts-sec">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
-      ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
-      <div class="pts-sec">${icon("plus")} 加分项</div>
-      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
-      <div class="pts-sec">${icon("minus")} 减分项目</div>
-      ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+  const head = $(`<div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <div class="pts-sec" style="margin-bottom:0;">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起打卡区">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        ${isToday?"":`<button class="checkin danger mb-12" id="backtoday">${icon("rotate")} 回到今天</button>`}
+        <div class="pts-sec">${icon("plus")} 加分项</div>
+        ${pointItems.filter((it) => Number(it.default_points ?? it.pts) > 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+        <div class="pts-sec">${icon("minus")} 减分项目</div>
+        ${pointItems.filter((it) => Number(it.default_points ?? it.pts) < 0).map((it)=>ptsCardHTML(it,activeDay)).join("")}
+      </div>
     </div>`);
   main.appendChild(head);
   head.querySelectorAll(".pts-toggle").forEach((button)=>{
@@ -1619,61 +2194,42 @@ function renderPoints(){
       button.disabled = true;
     };
   });
-  const bt = el("backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
+  const bt = head.querySelector("#backtoday"); if(bt) bt.onclick=()=>{PT_DAY=today; renderPoints();};
+  makeCollapsible(head, "points_checkin", false);
 
-  const customCard = $(`<div class="card growth-custom-card">
-      <h3>${icon("pencil")} 自定义积分项</h3>
-      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
-      <form id="pointItemForm" class="growth-form">
-        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
-        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
-      </form>
+  // 2. 积分日历（圆角 chip，紧凑置底，可折叠）
+  let chips="";
+  for(let d=1;d<=daysInMonth;d++){
+    const state=pointDayState(d);
+    const stateText=state.kind==="pos"?"有加分":state.kind==="neg"?"有扣分":state.kind==="mixed"?"有加分和扣分":"无积分";
+    const cls=[d===activeDay?"active":"",state.kind].filter(Boolean).join(" ");
+    const selectedText=d===activeDay?"，当前选中":"";
+    chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
+  }
+  const calCard=$(`<div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("calendar")} 补打卡日历 <span class="pill">${ymLabel}</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起补打卡日历">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="cal-helper">点击日期选择要补打卡的日期；边框表示当前选中日期。</div>
+        <div class="cal-legend" aria-label="积分日历图例">
+          <span class="cal-legend-item"><i class="cal-swatch neutral" aria-hidden="true"></i>无积分</span>
+          <span class="cal-legend-item"><i class="cal-swatch pos" aria-hidden="true"></i>有加分</span>
+          <span class="cal-legend-item"><i class="cal-swatch neg" aria-hidden="true"></i>有扣分</span>
+          <span class="cal-legend-item"><i class="cal-swatch mixed" aria-hidden="true"></i>加分和扣分</span>
+          <span class="cal-legend-item"><i class="cal-swatch selected" aria-hidden="true"></i>当前选中</span>
+        </div>
+        <div class="cal">${chips}</div>
+      </div>
     </div>`);
-  main.appendChild(customCard);
-  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") || "").trim();
-    const points = Number(form.get("points"));
-    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
-      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
-      return;
-    }
-    try {
-      await window.growthLoop.createPointItem({
-        request_id: clientRequestId("point-item"),
-        item: {
-          name,
-          description: "自定义成长任务",
-          default_points: points,
-          category: "growth",
-          icon_key: points > 0 ? "star" : "alert",
-          item_kind: "custom",
-        },
-      });
-      window.cloudSync?.scheduleGrowthLoop?.();
-      renderPoints();
-    } catch (error) {
-      console.error("Growth Loop custom point item creation failed:", error);
-      alert("积分项没有保存成功，请稍后重试。");
-    }
-  };
+  main.appendChild(calCard);
+  calCard.querySelectorAll(".cal-chip").forEach(c=>c.onclick=()=>{PT_DAY=+c.dataset.d; renderPoints();});
+  makeCollapsible(calCard, "points_cal", false);
 
-  // 结束当前积分周期：保留历史，通过不可变的反向调整归零当前月。
-  main.appendChild($(`<div class="card"><button class="checkin danger" id="ptclear">${icon("trash")} 结束本月积分周期</button><div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div></div>`));
-  el("ptclear").onclick=async()=>{
-    if(confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")){
-      try {
-        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
-        window.cloudSync?.scheduleGrowthLoop?.();
-        PT_DAY=today; renderPoints();
-      } catch (error) {
-        console.error("Growth Loop point period close failed:", error);
-        alert("积分周期没有结束成功，请稍后重试。");
-      }
-    }
-  };
   main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
 }
 
@@ -1825,7 +2381,463 @@ function renderBook(){
   main.appendChild($(`<div class="footer">${icon("library")} 本机离线保存 · 登录后跨设备同步</div>`));
 }
 
+
+/* =========================================================
+   渲染：系统设置（分类标签页）
+   ========================================================= */
+let currentSettingsTab = "learning";
+
+function renderSettings(options = {}){
+  if (options?.tab) {
+    currentSettingsTab = options.tab;
+  }
+  const main = el("main"); main.innerHTML="";
+  main.appendChild(modTitle("settings","设置"));
+
+  const tabs = [
+    { id: "learning", icon: "graduation", label: "学习设置" },
+    { id: "points", icon: "star", label: "积分规则" },
+    { id: "growth", icon: "sprout", label: "愿望成长" },
+    { id: "sound", icon: "volume", label: "声音音效" },
+  ];
+  const tabsBar = $(`
+    <div class="settings-tabs" role="tablist" aria-label="设置分类">
+      ${tabs.map((tab) => `
+        <button class="settings-tab ${currentSettingsTab === tab.id ? "active" : ""}" 
+                type="button" 
+                role="tab" 
+                data-tab="${tab.id}" 
+                aria-selected="${currentSettingsTab === tab.id}">
+          ${icon(tab.icon)} ${tab.label}
+        </button>
+      `).join("")}
+    </div>
+  `);
+  main.appendChild(tabsBar);
+  tabsBar.querySelectorAll(".settings-tab").forEach((btn) => {
+    btn.onclick = () => {
+      currentSettingsTab = btn.dataset.tab;
+      renderSettings();
+    };
+  });
+
+  if (currentSettingsTab === "learning") {
+    renderSettingsLearning(main);
+  } else if (currentSettingsTab === "points") {
+    renderSettingsPoints(main);
+  } else if (currentSettingsTab === "growth") {
+    renderSettingsGrowth(main);
+  } else if (currentSettingsTab === "sound") {
+    renderSettingsSound(main);
+  }
+}
+
+function renderSettingsLearning(main){
+  const config = normalizeContentConfig(store.content_config);
+  const settings = $(`
+    <div class="card">
+      <h3>${icon("grid")} 启蒙学习包设置</h3>
+      <div class="desc">${escapeHtml(FOUNDATION_PACKAGE.name)} · 建议年龄 ${escapeHtml(FOUNDATION_PACKAGE.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除打卡历史。</div>
+      <label class="switch-row">
+        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
+        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
+      </label>
+      ${FOUNDATION_PACKAGE.modules.map((module) => `
+      <label class="switch-row">
+        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天</span></span>
+        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
+      </label>`).join("")}
+    </div>
+  `);
+  main.appendChild(settings);
+  settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
+    input.onchange = () => {
+      updateContentPackage(input.checked);
+      renderSettings({ tab: "learning" });
+    };
+  });
+  settings.querySelectorAll("[data-config-toggle='module']").forEach((input) => {
+    input.onchange = () => {
+      updateContentModule(input.dataset.moduleId, input.checked);
+      renderSettings({ tab: "learning" });
+    };
+  });
+  main.appendChild($(`<div class="footer">${icon("graduation")} 学习包配置按孩子独立保存 · 登录后跨设备同步</div>`));
+}
+
+function renderSettingsPoints(main){
+  const customItems = (growthLoopSnapshot.items || []).filter(it => it.item_kind === "custom");
+  const customCard = $(`
+    <div class="card growth-custom-card">
+      <h3>${icon("pencil")} 自定义积分项</h3>
+      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
+      <form id="pointItemForm" class="growth-form">
+        <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
+        <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
+      </form>
+      ${customItems.length ? `
+        <div class="desc mt-12" style="font-weight:700;">已添加的自定义积分项：</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+          ${customItems.map(it => `<span class="pill" style="padding:4px 8px;font-size:12px;">${escapeHtml(it.name)} (${Number(it.default_points) > 0 ? '+' : ''}${it.default_points}分)</span>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `);
+  main.appendChild(customCard);
+  customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const points = Number(form.get("points"));
+    if (!name || !Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
+      alert("请填写名称，并输入 1 到 1000 的整数分值（可填负数）。");
+      return;
+    }
+    try {
+      await window.growthLoop.createPointItem({
+        request_id: clientRequestId("point-item"),
+        item: {
+          name,
+          description: "自定义成长任务",
+          default_points: points,
+          category: "growth",
+          icon_key: points > 0 ? "star" : "alert",
+          item_kind: "custom",
+        },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderSettings({ tab: "points" });
+      praise("积分项已添加！✨");
+      flyStars(6);
+    } catch (error) {
+      console.error("Growth Loop custom point item creation failed:", error);
+      alert("积分项没有保存成功，请稍后重试。");
+    }
+  };
+
+  const periodCard = $(`
+    <div class="card">
+      <h3>${icon("trash")} 结束本月积分周期</h3>
+      <div class="desc">不会删除历史记录，会追加反向调整，让本月重新开始。</div>
+      <button class="checkin danger" id="ptclear" type="button">${icon("trash")} 结束本月积分周期</button>
+    </div>
+  `);
+  main.appendChild(periodCard);
+  periodCard.querySelector("#ptclear").onclick = async () => {
+    if (confirm("确定结束本月积分周期？历史记录会保留，但本月积分会归零。")) {
+      try {
+        await window.growthLoop.closePeriod({ period_key: currentPeriodKey(), request_id: clientRequestId("period-close") });
+        window.cloudSync?.scheduleGrowthLoop?.();
+        renderSettings({ tab: "points" });
+      } catch (error) {
+        console.error("Growth Loop point period close failed:", error);
+        alert("积分周期没有结束成功，请稍后重试。");
+      }
+    }
+  };
+  main.appendChild($(`<div class="footer">${icon("star")} 每日按日期记录 · 本机离线保存并可同步云端</div>`));
+}
+
+function renderSettingsGrowth(main){
+  const opening = getOpeningBalance(growthLoopSnapshot);
+  const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
+  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
+  const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
+  const legacyPreview = legacyEntries.slice(-6).reverse();
+
+  let openingCard;
+  if (opening) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("checkCircle")} 期初积分已确认</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${opening.delta}</div><div class="t">期初积分</div></div>
+          <div class="stat"><div class="n">${openingStatusLabel(opening)}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">已确认的期初积分计入余额，不计入行为统计；如需纠错，请使用普通积分调整流水。</div>
+      </div>
+    `);
+  } else if (legacyImport) {
+    const presentation = legacyImportPresentation(legacyImport.status);
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon(presentation.iconName)} ${presentation.title}</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyImport.total}</div><div class="t">导入积分</div></div>
+          <div class="stat"><div class="n">${legacyImport.count}</div><div class="t">打卡明细</div></div>
+          <div class="stat"><div class="n">${presentation.statusLabel}</div><div class="t">状态</div></div>
+        </div>
+        <div class="desc">${presentation.description}</div>
+        ${presentation.canRetry ? `<button class="checkin" id="legacyImportBtn" type="button">${icon("refresh")} 重新导入</button>` : ""}
+      </div>
+    `);
+  } else if (legacyEntries.length > 0) {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("download")} 恢复旧积分</h3>
+        <div class="stat-grid">
+          <div class="stat"><div class="n">${legacyTotal}</div><div class="t">旧积分合计</div></div>
+          <div class="stat"><div class="n">${legacyEntries.length}</div><div class="t">打卡明细</div></div>
+        </div>
+        <div class="desc">已自动找到这个孩子的旧积分打卡记录。导入后余额与每天明细都会恢复，家长无需手动填写积分；每个孩子只能导入一次。</div>
+        <div class="legacy-preview">
+          ${legacyPreview.map((entry) => `<div class="legacy-row"><span>${escapeHtml(entry.occurred_on)}</span><span>${escapeHtml(entry.item_name_snapshot)}</span><span class="${entry.delta > 0 ? "pos" : "neg"}">${entry.delta > 0 ? "+" : ""}${entry.delta}</span></div>`).join("")}
+          ${legacyEntries.length > legacyPreview.length ? `<div class="legacy-more">… 最近 6 条 / 共 ${legacyEntries.length} 条</div>` : ""}
+        </div>
+        <button class="checkin" id="legacyImportBtn" type="button">${icon("download")} 导入并恢复</button>
+      </div>
+    `);
+  } else {
+    openingCard = $(`
+      <div class="card growth-opening-card">
+        <h3>${icon("star")} 期初积分</h3>
+        <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
+        <form id="openingBalanceForm" class="growth-form">
+          <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
+          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+        </form>
+      </div>
+    `);
+  }
+  main.appendChild(openingCard);
+  const openingForm = openingCard.querySelector("#openingBalanceForm");
+  if (openingForm) {
+    openingForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const value = Number(form.get("balance"));
+      if (!Number.isInteger(value) || value < 1 || value > 1000000) {
+        alert("请填写 1 到 1000000 的整数积分。");
+        return;
+      }
+      if (!window.confirm(`确定为当前孩子确认 ${value} 分期初积分？每个孩子只能确认一次。`)) return;
+      try {
+        const result = await window.growthLoop.confirmOpeningBalance({
+          balance: value,
+          note: "期初积分",
+          request_id: clientRequestId("opening"),
+        });
+        if (result.error === "opening_balance_already_confirmed") {
+          alert("这个孩子的期初积分已经确认过了。");
+        } else if (result.error) {
+          alert("期初积分确认失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderSettings({ tab: "growth" });
+        }
+      } catch (error) {
+        console.error("Growth Loop opening balance confirm failed:", error);
+        alert("期初积分没有保存成功，请稍后重试。");
+      }
+    };
+  }
+  const legacyImportBtn = openingCard.querySelector("#legacyImportBtn");
+  if (legacyImportBtn) {
+    legacyImportBtn.onclick = async () => {
+      if (!window.confirm(`将导入这个孩子的 ${legacyEntries.length} 条旧积分打卡明细，合计 ${legacyTotal} 分，并恢复为当前余额。每个孩子只能导入一次，确认导入？`)) return;
+      legacyImportBtn.disabled = true;
+      try {
+        const result = await window.growthLoop.importLegacyPoints({
+          entries: legacyEntries,
+          request_id: clientRequestId("legacy-import"),
+        });
+        if (result.error === "legacy_points_already_imported") {
+          alert("这个孩子的旧积分已经导入过了。");
+        } else if (result.error) {
+          alert("旧积分导入失败，请稍后重试。");
+        } else {
+          window.cloudSync?.scheduleGrowthLoop?.();
+          renderSettings({ tab: "growth" });
+        }
+      } catch (error) {
+        console.error("Growth Loop legacy points import failed:", error);
+        alert("旧积分没有导入成功，请稍后重试。");
+      } finally {
+        legacyImportBtn.disabled = false;
+      }
+    };
+  }
+
+  const existingRewards = window.growthLoop?.getRewards?.() || [];
+  const rewardCard = $(`
+    <div class="card growth-custom-card">
+      <h3>${icon("gift")} 添加心愿奖品</h3>
+      <div class="desc">设定孩子期待兑换的心愿奖品与兑换所需积分。</div>
+      <form id="rewardForm" class="growth-form">
+        <label>奖品名称<input name="name" maxlength="60" required placeholder="例如：去一次游乐园"></label>
+        <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
+        <button class="checkin" type="submit">${icon("plus")} 添加心愿奖品</button>
+      </form>
+      ${existingRewards.length ? `
+        <div class="desc mt-12" style="font-weight:700;">已设定的心愿奖品：</div>
+        <div class="reward-list mt-8">
+          ${existingRewards.map(r => `
+            <div class="reward-card">
+              <div class="reward-icon">${icon(r.icon_key || "gift")}</div>
+              <div class="reward-info">
+                <strong>${escapeHtml(r.name)}</strong>
+                <span>${escapeHtml(r.description || "家庭约定奖励")}</span>
+              </div>
+              <span class="pts-badge">${r.cost_points || 0}分</span>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `);
+  main.appendChild(rewardCard);
+  rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const cost = Number(form.get("cost"));
+    if (!name || !Number.isInteger(cost) || cost <= 0 || cost > 100000) {
+      alert("请填写奖品名称，并输入 1 到 100000 的所需积分。");
+      return;
+    }
+    try {
+      await window.growthLoop.createReward({
+        request_id: clientRequestId("reward"),
+        reward: {
+          name,
+          description: "家庭约定奖励",
+          cost_points: cost,
+          category: "family",
+          icon_key: "gift",
+        },
+      });
+      window.cloudSync?.scheduleGrowthLoop?.();
+      renderSettings({ tab: "growth" });
+      praise("心愿奖品已添加！🎁");
+      flyStars(6);
+    } catch (error) {
+      console.error("Growth Loop create reward failed:", error);
+      alert("心愿奖品添加失败，请稍后重试。");
+    }
+  };
+
+  main.appendChild($(`<div class="footer">${icon("sprout")} 期初积分与心愿奖品按孩子独立管理 · 登录后跨设备同步</div>`));
+}
+
+function renderSettingsSound(main){
+  const settings = soundEffects.getSettings();
+  const masterVol = Math.round((settings.volume ?? 0.6)*100);
+  const masterLabelText = `总音量 ${masterVol}%${masterVol > 100 ? " (超额增强)" : ""}`;
+  main.appendChild($(`
+    <div class="card">
+      <h3>${icon("volume")} 界面音效总开关与音量</h3>
+      <div class="sound-row">
+        <span class="sound-label">启用界面音效</span>
+        <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
+      </div>
+      <div class="sound-row">
+        <span class="sound-label" id="snd-volume-label">${masterLabelText}</span>
+        <input class="sound-range" type="range" id="snd-volume" min="0" max="200" step="5" value="${masterVol}" aria-label="总音量" ${settings.enabled?"":"disabled"}>
+      </div>
+      <div class="desc">控制点击、打卡、获得积分等界面操作音效。</div>
+    </div>
+  `));
+  const speechVol = Math.round((settings.speechVolume ?? 0.6)*100);
+  const speechLabelText = `朗读音量 ${speechVol}%${speechVol > 100 ? " (超额增强)" : ""}`;
+  main.appendChild($(`
+    <div class="card">
+      <h3>${icon("volume")} 课程语音朗读音量</h3>
+      <div class="sound-row">
+        <span class="sound-label" id="speech-volume-label">${speechLabelText}</span>
+        <input class="sound-range" type="range" id="speech-volume" min="0" max="200" step="5" value="${speechVol}" aria-label="课程语音朗读音量">
+      </div>
+      <div class="sound-event-controls" style="margin-top: 10px;">
+        <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
+      </div>
+      <div class="desc">控制汉字发音、英文单词和字意朗读的音量。</div>
+    </div>
+  `));
+  const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
+  main.appendChild(eventsCard);
+  const list = eventsCard.querySelector(".sound-events");
+  for (const key of SOUND_EVENT_KEYS) {
+    const def = SOUND_EVENTS[key];
+    const eventSettings = settings.events[key];
+    const variantOptions = Object.entries(def.variants).map(([variantKey, variant]) =>
+      `<option value="${variantKey}" ${variantKey===eventSettings.variant?"selected":""}>${variant.name}</option>`
+    ).join("");
+    list.appendChild($(`
+      <div class="sound-event" data-event="${key}">
+        <div class="sound-event-head">
+          <span class="sound-label">${def.label}</span>
+          <button class="sound-switch ${eventSettings.enabled?"on":""}" type="button" data-event-enable="${key}" role="switch" aria-checked="${eventSettings.enabled}">${eventSettings.enabled?"开":"关"}</button>
+        </div>
+        <div class="sound-event-controls">
+          <select data-event-variant="${key}" aria-label="${def.label}变体" ${eventSettings.enabled?"":"disabled"}>${variantOptions}</select>
+          <button class="checkin sound-preview" type="button" data-event-preview="${key}">${icon("play")} 试听</button>
+        </div>
+      </div>
+    `));
+  }
+  main.appendChild($(`
+    <div class="card">
+      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认设置</button>
+      <div class="desc">恢复为默认的总开关、音效音量、语音朗读音量与每个事件的变体选择。</div>
+    </div>
+  `));
+  main.appendChild($(`<div class="footer">${icon("settings")} 声音设置只保存在当前设备，不会同步到云端。</div>`));
+
+  el("snd-master").onclick = () => {
+    soundEffects.setEnabled(!soundEffects.getSettings().enabled);
+    renderSettings({ tab: "sound" });
+  };
+  el("snd-volume").oninput = (event) => {
+    const val = Number(event.target.value);
+    soundEffects.setVolume(val / 100);
+    const label = el("snd-volume-label");
+    if (label) {
+      label.textContent = `总音量 ${val}%${val > 100 ? " (超额增强)" : ""}`;
+    }
+  };
+  el("snd-volume").onchange = () => {
+    primeSpeechAudio();
+    soundEffects.preview("points_earned");
+  };
+  el("snd-volume").addEventListener?.("pointerdown", primeSpeechAudio, { passive: true });
+  el("speech-volume").oninput = (event) => {
+    const val = Number(event.target.value);
+    soundEffects.setSpeechVolume(val / 100);
+    const label = el("speech-volume-label");
+    if (label) {
+      label.textContent = `朗读音量 ${val}%${val > 100 ? " (超额增强)" : ""}`;
+    }
+  };
+  const triggerSpeechPreview = () => {
+    primeSpeechAudio();
+    const previewBtn = el("speech-preview");
+    speak("日", previewBtn, "zh-CN", "hz-001:glyph");
+  };
+  el("speech-volume").onchange = triggerSpeechPreview;
+  el("speech-preview").onclick = triggerSpeechPreview;
+  el("speech-preview").addEventListener?.("pointerdown", primeSpeechAudio, { passive: true });
+
+  el("snd-reset").onclick = () => {
+    soundEffects.resetDefaults();
+    renderSettings({ tab: "sound" });
+  };
+  main.querySelectorAll("[data-event-enable]").forEach((button) => button.onclick = () => {
+    soundEffects.setEventEnabled(button.dataset.eventEnable, !soundEffects.getSettings().events[button.dataset.eventEnable].enabled);
+    renderSettings({ tab: "sound" });
+  });
+  main.querySelectorAll("[data-event-variant]").forEach((select) => select.onchange = () => {
+    soundEffects.setEventVariant(select.dataset.eventVariant, select.value);
+    renderSettings({ tab: "sound" });
+  });
+  main.querySelectorAll("[data-event-preview]").forEach((button) => button.onclick = () => {
+    soundEffects.preview(button.dataset.eventPreview);
+  });
+}
+
 function renderGuide(){
+  const accountBtn = document.querySelector("#accountButton");
+  const isOnline = accountBtn?.dataset?.state === "online";
+
   const main = el("main");
   main.innerHTML = "";
   main.appendChild($(`
@@ -1833,8 +2845,58 @@ function renderGuide(){
       <section class="guide-hero">
         <div class="guide-kicker">给家长的快速上手</div>
         <h2>使用指南</h2>
-        <p>第一次使用影伴，照着这条路线走一遍：登录、建立家庭、选择孩子，然后开始今天的学习。</p>
-        <div class="guide-badges"><span>约 3 分钟开始</span><span>手机 · 平板 · 电脑</span></div>
+        <p>第一次使用影伴，照着这条路线走一遍：推荐使用 Chrome 与大屏平板、登录开启免费云同步，让孩子轻松开始自主学习。</p>
+        <div class="guide-badges">
+          <span>约 3 分钟上手</span>
+          <span>推荐 Chrome</span>
+          <span>大屏平板优先</span>
+          <span>免费云同步</span>
+        </div>
+      </section>
+
+      <section class="guide-card guide-recommend-card" data-guide-section="recommendations">
+        <div class="guide-section-heading">
+          <span class="guide-rec-icon">${icon("star")}</span>
+          <div>
+            <h3>最佳体验建议：Chrome + 平板电脑 + 登录开启免费云同步</h3>
+            <p>为保障孩子的专注力、视力健康与发音顺畅，推荐按以下搭配使用影伴：</p>
+          </div>
+        </div>
+
+        <div class="guide-recommend-grid">
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge tablet">${icon("book")} 平板首选</div>
+            <h4>首推平板电脑（iPad / 安卓平板）</h4>
+            <p><strong>大屏护眼防疲劳</strong>：大屏幕下生字卡片、笔画笔顺和图文更清晰，减少孩子低头与视力疲劳。</p>
+            <p><strong>自主触控点读</strong>：放置在书桌支架上，孩子伸手指即可自主点读汉字、古诗与题目，无需家长全程举着手机陪读。</p>
+          </article>
+
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge chrome">${icon("compass")} 极速浏览器</div>
+            <h4>推荐使用 Google Chrome 浏览器</h4>
+            <p><strong>现代音频与硬件加速</strong>：完整支持 Web Audio 引擎与 PWA 离线技术，发音响应即点即播、音质洪亮清晰。</p>
+            <p><strong>避开应用内限制</strong>：微信内置浏览器容易限制音频自动播放或离线缓存，使用系统 Chrome 体验最流畅。</p>
+          </article>
+
+          <article class="guide-recommend-item">
+            <div class="guide-recommend-badge cloud">${icon("cloud")} 数据安全</div>
+            <h4>家长免费登录开启云端同步</h4>
+            <p><strong>防丢失防误清</strong>：未登录数据仅保存在当前设备，清理缓存会导致记录丢失；登录后自动多副本安全备份。</p>
+            <p><strong>多端无缝协同</strong>：平板学习打卡、家长手机查看进度实时同步；家庭积分与心愿契约多端拉齐，换机无忧。</p>
+          </article>
+        </div>
+
+        <div class="guide-recommend-actions">
+          ${isOnline ? `
+            <div class="guide-sync-status-tip">
+              ${icon("checkCircle")} <span>已开启家庭空间：您的打卡与积分数据正在享受免费实时云端同步。</span>
+            </div>
+          ` : `
+            <button class="guide-login-action-btn" type="button" data-action="guide-login">
+              ${icon("cloud")} 立即免费登录 · 开启家庭空间与数据云同步
+            </button>
+          `}
+        </div>
       </section>
 
       <section class="guide-card" data-guide-section="quickstart">
@@ -1846,8 +2908,35 @@ function renderGuide(){
         </div>
       </section>
 
+      <section class="guide-card" data-guide-section="speech-features">
+        <div class="guide-section-heading"><span>02</span><div><h3>儿童全场景点读与自主学习</h3><p>让孩子无需家长一直陪读，点到哪里读到哪里。</p></div></div>
+        <div class="guide-steps">
+          <article class="guide-step"><span class="guide-step-no">文</span><div><h4>语文识字、古诗与写字</h4><p>点击生字卡片即听拼读组词；点击古诗任意行或标题听诵读；写字练习中点击字意、词语、例句与笔顺口诀均支持纯净发音辅导。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">数</span><div><h4>数学题目与游戏规则</h4><p>加减习题点击“读题目”；数感星球点“读要求”；数独入门点“读规则”，语音自动播报通俗易懂的儿童规则。</p></div></article>
+          <article class="guide-step"><span class="guide-step-no">英</span><div><h4>英语拼读与往期回顾</h4><p>今日核心词支持中英文发音引导；往期回顾直接点击单词标签即可听美式标准发音，温故而知新。</p></div></article>
+        </div>
+      </section>
+
+      <section class="guide-card" data-guide-section="growth-loop">
+        <div class="guide-section-heading"><span>03</span><div><h3>习惯积分与心愿兑换成长闭环</h3><p>把好习惯变成动力，建立看得见、守信用的家庭激励约定。</p></div></div>
+        <div class="guide-facts">
+          <div><strong>习惯打卡</strong><span>鼓励做家务、认真学习等好习惯；误操作可再次点击撤销，明细中清晰显示“（撤销）”。</span></div>
+          <div><strong>自主兑换</strong><span>孩子用攒下的积分挑选心愿奖励；心愿货架支持随时「再次兑换」，不再因历史履约而锁死。</span></div>
+          <div><strong>契约履约</strong><span>家长在现实履约后点击「确认兑现」；待兑现可随时取消，兑现后 24 小时内支持防误触「撤回兑现」并退还积分，超时自动归档。</span></div>
+        </div>
+      </section>
+
+      <section class="guide-card" data-guide-section="sound-settings">
+        <div class="guide-section-heading"><span>04</span><div><h3>音效与语音独立调节</h3><p>界面交互星星动效与课程朗读音量分轨调节，适应不同家庭环境。</p></div></div>
+        <div class="guide-facts">
+          <div><strong>界面音效</strong><span>打卡成功、连胜与获得积分时的星星音效，可开启/关闭并自由调节总音量。</span></div>
+          <div><strong>朗读音量</strong><span>专门调节课程朗读、古诗跟读与题目规则的音量大小，支持即时点击试听。</span></div>
+          <div><strong>本机记忆</strong><span>声音与音量设置保存在当前设备，切换设备时不会互相干扰。</span></div>
+        </div>
+      </section>
+
       <section class="guide-card" data-guide-section="speech">
-        <div class="guide-section-heading"><span>02</span><div><h3>听发音与共享语音</h3><p>影伴优先播放发布前生成的共享 AI 语音；共享音频不可用时才尝试同语言系统语音。不会上传录音。</p></div></div>
+        <div class="guide-section-heading"><span>05</span><div><h3>发音来源与备用系统语音</h3><p>影伴优先播放经过专业调优的高质量预录音频；离线时自动尝试同语言系统语音。绝不上传录音。</p></div></div>
         <div class="guide-device-grid">
           <article class="guide-device"><h4>Windows</h4><p>设置 → 时间和语言 → 语言和区域 → English → 语言选项 → 语音 → 下载。</p><a class="guide-link" href="https://support.microsoft.com/windows/change-your-keyboard-layout-245c49b8-f856-7fd7-2cf5-41e54c66f5b3" target="_blank" rel="noopener">查看微软安装说明 ↗</a></article>
           <article class="guide-device"><h4>macOS</h4><p>系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音，下载 English 语音。</p><a class="guide-link" href="https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac" target="_blank" rel="noopener">查看 Apple 安装说明 ↗</a></article>
@@ -1860,13 +2949,55 @@ function renderGuide(){
       </section>
 
       <section class="guide-card" data-guide-section="sync">
-        <div class="guide-section-heading"><span>03</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
-        <div class="guide-facts"><div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div><div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div><div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div></div>
+        <div class="guide-section-heading"><span>06</span><div><h3>家庭空间和同步</h3><p>家庭空间是统一入口，学习记录按孩子分别同步和保存。</p></div></div>
+        <div class="guide-facts">
+          <div><strong>家庭维度</strong><span>管理家庭名称、孩子档案和当前选择。</span></div>
+          <div><strong>孩子维度</strong><span>每个孩子的打卡、积分和绘本记录分别同步。</span></div>
+          <div><strong>看同步状态</strong><span>进入家庭空间可查看家庭内最近同步时间。</span></div>
+          <div><strong>跨端免配置</strong><span>无论在平板、手机还是电脑上登录同一家长账号，孩子学习数据实时拉齐。</span></div>
+        </div>
       </section>
 
       <section class="guide-card" data-guide-section="install">
-        <div class="guide-section-heading"><span>04</span><div><h3>安装到主屏幕，打开更方便</h3><p>影伴是网页应用，不需要从陌生渠道下载 APK 或安装包。</p></div></div>
-        <div class="guide-install-grid"><div><strong>iPhone / iPad</strong><span>Safari 打开影伴 → 分享 → 添加到主屏幕。</span></div><div><strong>Android</strong><span>Chrome 打开影伴 → 菜单 ⋮ → 添加到主屏幕。</span></div><div><strong>电脑</strong><span>Chrome 或 Edge 地址栏右侧点击安装图标，或使用浏览器菜单“安装影伴”。</span></div></div>
+        <div class="guide-section-heading"><span>07</span><div><h3>添加到主屏幕：实现像原生 App 一样的独立安装体验</h3><p>影伴支持现代 PWA 渐进式 Web 应用标准，无需在应用商店搜索或下载臃肿安装包，添加到主屏幕即可像独立 App 一样打开使用。</p></div></div>
+        
+        <div class="guide-pwa-benefits">
+          <div><strong>全屏沉浸无干扰</strong><span>隐藏浏览器地址栏与前进后退按键，全屏纯净展示，孩子点读学习更专注、防误触。</span></div>
+          <div><strong>系统独立进程长久保活</strong><span>系统为桌面图标分配专属独立沙盒，登录状态长效保持，彻底告别频繁掉登录。</span></div>
+          <div><strong>秒开与离线能力</strong><span>学习界面与课程发音由本地智能缓存，网络不佳或离线时也能秒开并完成打卡。</span></div>
+        </div>
+
+        <div class="guide-install-steps">
+          <article class="guide-install-card">
+            <h4>🍎 iPad / iPhone (Safari 浏览器)</h4>
+            <ol>
+              <li>在系统自带的 <strong>Safari 浏览器</strong> 中打开影伴（若在微信内，先点右上角「···」选择“在 Safari 中打开”）。</li>
+              <li>点击屏幕底栏（iPhone）或顶栏（iPad）的 <strong>「分享」图标</strong>（带向上箭头的方框）。</li>
+              <li>在弹出的分享菜单中向下滑动，找到并点击 <strong>「添加到主屏幕」</strong>（Add to Home Screen）。</li>
+              <li>在右上角确认点击 <strong>「添加」</strong>，桌面就会出现绿色的“影伴”独立应用图标。</li>
+            </ol>
+          </article>
+
+          <article class="guide-install-card">
+            <h4>🤖 Android 平板 / 手机 (Chrome 浏览器)</h4>
+            <ol>
+              <li>使用系统自带或下载的 <strong>Google Chrome 浏览器</strong> 打开影伴。</li>
+              <li>点击浏览器右上角的 <strong>三个点「⋮」</strong> 菜单。</li>
+              <li>选择 <strong>「添加到主屏幕」</strong> 或 <strong>「安装应用」</strong>（部分系统底部会直接提示“安装影伴”横幅）。</li>
+              <li>点击确认，系统即可在桌面自动生成独立的影伴应用图标。</li>
+            </ol>
+          </article>
+
+          <article class="guide-install-card">
+            <h4>💻 电脑 (Windows PC / Mac)</h4>
+            <ol>
+              <li>使用 Chrome 或 Edge 浏览器打开影伴网页。</li>
+              <li>观察浏览器地址栏最右侧，会看到一个 <strong>显示屏带箭头的「安装应用」小图标</strong>。</li>
+              <li>点击该图标并选择 <strong>「安装」</strong>（或在浏览器菜单选择“安装影伴”）。</li>
+              <li>安装后自动生成独立桌面快捷方式，支持固定到任务栏或 Dock 栏独立窗口运行。</li>
+            </ol>
+          </article>
+        </div>
       </section>
 
       <section class="guide-card guide-help-card">
@@ -1876,6 +3007,11 @@ function renderGuide(){
     </div>
   `));
   mountPiperResourceManager(main.querySelector("[data-piper-resource-manager]"));
+
+  const guideLoginBtn = main.querySelector("[data-action='guide-login']");
+  if (guideLoginBtn) {
+    guideLoginBtn.onclick = () => document.querySelector("#accountButton")?.click();
+  }
 }
 
 /* =========================================================
@@ -1892,9 +3028,10 @@ function checkinBtn(mod,label){
 /* =========================================================
    导航切换
    ========================================================= */
-function switchMod(mod){
+function switchMod(mod, options = {}){
   CURRENT_MOD = mod;
   removeWritingPrintRoot();
+  stopPoemSpeech();
   document.querySelectorAll(".navbtn").forEach(b=>{
     const active = b.dataset.mod === mod;
     b.classList.toggle("active", active);
@@ -1910,12 +3047,13 @@ function switchMod(mod){
   else if(mod==="points") renderPoints();
   else if(mod==="grow") renderGrow();
   else if(mod==="guide") renderGuide();
+  else if(mod==="settings") renderSettings(options);
   // 绑定打卡按钮
   el("main").querySelectorAll("[data-cmod]").forEach(btn=>{
     btn.onclick=()=>{
       const m=btn.dataset.cmod;
       toggleCheckin(m);
-      switchMod(mod);
+      switchMod(mod, options);
     };
   });
   el("main").scrollTop=0;

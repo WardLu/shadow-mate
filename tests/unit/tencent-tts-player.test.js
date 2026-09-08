@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPublishedSpeechPlayer } from "../../src/tencent-tts-player.js";
+import { createPublishedSpeechPlayer, SPEECH_GAIN_MULTIPLIER, calculatePerceptualSpeechGain } from "../../src/tencent-tts-player.js";
 
 const entry = {
   contentId: "hz-001:glyph",
@@ -8,6 +8,69 @@ const entry = {
 
 function response(body = new Uint8Array([0x49, 0x44, 0x33, 1])) {
   return new Response(body, { status: 200, headers: { "content-type": "audio/mpeg" } });
+}
+
+function createFakeAudioContext() {
+  let sourceNode = null;
+  const gainNode = {
+    gain: { value: 0, setValueAtTime: vi.fn((val) => { gainNode.gain.value = val; }) },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  };
+  const warmFilterNode = {
+    type: "",
+    frequency: { setValueAtTime: vi.fn() },
+    Q: { setValueAtTime: vi.fn() },
+    gain: { setValueAtTime: vi.fn() },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  };
+  const waveShaperNode = {
+    curve: null,
+    oversample: "none",
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  };
+  const compressors = [];
+  const makeCompressor = () => {
+    const node = {
+      threshold: { setValueAtTime: vi.fn() },
+      knee: { setValueAtTime: vi.fn() },
+      ratio: { setValueAtTime: vi.fn() },
+      attack: { setValueAtTime: vi.fn() },
+      release: { setValueAtTime: vi.fn() },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    compressors.push(node);
+    return node;
+  };
+  const fakeBuffer = { duration: 1.2, numberOfChannels: 1, sampleRate: 16000 };
+  const ctx = {
+    state: "running",
+    currentTime: 10,
+    destination: { id: "dest" },
+    resume: vi.fn(() => Promise.resolve()),
+    decodeAudioData: vi.fn((_ab, ok) => {
+      if (typeof ok === "function") ok(fakeBuffer);
+      return Promise.resolve(fakeBuffer);
+    }),
+    createBufferSource: () => {
+      sourceNode = {
+        buffer: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(() => { sourceNode?.onended?.(); }),
+      };
+      return sourceNode;
+    },
+    createGain: () => gainNode,
+    createBiquadFilter: () => warmFilterNode,
+    createWaveShaper: () => waveShaperNode,
+    createDynamicsCompressor: makeCompressor,
+  };
+  return { ctx, getSource: () => sourceNode, gainNode, warmFilterNode, waveShaperNode, compressors, fakeBuffer };
 }
 
 describe("published speech player", () => {
@@ -55,5 +118,194 @@ describe("published speech player", () => {
       revokeObjectURL() {},
     });
     await expect(player.play(entry.contentId)).rejects.toMatchObject({ code: "published-audio-playback" });
+  });
+
+  it("amplifies published speech via Web Audio gain, soft-clipper wave shaper and warm lowpass filter", async () => {
+    const fake = createFakeAudioContext();
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    const playPromise = player.play(entry.contentId, { volume: 0.6 });
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    const source = fake.getSource();
+    expect(source.buffer).toBe(fake.fakeBuffer);
+    expect(source.connect).toHaveBeenCalledWith(fake.compressors[0]);
+    expect(fake.compressors[0].threshold.setValueAtTime).toHaveBeenCalledWith(-20.0, fake.ctx.currentTime);
+    expect(fake.compressors[0].ratio.setValueAtTime).toHaveBeenCalledWith(2.5, fake.ctx.currentTime);
+    expect(fake.compressors[0].connect).toHaveBeenCalledWith(fake.gainNode);
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.0, fake.ctx.currentTime);
+    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.waveShaperNode);
+    expect(fake.waveShaperNode.oversample).toBe("2x");
+    expect(fake.waveShaperNode.curve).toBeInstanceOf(Float32Array);
+    expect(fake.waveShaperNode.connect).toHaveBeenCalledWith(fake.warmFilterNode);
+    expect(fake.warmFilterNode.frequency.setValueAtTime).toHaveBeenCalledWith(7500, fake.ctx.currentTime);
+    expect(fake.warmFilterNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
+    expect(source.start).toHaveBeenCalledWith(0);
+
+    source.onended();
+    await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
+  });
+
+  it("falls back to compressor/limiter if createWaveShaper is unavailable", async () => {
+    const fake = createFakeAudioContext();
+    delete fake.ctx.createWaveShaper;
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    const playPromise = player.play(entry.contentId, { volume: 0.6 });
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    expect(fake.gainNode.connect).toHaveBeenCalledWith(fake.compressors[1]);
+    expect(fake.compressors[1].threshold.setValueAtTime).toHaveBeenCalledWith(-1.0, fake.ctx.currentTime);
+    expect(fake.compressors[1].ratio.setValueAtTime).toHaveBeenCalledWith(4.0, fake.ctx.currentTime);
+    expect(fake.compressors[1].connect).toHaveBeenCalledWith(fake.warmFilterNode);
+    expect(fake.warmFilterNode.connect).toHaveBeenCalledWith(fake.ctx.destination);
+
+    fake.getSource().onended();
+    await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
+  });
+
+  it("scales gain perceptually with volume option including excess boost up to 200%", async () => {
+    const fake = createFakeAudioContext();
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    // 100% volume -> perceptual boost (~2.9894)
+    const playPromise1 = player.play(entry.contentId, { volume: 1.0 });
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(calculatePerceptualSpeechGain(1.0), fake.ctx.currentTime);
+    fake.getSource().onended();
+    await expect(playPromise1).resolves.toEqual({ status: "played", source: "cdn" });
+
+    // 200% volume -> perceptual boost (~7.6204)
+    const playPromise2 = player.play(entry.contentId, { volume: 2.0 });
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+    expect(fake.gainNode.gain.setValueAtTime).toHaveBeenCalledWith(calculatePerceptualSpeechGain(2.0), fake.ctx.currentTime);
+    fake.getSource().onended();
+    await expect(playPromise2).resolves.toEqual({ status: "played", source: "cdn" });
+  });
+
+  it("caches decoded AudioBuffer to avoid re-fetching and re-decoding on subsequent plays", async () => {
+    const fake = createFakeAudioContext();
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    const first = player.play(entry.contentId);
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+    fake.getSource().onended();
+    await first;
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // 1 manifest + 1 audio
+    expect(fake.ctx.decodeAudioData).toHaveBeenCalledTimes(1);
+
+    // Second play: uses cached AudioBuffer
+    const second = player.play(entry.contentId);
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+    fake.getSource().onended();
+    await second;
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // no extra fetch
+    expect(fake.ctx.decodeAudioData).toHaveBeenCalledTimes(1); // no extra decode
+  });
+
+  it("stops active playback cleanly via player.stop()", async () => {
+    const fake = createFakeAudioContext();
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      getAudioContext: () => fake.ctx,
+    });
+
+    const playPromise = player.play(entry.contentId);
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    player.stop();
+    await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
+    expect(fake.getSource().stop).toHaveBeenCalled();
+  });
+
+  it("falls back to AudioCtor if AudioContext decode fails", async () => {
+    const fake = createFakeAudioContext();
+    fake.ctx.decodeAudioData = vi.fn(() => Promise.reject(new Error("decode-error")));
+    let finish;
+    class AudioMock {
+      play() { return new Promise((resolve) => { finish = () => { this.onended?.(); resolve(); }; }); }
+      pause() {}
+    }
+    const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
+      ? new Response(JSON.stringify({ entries: [entry] }), { headers: { "content-type": "application/json" } })
+      : response());
+
+    const player = createPublishedSpeechPlayer({
+      fetchImpl,
+      AudioCtor: AudioMock,
+      getAudioContext: () => fake.ctx,
+      createObjectURL: () => "blob:fallback",
+      revokeObjectURL() {},
+    });
+
+    const playPromise = player.play(entry.contentId);
+    await vi.waitFor(() => expect(typeof finish).toBe("function"));
+    finish();
+    await expect(playPromise).resolves.toEqual({ status: "played", source: "cdn" });
+  });
+
+  it("cancels previous in-flight fetch when interrupted before playback starts", async () => {
+    const fake = createFakeAudioContext();
+    const entry2 = { contentId: "hz-002:glyph", url: "https://voice.shadow.wang/2.mp3" };
+    let finishFirstFetch;
+    const fetchImpl = vi.fn(async (url) => {
+      if (url.endsWith("manifest.json")) {
+        return new Response(JSON.stringify({ entries: [entry, entry2] }), { headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("101030/a.mp3")) {
+        return new Promise((resolve) => {
+          finishFirstFetch = () => resolve(response());
+        });
+      }
+      return response();
+    });
+
+    const player = createPublishedSpeechPlayer({ fetchImpl, getAudioContext: () => fake.ctx });
+    const firstPromise = player.play(entry.contentId);
+    await vi.waitFor(() => expect(typeof finishFirstFetch).toBe("function"));
+
+    // Interrupted while first is still fetching
+    const secondPromise = player.play(entry2.contentId);
+    await vi.waitFor(() => expect(fake.getSource()).not.toBeNull());
+
+    // Complete the first fetch now
+    finishFirstFetch();
+    await expect(firstPromise).resolves.toEqual({ status: "cancelled", source: "cdn" });
+
+    fake.getSource().onended();
+    await expect(secondPromise).resolves.toEqual({ status: "played", source: "cdn" });
   });
 });

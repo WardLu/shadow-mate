@@ -215,7 +215,7 @@ test.describe("Hanzi writing worksheet", () => {
     expect(await englishSpeechButtons.allTextContents()).toEqual(Array.from({ length: 4 }, () => "英文发音"));
 
     const firstCard = cards.first();
-    await expect(firstCard.locator("[data-hanzi-visual]")).toHaveAttribute("role", "img");
+    await expect(firstCard.locator("[data-hanzi-visual]")).toHaveAttribute("role", "button");
     await expect(firstCard.locator("[data-hanzi-sentence]")).not.toBeEmpty();
     await expect(firstCard.locator("[data-hanzi-writing-hint]")).not.toBeEmpty();
 

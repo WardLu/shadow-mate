@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryLearningDb } from "../../src/learning-local-db.js";
 import { createGrowthLoopController } from "../../src/learning-growth-loop-controller.js";
+import { createGrowthLoopState } from "../../src/learning-growth-loop.js";
 
 describe("Growth Loop controller scope adoption", () => {
   it("does not hydrate or create a local snapshot while the global write guard is blocked", async () => {
@@ -216,6 +217,199 @@ describe("Growth Loop controller scope adoption", () => {
     expect(controller.getSnapshot().ledger).toEqual([
       expect.objectContaining({ household_id: "household-1", profile_id: "profile-1" }),
     ]);
+  });
+});
+
+describe("Growth Loop redemption actions", () => {
+  const scope = { household_id: "household-1", profile_id: "profile-1" };
+
+  it("confirms a cancellation refund and a later fulfillment through ordered outbox actions", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.ledger = [{
+      id: "ledger-1",
+      request_id: "point-1",
+      profile_id: scope.profile_id,
+      delta: 10,
+      entry_type: "manual",
+      status: "confirmed",
+    }];
+    await db.putSnapshot("household-1:profile-1", state);
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope(scope);
+
+    await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-1" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "reward_redeem"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "pending" } }
+          : { status: "confirmed" },
+      },
+    });
+
+    await controller.cancelRedemption({
+      redemption_id: "remote-redemption-1",
+      request_id: "cancel-1",
+      note: "临时改约",
+    });
+    expect(controller.getSnapshot().redemptions[0]).toEqual(expect.objectContaining({
+      status: "pending",
+      cancel_requested: true,
+    }));
+    expect(controller.getSnapshot().ledger.at(-1)).toEqual(expect.objectContaining({
+      entry_type: "refund",
+      status: "pending",
+      delta: 5,
+    }));
+
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "redemption_cancel"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "cancelled" } }
+          : { status: "confirmed" },
+      },
+    });
+    expect(controller.getSnapshot().redemptions[0]).toEqual(expect.objectContaining({
+      status: "cancelled",
+      cancel_requested: false,
+    }));
+    expect(controller.getSnapshot().ledger.at(-1)).toEqual(expect.objectContaining({ status: "confirmed" }));
+
+    await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-2" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "reward_redeem"
+          ? { status: "confirmed", data: { id: "remote-redemption-2", status: "pending" } }
+          : { status: "confirmed" },
+      },
+    });
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-2", request_id: "fulfill-2" });
+    await controller.sync({
+      transport: {
+        send: async (event) => event.type === "redemption_fulfill"
+          ? { status: "confirmed", data: { id: "remote-redemption-2", status: "fulfilled" } }
+          : { status: "confirmed" },
+      },
+    });
+
+    expect(controller.getSnapshot().redemptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "remote-redemption-2", status: "fulfilled", fulfill_requested: false }),
+    ]));
+  });
+
+  it("passes userInitiated flag to onRewardFulfilled only when initiated in session", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.redemptions = [{ id: "remote-redemption-1", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state);
+
+    const fulfilledEvents = [];
+    const controller = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    await controller.loadScope(scope);
+
+    // 1. User initiated in current session
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-user" });
+    await controller.sync({
+      transport: {
+        send: async () => ({ status: "confirmed", data: { id: "remote-redemption-1", status: "fulfilled" } }),
+      },
+    });
+    expect(fulfilledEvents).toHaveLength(1);
+    expect(fulfilledEvents[0].userInitiated).toBe(true);
+    expect(fulfilledEvents[0].redemption.id).toBe("remote-redemption-1");
+
+    // 2. Background sync / hydration of an existing unfulfilled redemption that is fulfilled remotely
+    const controller2 = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    const state2 = createGrowthLoopState(scope);
+    state2.redemptions = [{ id: "remote-redemption-2", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state2);
+    await controller2.loadScope(scope);
+
+    // Remote sync confirms fulfillment without controller2 having called fulfillRedemption
+    // We simulate remote reconciliation of an outbox event that came from another tab / sync
+    await controller2.sync({
+      transport: {
+        send: async () => ({ status: "confirmed", data: { id: "remote-redemption-2", status: "fulfilled" } }),
+      },
+    });
+    // No outbox event was in controller2, so no onRewardFulfilled was triggered
+    expect(fulfilledEvents).toHaveLength(1);
+  });
+
+  it("resets fulfill_requested and sets sync_error on sync failure allowing retry", async () => {
+    const db = createMemoryLearningDb();
+    const state = createGrowthLoopState(scope);
+    state.rewards = [{ id: "reward-1", name: "去公园", cost_points: 5, is_active: true }];
+    state.profile_rewards = [{ profile_id: scope.profile_id, reward_id: "reward-1", enabled: true }];
+    state.redemptions = [{ id: "remote-redemption-1", status: "pending", confirmed: true, cost_points_snapshot: 5 }];
+    await db.putSnapshot("household-1:profile-1", state);
+
+    const controller = createGrowthLoopController({ db });
+    await controller.loadScope(scope);
+
+    await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-1" });
+    expect(controller.getSnapshot().redemptions[0].fulfill_requested).toBe(true);
+
+    // Sync fails with retryable status
+    await controller.sync({
+      transport: {
+        send: async () => ({ status: "retryable", error_code: "network_timeout" }),
+      },
+    });
+
+    // fulfill_requested should be reset to false and sync_error set so retry/cancel is unblocked
+    const afterFail = controller.getSnapshot().redemptions[0];
+    expect(afterFail.fulfill_requested).toBe(false);
+    expect(afterFail.sync_error).toBe("network_timeout");
+
+    // Retry should now succeed locally without error
+    const retryResult = await controller.fulfillRedemption({ redemption_id: "remote-redemption-1", request_id: "fulfill-retry" });
+    expect(retryResult.error).toBeUndefined();
+    expect(controller.getSnapshot().redemptions[0].fulfill_requested).toBe(true);
+    expect(controller.getSnapshot().redemptions[0].sync_error).toBeNull();
+  });
+
+  it("allows unauthenticated controller to fulfill and cancel rewards immediately with celebration sound", async () => {
+    const db = createMemoryLearningDb();
+    const fulfilledEvents = [];
+    const controller = createGrowthLoopController({
+      db,
+      onRewardFulfilled: (payload) => fulfilledEvents.push(payload),
+    });
+    // Unauthenticated initial state (scope = { household_id: null, profile_id: null })
+    await controller.createReward({
+      request_id: "reward-req-1",
+      reward: { id: "reward-1", name: "去公园", cost_points: 5, category: "family" },
+    });
+    await controller.recordPoint({
+      item: { id: "item-1", name: "做家务", default_points: 10 },
+      occurred_on: "2026-08-14",
+      request_id: "point-1",
+    });
+
+    // Redeem reward locally
+    const redeemResult = await controller.redeemReward({ reward_id: "reward-1", request_id: "redeem-1" });
+    expect(redeemResult.error).toBeUndefined();
+    expect(redeemResult.redemptions[0].status).toBe("pending");
+    expect(redeemResult.redemptions[0].confirmed).toBe(true);
+
+    // Fulfill reward locally: immediately transitions to fulfilled and triggers sound
+    const fulfillResult = await controller.fulfillRedemption({ redemption_id: "redeem-1", request_id: "fulfill-1" });
+    expect(fulfillResult.error).toBeUndefined();
+    expect(fulfillResult.redemptions[0].status).toBe("fulfilled");
+    expect(fulfilledEvents).toHaveLength(1);
+    expect(fulfilledEvents[0].userInitiated).toBe(true);
+    expect(fulfilledEvents[0].redemption.status).toBe("fulfilled");
   });
 });
 

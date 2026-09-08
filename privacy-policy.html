@@ -79,7 +79,7 @@
           <ul>
             <li>离线学习状态保存在当前设备的浏览器存储中。</li>
             <li>登录后，家庭和学习状态同步到项目配置的 Supabase 数据库。</li>
-            <li>登录会话使用浏览器会话存储；关闭对应浏览器会话后需要重新登录。</li>
+            <li>登录会话保存在当前设备的浏览器本地持久存储中，支持长期免重复登录；退出登录或清除本机数据时会一并清除。</li>
             <li>学习数据按家庭隔离，登录用户仍必须通过家庭成员关系和 RLS 才能读取或修改记录。</li>
           </ul>
           <p>本机缓存通常会在关闭浏览器后继续保留，直到用户清除该网站的浏览器数据、使用隐私/无痕窗口、浏览器或系统自动清理，或更换访问域名。登录并同步后，云端家庭记录才是跨设备恢复来源。</p>
@@ -123,7 +123,7 @@
           <ul>
             <li>Offline learning state is stored in the browser storage on the current device.</li>
             <li>After sign-in, household and learning state sync to the Supabase database configured for the project.</li>
-            <li>The sign-in session uses browser session storage; a new browser session may require signing in again.</li>
+            <li>The sign-in session is stored in the browser's local persistent storage on the current device to support long-lived logins; it is cleared upon sign-out or clearing local data.</li>
             <li>Learning data is isolated by household. Signed-in users must still pass household membership checks and Row Level Security (RLS) to read or change records.</li>
           </ul>
           <p>Local cache normally remains after the browser closes until the site's browser data is cleared, a private/incognito session is used, the browser or operating system cleans it up, or the site domain changes. After synchronization, the cloud household record is the source for cross-device recovery.</p>

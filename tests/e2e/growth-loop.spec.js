@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Growth Loop local-first boundary", () => {
-  test("lets a parent create a custom point item and a reward from the app", async ({ page }) => {
+  test("lets an unauthenticated parent create a custom point item, redeem and fulfill a reward locally", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
+    await page.click('[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "自己刷牙");
     await page.fill('#pointItemForm input[name="points"]', "2");
     await page.click('#pointItemForm button[type="submit"]');
+    await page.click('[data-mod="points"]');
     await expect(page.locator(".pts-card").filter({ hasText: "自己刷牙" })).toBeVisible();
 
     const customCard = page.locator(".pts-card").filter({ hasText: "自己刷牙" });
@@ -14,13 +16,96 @@ test.describe("Growth Loop local-first boundary", () => {
     await expect(customCard).toHaveClass(/done/);
 
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
     await page.fill('#rewardForm input[name="name"]', "选一个故事");
     await page.fill('#rewardForm input[name="cost"]', "2");
     await page.click('#rewardForm button[type="submit"]');
+    await page.click('[data-mod="grow"]');
     const reward = page.locator(".reward-card").filter({ hasText: "选一个故事" });
     await expect(reward).toBeVisible();
     await reward.locator(".reward-redeem").click();
+    await expect(reward).toContainText("待兑现");
+    await reward.locator(".reward-fulfill").click();
+    await expect(reward).toContainText("已兑现");
+
+    page.on("dialog", (dialog) => dialog.accept());
+    const cancelButton = reward.locator(".reward-cancel");
+    await expect(cancelButton).toContainText("撤回兑现");
+    await cancelButton.click();
+    await expect(reward.locator(".reward-redeem")).toHaveText("兑换");
+    await expect(reward.locator(".reward-cancel")).toHaveCount(0);
+    await expect(page.locator(".stat").filter({ hasText: "当前可用积分" })).toContainText("2");
+  });
+
+  test("cancels an unauthenticated redemption with immediate local refund", async ({ page }) => {
+    await page.goto("/");
+    await page.click('[data-mod="points"]');
+    await page.click('[data-go-settings="points"]');
+    await page.fill('#pointItemForm input[name="name"]', "整理书架");
+    await page.fill('#pointItemForm input[name="points"]', "5");
+    await page.click('#pointItemForm button[type="submit"]');
+    await page.click('[data-mod="points"]');
+    await page.locator(".pts-card").filter({ hasText: "整理书架" }).locator(".pts-toggle").click();
+
+    await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
+    await page.fill('#rewardForm input[name="name"]', "取消测试奖励");
+    await page.fill('#rewardForm input[name="cost"]', "5");
+    await page.click('#rewardForm button[type="submit"]');
+    await page.click('[data-mod="grow"]');
+    const reward = page.locator(".reward-card").filter({ hasText: "取消测试奖励" });
+    await reward.locator(".reward-redeem").click();
+    await expect(reward).toContainText("待兑现");
+
+    page.on("dialog", (dialog) => dialog.accept());
+    await reward.locator(".reward-cancel").click();
+    await expect(reward.locator(".reward-redeem")).toHaveText("兑换");
+    await expect(reward.locator(".reward-cancel")).toHaveCount(0);
+    await expect(page.locator(".stat").filter({ hasText: "当前可用积分" })).toContainText("5");
+  });
+
+  test("synchronizes redemption lifecycle through cloud when authenticated", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(async () => {
+      await window.growthLoop.loadScope({
+        household_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        profile_id: "aaaaaaaa-bbbb-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      await window.growthLoop.createReward({
+        request_id: "reward-cloud-1",
+        reward: { name: "云端奖励", cost_points: 2, category: "family" },
+      });
+      await window.growthLoop.recordPoint({
+        item: { id: "item-cloud-1", name: "云端任务", default_points: 5 },
+        occurred_on: "2026-08-14",
+        request_id: "point-cloud-1",
+      });
+    });
+    await page.click('[data-mod="grow"]');
+    const reward = page.locator(".reward-card").filter({ hasText: "云端奖励" });
+    await expect(reward).toBeVisible();
+    await reward.locator(".reward-redeem").click();
     await expect(reward).toContainText("待联网确认");
+
+    await page.evaluate(() => window.growthLoop.sync({
+      transport: {
+        send: async (event) => event.type === "reward_redeem"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "pending" } }
+          : { status: "confirmed" },
+      },
+    }));
+    await expect(reward).toContainText("待兑现");
+
+    await reward.locator(".reward-fulfill").click();
+    await expect(reward).toContainText("兑现同步中");
+    await page.evaluate(() => window.growthLoop.sync({
+      transport: {
+        send: async (event) => event.type === "redemption_fulfill"
+          ? { status: "confirmed", data: { id: "remote-redemption-1", status: "fulfilled" } }
+          : { status: "confirmed" },
+      },
+    }));
+    await expect(reward).toContainText("已兑现");
   });
 
   test("adopts pending local actions and claims one outbox event across two pages", async ({ browser }) => {
@@ -96,6 +181,7 @@ test.describe("Growth Loop local-first boundary", () => {
     await page.goto("/");
 
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
     const card = page.locator(".growth-opening-card");
     await expect(card).toContainText("恢复旧积分");
     await expect(card).toContainText("10"); // 2+2+3+3 合计
@@ -107,6 +193,7 @@ test.describe("Growth Loop local-first boundary", () => {
     await expect(card).toContainText("10");
 
     // The imported daily detail shows in the recent history list.
+    await page.click('[data-mod="grow"]');
     await expect(page.locator(".growth-history-list li")).toHaveCount(4);
 
     await page.evaluate(() => window.growthLoop.sync({
@@ -116,6 +203,7 @@ test.describe("Growth Loop local-first boundary", () => {
           : { status: "confirmed" },
       },
     }));
+    await page.click('[data-go-settings="growth"]');
     await expect(card).toContainText("旧积分导入未完成");
     await expect(card).toContainText("云端拒绝了这次导入");
     await expect(card.locator("#legacyImportBtn")).toContainText("重新导入");
@@ -134,6 +222,7 @@ test.describe("Growth Loop local-first boundary", () => {
     });
     await page.goto("/");
     await page.click('[data-mod="grow"]');
+    await page.click('[data-go-settings="growth"]');
     const card = page.locator(".growth-opening-card");
     page.on("dialog", (dialog) => dialog.accept());
     await card.locator("#legacyImportBtn").click();
@@ -152,6 +241,7 @@ test.describe("Growth Loop local-first boundary", () => {
       },
     }));
 
+    await page.click('[data-tab="growth"]');
     await expect(card).toContainText("旧积分等待云端重试");
     await expect(card).toContainText("云端确认暂时失败，将自动重试");
   });
