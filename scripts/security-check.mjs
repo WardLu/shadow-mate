@@ -85,11 +85,18 @@ if (configuredEmail && !configuredEmail.endsWith("@users.noreply.github.com")) {
 if (process.env.SECURITY_CHECK_HISTORY === "1") {
   const isGitHubNoreply = (email) =>
     email.endsWith("@users.noreply.github.com") || email === "noreply@github.com";
-  const historyEmails = runGit(["log", "HEAD", "--format=%ae%n%ce"])
+  // Owner-approved exception for this already-public historical commit only.
+  // Its immutable SHA fixes both identity fields; all other commits remain checked.
+  const acceptedHistoricalCommits = new Set([
+    "11baf6ac246816b96dfbd9d0c5f67c0b3f42c8ad",
+  ]);
+  const historyEntries = runGit(["log", "HEAD", "--format=%H%x09%ae%x09%ce"])
     .split(/\r?\n/)
     .filter(Boolean);
-  for (const email of historyEmails) {
-    if (!isGitHubNoreply(email)) {
+  for (const entry of historyEntries) {
+    const [sha, authorEmail, committerEmail] = entry.split("\t");
+    if (acceptedHistoricalCommits.has(sha)) continue;
+    if (!isGitHubNoreply(authorEmail) || !isGitHubNoreply(committerEmail)) {
       findings.push("Git history contains a non-noreply author or committer email");
       break;
     }
