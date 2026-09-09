@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
+import { CORE_LEARNING_SPEECH_ENTRIES } from "../src/content/core-learning-speech.js";
 import { validateHanziWritingPack } from "../src/content/hanzi-writing/validate-pack.js";
 import {
   listBundledPiperRuntimePackages,
@@ -41,6 +42,7 @@ const requiredFiles = [
   "src/app.js",
   "src/app.css",
   "src/content/hanzi-writing/v2-pilot-1.json",
+  "src/content/core-learning-speech.js",
   "src/content/hanzi-writing/manifest.js",
   "src/content/hanzi-writing/validate-pack.js",
   "SECURITY.md",
@@ -75,7 +77,7 @@ if (!hanziWritingPackValidation.valid) {
 
 validatePiperResourcePackages(listPiperResourcePackages());
 
-const expectedTencentTtsCatalog = await buildTencentSpeechCatalog(activeHanziWritingPack.items);
+const expectedTencentTtsCatalog = await buildTencentSpeechCatalog(activeHanziWritingPack.items, CORE_LEARNING_SPEECH_ENTRIES);
 const tencentTtsManifest = await readFile("public/tts/tencent-v1-manifest.json", "utf8").then(JSON.parse).catch((error) => {
   if (error?.code === "ENOENT") return null;
   throw error;
@@ -161,8 +163,8 @@ if (!config.includes('remote_supabase_blocked')) {
 }
 
 const serviceWorker = await readFile("public/sw.js", "utf8");
-if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v4"')) {
-  throw new Error("Service worker cache must use shadow-mate-app-v4");
+if (!serviceWorker.includes('CACHE_NAME = "shadow-mate-app-v5"')) {
+  throw new Error("Service worker cache must use shadow-mate-app-v5");
 }
 if (!serviceWorker.includes("/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)")) {
   throw new Error("Service worker must define the app-shell preservation predicate");
@@ -178,7 +180,7 @@ if (/caches\.keys\(\)\s*\.then\(\(keys\)\s*=>\s*Promise\.all\(keys\.map\(.*cache
 
 const cachePolicy = await readFile("src/cache-policy.js", "utf8");
 for (const marker of [
-  'APP_SHELL_CACHE_NAME = "shadow-mate-app-v4"',
+  'APP_SHELL_CACHE_NAME = "shadow-mate-app-v5"',
   "/^shadow-mate-app-v\\d+$/.test(name) || /^shadow-mate-v\\d+$/.test(name)",
   "key !== currentName",
 ]) {

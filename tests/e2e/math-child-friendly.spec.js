@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-Ting" }]) {
+  await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
   await page.addInitScript((configuredVoices) => {
     window.__speechUtterances = [];
     Object.defineProperty(window, "speechSynthesis", {
@@ -27,6 +28,49 @@ async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-
 
 test.describe("Child-friendly math interactions", () => {
   test.use({ serviceWorkers: "block" });
+
+  test("plays a mental-math question from CDN fragments without Web Speech API", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__publishedAudioPlays = 0;
+      Object.defineProperty(window, "speechSynthesis", { configurable: true, value: undefined });
+      Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: undefined });
+      Object.defineProperty(window, "Audio", {
+        configurable: true,
+        value: class AudioMock {
+          play() {
+            window.__publishedAudioPlays += 1;
+            queueMicrotask(() => this.onended?.());
+            return Promise.resolve();
+          }
+          pause() {}
+          remove() {}
+        },
+      });
+    });
+    const entry = (contentId) => ({ contentId, url: `https://voice.test/${encodeURIComponent(contentId)}.mp3` });
+    const entries = [
+      ...Array.from({ length: 101 }, (_, number) => entry(`math:number-${String(number).padStart(3, "0")}`)),
+      entry("math:operator-plus"),
+      entry("math:operator-minus"),
+      entry("math:question-result"),
+    ];
+    await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ entries }),
+    }));
+    await page.route("https://voice.test/**", (route) => route.fulfill({
+      contentType: "audio/mpeg",
+      body: Buffer.from([0x49, 0x44, 0x33, 1]),
+    }));
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="math"]');
+
+    await page.locator(".btn-read-q").click();
+
+    await expect.poll(() => page.evaluate(() => window.__publishedAudioPlays)).toBe(4);
+    await expect(page.locator(".btn-read-q")).not.toHaveAttribute("data-speech-failure", "true");
+  });
 
   test("provides spoken question button for mental math", async ({ page }) => {
     await installSystemSpeech(page);

@@ -2,6 +2,17 @@
 
 > This file lists user-visible product changes for each published version.
 
+## v1.5.1 - 2026-09-09
+
+### Reliable learning audio on mobile
+
+- Expand shared pre-generated audio to 634 entries, covering literacy cards, writing-card pictures, words, sentences, writing hints, poems, English words and learning instructions.
+- Read random math questions using reusable number and operator clips, without requiring system speech support.
+- Attempt language-based browser speech when voice enumeration is empty; preserve failure and timeout feedback.
+- Refresh the application-shell cache generation and align English/Chinese product and development documentation.
+
+Xiaomi/Quark playback was confirmed by the user against the LAN development server. Other device/browser combinations and production acceptance require their own checks.
+
 ## v1.5.0 - 2026-09-08
 
 ### Growth loop and rewards redemption

@@ -10,12 +10,13 @@
 </p>
 
 <p align="center">
-  <code>v1.5.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
   <a href="./README.zh-CN.md">简体中文</a> ·
   <a href="https://sm.shadow.wang/"><strong>Open Shadow Mate</strong></a> ·
+  <a href="https://shadow.wang/zh/products/shadow-mate"><strong>Shadow Lab</strong></a> ·
   <a href="./docs/user-guide.md">User guide</a> ·
   <a href="./docs/README.md">Docs</a> ·
   <a href="./RELEASE_NOTES.md">Release notes</a>
@@ -110,14 +111,14 @@ The shared local Supabase API is local-only and Mailpit is available at [http://
 
 Non-production and Preview sources must not connect to production Supabase. Remote production access is blocked unless an explicitly authorized temporary verification override is provided. Never put production credentials or service-role keys in this repository.
 
-Compatibility wrappers remain available when only the split entry points are needed:
+Compatibility wrappers remain available for split diagnostics; do not start them alongside central Edge generation:
 
 ```bash
 npm run supabase:local:start
 npm run supabase:local:functions:serve
 ```
 
-Do not run a bare `supabase start` in the repository root as a replacement for the shared local entry.
+These wrappers use the sibling merchant-admin checkout and control-plane-verified sources to prepare local schema and function overlays. The foreground function server stops when its terminal closes. Do not run a bare `supabase start` in the repository root as a replacement for the shared local entry.
 
 For local database linting:
 
@@ -126,7 +127,7 @@ cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` before merging or releasing.
+Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` for release candidates. `test:fast` includes static checks and all unit tests; real Supabase E2E requires the corresponding environment. Coverage thresholds are defined in the test configuration.
 
 ## How it works
 
@@ -153,6 +154,7 @@ Browser-local state
 
 ```text
 src/app.js                 UI rendering, interaction, and local state
+vite.config.js             Vite development compatibility and retained Piper resources
 src/learning-state.js      Learning state machine and module grouping
 src/cloud.js               Authentication, family space, sync, export, and deletion
 src/action-lock.js         Duplicate-action and async-operation guards
@@ -177,7 +179,11 @@ Shadow Mate is an open-source family learning PWA. It has no advertising and no 
 
 ## Speech fallback
 
-Fixed curriculum speech is generated during release preparation with Tencent Cloud TTS and served as immutable MP3 files from `voice.shadow.wang`. Mandarin uses the audition-approved Zhike voice (`101030`) and English uses WeJack (`101050`). All users reuse the same published clips, while normal browser HTTP caching reduces repeat transfers; users no longer download a 154.6 MB browser model. If a published clip cannot play, Shadow Mate tries only a matching system-language voice. Runtime playback never calls Tencent's paid synthesis API and Shadow Mate does not collect microphone recordings.
+Fixed curriculum speech is generated during release preparation with Tencent Cloud TTS and served as immutable MP3 files from `voice.shadow.wang`. Mandarin uses Zhike (`101030`) and English uses WeJack (`101050`). Playback does not require a local model download or call Tencent's synthesis API. Shadow Mate does not collect microphone recordings.
+
+The current working-tree catalog has 634 entries: 98 literacy cards; 256 writing-card clips covering 32 characters (Chinese/English pronunciation, meaning, picture description, two words, example sentence and writing hint); 80 poem clips; 65 English words; 104 math fragments; and 31 instructions. Random math questions combine two numbers, an operator and “equals what”; daily content rotates within the fully covered curriculum. Adding or changing text requires another prewarm run. Browsers may cache audio under standard HTTP rules; offline availability depends on retained cache entries.
+
+If CDN playback fails, the app tries a matching system voice. With an empty voice list it attempts the browser default with the requested language; this does not guarantee that the device supports speech. On 2026-09-09, the user confirmed playback on Xiaomi/Quark through the local development server. This validates that device/browser combination, not all mobile browsers or a production deployment. See [speech maintenance](docs/architecture.md#speech-catalog-maintenance) for generation and verification commands.
 
 ## Acknowledgements
 
@@ -206,6 +212,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, version, and li
 | [Chinese release notes](RELEASE_NOTES.zh-CN.md) | Chinese user-facing changes |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Included libraries and assets |
 | [Privacy](PRIVACY.md) · [Security](SECURITY.md) | Data and responsible disclosure policies |
+| [Trademarks](TRADEMARKS.md) · [Changelog](CHANGELOG.md) | Brand boundaries and version history |
 
 ## Contact
 
@@ -213,10 +220,17 @@ I share product and AI-building work across several channels:
 
 - X: [@Gollumgulu](https://x.com/Gollumgulu)
 - WeChat Official Account: **Ward 的 AI 产品实战**
+
+  <p align="center">
+    <img src="./assets/readme/wechat-public-account.png" width="180" alt="WeChat Official Account: Ward 的 AI 产品实战">
+  </p>
+
 - Xiaohongshu / Weibo / Douyin: **Ward 的 AI 产品实战** — [Xiaohongshu](https://xhslink.cn/m/4W1NWyRrxv5) · [Weibo](https://weibo.com/u/8344390431) · [Douyin](https://v.douyin.com/1y06PMohfoE/)
 - Product site: [Shadow Nexus](https://www.shadow.wang/)
 - Email: [wardlu@126.com](mailto:wardlu@126.com)
 
+1:1 consulting and project support are available for product diagnosis, AI implementation, workflows, Skills and system customization.
+
 ## License
 
-The code is released under the [MIT License](LICENSE). Third-party content, models, and trademarks remain the property of their respective owners.
+The code is released under the [MIT License](LICENSE). Third-party content, models, and trademarks remain the property of their respective owners; MIT does not grant rights to them. See [TRADEMARKS.md](TRADEMARKS.md) for Shadow Mate brand boundaries.

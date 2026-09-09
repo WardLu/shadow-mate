@@ -51,3 +51,38 @@ export function cleanSpeechText(text) {
 
   return s;
 }
+
+/**
+ * Determine if a voice locale represents Mandarin Chinese.
+ * Excludes Cantonese (yue) while supporting standard subtags and 3-letter codes.
+ * @param {string} locale
+ * @returns {boolean}
+ */
+export function isMandarinChineseVoiceLocale(locale) {
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
+  if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
+  if (normalizedLocale === "zh") return true;
+  if (!/^zh-/.test(normalizedLocale) && !/^zho-/.test(normalizedLocale) && !/^chi-/.test(normalizedLocale)) return false;
+
+  const subtags = normalizedLocale.split("-").slice(1);
+  return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg") || subtags.includes("chn");
+}
+
+/**
+ * Find best matching system voice from a given list of voices.
+ * @param {Array} voices
+ * @param {string} locale
+ * @returns {object|null}
+ */
+export function findMatchingVoice(voices, locale) {
+  if (!Array.isArray(voices)) return null;
+  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  const language = normalizedLocale.split("-")[0];
+  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
+  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
+    || voices.find((voice) => locale === "zh-CN"
+      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
+      : normalizeVoiceLocale(voice).split("-")[0] === language)
+    || null;
+}

@@ -340,7 +340,11 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator('[data-guide-section="sync"]')).toContainText("按孩子分别同步");
   });
 
+  test.describe("deterministic system speech fallback", () => {
+    test.use({ serviceWorkers: "block" });
+
   test("speech button sends the displayed word to the browser speech API", async ({ page }) => {
+    await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
     await page.addInitScript(() => {
       const calls = [];
       Object.defineProperty(window, "__speechCalls", { value: calls, writable: false });
@@ -365,7 +369,11 @@ test.describe("Offline mode (no login)", () => {
     await page.addInitScript(() => {
       Object.defineProperty(window, "speechSynthesis", {
         configurable: true,
-        value: { cancel() {}, getVoices() { return []; }, speak() {} },
+        value: {
+          cancel() {},
+          getVoices() { return []; },
+          speak(utterance) { queueMicrotask(() => utterance.onerror?.({ error: "synthesis-failed" })); },
+        },
       });
       Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: function SpeechSynthesisUtterance() {} });
     });
@@ -373,8 +381,10 @@ test.describe("Offline mode (no login)", () => {
     await openModule(page, "english");
     const button = page.locator("[data-speak]").first();
     await button.click();
-    await expect(button).toContainText("AI 发音暂不可用，且未检测到对应系统语音，请稍后重试");
+    await expect(button).toContainText("AI 发音不可用，系统语音播放也失败，请重试");
     await expect(page.locator("#shadow-voice-dialog")).toHaveCount(0);
+  });
+
   });
 
   test("number sense keeps exactly one missing number in sequence", async ({ page }) => {

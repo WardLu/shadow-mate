@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import hanziWritingV2Pilot from "../../src/content/hanzi-writing/v2-pilot-1.json" with { type: "json" };
+import { CORE_LEARNING_SPEECH_ENTRIES } from "../../src/content/core-learning-speech.js";
 import {
   buildTencentSpeechCatalog,
   createTencentSpeechHash,
@@ -9,9 +10,9 @@ import {
 
 describe("Tencent TTS catalog", () => {
   it("maps every active curriculum item to fixed Chinese and English voices", async () => {
-    const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items);
+    const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items, CORE_LEARNING_SPEECH_ENTRIES);
 
-    expect(catalog).toHaveLength(96);
+    expect(catalog).toHaveLength(634);
     expect(catalog.map(({ contentId }) => contentId)).toEqual([...catalog.map(({ contentId }) => contentId)].sort());
     expect(catalog.find(({ contentId }) => contentId === "hz-001:glyph")).toMatchObject({
       locale: "zh-CN", voiceId: "101030", text: "一", codec: "mp3", sampleRate: 16000,
@@ -21,6 +22,21 @@ describe("Tencent TTS catalog", () => {
     });
     expect(catalog.find(({ contentId }) => contentId === "hz-001:meaning")).toMatchObject({
       locale: "zh-CN", voiceId: "101030", text: "表示数量一",
+    });
+    expect(catalog.find(({ contentId }) => contentId === "poem-001:header")).toMatchObject({
+      locale: "zh-CN", voiceId: "101030", text: "古诗《咏鹅》，骆宾王",
+    });
+    expect(catalog.find(({ contentId }) => contentId === "poem-001:line-01")).toMatchObject({
+      locale: "zh-CN", text: "鹅鹅鹅",
+    });
+    expect(catalog.find(({ contentId }) => contentId === "word-001:pronunciation")).toMatchObject({
+      locale: "en-US", voiceId: "101050", text: "apple",
+    });
+    expect(catalog.find(({ contentId }) => contentId === "math:number-100")).toMatchObject({
+      locale: "zh-CN", text: "一百",
+    });
+    expect(catalog.find(({ contentId }) => contentId === "prompt:english-review-28")).toMatchObject({
+      locale: "zh-CN", text: "按月回看之前朗读过的单词，最近二十八天。",
     });
   });
 

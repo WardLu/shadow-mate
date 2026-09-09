@@ -49,33 +49,40 @@ function speechValues(item) {
   ];
 }
 
-export async function buildTencentSpeechCatalog(items) {
+export async function buildTencentSpeechCatalog(items, supplementalEntries = []) {
   if (!Array.isArray(items)) throw new Error("invalid-curriculum-items");
+  if (!Array.isArray(supplementalEntries)) throw new Error("invalid-supplemental-speech-entries");
   const contentIds = new Set();
   const catalog = [];
+  const appendEntry = async ({ contentId, locale, rawText }) => {
+    if (!contentId || contentIds.has(contentId)) throw new Error("duplicate-speech-content-id");
+    contentIds.add(contentId);
+    const text = normalizeSpeechText(rawText);
+    const maximumLength = locale === "zh-CN" ? 150 : 500;
+    if (Array.from(text).length > maximumLength) throw new Error(`speech-text-too-long:${contentId}`);
+    const policy = TENCENT_TTS_POLICY[locale];
+    if (!policy) throw new Error(`unsupported-speech-locale:${contentId}`);
+    const objectHash = await createTencentSpeechHash({ ...policy, locale, text });
+    catalog.push(Object.freeze({
+      contentId,
+      text,
+      textSha256: hashText(text),
+      provider: "tencent",
+      synthesisVersion: "v1",
+      locale,
+      ...policy,
+      objectHash,
+      objectKey: `tts/tencent/v1/${locale}/${policy.voiceId}/${objectHash}.mp3`,
+    }));
+  };
   for (const item of items) {
     if (!item?.id || contentIds.has(`${item.id}:glyph`)) throw new Error("invalid-or-duplicate-curriculum-id");
     for (const [kind, locale, rawText] of speechValues(item)) {
-      const contentId = `${item.id}:${kind}`;
-      if (contentIds.has(contentId)) throw new Error("duplicate-speech-content-id");
-      contentIds.add(contentId);
-      const text = normalizeSpeechText(rawText);
-      const maximumLength = locale === "zh-CN" ? 150 : 500;
-      if (Array.from(text).length > maximumLength) throw new Error(`speech-text-too-long:${contentId}`);
-      const policy = TENCENT_TTS_POLICY[locale];
-      const objectHash = await createTencentSpeechHash({ ...policy, locale, text });
-      catalog.push(Object.freeze({
-        contentId,
-        text,
-        textSha256: hashText(text),
-        provider: "tencent",
-        synthesisVersion: "v1",
-        locale,
-        ...policy,
-        objectHash,
-        objectKey: `tts/tencent/v1/${locale}/${policy.voiceId}/${objectHash}.mp3`,
-      }));
+      await appendEntry({ contentId: `${item.id}:${kind}`, locale, rawText });
     }
+  }
+  for (const entry of supplementalEntries) {
+    await appendEntry({ contentId: entry?.contentId, locale: entry?.locale, rawText: entry?.text });
   }
   return catalog.sort((left, right) => left.contentId.localeCompare(right.contentId));
 }

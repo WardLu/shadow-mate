@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import COS from "cos-nodejs-sdk-v5";
 import tencentcloud from "tencentcloud-sdk-nodejs-tts";
 import hanziWritingV2Pilot from "../src/content/hanzi-writing/v2-pilot-1.json" with { type: "json" };
+import { CORE_LEARNING_SPEECH_ENTRIES } from "../src/content/core-learning-speech.js";
 import { createPiperResourceSha256 } from "../src/piper-resource-hash.js";
 import {
   buildTencentSpeechCatalog,
@@ -178,9 +179,12 @@ function parseArguments(argv) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items);
+  const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items, CORE_LEARNING_SPEECH_ENTRIES);
   if (options.dryRun) {
-    console.log(JSON.stringify({ catalogEntries: catalog.length, locales: { "zh-CN": 64, "en-US": 32 }, networkWrites: 0 }));
+    const locales = Object.fromEntries([...new Set(catalog.map((entry) => entry.locale))]
+      .sort()
+      .map((locale) => [locale, catalog.filter((entry) => entry.locale === locale).length]));
+    console.log(JSON.stringify({ catalogEntries: catalog.length, locales, networkWrites: 0 }));
     return;
   }
   const result = await prewarmTencentTts({ catalog, ...createReleaseClients(), ...options });

@@ -11,7 +11,16 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
-import { cleanSpeechText } from "./speech-text-utils.js";
+import { cleanSpeechText, findMatchingVoice } from "./speech-text-utils.js";
+import { HANZI } from "./content/literacy.js";
+import { literacySpeechId } from "./content/literacy-speech.js";
+import {
+  ENGLISH,
+  POEMS,
+  englishWordSpeechId,
+  mathSpeechContentIds,
+  poemSpeechIds,
+} from "./content/core-learning-speech.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
@@ -52,51 +61,22 @@ startVersionGuard({ checkIntervalMs: 60_000 });
 const publishedSpeechPlayer = createPublishedSpeechPlayer({
   getAudioContext: () => getAudioContext(),
 });
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  try {
+    window.speechSynthesis.getVoices?.();
+    window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+      try { window.speechSynthesis.getVoices?.(); } catch (_) {}
+    });
+  } catch (_) {}
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerdown", primeSpeechAudio, { passive: true, capture: true });
+}
 
 /* =========================================================
    影伴学习任务台 —— 数据层
    ========================================================= */
-const HANZI = [
-  ["一","yī","一个"],["二","èr","二月"],["三","sān","三天"],["十","shí","十天"],["人","rén","大人"],
-  ["口","kǒu","口水"],["手","shǒu","小手"],["日","rì","日子"],["月","yuè","月儿"],["水","shuǐ","水果"],
-  ["火","huǒ","火山"],["木","mù","木头"],["山","shān","大山"],["石","shí","石头"],["田","tián","田地"],
-  ["土","tǔ","土地"],["上","shàng","上下"],["下","xià","下雨"],["大","dà","大门"],["小","xiǎo","小猫"],
-  ["中","zhōng","中间"],["天","tiān","天空"],["王","wáng","王子"],["马","mǎ","马车"],["牛","niú","水牛"],
-  ["羊","yáng","山羊"],["鸟","niǎo","小鸟"],["虫","chóng","虫子"],["云","yún","白云"],["雨","yǔ","下雨"],
-  ["风","fēng","大风"],["花","huā","花朵"],["草","cǎo","小草"],["树","shù","大树"],["叶","yè","叶子"],
-  ["米","mǐ","大米"],["牙","yá","牙齿"],["目","mù","目光"],["耳","ěr","耳朵"],["足","zú","足球"],
-  ["心","xīn","开心"],["头","tóu","头发"],["力","lì","力气"],["刀","dāo","小刀"],["尺","chǐ","尺子"],
-  ["书","shū","书本"],["笔","bǐ","铅笔"],["学","xué","学习"],["生","shēng","学生"],["门","mén","大门"],
-  ["车","chē","火车"],["飞","fēi","飞机"],["鱼","yú","小鱼"],["瓜","guā","西瓜"],["果","guǒ","水果"],
-  ["豆","dòu","红豆"],["红","hóng","红色"],["白","bái","白云"],["黑","hēi","黑夜"],["黄","huáng","黄色"],
-  ["开","kāi","开门"],["关","guān","关门"],["来","lái","来去"],["去","qù","回去"],["多","duō","多少"],
-  ["少","shǎo","多少"],["前","qián","前面"],["后","hòu","后面"],["左","zuǒ","左边"],["右","yòu","右边"],
-  ["里","lǐ","里面"],["外","wài","外面"],["东","dōng","东西"],["西","xī","东西"],["南","nán","南方"],
-  ["北","běi","北方"],["春","chūn","春天"],["夏","xià","夏天"],["秋","qiū","秋天"],["冬","dōng","冬天"],
-  ["早","zǎo","早上"],["晚","wǎn","晚上"],["明","míng","明天"],["年","nián","新年"],["时","shí","时间"],
-  ["走","zǒu","走路"],["跑","pǎo","跑步"],["跳","tiào","跳高"],["笑","xiào","笑话"],["哭","kū","哭声"],
-  ["好","hǎo","好人"],["坏","huài","坏事"],["高","gāo","高山"],["低","dī","低头"],["长","cháng","长河"],
-  ["短","duǎn","短发"],["方","fāng","方块"],["圆","yuán","圆圈"]
-];
 
-const POEMS = [
-  {g:"一年级上",t:"咏鹅",a:"骆宾王",c:["鹅，鹅，鹅，","曲项向天歌。","白毛浮绿水，","红掌拨清波。"]},
-  {g:"一年级上",t:"静夜思",a:"李白",c:["床前明月光，","疑是地上霜。","举头望明月，","低头思故乡。"]},
-  {g:"一年级上",t:"悯农（其二）",a:"李绅",c:["锄禾日当午，","汗滴禾下土。","谁知盘中餐，","粒粒皆辛苦。"]},
-  {g:"一年级上",t:"画",a:"王维",c:["远看山有色，","近听水无声。","春去花还在，","人来鸟不惊。"]},
-  {g:"一年级上",t:"风",a:"李峤",c:["解落三秋叶，","能开二月花。","过江千尺浪，","入竹万竿斜。"]},
-  {g:"一年级上",t:"古朗月行（节选）",a:"李白",c:["小时不识月，","呼作白玉盘。","又疑瑶台镜，","飞在青云端。"]},
-  {g:"一年级下",t:"春晓",a:"孟浩然",c:["春眠不觉晓，","处处闻啼鸟。","夜来风雨声，","花落知多少。"]},
-  {g:"一年级下",t:"村居",a:"高鼎",c:["草长莺飞二月天，","拂堤杨柳醉春烟。","儿童散学归来早，","忙趁东风放纸鸢。"]},
-  {g:"一年级下",t:"所见",a:"袁枚",c:["牧童骑黄牛，","歌声振林樾。","意欲捕鸣蝉，","忽然闭口立。"]},
-  {g:"一年级下",t:"小池",a:"杨万里",c:["泉眼无声惜细流，","树阴照水爱晴柔。","小荷才露尖尖角，","早有蜻蜓立上头。"]},
-  {g:"二年级上",t:"登鹳雀楼",a:"王之涣",c:["白日依山尽，","黄河入海流。","欲穷千里目，","更上一层楼。"]},
-  {g:"二年级上",t:"望庐山瀑布",a:"李白",c:["日照香炉生紫烟，","遥看瀑布挂前川。","飞流直下三千尺，","疑是银河落九天。"]},
-  {g:"二年级上",t:"夜宿山寺",a:"李白",c:["危楼高百尺，","手可摘星辰。","不敢高声语，","恐惊天上人。"]},
-  {g:"二年级上",t:"敕勒歌",a:"北朝民歌",c:["敕勒川，阴山下，","天似穹庐，笼盖四野。","天苍苍，野茫茫，","风吹草低见牛羊。"]},
-  {g:"二年级下",t:"赋得古原草送别（节选）",a:"白居易",c:["离离原上草，","一岁一枯荣。","野火烧不尽，","春风吹又生。"]},
-  {g:"三年级上",t:"山行",a:"杜牧",c:["远上寒山石径斜，","白云生处有人家。","停车坐爱枫林晚，","霜叶红于二月花。"]}
-];
 
 const STROKES = ["点","横","竖","撇","捺","提","折","钩"];
 const STROKE_GLYPHS = Object.freeze({
@@ -113,30 +93,6 @@ const STROKE_GLYPHS = Object.freeze({
 function renderStrokeChip(stroke) {
   return `<span class="stroke-chip" aria-label="基础笔画：${escapeHtml(stroke)}"><span class="stroke-glyph" aria-hidden="true">${escapeHtml(STROKE_GLYPHS[stroke] || "")}</span><span>${escapeHtml(stroke)}</span></span>`;
 }
-
-const ENGLISH = [
-  ["apple","/ˈæp.əl/","苹果","水果"],["banana","/bəˈnɑː.nə/","香蕉","水果"],["orange","/ˈɒr.ɪndʒ/","橙子","水果"],
-  ["red","/red/","红色","颜色"],["yellow","/ˈjel.əʊ/","黄色","颜色"],["blue","/bluː/","蓝色","颜色"],
-  ["green","/ɡriːn/","绿色","颜色"],["cat","/kæt/","猫","动物"],["dog","/dɒɡ/","狗","动物"],["fish","/fɪʃ/","鱼","动物"],
-  ["bird","/bɜːd/","鸟","动物"],["duck","/dʌk/","鸭子","动物"],["cow","/kaʊ/","奶牛","动物"],["pig","/pɪɡ/","猪","动物"],
-  ["rabbit","/ˈræb.ɪt/","兔子","动物"],["tiger","/ˈtaɪ.ɡər/","老虎","动物"],["elephant","/ˈel.ɪ.fənt/","大象","动物"],
-  ["monkey","/ˈmʌŋ.ki/","猴子","动物"],["mom","/mɒm/","妈妈","家人"],["dad","/dæd/","爸爸","家人"],
-  ["brother","/ˈbrʌð.ər/","兄弟","家人"],["sister","/ˈsɪs.tər/","姐妹","家人"],["grandma","/ˈɡræn.mɑː/","奶奶","家人"],
-  ["grandpa","/ˈɡræn.pɑː/","爷爷","家人"],["eye","/aɪ/","眼睛","身体"],["ear","/ɪər/","耳朵","身体"],
-  ["nose","/nəʊz/","鼻子","身体"],["mouth","/maʊθ/","嘴巴","身体"],["hand","/hænd/","手","身体"],
-  ["foot","/fʊt/","脚","身体"],["head","/hed/","头","身体"],["book","/bʊk/","书","学习"],
-  ["pen","/pen/","钢笔","学习"],["bag","/bæɡ/","书包","学习"],["desk","/desk/","书桌","学习"],
-  ["sun","/sʌn/","太阳","自然"],["moon","/muːn/","月亮","自然"],["star","/stɑːr/","星星","自然"],
-  ["flower","/ˈflaʊ.ər/","花","自然"],["tree","/triː/","树","自然"],["water","/ˈwɔː.tər/","水","自然"],
-  ["eat","/iːt/","吃","动作"],["drink","/drɪŋk/","喝","动作"],["run","/rʌn/","跑","动作"],
-  ["jump","/dʒʌmp/","跳","动作"],["read","/riːd/","读","动作"],["write","/raɪt/","写","动作"],
-  ["sing","/sɪŋ/","唱","动作"],["play","/pleɪ/","玩","动作"],["sleep","/sliːp/","睡觉","动作"],
-  ["big","/bɪɡ/","大的","形容词"],["small","/smɔːl/","小的","形容词"],["hot","/hɒt/","热的","形容词"],
-  ["cold","/kəʊld/","冷的","形容词"],["happy","/ˈhæp.i/","开心","形容词"],["one","/wʌn/","一","数字"],
-  ["two","/tuː/","二","数字"],["three","/θriː/","三","数字"],["four","/fɔːr/","四","数字"],
-  ["five","/faɪv/","五","数字"],["six","/sɪks/","六","数字"],["seven","/ˈsev.ən/","七","数字"],
-  ["eight","/eɪt/","八","数字"],  ["nine","/naɪn/","九","数字"],["ten","/ten/","十","数字"]
-];
 
 /* 积分打卡：加分项 / 减分项目（取自文档第 2 页） */
 const POINT_ITEMS = [
@@ -598,8 +554,18 @@ function getAudioContext() {
 
 function primeSpeechAudio() {
   const audioContext = getAudioContext();
-  if (!audioContext || audioContext.state !== "suspended") return;
-  void audioContext.resume().catch(() => {});
+  if (audioContext && audioContext.state === "suspended") {
+    void audioContext.resume().catch(() => {});
+  }
+  const synth = window.speechSynthesis;
+  if (synth) {
+    try {
+      synth.getVoices?.();
+      if (synth.paused) {
+        synth.resume();
+      }
+    } catch (_) {}
+  }
 }
 
 function releaseObjectUrl(url) {
@@ -644,58 +610,6 @@ function stopActivePlayback() {
     previousAudio.remove();
     releaseObjectUrl(previousUrl);
   }
-}
-
-function isMandarinChineseVoiceLocale(locale) {
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
-  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
-  if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
-  if (normalizedLocale === "zh") return true;
-  if (!/^zh-/.test(normalizedLocale)) return false;
-
-  const subtags = normalizedLocale.split("-").slice(1);
-  return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg");
-}
-
-function findSystemVoice(locale) {
-  const synth = window.speechSynthesis;
-  if (!(synth && typeof window.SpeechSynthesisUtterance === "function")) return null;
-  const voices = typeof synth.getVoices === "function" ? synth.getVoices() : null;
-  if (!Array.isArray(voices)) return null;
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
-  const language = normalizedLocale.split("-")[0];
-  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
-  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
-    || voices.find((voice) => locale === "zh-CN"
-      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
-      : normalizeVoiceLocale(voice) === language)
-    || null;
-}
-
-function waitForSystemVoice(locale, timeoutMs = 1200) {
-  const immediateVoice = findSystemVoice(locale);
-  if (immediateVoice) return Promise.resolve(immediateVoice);
-
-  const synth = window.speechSynthesis;
-  if (!synth || typeof synth.addEventListener !== "function") return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    let timer = null;
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (timer !== null) window.clearTimeout(timer);
-      synth.removeEventListener?.("voiceschanged", check);
-      resolve(findSystemVoice(locale));
-    };
-    const check = () => {
-      if (findSystemVoice(locale)) finish();
-    };
-    synth.addEventListener?.("voiceschanged", check);
-    timer = window.setTimeout(finish, timeoutMs);
-    check();
-  });
 }
 
 async function speak(t, button, locale = "en-US", contentId = "", options = {}){
@@ -839,51 +753,68 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
   try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
   const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
-  try {
-    await publishedSpeechPlayer.play(contentId, { volume: speechVolume });
-    if (!isCurrentSpeech()) return;
-    restore();
-    return;
-  } catch (publishedError) {
-    if (!isCurrentSpeech()) return;
-    if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
-    const systemVoice = await waitForSystemVoice(locale, 1200);
-    if (!isCurrentSpeech()) return;
-    if (!(synth && typeof Utterance === "function") || !systemVoice) {
-      const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
-      fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
-      return;
-    }
-    await new Promise((resolve) => {
-      const utterance = new Utterance(t);
-      let started = false;
-      utterance.lang = locale;
-      utterance.rate = 0.9;
-      utterance.volume = Math.max(0, Math.min(1, speechVolume));
-      utterance.voice = systemVoice;
-      utterance.onstart = () => { started = true; clearSystemTimer(); };
-      utterance.onend = () => { restore(); resolve(); };
-      utterance.onerror = (event) => {
-        if (event?.error === "canceled" || event?.error === "interrupted") restore();
-        else fail("AI 发音不可用，系统语音播放也失败，请重试");
-        resolve();
-      };
-      try {
-        synth.cancel();
-        synth.speak(utterance);
-        systemTimer = window.setTimeout(() => {
-          if (!started) {
-            try { synth.cancel(); } catch (_) {}
-            fail("AI 发音不可用，系统语音未能启动，请重试");
-            resolve();
-          }
-        }, 4000);
-      } catch (_) {
-        fail("AI 发音不可用，系统语音播放也失败，请重试");
-        resolve();
+  const publishedContentIds = (Array.isArray(contentId) ? contentId : [contentId]).filter(Boolean);
+  const hasContentId = publishedContentIds.length > 0;
+  let publishedError = null;
+  if (hasContentId) {
+    try {
+      for (const publishedContentId of publishedContentIds) {
+        await publishedSpeechPlayer.play(publishedContentId, { volume: speechVolume });
+        if (!isCurrentSpeech()) return;
       }
-    });
+      if (!isCurrentSpeech()) return;
+      restore();
+      return;
+    } catch (err) {
+      publishedError = err;
+      if (!isCurrentSpeech()) return;
+      if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
+    }
+  } else {
+    publishedError = new Error("published-audio-not-found");
+    publishedError.code = "published-audio-not-found";
   }
+
+  const listedVoices = typeof synth?.getVoices === "function" ? synth.getVoices() : null;
+  const systemVoice = findMatchingVoice(listedVoices, locale);
+  const canTryBrowserDefaultVoice = !Array.isArray(listedVoices) || listedVoices.length === 0;
+  if (!isCurrentSpeech()) return;
+  if (!(synth && typeof Utterance === "function") || (!systemVoice && !canTryBrowserDefaultVoice)) {
+    const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
+    fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
+    return;
+  }
+  await new Promise((resolve) => {
+    const utterance = new Utterance(t);
+    let started = false;
+    utterance.lang = locale;
+    utterance.rate = 0.9;
+    utterance.volume = Math.max(0, Math.min(1, speechVolume));
+    if (systemVoice) utterance.voice = systemVoice;
+    utterance.onstart = () => { started = true; clearSystemTimer(); };
+    utterance.onend = () => { restore(); resolve(); };
+    utterance.onerror = (event) => {
+      if (event?.error === "canceled" || event?.error === "interrupted") restore();
+      else fail("AI 发音不可用，系统语音播放也失败，请重试");
+      resolve();
+    };
+    try {
+      if (synth.speaking) {
+        synth.cancel();
+      }
+      synth.speak(utterance);
+      systemTimer = window.setTimeout(() => {
+        if (!started) {
+          try { synth.cancel(); } catch (_) {}
+          fail("AI 发音不可用，系统语音未能启动，请重试");
+          resolve();
+        }
+      }, 4000);
+    } catch (_) {
+      fail("AI 发音不可用，系统语音播放也失败，请重试");
+      resolve();
+    }
+  });
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
@@ -1041,6 +972,11 @@ function renderLearning(){
 let currentPoemSpeechId = 0;
 function stopPoemSpeech() {
   currentPoemSpeechId++;
+  const readAllButton = document.querySelector(".poem-read-all");
+  if (readAllButton) {
+    readAllButton.disabled = false;
+    readAllButton.removeAttribute("aria-busy");
+  }
   if (activeSpeechRequest?.isPoemSpeech) {
     const prev = activeSpeechRequest;
     activeSpeechRequest = null;
@@ -1082,7 +1018,8 @@ function renderChinese(){
     const item = isFirst ? c1 : c2;
     const playHanzi = () => {
       stopPoemSpeech();
-      speak(`${item[0]}，${item[2]}`, mc, "zh-CN");
+      const text = `${item[0]}，${item[2]}`;
+      speak(text, mc, "zh-CN", literacySpeechId(text));
     };
     mc.onclick = playHanzi;
     mc.onkeydown = (e) => {
@@ -1094,7 +1031,9 @@ function renderChinese(){
   });
 
   // 古诗词
-  const p = POEMS[di%POEMS.length];
+  const poemIndex = di % POEMS.length;
+  const p = POEMS[poemIndex];
+  const poemIds = poemSpeechIds(poemIndex);
   const linesHtml = p.c.map((line, idx) => `
     <div class="poem-line" role="button" tabindex="0" data-poem-line="${idx}" aria-label="点读第 ${idx + 1} 句：${escapeHtml(line)}">
       <span class="poem-line-text">${escapeHtml(line)}</span>
@@ -1123,7 +1062,7 @@ function renderChinese(){
   const poemMetaEl = card2.querySelector(".poem-meta");
   const playPoemHeader = () => {
     stopPoemSpeech();
-    speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+    speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", poemIds.header, { isPoemSpeech: true });
   };
   if (poemTitleEl) {
     poemTitleEl.onclick = playPoemHeader;
@@ -1147,7 +1086,7 @@ function renderChinese(){
       lineEl.classList.add("hi");
       const clean = lineText.replace(/[，。！？、；：]/g, "");
       try {
-        await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+        await speak(clean, null, "zh-CN", poemIds.line(idx), { isPoemSpeech: true });
       } catch (_) {}
     };
   });
@@ -1161,7 +1100,7 @@ function renderChinese(){
       readAllBtn.setAttribute("aria-busy", "true");
 
       try {
-        await speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", "", { isPoemSpeech: true });
+        await speak(`古诗《${p.t}》，${p.a}`, null, "zh-CN", poemIds.header, { isPoemSpeech: true });
         if (currentPoemSpeechId !== thisSeqId) return;
 
         for (let i = 0; i < p.c.length; i++) {
@@ -1171,7 +1110,7 @@ function renderChinese(){
           if (lineEl) lineEl.classList.add("hi");
 
           const clean = p.c[i].replace(/[，。！？、；：]/g, "");
-          await speak(clean, null, "zh-CN", "", { isPoemSpeech: true });
+          await speak(clean, null, "zh-CN", poemIds.line(i), { isPoemSpeech: true });
           if (currentPoemSpeechId !== thisSeqId) return;
         }
 
@@ -1272,7 +1211,7 @@ function renderChinese(){
       }
       const rawText = el.dataset.speechText || el.textContent || "";
       const textToSpeak = cleanSpeechText(rawText);
-      if (textToSpeak) speak(textToSpeak, el, "zh-CN");
+      if (textToSpeak) speak(textToSpeak, el, "zh-CN", literacySpeechId(textToSpeak));
     };
     el.onclick = playSpeechTap;
     el.onkeydown = (e) => {
@@ -1333,7 +1272,7 @@ function renderMath(){
   const readQBtn = card1.querySelector(".btn-read-q");
   if (readQBtn) {
     readQBtn.onclick = () => {
-      speak(mathSpeechText(q), readQBtn, "zh-CN");
+      speak(mathSpeechText(q), readQBtn, "zh-CN", mathSpeechContentIds(q));
     };
   }
   el("qsubmit").onclick=()=>{
@@ -1389,7 +1328,7 @@ function renderMath(){
   const mathPromptBtn = card2.querySelector(".btn-read-prompt");
   if (mathPromptBtn) {
     mathPromptBtn.onclick = () => {
-      speak("点击问号格，选出它应该是哪个数字，按一递增顺序。", mathPromptBtn, "zh-CN");
+      speak("点击问号格，选出它应该是哪个数字，按一递增顺序。", mathPromptBtn, "zh-CN", "prompt:math-sequence");
     };
   }
 
@@ -1457,7 +1396,7 @@ function renderMath(){
   const sudokuPromptBtn = card3.querySelector(".btn-read-prompt");
   if (sudokuPromptBtn) {
     sudokuPromptBtn.onclick = () => {
-      speak("把一到四填入每行每列，四乘四入门版，含比较、分类、形状思维。", sudokuPromptBtn, "zh-CN");
+      speak("把一到四填入每行每列，四乘四入门版，含比较、分类、形状思维。", sudokuPromptBtn, "zh-CN", "prompt:sudoku");
     };
   }
   buildSudoku();
@@ -1508,8 +1447,10 @@ function renderEnglish(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("languages","英语学习"));
   // 每日推送 1~2 词
-  const w1 = ENGLISH[di%ENGLISH.length];
-  const w2 = ENGLISH[(di+1)%ENGLISH.length];
+  const w1Index = di % ENGLISH.length;
+  const w2Index = (di + 1) % ENGLISH.length;
+  const w1 = ENGLISH[w1Index];
+  const w2 = ENGLISH[w2Index];
   const card1 = $(`
     <div class="card">
       <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
@@ -1538,22 +1479,27 @@ function renderEnglish(){
   const englishPromptBtn = card1.querySelector(".btn-read-prompt");
   if (englishPromptBtn) {
     englishPromptBtn.onclick = () => {
-      speak("拼读并朗读下面的单词，读完点完成今日打卡。", englishPromptBtn, "zh-CN");
+      speak("拼读并朗读下面的单词，读完点完成今日打卡。", englishPromptBtn, "zh-CN", "prompt:english-daily");
     };
   }
 
   const spokenWords = [w1[0], w2[0]];
+  const spokenWordIds = [englishWordSpeechId(w1Index), englishWordSpeechId(w2Index)];
   card1.querySelectorAll("[data-speak]").forEach((button) => {
     button.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
-    button.onclick = () => speak(spokenWords[Number(button.dataset.speak)], button);
+    button.onclick = () => {
+      const index = Number(button.dataset.speak);
+      speak(spokenWords[index], button, "en-US", spokenWordIds[index]);
+    };
   });
 
   // 按月回看往期单词
   const pastDays = Math.min(28, new Date().getDate());
   let chips = "";
   for (let d = 1; d <= pastDays; d++) {
-    const w = ENGLISH[(di - d + ENGLISH.length * 10) % ENGLISH.length];
-    chips += `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(w[0])}" aria-label="听发音：${escapeHtml(w[0])}">${w[0]}</span>`;
+    const wordIndex = (di - d + ENGLISH.length * 10) % ENGLISH.length;
+    const w = ENGLISH[wordIndex];
+    chips += `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(w[0])}" data-word-index="${wordIndex}" aria-label="听发音：${escapeHtml(w[0])}">${w[0]}</span>`;
   }
   const card2 = $(`
     <div class="card">
@@ -1570,14 +1516,14 @@ function renderEnglish(){
   const reviewPromptBtn = card2.querySelector(".btn-read-prompt");
   if (reviewPromptBtn) {
     reviewPromptBtn.onclick = () => {
-      speak(`按月回看之前朗读过的单词，最近 ${pastDays} 天。`, reviewPromptBtn, "zh-CN");
+      speak(`按月回看之前朗读过的单词，最近 ${pastDays} 天。`, reviewPromptBtn, "zh-CN", `prompt:english-review-${String(pastDays).padStart(2, "0")}`);
     };
   }
   card2.querySelectorAll(".mr-chip[data-word]").forEach((chip) => {
     chip.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     const playChip = () => {
       stopPoemSpeech();
-      speak(chip.dataset.word, chip, "en-US");
+      speak(chip.dataset.word, chip, "en-US", englishWordSpeechId(Number(chip.dataset.wordIndex)));
     };
     chip.onclick = playChip;
     chip.onkeydown = (e) => {
