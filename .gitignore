@@ -32,9 +32,12 @@ shadow-wang-home.png
 # Local-only internal planning and deployment docs
 /TODO.md
 /ROADMAP.md
+/docs/roadmap.md
 /AGENTS.md
 /CLAUDE.md
 /.superpowers/
+/.mimosa/
+/.zcode/
 /docs/superpowers/
 /docs/internal/
 /docs/private/
