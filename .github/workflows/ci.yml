@@ -92,7 +92,10 @@ jobs:
       - name: Test account deletion isolation guard
         run: npm run test:functions
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run E2E tests
         run: npm run test:e2e
+
+      - name: Run mobile viewport E2E tests
+        run: npm run test:e2e:mobile

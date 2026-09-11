@@ -23,7 +23,8 @@
     "supabase:local:functions:serve": "node scripts/serve-shared-functions.mjs",
     "test:db": "node scripts/test-shared-db.mjs",
     "test:functions": "node scripts/test-delete-account-guard.mjs",
-    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs --project=chromium",
+    "test:e2e:mobile": "node scripts/run-e2e.mjs --project=mobile-360 --project=mobile-390 --project=tablet-portrait --project=tablet-landscape",
     "tts:catalog": "node scripts/tencent-tts-prewarm.mjs --dry-run",
     "tts:prewarm": "node --env-file-if-exists=.env.tts.local scripts/tencent-tts-prewarm.mjs",
     "tts:smoke": "node scripts/tencent-tts-smoke.mjs"
