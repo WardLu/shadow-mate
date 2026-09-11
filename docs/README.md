@@ -20,6 +20,7 @@
 | 文档 | 说明 | 适用对象 |
 | :--- | :--- | :--- |
 | [系统架构与数据模型 (Architecture)](architecture.md) | 整体技术栈、Web Audio 声音引擎、Local-first 兑现闭环与数据隔离 | 开发者 / 架构师 |
+| [产品路线 (Roadmap)](roadmap.md) | 移动端学习体验与移动设备字帖输出的后续计划 | 产品 / 开发 / 测试 |
 
 ---
 
