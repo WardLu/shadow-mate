@@ -30,4 +30,4 @@
 | :--- | :--- | :--- |
 | [硬笔楷书字体授权 (Font License)](licenses/ruimeijia-zhangqingping-font.md) | 瑞美加张清平硬笔楷书商用许可与首发证明 | 审计 / 开发者 |
 | [第三方许可清单 (Root Notice)](../THIRD_PARTY_NOTICES.md) | npm 依赖、WASM 运行时与语音模型的授权汇总 | 全员 |
-| [商标使用政策 (Root Trademarks)](../TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 | 全员 |
+| [商标使用政策 (Root Trademarks)](../TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Lab 的品牌使用边界 | 全员 |

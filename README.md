@@ -226,7 +226,7 @@ I share product and AI-building work across several channels:
   </p>
 
 - Xiaohongshu / Weibo / Douyin: **Ward 的 AI 产品实战** — [Xiaohongshu](https://xhslink.cn/m/4W1NWyRrxv5) · [Weibo](https://weibo.com/u/8344390431) · [Douyin](https://v.douyin.com/1y06PMohfoE/)
-- Product site: [Shadow Nexus](https://www.shadow.wang/)
+- Product site: [Shadow Lab](https://www.shadow.wang/)
 - Email: [wardlu@126.com](mailto:wardlu@126.com)
 
 1:1 consulting and project support are available for product diagnosis, AI implementation, workflows, Skills and system customization.
