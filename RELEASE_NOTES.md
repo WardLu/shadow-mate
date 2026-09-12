@@ -2,6 +2,16 @@
 
 > This file lists user-visible product changes for each published version.
 
+## v1.5.2 - 2026-09-13
+
+### Mobile-first experience and Shadow Lab branding
+
+- Harden mobile adaptation: `viewport-fit=cover` with status-bar/notch safe-area insets, dynamic viewport height fallbacks, and 44px minimum touch targets across footer links, settings tabs, filter chips, toggles and dialog close buttons.
+- Fix small-screen layouts: a single-line compact topbar below 520px, an overflow-proof number-fill grid that keeps the check-marked answer inside the last column, and full-width form layouts for custom point items and wish rewards.
+- Add mobile/tablet breakpoint automation: Playwright projects for 360/390 phones and iPad portrait/landscape running on the WebKit engine, with six viewport checks per breakpoint (`npm run test:e2e:mobile`).
+- Rename the product-matrix portal brand from Shadow Nexus to Shadow Lab across the page footer, SEO structured data, Auth email templates and trademark policy.
+- Ship the missing wish-reward icons so custom-added rewards and the built-in park trip render their badges instead of empty placeholders.
+
 ## v1.5.1 - 2026-09-09
 
 ### Reliable learning audio on mobile
