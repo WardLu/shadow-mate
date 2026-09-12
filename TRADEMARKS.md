@@ -10,8 +10,8 @@
 
 - `Shadow Mate`
 - `影伴`
-- `Shadow Nexus`
-- Shadow Mate、影伴和 Shadow Nexus 的官方 Logo、图标和组合标识
+- `Shadow Lab`
+- Shadow Mate、影伴和 Shadow Lab 的官方 Logo、图标和组合标识
 - 以官方身份指向上述产品的域名、产品名称和宣传语
 
 源代码可以在 MIT License 下使用、修改和分发；这不代表获得上述名称或 Logo 的商标使用权。
@@ -33,7 +33,7 @@
 
 不得在未经书面授权的情况下：
 
-- 将 `Shadow Mate`、`影伴` 或 `Shadow Nexus` 作为自己的产品或服务名称；
+- 将 `Shadow Mate`、`影伴` 或 `Shadow Lab` 作为自己的产品或服务名称；
 - 使用官方 Logo、配色或近似视觉包装，使用户误以为是官方版本；
 - 使用“官方版”“官方 Cloud”“Shadow Mate Pro”等表述；
 - 注册或运营容易造成混淆的域名、社交账号或应用商店名称；

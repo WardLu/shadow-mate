@@ -25,7 +25,7 @@ describe("multi-product password recovery email", () => {
 
   it("uses Supabase's official recovery link and a neutral fallback", () => {
     expect(recovery).toContain("{{ .ConfirmationURL }}");
-    expect(recovery).toContain("Shadow Nexus");
+    expect(recovery).toContain("Shadow Lab");
     expect(recovery).not.toContain("password_reset_tokens");
   });
 
@@ -39,7 +39,7 @@ describe("multi-product password recovery email", () => {
       expect(template).toContain('meta name="color-scheme" content="light dark"');
       expect(template).toContain("prefers-color-scheme: dark");
       expect(template).toContain("[data-ogsc]");
-      expect(template).toContain("Shadow Nexus");
+      expect(template).toContain("Shadow Lab");
       expect(template).toContain("https://shadow.wang/zh");
       expect(template).toContain("shadow_mate.svg");
       expect(template).toContain("shadow_card_logo.png");
@@ -82,7 +82,7 @@ describe("multi-product password recovery email", () => {
       expect(subject).toContain("影匣 Shadow Card");
       expect(subject).toContain("影裁 Shadow Size");
       expect(subject).toContain("Quick flomo");
-      expect(subject).toContain("Shadow Nexus");
+      expect(subject).toContain("Shadow Lab");
     }
   });
 

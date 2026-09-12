@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 describe("public SEO and GEO contract", () => {
-  test("connects the branded visible heading and application entity to Shadow Nexus", async () => {
+  test("connects the branded visible heading and application entity to Shadow Lab", async () => {
     const html = await readFile(resolve(process.cwd(), "index.html"), "utf8");
     const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
 
@@ -18,7 +18,7 @@ describe("public SEO and GEO contract", () => {
     expect(application.publisher).toEqual({
       "@type": "Organization",
       "@id": "https://shadow.wang/#organization",
-      name: "Shadow Nexus",
+      name: "Shadow Lab",
       url: "https://shadow.wang/",
     });
   });

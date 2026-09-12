@@ -1,6 +1,6 @@
 # Shadow Mate Logo 使用说明
 
-本文档是 Shadow Mate Logo 的使用边界。仓库只保留已采用的产品 Logo；Shadow Nexus 门户 Logo 由门户仓库维护。
+本文档是 Shadow Mate Logo 的使用边界。仓库只保留已采用的产品 Logo；Shadow Lab 门户 Logo 由门户仓库维护。
 
 ## 当前结论
 
@@ -9,7 +9,7 @@
 | Shadow Mate 应用、PWA、README、产品截图 | 绿色适配版 05「陪伴轨道」 | [`public/brand_assets/shadow-mate.svg`](../public/brand_assets/shadow-mate.svg) | 默认版本，适配浅色绿色产品界面 |
 | Shadow Mate A4 打印字帖 | 绿色适配版 05「陪伴轨道」 | [`src/hanzi-writing-view.js`](../src/hanzi-writing-view.js) | 打印快照内联 SVG，避免打印预览依赖外部背景图加载；图形与主文件保持一致 |
 | Shadow Mate 应用图标 PNG | 绿色适配版 05「陪伴轨道」 | [`public/icons/icon-512.png`](../public/icons/icon-512.png) | 用于 PWA、Apple Touch Icon 和兼容性场景 |
-| Shadow Nexus Portal、深色品牌页、产品矩阵 | Shadow Nexus 门户 Logo | 由 Shadow Portal 仓库维护 | 不从本仓库复制或引用 |
+| Shadow Lab Portal、深色品牌页、产品矩阵 | Shadow Lab 门户 Logo | 由 Shadow Portal 仓库维护 | 不从本仓库复制或引用 |
 
 ## 绿色适配版：Shadow Mate 默认 Logo
 

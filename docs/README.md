@@ -20,6 +20,7 @@
 | 文档 | 说明 | 适用对象 |
 | :--- | :--- | :--- |
 | [系统架构与数据模型 (Architecture)](architecture.md) | 整体技术栈、Web Audio 声音引擎、Local-first 兑现闭环与数据隔离 | 开发者 / 架构师 |
+| [产品路线 (Roadmap)](roadmap.md) | 移动端学习体验与移动设备字帖输出的后续计划 | 产品 / 开发 / 测试 |
 
 ---
 
@@ -29,4 +30,4 @@
 | :--- | :--- | :--- |
 | [硬笔楷书字体授权 (Font License)](licenses/ruimeijia-zhangqingping-font.md) | 瑞美加张清平硬笔楷书商用许可与首发证明 | 审计 / 开发者 |
 | [第三方许可清单 (Root Notice)](../THIRD_PARTY_NOTICES.md) | npm 依赖、WASM 运行时与语音模型的授权汇总 | 全员 |
-| [商标使用政策 (Root Trademarks)](../TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Nexus 的品牌使用边界 | 全员 |
+| [商标使用政策 (Root Trademarks)](../TRADEMARKS.md) | Shadow Mate、影伴和 Shadow Lab 的品牌使用边界 | 全员 |
