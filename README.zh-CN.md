@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.5.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.2</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -170,7 +170,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴当前仓库版本为 v1.5.1，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴当前仓库版本为 v1.5.2，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告；当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录匿名、聚合的页面访问数据，也没有儿童独立账号体系。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 ## 中英文发音
 
