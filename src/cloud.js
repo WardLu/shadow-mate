@@ -1,3 +1,4 @@
+import { sameProfileScope } from "./learner-session.js";
 import { createClient } from "@supabase/supabase-js";
 import { CLOUD_CONFIG } from "./config.js";
 import { ANALYTICS_EVENTS, recordAnalyticsEvent } from "./analytics.js";
@@ -73,14 +74,8 @@ const supabase = cloudEnabled
   : null;
 const growthLoopTransport = cloudEnabled ? createGrowthLoopTransport({ client: supabase }) : null;
 
-function readProfileScopeBlock() {
-  const blocked = localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
-    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
-  if (blocked && localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) !== "1") {
-    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
-  }
-  return blocked;
-}
+const learnerSession = window.learnerSession;
+const scopeBlocked = () => learnerSession.getStatus().phase === "blocked";
 
 let session = null;
 let memberships = [];
@@ -97,26 +92,22 @@ let saveTimer = null;
 let saveInFlight = false;
 let saveQueued = null;
 let cloudSyncBlocked = false;
-let profileScopeWriteBlocked = readProfileScopeBlock();
 let toastTimer = null;
 let lastSyncAt = null;
 let workspaceLoading = null;
 let authChangeVersion = 0;
 let localResetInProgress = false;
-let profileScopeResetInProgress = false;
 let lastAuthSessionKey = null;
 let passwordRecoveryActive = false;
 let passwordStatusCheckedForSession = null;
-let profileOperationQueue = Promise.resolve();
-let profileOperationGeneration = 0;
 let remoteHydratePending = null;
 
 const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
   onTimer() {
-    if (profileScopeWriteBlocked) return;
+    if (scopeBlocked()) return;
     const profile = activeProfile;
     if (!profile) return;
-    const generation = profileOperationGeneration;
+    const generation = learnerSession.captureOperation();
     void loadGrowthLoopProfile(profile, { generation }).catch((error) => {
       console.warn("Growth Loop cloud sync deferred:", error);
     });
@@ -177,19 +168,8 @@ function isActiveProfile(profile) {
     && activeProfile?.household_id === profile?.household_id;
 }
 
-function sameProfileScope(left = {}, right = {}) {
-  return left?.household_id === right?.household_id
-    && left?.profile_id === right?.profile_id;
-}
-
 function failClosedProfileScope() {
-  profileScopeWriteBlocked = true;
-  try {
-    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
-  } catch (error) {
-    console.warn("Unable to persist the profile scope block:", error);
-  }
-  advanceProfileOperationGeneration();
+  learnerSession.block();
   clearTimeout(saveTimer);
   saveTimer = null;
   saveQueued = null;
@@ -197,138 +177,18 @@ function failClosedProfileScope() {
   activeProfile = null;
   cloudVersion = null;
   cloudSyncBlocked = true;
-  try {
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-  } catch (error) {
-    console.warn("Unable to remove the active profile key while failing closed:", error);
-  }
+  try { localStorage.removeItem(ACTIVE_PROFILE_KEY); } catch (_) {}
   setAccountState();
   showToast("孩子切换未完成，本机作用域无法确认，已暂停同步；请在账号面板点击“清除本机数据”后重试。", 7000);
 }
 
-async function restoreScopeWithCas({ name, getScope, restoreScope, previousScope, targetScope }) {
-  try {
-    const currentScope = getScope?.() || {};
-    if (sameProfileScope(currentScope, previousScope)) return { restored: true, already: true };
-    if (!sameProfileScope(currentScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
-    const compareScope = getScope?.() || {};
-    if (!sameProfileScope(compareScope, targetScope)) return { failed: true, reason: "rollback_target_changed" };
-    await restoreScope?.(previousScope, { adoptPending: false });
-    const restoredScope = getScope?.() || {};
-    if (!sameProfileScope(restoredScope, previousScope)) {
-      throw new Error(`${name}_scope_rollback_not_committed`);
-    }
-    return { restored: true };
-  } catch (rollbackError) {
-    console.warn(`${name} profile scope rollback failed:`, rollbackError);
-    return { failed: true };
-  }
-}
-
-async function restoreProfileScopes(previousGrowthScope, previousLearningScope, targetScope) {
-  const growthResult = await restoreScopeWithCas({
-    name: "Growth Loop",
-    getScope: () => window.growthLoop?.getScope?.(),
-    restoreScope: (scope, options) => window.growthLoop?.loadScope?.(scope, options),
-    previousScope: previousGrowthScope,
-    targetScope,
-  });
-  const learningResult = await restoreScopeWithCas({
-    name: "Learning Desk",
-    getScope: () => window.learningDesk?.getEnvelope?.()?.scope,
-    restoreScope: (scope, options) => window.learningDesk?.setScope?.(scope, options),
-    previousScope: previousLearningScope,
-    targetScope,
-  });
-
-  const growthScope = window.growthLoop?.getScope?.() || {};
-  const learningScope = window.learningDesk?.getEnvelope?.()?.scope || {};
-  const rollbackFailed = growthResult.failed || learningResult.failed;
-  if (
-    rollbackFailed
-    || !sameProfileScope(growthScope, previousGrowthScope)
-    || !sameProfileScope(learningScope, previousLearningScope)
-  ) {
-    failClosedProfileScope();
-    return false;
-  }
-  return true;
-}
-
-function captureProfileCommitState() {
-  return {
-    activeProfile: activeProfile ? structuredClone(activeProfile) : null,
-    activeProfileKey: localStorage.getItem(ACTIVE_PROFILE_KEY),
-    cloudVersion,
-    cloudSyncBlocked,
-    lastSyncAt,
-    growthScope: window.growthLoop?.getScope?.() || {},
-    learningScope: window.learningDesk?.getEnvelope?.()?.scope || {},
-  };
-}
-
-function sameActiveProfile(left, right) {
-  return (left?.id || null) === (right?.id || null)
-    && (left?.household_id || null) === (right?.household_id || null);
-}
-
-function restoreActiveProfileTuple(previous, targetProfile) {
-  const targetTuple = activeProfile?.id === targetProfile?.id
-    && localStorage.getItem(ACTIVE_PROFILE_KEY) === targetProfile?.id;
-  const alreadyPrevious = sameActiveProfile(activeProfile, previous.activeProfile)
-    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null);
-  if (!targetTuple && !alreadyPrevious) return false;
-
-  activeProfile = previous.activeProfile ? structuredClone(previous.activeProfile) : null;
-  cloudVersion = previous.cloudVersion;
-  cloudSyncBlocked = previous.cloudSyncBlocked;
-  lastSyncAt = previous.lastSyncAt;
-  if (previous.activeProfileKey) localStorage.setItem(ACTIVE_PROFILE_KEY, previous.activeProfileKey);
-  else localStorage.removeItem(ACTIVE_PROFILE_KEY);
-
-  return sameActiveProfile(activeProfile, previous.activeProfile)
-    && localStorage.getItem(ACTIVE_PROFILE_KEY) === (previous.activeProfileKey || null)
-    && cloudVersion === previous.cloudVersion
-    && sameProfileScope(window.growthLoop?.getScope?.() || {}, previous.growthScope)
-    && sameProfileScope(window.learningDesk?.getEnvelope?.()?.scope || {}, previous.learningScope);
-}
-
-async function restoreProfileCommit(previous, targetProfile) {
-  const restoredScopes = await restoreProfileScopes(previous.growthScope, previous.learningScope, {
-    household_id: targetProfile?.household_id,
-    profile_id: targetProfile?.id,
-  });
-  if (!restoredScopes || !restoreActiveProfileTuple(previous, targetProfile)) {
-    if (!profileScopeWriteBlocked) failClosedProfileScope();
-    return false;
-  }
-  setAccountState();
-  return true;
-}
-
-function enqueueProfileOperation(operation, { advanceGeneration = true } = {}) {
-  const generation = advanceGeneration
-    ? advanceProfileOperationGeneration()
-    : profileOperationGeneration;
-  const result = profileOperationQueue.then(() => operation(generation));
-  profileOperationQueue = result.catch(() => false);
-  return result;
-}
-
-function advanceProfileOperationGeneration() {
-  profileOperationGeneration += 1;
-  window.growthLoop?.invalidateWriteOperations?.();
-  return profileOperationGeneration;
-}
-
-function isCurrentProfileOperation(generation) {
-  return !profileScopeWriteBlocked
-    && (generation === null || generation === profileOperationGeneration);
+function isCurrentProfileOperation(operation) {
+  return operation ? operation.canCommit() : !scopeBlocked();
 }
 
 async function loadGrowthLoopProfile(profile, { adoptPending = false, generation = null } = {}) {
   const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
-  if (profileScopeWriteBlocked || !profile || !window.growthLoop || !window.learningDesk || !isCurrent()) return;
+  if (scopeBlocked() || !profile || !window.growthLoop || !window.learningDesk || !isCurrent()) return;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
   await window.growthLoop.loadScope(scope, { adoptPending, canCommit: isCurrent });
   if (!isCurrent()) return;
@@ -377,7 +237,7 @@ async function loadGrowthLoopProfile(profile, { adoptPending = false, generation
 }
 
 async function queueGrowthCloudActivity(profile, event_type, payload = {}, bucket = "once", { ensureScope = false, generation = null } = {}) {
-  if (profileScopeWriteBlocked || !profile || !window.growthLoop) return null;
+  if (scopeBlocked() || !profile || !window.growthLoop) return null;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
   if (!scope.household_id || !scope.profile_id) return null;
   const isCurrent = () => isCurrentProfileOperation(generation) && isActiveGrowthLoopProfile(profile);
@@ -419,7 +279,7 @@ function nextGrowthLoopAttemptAt(events, now = Date.now()) {
 }
 
 function scheduleGrowthLoopSyncAt(targetAt) {
-  if (profileScopeWriteBlocked || !activeProfile) return null;
+  if (scopeBlocked() || !activeProfile) return null;
   return growthLoopRetryScheduler.scheduleAt(targetAt);
 }
 
@@ -437,7 +297,7 @@ async function scheduleGrowthLoopRetry({
   fallbackDelayMs = GROWTH_LOOP_RETRY_FALLBACK_MS,
   generation = null,
 } = {}) {
-  if (profileScopeWriteBlocked || !activeProfile || !isCurrentProfileOperation(generation)) return null;
+  if (scopeBlocked() || !activeProfile || !isCurrentProfileOperation(generation)) return null;
   const profileId = activeProfile.id;
   const now = Date.now();
   let scheduledAt = Math.max(Number(notBefore) || now, now + fallbackDelayMs);
@@ -474,51 +334,22 @@ function guardianConsentPayload(householdId) {
 
 async function clearLocalAccountState() {
   resetGrowthLoopRemoteRetry();
-  profileScopeWriteBlocked = true;
+  learnerSession.block();
   cloudSyncBlocked = true;
-  try {
-    localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
-  } catch (error) {
-    console.warn("Unable to persist the profile scope block before cleanup:", error);
-  }
-  advanceProfileOperationGeneration();
   let signOutError = null;
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
     signOutError = error;
-  } catch (error) {
-    signOutError = error;
-  }
+  } catch (error) { signOutError = error; }
   try {
     if (AUTH_STORAGE_KEY) {
       localStorage.removeItem(AUTH_STORAGE_KEY);
       sessionStorage.clear();
     }
-    localStorage.removeItem(ACTIVE_PROFILE_KEY);
-    await window.growthLoop?.clearAllLocalData?.();
-    window.learningDesk.clearLocalData({ reload: false });
+    learnerSession.setIdentity(null);
+    await learnerSession.resetLocal({ clearData: true });
   } catch (error) {
-    profileScopeWriteBlocked = true;
-    cloudSyncBlocked = true;
-    try {
-      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
-    } catch (markerError) {
-      console.warn("Unable to persist the profile scope block after cleanup failure:", markerError);
-    }
-    setAccountState();
-    throw error;
-  }
-  try {
-    localStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
-    sessionStorage.removeItem(PROFILE_SCOPE_BLOCKED_KEY);
-  } catch (error) {
-    profileScopeWriteBlocked = true;
-    cloudSyncBlocked = true;
-    try {
-      localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
-    } catch (markerError) {
-      console.warn("Unable to restore the profile scope block:", markerError);
-    }
+    learnerSession.block();
     setAccountState();
     throw error;
   }
@@ -527,7 +358,6 @@ async function clearLocalAccountState() {
   profiles = [];
   guardianConsentHouseholds = new Set();
   activeProfile = null;
-  profileScopeWriteBlocked = false;
   cloudSyncBlocked = false;
   setAccountState();
   return signOutError;
@@ -556,34 +386,10 @@ async function completeLocalAccountReset(successMessage) {
 }
 
 async function resetSignedOutProfileScope(changeVersion) {
-  const pendingScope = { household_id: null, profile_id: null };
-  const canCommit = () => !session
-    && changeVersion === authChangeVersion;
-  try {
-    if (!canCommit()) return false;
-    if (
-      typeof window.growthLoop?.loadScope !== "function"
-      || typeof window.growthLoop?.getScope !== "function"
-      || typeof window.learningDesk?.setScope !== "function"
-      || typeof window.learningDesk?.getEnvelope !== "function"
-    ) {
-      throw new Error("signed_out_profile_scope_reset_dependencies_missing");
-    }
-    await window.growthLoop.loadScope(pendingScope, { adoptPending: false, canCommit });
-    if (!canCommit()) return false;
-    await window.learningDesk.setScope(pendingScope, { adoptPending: false, canCommit });
-    if (!canCommit()) return false;
-    const growthScope = window.growthLoop.getScope();
-    const learningScope = window.learningDesk.getEnvelope()?.scope;
-    if (!sameProfileScope(growthScope, pendingScope) || !sameProfileScope(learningScope, pendingScope)) {
-      throw new Error("signed_out_profile_scope_not_reset");
-    }
-    return true;
-  } catch (error) {
-    console.warn("Unable to reset profile scope after sign-out:", error);
-    failClosedProfileScope();
-    return false;
-  }
+  if (session || changeVersion !== authChangeVersion) return false;
+  const result = await learnerSession.resetLocal({ clearData: false });
+  if (result.status === "blocked") failClosedProfileScope();
+  return result.status === "committed" && !session && changeVersion === authChangeVersion;
 }
 
 function formatSyncTime(value) {
@@ -1146,7 +952,7 @@ function renderSetup() {
         return;
       }
       await loadWorkspace(profileId, { migrateLocal: true, deferGrowthLoopSync: true });
-      void enqueueProfileOperation(
+      void learnerSession.run(
         (generation) => queueGrowthCloudActivity(
           { household_id: householdId, id: profileId },
           ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
@@ -1238,7 +1044,7 @@ function renderAccount() {
   panel.querySelectorAll("[data-profile]").forEach((button) => {
     button.onclick = async () => {
       await runLockedAction(button, async () => {
-        await enqueueProfileOperation(async (generation) => {
+        await learnerSession.run(async (generation) => {
           let migrateLocal = false;
           try {
             if (button.dataset.profile !== activeProfile?.id && await window.growthLoop?.hasPendingData?.()) {
@@ -1280,6 +1086,7 @@ function renderAccount() {
         if (deletingActive) {
           resetGrowthLoopRemoteRetry();
           activeProfile = null;
+          learnerSession.deactivate();
           cloudVersion = null;
           localStorage.removeItem(ACTIVE_PROFILE_KEY);
           window.learningDesk.replaceState({}, { persist: true });
@@ -1327,7 +1134,7 @@ function renderAccount() {
   });
   panel.querySelector("[data-sync]")?.addEventListener("click", async (event) => {
     await runLockedAction(event.currentTarget, async () => {
-      await enqueueProfileOperation(async (generation) => {
+      await learnerSession.run(async (generation) => {
         const profile = activeProfile;
         if (!profile) return;
         const request = captureSaveRequest(true);
@@ -1444,7 +1251,7 @@ function renderAccount() {
         renderAccount();
         return;
       }
-      const selectedGeneration = profileOperationGeneration;
+      const selectedGeneration = learnerSession.captureOperation();
       await queueGrowthCloudActivity(
         data,
         ACTIVITY_EVENT_TYPES.LEARNER_CREATED,
@@ -1528,6 +1335,7 @@ async function fetchWorkspace() {
     workspaceMetadataLoading = Promise.resolve(true);
     resetGrowthLoopRemoteRetry();
     activeProfile = null;
+    learnerSession.deactivate();
     return;
   }
   const householdIds = memberships.map((item) => item.household_id);
@@ -1648,77 +1456,39 @@ async function loadWorkspace(preferredProfileId = null, options = {}) {
   if (remembered && !profiles.some((item) => item.id === remembered)) {
     // 残留引用指向已不存在的 profile（如云端删除 / household 残留）→ 清除，
     // 避免后续对不存在的 profile 发起无效同步（曾在生产触发 not_found 冲突风暴）。
-    if (!profileScopeWriteBlocked) localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    if (!scopeBlocked()) localStorage.removeItem(ACTIVE_PROFILE_KEY);
   }
   const profile = profiles.find((item) => item.id === remembered) || profiles[0] || null;
   return profile ? selectProfile(profile.id, options) : false;
 }
 
 function selectProfile(profileId, options = {}) {
-  return enqueueProfileOperation((generation) => selectProfileNow(profileId, options, generation));
+  return learnerSession.run((generation) => selectProfileNow(profileId, options, generation));
 }
 
 async function selectProfileNow(profileId, { migrateLocal = false } = {}, generation) {
   const isCurrent = () => isCurrentProfileOperation(generation);
-  if (profileScopeWriteBlocked) return false;
+  if (scopeBlocked()) return false;
   const profile = profiles.find((item) => item.id === profileId);
   if (!profile) return false;
   const scope = { household_id: profile.household_id, profile_id: profile.id };
   const profileChanged = activeProfile?.id !== profile.id
     || activeProfile?.household_id !== profile.household_id;
-  const previousProfileState = captureProfileCommitState();
-
-  // The Growth Loop controller commits its scope only after the local database
-  // load succeeds. Make it the profile-switch commit barrier so a failed
-  // IndexedDB reopen cannot leave the UI on a new learner and Growth Loop on
-  // the old scope.
-  try {
-    let growthScope;
-    // A superseded local read can return the previous snapshot without throwing;
-    // retry once while this profile operation is still current.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await window.growthLoop?.loadScope?.(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
-      if (!isCurrent()) {
-        await restoreProfileCommit(previousProfileState, profile);
-        return false;
-      }
-      growthScope = window.growthLoop?.getScope?.();
-      if (sameProfileScope(growthScope, scope)) break;
-      if (attempt === 1) throw new Error("growth_loop_scope_not_ready");
+  const result = await learnerSession.select(scope, { adoptPending: migrateLocal, operation: generation });
+  if (result.status !== "committed") {
+    if (result.status === "blocked") failClosedProfileScope();
+    else if (result.status === "restored" && isCurrent()) {
+      showToast(result.stage === "growth"
+        ? "孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。"
+        : "孩子切换未完成，本机学习记录暂时不可用；当前孩子未变，请重试。", 6000);
     }
-  } catch (growthError) {
-    console.warn("Growth Loop profile switch blocked:", growthError);
-    const restored = await restoreProfileCommit(previousProfileState, profile);
-    if (!restored) return false;
-    if (!isCurrent()) return false;
-    showToast("孩子切换未完成，本机成长记录暂时不可用；当前孩子未变，请重试。", 6000);
     return false;
   }
-
-  try {
-    await window.learningDesk.setScope(scope, { adoptPending: migrateLocal, canCommit: isCurrent });
-    if (!isCurrent()) {
-      await restoreProfileCommit(previousProfileState, profile);
-      return false;
-    }
-  } catch (scopeError) {
-    console.warn("Learning profile switch rolled back:", scopeError);
-    const restored = await restoreProfileCommit(previousProfileState, profile);
-    if (!restored) return false;
-    if (!isCurrent()) return false;
-    showToast("孩子切换未完成，本机学习记录暂时不可用；当前孩子未变，请重试。", 6000);
-    return false;
-  }
-
-  if (!isCurrent()) {
-    await restoreProfileCommit(previousProfileState, profile);
-    return false;
-  }
+  if (!isCurrent()) return false;
   if (profileChanged) resetGrowthLoopRemoteRetry();
   activeProfile = profile;
   cloudVersion = null;
   cloudSyncBlocked = false;
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
   setAccountState();
   markPerformance("shadow-mate:profile:local-ready");
   void queueGrowthCloudActivity(
@@ -1792,10 +1562,10 @@ async function hydrateProfileRemote(profile, { migrateLocal = false, generation 
 }
 
 function captureSaveRequest(manual = false) {
-  if (profileScopeWriteBlocked || !session || !activeProfile) return null;
+  if (scopeBlocked() || !session || !activeProfile) return null;
   return {
     profileId: activeProfile.id,
-    generation: profileOperationGeneration,
+    generation: learnerSession.captureOperation(),
     manual: Boolean(manual),
     requestSession: session,
     state: window.learningDesk.getEnvelope(),
@@ -1813,9 +1583,9 @@ async function saveCloudState(manual = false, {
   fromDebounce = false,
   allowPendingRemoteHydrate = false,
 } = {}) {
-  if (profileScopeWriteBlocked) return;
+  if (scopeBlocked()) return;
   const requestedProfileId = profileId ?? activeProfile?.id ?? null;
-  const requestedGeneration = generation ?? profileOperationGeneration;
+  const requestedGeneration = generation ?? learnerSession.captureOperation();
   const saveSession = requestSession ?? session;
   const requestedState = state ? structuredClone(state) : null;
   const requestedVersion = expectedVersion === undefined ? cloudVersion : expectedVersion;
@@ -1858,14 +1628,14 @@ async function saveCloudState(manual = false, {
     profile_id: saveProfile.id,
   })) return;
   const saveGeneration = requestedGeneration;
-  const canWrite = () => !profileScopeWriteBlocked
+  const canWrite = () => !scopeBlocked()
     && session === saveSession
     && (fromDebounce || (
       isCurrentProfileOperation(saveGeneration)
       && activeProfile?.id === saveProfile.id
       && requestedProfileId === saveProfile.id
     ));
-  const canApplyActiveState = () => !profileScopeWriteBlocked
+  const canApplyActiveState = () => !scopeBlocked()
     && session === saveSession
     && isCurrentProfileOperation(saveGeneration)
     && activeProfile?.id === saveProfile.id;
@@ -1929,6 +1699,7 @@ async function saveCloudState(manual = false, {
           if (canApplyActiveState()) {
             resetGrowthLoopRemoteRetry();
             activeProfile = null;
+          learnerSession.deactivate();
             cloudSyncBlocked = true;
             localStorage.removeItem(ACTIVE_PROFILE_KEY);
           }
@@ -1965,7 +1736,7 @@ async function saveCloudState(manual = false, {
 function scheduleSave(manual = false) {
   clearTimeout(saveTimer);
   saveTimer = null;
-  if (manual && !profileScopeWriteBlocked) cloudSyncBlocked = false;
+  if (manual && !scopeBlocked()) cloudSyncBlocked = false;
   const request = captureSaveRequest(manual);
   if (!cloudSyncBlocked && request) {
     saveTimer = setTimeout(() => {
@@ -1979,11 +1750,9 @@ function scheduleSave(manual = false) {
 window.cloudSync = {
   schedule: scheduleSave,
   scheduleGrowthLoop: scheduleGrowthLoopSync,
-  isProfileScopeWriteBlocked: () => profileScopeWriteBlocked,
-  canWriteLocalState: () => !profileScopeWriteBlocked
-    && !profileScopeResetInProgress
-    && (!session || Boolean(activeProfile)),
-  canWriteScopeTransition: () => !profileScopeWriteBlocked,
+  isProfileScopeWriteBlocked: () => scopeBlocked(),
+  canWriteLocalState: () => learnerSession.getStatus().writable,
+  canWriteScopeTransition: () => learnerSession.canTransition(),
   getProfileCommitState: () => ({
     active_profile_id: activeProfile?.id || null,
     active_profile_key: localStorage.getItem(ACTIVE_PROFILE_KEY),
@@ -1991,7 +1760,7 @@ window.cloudSync = {
   }),
 };
 window.addEventListener("online", () => {
-  if (activeProfile && !profileScopeWriteBlocked) growthLoopRetryScheduler.scheduleNow();
+  if (activeProfile && !scopeBlocked()) growthLoopRetryScheduler.scheduleNow();
 });
 
 async function maybePromptPasswordSetup(options = {}) {
@@ -2015,11 +1784,12 @@ async function onAuthChange(nextSession, event = "") {
   lastAuthSessionKey = authSessionKey;
   if (event === "PASSWORD_RECOVERY") passwordRecoveryActive = true;
   const changeVersion = ++authChangeVersion;
-  profileScopeResetInProgress = false;
-  advanceProfileOperationGeneration();
+  learnerSession.invalidate();
   resetGrowthLoopRemoteRetry();
-  const existingScopeBlock = profileScopeWriteBlocked || readProfileScopeBlock();
+  const existingScopeBlock = scopeBlocked();
   session = nextSession;
+  learnerSession.setIdentity(nextSession?.user?.id || null);
+  learnerSession.deactivate();
   memberships = [];
   profiles = [];
   guardianConsentHouseholds = new Set();
@@ -2030,8 +1800,7 @@ async function onAuthChange(nextSession, event = "") {
   cloudVersion = null;
   lastSyncAt = null;
   cloudSyncBlocked = false;
-  profileScopeWriteBlocked = existingScopeBlock;
-  if (profileScopeWriteBlocked) localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
+  if (scopeBlocked()) localStorage.setItem(PROFILE_SCOPE_BLOCKED_KEY, "1");
   if (!session) {
     clearTimeout(saveTimer);
     saveTimer = null;
@@ -2046,9 +1815,7 @@ async function onAuthChange(nextSession, event = "") {
     passwordRecoveryActive = false;
     passwordStatusCheckedForSession = null;
     if (!existingScopeBlock) {
-      profileScopeResetInProgress = true;
       await resetSignedOutProfileScope(changeVersion);
-      if (changeVersion === authChangeVersion) profileScopeResetInProgress = false;
     }
   }
   if (changeVersion !== authChangeVersion) return;

@@ -134,8 +134,7 @@ if (/\sonclick\s*=/i.test(html)) {
 
 const appJs = await readFile("src/app.js", "utf8");
 for (const marker of [
-  'const STORE_KEY = "shadow_mate_workbench_v1"',
-  "clearLocalData()",
+  "createLearningDesk",
   "window.learningDesk",
   "window.cloudSync?.schedule()",
   "buildMissingSequence",
@@ -143,6 +142,14 @@ for (const marker of [
   "speechSynthesis",
 ]) {
   if (!appJs.includes(marker)) throw new Error(`src/app.js is missing ${marker}`);
+}
+const learningDesk = await readFile("src/learning-desk.js", "utf8");
+for (const marker of ["LEGACY_LEARNING_STATE_KEY", "getLearningStateStorageKey", "clearLearningDeskStorage", "clearLocalData()"] ) {
+  if (!learningDesk.includes(marker)) throw new Error(`Learning Desk is missing ${marker}`);
+}
+const learningStorage = await readFile("src/learning-state-storage.js", "utf8");
+if (!learningStorage.includes('LEGACY_LEARNING_STATE_KEY = "shadow_mate_workbench_v1"')) {
+  throw new Error("Learning storage must retain the legacy key");
 }
 
 const config = await readFile("src/config.js", "utf8");

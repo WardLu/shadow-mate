@@ -393,6 +393,29 @@ async function mockCloudApi(page, {
 }
 
 test.describe("Authenticated cloud workspace", () => {
+  test("keeps anonymous learning writable after cleanup when remote sign-out fails", async ({ page, context }) => {
+    await seedAuthenticatedSession(page);
+    await mockCloudApi(page);
+    await page.route('**/auth/v1/logout**', route => route.fulfill({ status: 503, body: JSON.stringify({ message: 'offline logout' }) }));
+    await page.goto('/');
+    await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await page.click('#accountButton');
+    page.once('dialog', dialog => dialog.accept());
+    await page.click('[data-clear-local]');
+    await expect(page.locator('#cloudDialog')).not.toBeVisible();
+    expect(await page.evaluate(() => window.cloudSync.canWriteLocalState())).toBe(true);
+    await openModule(page, 'chinese');
+    await page.click('[data-cmod="chinese-literacy"]');
+    await expect(page.locator('[data-cmod="chinese-literacy"]')).toHaveClass(/done/);
+    // A fresh page shares durable storage without rerunning this page's auth seed.
+    const reopened = await context.newPage();
+    await mockCloudApi(reopened);
+    await reopened.goto('/');
+    await openModule(reopened, 'chinese');
+    await expect(reopened.locator('[data-cmod="chinese-literacy"]')).toHaveClass(/done/);
+    await reopened.close();
+  });
+
   test("backs off repeated Growth Loop snapshot 5xx responses instead of polling every second", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { growthPointItemsFailures: Number.POSITIVE_INFINITY });

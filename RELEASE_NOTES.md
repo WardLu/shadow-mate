@@ -2,6 +2,18 @@
 
 > This file lists user-visible product changes for each published version.
 
+## v1.5.3 - 2026-09-14
+
+### More reliable learner switching and offline recovery
+
+- A learner switch now keeps local learning records, Growth Loop records, and the active learner scope aligned. If the complete switch cannot be confirmed, writes pause safely instead of being sent to the wrong learner.
+- Clearing local data returns the signed-out workspace to usable offline mode after local cleanup completes, even when the remote sign-out request is unavailable.
+
+### More reliable speech playback
+
+- Cancelling or retrying a speech clip no longer lets a late audio request or old error state interrupt the newer playback.
+- CDN audio, matching system voices, empty voice lists, timeouts, and retry feedback now follow one consistent playback lifecycle.
+
 ## v1.5.2 - 2026-09-13
 
 ### Mobile-first experience and Shadow Lab branding

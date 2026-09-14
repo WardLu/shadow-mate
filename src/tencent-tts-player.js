@@ -103,6 +103,7 @@ export function createPublishedSpeechPlayer({
 
   function stop() {
     activePlaySessionId++;
+    inFlight.clear();
     if (currentPlayback) {
       const active = currentPlayback;
       currentPlayback = null;
@@ -312,12 +313,12 @@ export function createPublishedSpeechPlayer({
   }
 
   async function playOnce(contentId, { volume = 1 } = {}) {
-    const entries = await loadManifest();
-    const entry = entries.get(contentId);
-    if (!entry) throw new PublishedSpeechError("published-audio-not-found");
-
     stop();
     const sessionId = activePlaySessionId;
+    const entries = await loadManifest();
+    if (sessionId !== activePlaySessionId) return { status: "cancelled", source: "cdn" };
+    const entry = entries.get(contentId);
+    if (!entry) throw new PublishedSpeechError("published-audio-not-found");
 
     let audioContext = null;
     try {
@@ -392,7 +393,9 @@ export function createPublishedSpeechPlayer({
         }
       } catch (_) {}
       if (inFlight.has(contentId)) return inFlight.get(contentId);
-      const promise = playOnce(contentId, { volume }).finally(() => inFlight.delete(contentId));
+      const promise = playOnce(contentId, { volume }).finally(() => {
+        if (inFlight.get(contentId) === promise) inFlight.delete(contentId);
+      });
       inFlight.set(contentId, promise);
       return promise;
     },
