@@ -1714,6 +1714,9 @@ test.describe("Authenticated cloud workspace", () => {
         return loadScope(scope, options);
       };
       window.dispatchEvent(new Event("online"));
+      // Use the public scheduler seam directly as well as the browser online
+      // event; an existing debounce timer must not make this test timing-bound.
+      window.cloudSync.scheduleGrowthLoop?.();
     }, { firstProfileId: PROFILE_ID });
 
     await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
