@@ -39,7 +39,7 @@
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.5",
     "@emnapi/runtime": "2.0.0-alpha.5",
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.63.0",
     "@vitest/coverage-v8": "5.0.0",
     "@vitest/ui": "5.0.0",
     "cos-nodejs-sdk-v5": "3.0.0",
