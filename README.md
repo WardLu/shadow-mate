@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.5.2</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.3</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -153,10 +153,13 @@ Browser-local state
 ## Repository structure
 
 ```text
-src/app.js                 UI rendering, interaction, and local state
+src/app.js                 UI assembly, interaction, and view rendering
 vite.config.js             Vite development compatibility and retained Piper resources
+src/learning-desk.js       Local learning state, envelopes, migration, and storage
+src/learner-session.js     Learner scope transitions, rollback, and fail-closed writes
+src/speech-session.js      Speech playback lifecycle, fallback, cancellation, and timeout
 src/learning-state.js      Learning state machine and module grouping
-src/cloud.js               Authentication, family space, sync, export, and deletion
+src/cloud.js               Authentication, family space, remote sync, export, and deletion
 src/action-lock.js         Duplicate-action and async-operation guards
 src/icons.js               Lucide icon rendering and hydration
 supabase/migrations/       Migration proposals and isolated CI test copies
