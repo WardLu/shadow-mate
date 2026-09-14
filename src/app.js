@@ -1,3 +1,6 @@
+import { createSpeechSession } from "./speech-session.js";
+import { createLearningDesk } from "./learning-desk.js";
+import { createLearnerSession } from "./learner-session.js";
 import { inject } from "@vercel/analytics";
 import { ANALYTICS_EVENTS, hasConsecutiveCheckinDays, recordAnalyticsEvent } from "./analytics.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
@@ -11,7 +14,7 @@ import {
   resolveDailyWorksheet,
 } from "./hanzi-worksheet-rotation.js";
 import { buildMissingSequence, escapeHtml } from "./lib.js";
-import { cleanSpeechText, findMatchingVoice } from "./speech-text-utils.js";
+import { cleanSpeechText } from "./speech-text-utils.js";
 import { HANZI } from "./content/literacy.js";
 import { literacySpeechId } from "./content/literacy-speech.js";
 import {
@@ -27,14 +30,12 @@ import { mountPiperResourceManager } from "./piper-resource-ui.js";
 import { createPublishedSpeechPlayer } from "./tencent-tts-player.js";
 import { icon, hydrateIcons } from "./icons.js";
 import {
-  createLearningState,
   getHanziRotationState,
   hasCompatibleHanziRotationScope,
   hasCheckin,
   replaceHanziRotationState,
   transitionLearningState,
 } from "./learning-state.js";
-import { getLearningStateStorageKey, migrateLegacyLearningState } from "./learning-state-envelope.js";
 import {
   FOUNDATION_PACKAGE,
   getContentModuleDefinition,
@@ -43,11 +44,6 @@ import {
   setContentModuleEnabled,
   setContentPackageEnabled,
 } from "./learning-content-package.js";
-import {
-  clearLearningDeskStorage,
-  loadLearningStateEnvelope,
-  adoptPendingLearningState,
-} from "./learning-state-storage.js";
 import { createIndexedDbLearningDb } from "./learning-local-db.js";
 import { createGrowthLoopController } from "./learning-growth-loop-controller.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
@@ -124,25 +120,29 @@ const PEANUT_BOOKS = [
 /* =========================================================
    状态 / 存档层（localStorage 永久存档）
    ========================================================= */
-const STORE_KEY = "shadow_mate_workbench_v1";
-const PROFILE_SCOPE_BLOCKED_KEY = "shadow_mate_profile_scope_blocked";
-
-function isProfileScopeBlocked() {
-  return localStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1"
-    || sessionStorage.getItem(PROFILE_SCOPE_BLOCKED_KEY) === "1";
-}
+const learnerSession = createLearnerSession({
+  storage: localStorage, sessionStorage,
+  getLearningDesk: () => window.learningDesk,
+  getGrowthLoop: () => window.growthLoop,
+});
+window.learnerSession = learnerSession;
+function isProfileScopeBlocked() { return learnerSession.getStatus().phase === "blocked"; }
 
 const profileScopeBlockedAtStartup = isProfileScopeBlocked();
 if (!profileScopeBlockedAtStartup) recordAnalyticsEvent(ANALYTICS_EVENTS.activation, { once: true });
 const growthLoopDb = createIndexedDbLearningDb({ deferOpen: profileScopeBlockedAtStartup });
 const soundEffects = createSoundEngine();
+const speechSession = createSpeechSession({
+  publishedPlayer: publishedSpeechPlayer,
+  synthesis: window.speechSynthesis,
+  Utterance: window.SpeechSynthesisUtterance,
+});
+speechSession.subscribe(({ state }) => soundEffects.setTtsActive(state === "playing"));
 window.soundEffects = soundEffects;
 const growthLoopController = createGrowthLoopController({
   db: growthLoopDb,
-  canWrite: () => !isProfileScopeBlocked()
-    && window.cloudSync?.canWriteLocalState?.() !== false,
-  canTransition: () => !isProfileScopeBlocked()
-    && window.cloudSync?.canWriteScopeTransition?.() !== false,
+  canWrite: () => learnerSession.getStatus().writable,
+  canTransition: () => learnerSession.canTransition(),
   onRewardFulfilled: ({ redemption, userInitiated }) => {
     if (userInitiated && redemption?.status === "fulfilled") {
       soundEffects.play("reward_fulfilled");
@@ -181,33 +181,18 @@ growthLoopController.subscribe((nextSnapshot) => {
   if (CURRENT_MOD === "points" || CURRENT_MOD === "grow") switchMod(CURRENT_MOD);
 });
 
-function learningStateFromEnvelope(envelope) {
-  return envelope?.schema_version === 2 && envelope.learning ? envelope.learning : envelope;
-}
-
-function learningStateReadStorage() {
-  if (!isProfileScopeBlocked()) return localStorage;
-  // Storage migration helpers are intentionally read-only while a prior
-  // profile operation is fail-closed, including during a same-tab reload.
-  return {
-    getItem: (key) => localStorage.getItem(key),
-    setItem: () => {},
-  };
-}
-
-function readStoredState(){
-  return learningStateFromEnvelope(loadLearningStateEnvelope(learningStateReadStorage(), {}));
-}
-
-let store = createLearningState(readStoredState());
-if(!store.checkins) store.checkins = {};   // {date: {module:true}}
-if(!store.extra) store.extra = {};         // 扩展记录（如数学题数）
-if(!store.points) store.points = {};       // 仅保留旧积分历史；新 Growth Loop 不再写入此字段
-if(!store.bookShelf) store.bookShelf = {};  // {bookIdx:1} 绘本已读标记
-if(!store.peanutLog) store.peanutLog = [];  // [{title,date,rating}] 小花生阅读记录
-if(!store.peanutRead) store.peanutRead = {}; // {bookIdx:1} 小花生书单已读标记
-
-let learningEnvelope = loadLearningStateEnvelope(learningStateReadStorage(), {});
+const learningDesk = createLearningDesk({
+  storage: localStorage,
+  canWrite: () => learnerSession.getStatus().writable,
+  canTransition: () => learnerSession.canTransition(),
+});
+// A view draft; only Learning Desk owns the stored state and envelope.
+let store = learningDesk.getState();
+learningDesk.subscribe((next, { render, scopeChanged }) => {
+  store = next;
+  if (scopeChanged) removeWritingPrintRoot();
+  if (render) switchMod(CURRENT_MOD);
+});
 
 const WRITING_PRINT_ROOT_ID = "writingPrintRoot";
 let activeWorksheetSnapshot = null;
@@ -222,7 +207,7 @@ function getLearningTimeZone() {
 }
 
 function getHanziLearnerScope() {
-  const profileId = learningEnvelope?.scope?.profile_id;
+  const profileId = learningDesk.getEnvelope().scope?.profile_id;
   return typeof profileId === "string" && profileId.length > 0
     ? `profile:${profileId}`
     : "anonymous";
@@ -289,51 +274,17 @@ function recordActiveWorksheetCompletion() {
 
 function canWriteLearningState({ allowScopeTransition = false } = {}) {
   const cloudWriteCheck = allowScopeTransition
-    ? window.cloudSync?.canWriteScopeTransition?.()
-    : window.cloudSync?.canWriteLocalState?.();
+    ? learnerSession.canTransition()
+    : learnerSession.getStatus().writable;
   return !isProfileScopeBlocked()
     && cloudWriteCheck !== false;
 }
 
-function persistLearningState({ canCommit = () => true, allowScopeTransition = false } = {}){
-  if (!canWriteLearningState({ allowScopeTransition }) || !canCommit()) return false;
-  learningEnvelope = {
-    ...learningEnvelope,
-    schema_version: 2,
-    product_id: "shadow-mate",
-    learning: structuredClone(store),
-  };
-  const scope = learningEnvelope.scope || {};
-  localStorage.setItem(getLearningStateStorageKey(scope), JSON.stringify(learningEnvelope));
-  // 兼容旧版本的低风险学习状态读取和既有冲突测试；新 Growth Loop
-  // 账本永远不写入旧 state.points。
-  localStorage.setItem(STORE_KEY, JSON.stringify({ ...store, points: {} }));
-  return true;
-}
-
 function save(){
   if (!canWriteLearningState()) return false;
-  persistLearningState();
+  if (!learningDesk.replaceState(store, { persist: true, render: false })) return false;
   window.cloudSync?.schedule();
   return true;
-}
-
-async function setLearningScope(scope, { adoptPending = false, canCommit = () => true } = {}) {
-  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
-  learningEnvelope = adoptPending
-    ? adoptPendingLearningState(localStorage, scope)
-    : loadLearningStateEnvelope(localStorage, scope);
-  store = createLearningState(learningStateFromEnvelope(learningEnvelope));
-  if(!store.checkins) store.checkins = {};
-  if(!store.extra) store.extra = {};
-  if(!store.points) store.points = {};
-  if(!store.bookShelf) store.bookShelf = {};
-  if(!store.peanutLog) store.peanutLog = [];
-  if(!store.peanutRead) store.peanutRead = {};
-  if (!canWriteLearningState({ allowScopeTransition: true }) || !canCommit()) return structuredClone(learningEnvelope);
-  persistLearningState({ canCommit, allowScopeTransition: true });
-  switchMod(CURRENT_MOD);
-  return structuredClone(learningEnvelope);
 }
 
 function todayKey(){
@@ -533,11 +484,9 @@ function dayTotal(day){
 function $(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function el(id){ return document.getElementById(id); }
 function buttonContent(iconName, text){ return `${icon(iconName)}<span>${escapeHtml(text)}</span>`; }
-let activeAudio = null;
-let activeAudioSource = null;
-let activeAudioSourceUrl = null;
 let sharedAudioContext = null;
-let activeSpeechRequest = null;
+let activeSpeechView = null;
+const speechViews = new WeakMap();
 
 function getAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -568,69 +517,23 @@ function primeSpeechAudio() {
   }
 }
 
-function releaseObjectUrl(url) {
-  if (!url?.startsWith("blob:")) return;
-  window.setTimeout(() => URL.revokeObjectURL(url), 500);
-}
-
-function releaseAudio(audio, url) {
-  if (activeAudio === audio) activeAudio = null;
-  audio.remove();
-  releaseObjectUrl(url);
-}
-
-function stopActivePlayback() {
-  try {
-    publishedSpeechPlayer?.stop?.();
-  } catch (_) {}
-  try {
-    soundEffects?.setTtsActive?.(false);
-  } catch (_) {}
-  if (activeAudioSource) {
-    const source = activeAudioSource;
-    activeAudioSource = null;
-    try {
-      source.stop();
-    } catch (_) {
-      // The source may already have ended.
-    }
-    try {
-      source.disconnect();
-    } catch (_) {
-      // Some lightweight browser implementations do not expose disconnect().
-    }
-    releaseObjectUrl(activeAudioSourceUrl);
-    activeAudioSourceUrl = null;
-  }
-  if (activeAudio) {
-    const previousAudio = activeAudio;
-    activeAudio = null;
-    previousAudio.pause();
-    const previousUrl = previousAudio.src;
-    previousAudio.remove();
-    releaseObjectUrl(previousUrl);
-  }
-}
+function stopActivePlayback() { speechSession.stop(); }
 
 async function speak(t, button, locale = "en-US", contentId = "", options = {}){
   primeSpeechAudio();
   if (button?.dataset.speechInFlight === "true") return;
-  if (activeSpeechRequest) {
-    if (activeSpeechRequest.button === button) return;
-    const prev = activeSpeechRequest;
-    activeSpeechRequest = null;
+  if (activeSpeechView) {
+    if (activeSpeechView.button === button) return;
+    const prev = activeSpeechView;
+    activeSpeechView = null;
     prev.cancelled = true;
     prev.restore?.();
-    try {
-      window.speechSynthesis?.cancel();
-    } catch (_) {
-      // Some browser speech implementations throw while cancelling a stale utterance.
-    }
     stopActivePlayback();
   }
   const speechRequest = { button, cancelled: false, restore: null, isPoemSpeech: Boolean(options.isPoemSpeech) };
-  activeSpeechRequest = speechRequest;
-  const isCurrentSpeech = () => activeSpeechRequest === speechRequest && !speechRequest.cancelled;
+  activeSpeechView = speechRequest;
+  if (button) speechViews.set(button, speechRequest);
+  const isCurrentSpeech = () => activeSpeechView === speechRequest && !speechRequest.cancelled;
   if (button) button.dataset.speechInFlight = "true";
   const initialVisibleLabel = button?.textContent?.trim() || button?.dataset.label || "听发音";
   if (button && button.dataset.speechOriginalLabel === undefined) {
@@ -665,8 +568,7 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     shouldRestoreButtonFocus = false;
   };
   const restore = () => {
-    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
-    clearSystemTimer();
+    if (button && speechViews.get(button) !== speechRequest) return;
     if (button) {
       if (isContainer) {
         button.classList.remove("speech-playing");
@@ -688,13 +590,12 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
         restoreButtonFocus();
       }
     }
-    if (activeSpeechRequest === speechRequest) {
-      activeSpeechRequest = null;
+    if (activeSpeechView === speechRequest) {
+      activeSpeechView = null;
     }
   };
   speechRequest.restore = restore;
   const fail = (message) => {
-    try { soundEffects?.setTtsActive?.(false); } catch (_) {}
     if (!isCurrentSpeech()) return;
     restore();
     if (!button) return;
@@ -718,7 +619,7 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
       retryable: true,
     }, `${errorCode}:${Date.now()}`);
     window.setTimeout(() => {
-      if (button.dataset.speechFailure === "true") restore();
+      if (speechViews.get(button) === speechRequest && button.dataset.speechFailure === "true") restore();
     }, 5000);
   };
   const setBusy = (label = "播放中…") => {
@@ -740,81 +641,22 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     button.setAttribute("aria-busy", "true");
   };
 
-  let systemTimer = null;
-  const clearSystemTimer = () => {
-    if (systemTimer !== null) {
-      window.clearTimeout(systemTimer);
-      systemTimer = null;
-    }
-  };
-
-  const synth = window.speechSynthesis;
-  const Utterance = window.SpeechSynthesisUtterance;
-  try { soundEffects?.setTtsActive?.(true); } catch (_) {}
   setBusy();
-  const speechVolume = soundEffects?.getSpeechVolume?.() ?? 0.6;
-  const publishedContentIds = (Array.isArray(contentId) ? contentId : [contentId]).filter(Boolean);
-  const hasContentId = publishedContentIds.length > 0;
-  let publishedError = null;
-  if (hasContentId) {
-    try {
-      for (const publishedContentId of publishedContentIds) {
-        await publishedSpeechPlayer.play(publishedContentId, { volume: speechVolume });
-        if (!isCurrentSpeech()) return;
-      }
-      if (!isCurrentSpeech()) return;
-      restore();
-      return;
-    } catch (err) {
-      publishedError = err;
-      if (!isCurrentSpeech()) return;
-      if (button) button.dataset.publishedSpeechError = publishedError?.code || "published-audio-unknown";
-    }
-  } else {
-    publishedError = new Error("published-audio-not-found");
-    publishedError.code = "published-audio-not-found";
-  }
-
-  const listedVoices = typeof synth?.getVoices === "function" ? synth.getVoices() : null;
-  const systemVoice = findMatchingVoice(listedVoices, locale);
-  const canTryBrowserDefaultVoice = !Array.isArray(listedVoices) || listedVoices.length === 0;
-  if (!isCurrentSpeech()) return;
-  if (!(synth && typeof Utterance === "function") || (!systemVoice && !canTryBrowserDefaultVoice)) {
-    const stage = publishedError?.code === "published-audio-timeout" ? "加载超时" : "暂不可用";
-    fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
-    return;
-  }
-  await new Promise((resolve) => {
-    const utterance = new Utterance(t);
-    let started = false;
-    utterance.lang = locale;
-    utterance.rate = 0.9;
-    utterance.volume = Math.max(0, Math.min(1, speechVolume));
-    if (systemVoice) utterance.voice = systemVoice;
-    utterance.onstart = () => { started = true; clearSystemTimer(); };
-    utterance.onend = () => { restore(); resolve(); };
-    utterance.onerror = (event) => {
-      if (event?.error === "canceled" || event?.error === "interrupted") restore();
-      else fail("AI 发音不可用，系统语音播放也失败，请重试");
-      resolve();
-    };
-    try {
-      if (synth.speaking) {
-        synth.cancel();
-      }
-      synth.speak(utterance);
-      systemTimer = window.setTimeout(() => {
-        if (!started) {
-          try { synth.cancel(); } catch (_) {}
-          fail("AI 发音不可用，系统语音未能启动，请重试");
-          resolve();
-        }
-      }, 4000);
-    } catch (_) {
-      fail("AI 发音不可用，系统语音播放也失败，请重试");
-      resolve();
-    }
+  const result = await speechSession.play({
+    text: t, locale,
+    contentIds: (Array.isArray(contentId) ? contentId : [contentId]).filter(Boolean),
+    volume: soundEffects.getSpeechVolume(),
   });
+  if (!isCurrentSpeech()) return;
+  if (result.status !== "failed") { restore(); return; }
+  if (result.code === "system-unavailable") {
+    const stage = result.publishedCode === "published-audio-timeout" ? "加载超时" : "暂不可用";
+    fail(`AI 发音${stage}，且未检测到对应系统语音，请稍后重试`);
+  } else if (result.code === "system-start-timeout") {
+    fail("AI 发音不可用，系统语音未能启动，请重试");
+  } else {
+    fail("AI 发音不可用，系统语音播放也失败，请重试");
+  }
 }
 function bilibili(q){ return "https://search.bilibili.com/all?keyword="+encodeURIComponent(q); }
 
@@ -977,12 +819,11 @@ function stopPoemSpeech() {
     readAllButton.disabled = false;
     readAllButton.removeAttribute("aria-busy");
   }
-  if (activeSpeechRequest?.isPoemSpeech) {
-    const prev = activeSpeechRequest;
-    activeSpeechRequest = null;
+  if (activeSpeechView?.isPoemSpeech) {
+    const prev = activeSpeechView;
+    activeSpeechView = null;
     prev.cancelled = true;
     prev.restore?.();
-    try { window.speechSynthesis?.cancel(); } catch (_) {}
     stopActivePlayback();
   }
   document.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
@@ -2488,7 +2329,7 @@ function renderSettingsPoints(main){
 function renderSettingsGrowth(main){
   const opening = getOpeningBalance(growthLoopSnapshot);
   const legacyImport = getLegacyPointsImport(growthLoopSnapshot);
-  const legacyEntries = buildLegacyPointEntries(learningEnvelope?.legacy?.points_readonly || {});
+  const legacyEntries = buildLegacyPointEntries(learningDesk.getEnvelope().legacy?.points_readonly || {});
   const legacyTotal = legacyEntries.reduce((sum, entry) => sum + entry.delta, 0);
   const legacyPreview = legacyEntries.slice(-6).reverse();
 
@@ -3039,107 +2880,17 @@ wechatDialog?.addEventListener("close", () => {
 // 初始渲染
 switchMod("home");
 
-function persistenceScopeLabel() {
-  return getHanziLearnerScope();
-}
-
-function compatibilityScopeObject(scope) {
-  if (scope === "anonymous") return { household_id: null, profile_id: null };
-  const profileId = String(scope).replace(/^profile:/, "");
-  return {
-    household_id: "compatibility-household",
-    profile_id: profileId,
-  };
-}
-
-window.learningDesk = {
-  getState(scope){
-    if (scope !== undefined && scope !== persistenceScopeLabel()) {
-      return createLearningState();
-    }
-    return JSON.parse(JSON.stringify(store));
-  },
-  getPersistenceScope(){
-    return persistenceScopeLabel();
-  },
-  getPersistenceStatus(){
-    return { pending: false };
-  },
-  activateScope(scope, options = {}){
-    if (typeof scope !== "string" || scope.trim().length === 0) return false;
-    if (!canWriteLearningState({ allowScopeTransition: true })) return false;
-    const previousScope = persistenceScopeLabel();
-    const nextState = options.state ?? (scope === previousScope ? store : {});
-    removeWritingPrintRoot();
-    learningEnvelope = {
-      ...learningEnvelope,
-      scope: compatibilityScopeObject(scope),
-    };
-    store = createLearningState(nextState);
-    if (options.persist !== false) persistLearningState({ allowScopeTransition: true });
-    if (options.render !== false) switchMod(CURRENT_MOD);
-    return true;
-  },
-  activateSafeAnonymousScope(){
-    removeWritingPrintRoot();
-    learningEnvelope = migrateLegacyLearningState({}, {});
-    store = createLearningState();
-    switchMod(CURRENT_MOD);
-    return true;
-  },
-  flushLocalState(){
-    return persistLearningState();
-  },
-  markCloudConfirmed(scope, state){
-    if (scope !== persistenceScopeLabel()) return false;
-    store = createLearningState(state);
-    learningEnvelope = {
-      ...learningEnvelope,
-      learning: structuredClone(store),
-    };
-    return true;
-  },
-  renderCurrent(){
-    switchMod(CURRENT_MOD);
-  },
-  getEnvelope(){
-    return structuredClone({
-      ...learningEnvelope,
-      schema_version: 2,
-      product_id: "shadow-mate",
-      learning: store,
-    });
-  },
-  async setScope(scope, options = {}){
-    return setLearningScope(scope, options);
-  },
-  getPendingState(){
-    const pending = loadLearningStateEnvelope(localStorage, {});
-    return structuredClone(pending);
-  },
-  replaceState(next, options = {}){
-    if (!canWriteLearningState()) return false;
-    store = transitionLearningState(store, { type: "STATE_REPLACED", state: learningStateFromEnvelope(next) });
-    if(options.persist) persistLearningState();
-    switchMod(CURRENT_MOD);
-    return true;
-  },
-  clearLocalData(){
-    const { reload = true } = arguments[0] || {};
-    clearLearningDeskStorage(localStorage);
-    removeWritingPrintRoot();
-    if (reload) {
-      window.location.reload();
-      return;
-    }
-    learningEnvelope = migrateLegacyLearningState({}, {});
-    store = createLearningState();
-    switchMod(CURRENT_MOD);
-  },
-  removePersistenceScope(scope){
-    if (scope !== persistenceScopeLabel()) return true;
-    return this.activateSafeAnonymousScope();
-  },
+// Compatibility for the existing browser harness; no independent state.
+window.learningDesk = learningDesk;
+learningDesk.getPersistenceScope = getHanziLearnerScope;
+learningDesk.renderCurrent = () => switchMod(CURRENT_MOD);
+learningDesk.activateScope = async (scope, options = {}) => {
+  if (typeof scope !== "string" || !scope.trim() || !learnerSession.canTransition()) return false;
+  const nextScope = scope === "anonymous"
+    ? { household_id: null, profile_id: null }
+    : { household_id: "compatibility-household", profile_id: scope.replace(/^profile:/, "") };
+  await learningDesk.setScope(nextScope);
+  return learningDesk.replaceState(options.state || {}, { persist: options.persist !== false, render: options.render !== false });
 };
 
 void growthLoopController.hydrate().catch((error) => {
