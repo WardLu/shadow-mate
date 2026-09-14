@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.4",
-    "@emnapi/runtime": "2.0.0-alpha.4",
+    "@emnapi/runtime": "2.0.0-alpha.5",
     "@playwright/test": "1.62.1",
     "@vitest/coverage-v8": "5.0.0",
     "@vitest/ui": "5.0.0",
