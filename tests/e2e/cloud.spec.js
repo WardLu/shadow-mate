@@ -1550,6 +1550,13 @@ test.describe("Authenticated cloud workspace", () => {
     const secondChoice = page.locator(`[data-profile="${SECOND_PROFILE_ID}"]`);
     await expect(firstChoice).toHaveClass(/active/);
     await expect(page.locator(`[data-profile="${THIRD_PROFILE_ID}"]`)).toBeVisible();
+    // Initial profile activation is intentionally fire-and-forget. Drain that
+    // background event before isolating the failed switch assertions, so a
+    // late legitimate activation event cannot look like a stale rollback write.
+    await expect.poll(() => api.activityPayloads.some(
+      (payload) => payload.p_event?.profile_id === PROFILE_ID
+        && payload.p_event?.event_type === "household_activated",
+    )).toBe(true);
     api.rpcPayloads.length = 0;
     api.activityPayloads.length = 0;
 
@@ -1707,6 +1714,9 @@ test.describe("Authenticated cloud workspace", () => {
         return loadScope(scope, options);
       };
       window.dispatchEvent(new Event("online"));
+      // Use the public scheduler seam directly as well as the browser online
+      // event; an existing debounce timer must not make this test timing-bound.
+      window.cloudSync.scheduleGrowthLoop?.();
     }, { firstProfileId: PROFILE_ID });
 
     await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
