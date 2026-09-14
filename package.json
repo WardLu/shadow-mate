@@ -37,7 +37,7 @@
     "pinyin-pro": "3.29.3"
   },
   "devDependencies": {
-    "@emnapi/core": "2.0.0-alpha.4",
+    "@emnapi/core": "2.0.0-alpha.5",
     "@emnapi/runtime": "2.0.0-alpha.5",
     "@playwright/test": "1.62.1",
     "@vitest/coverage-v8": "5.0.0",
