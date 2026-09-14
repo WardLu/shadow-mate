@@ -32,6 +32,33 @@ async function installSystemSpeech(page, voices = []) {
 test.describe("Published speech and system fallback", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("does not let an old failure timer clear the retried button's busy state", async ({ page }) => {
+    await installSystemSpeech(page, []);
+    await page.clock.install();
+    await page.route('**/tts/tencent-v1-manifest.json', route => route.fulfill({ status: 503, body: 'offline' }));
+    await openChinese(page);
+    await page.evaluate(() => {
+      let calls = 0;
+      window.speechSynthesis.speak = utterance => {
+        if (++calls === 1) queueMicrotask(() => utterance.onerror({ error: 'synthesis-failed' }));
+        else {
+          utterance.onstart();
+          window.__finishRetriedSpeech = () => utterance.onend();
+        }
+      };
+    });
+    const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
+    await button.click();
+    await expect(button).toHaveAttribute('data-speech-failure', 'true');
+    await page.clock.runFor(600);
+    await button.click();
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    await page.clock.runFor(5000);
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    await page.evaluate(() => window.__finishRetriedSpeech());
+    await expect(button).not.toHaveAttribute('aria-busy');
+  });
+
   test("plays the shared CDN clip first with immediate busy feedback", async ({ page }) => {
     await installSystemSpeech(page, []);
     const audioUrl = "https://voice.shadow.wang/tts/tencent/v1/zh-CN/101030/test.mp3";

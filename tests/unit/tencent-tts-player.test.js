@@ -74,6 +74,33 @@ function createFakeAudioContext() {
 }
 
 describe("published speech player", () => {
+  it("starts a fresh same-content request after stop without stale promise eviction", async () => {
+    let release;
+    const manifest = new Promise(resolve => { release = resolve; });
+    const fetchImpl = vi.fn(url => url.endsWith('manifest.json') ? manifest : Promise.resolve(response()));
+    const player = createPublishedSpeechPlayer({ fetchImpl,
+      AudioCtor: class { play() { queueMicrotask(() => this.onended?.()); return Promise.resolve(); } pause() {} },
+      createObjectURL: () => 'blob:test', revokeObjectURL() {},
+    });
+    const first = player.play(entry.contentId);
+    player.stop();
+    const second = player.play(entry.contentId);
+    expect(first).not.toBe(second);
+    release(new Response(JSON.stringify({ entries: [entry] })));
+    await expect(first).resolves.toMatchObject({ status: 'cancelled' });
+    await expect(second).resolves.toMatchObject({ status: 'played' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it("cannot restart a cancelled request after its manifest finishes loading", async () => {
+    let release;
+    const fetchImpl = vi.fn(() => new Promise(resolve => { release = resolve; }));
+    const player = createPublishedSpeechPlayer({ fetchImpl });
+    const pending = player.play(entry.contentId);
+    player.stop();
+    release(new Response(JSON.stringify({ entries: [entry] })));
+    await expect(pending).resolves.toMatchObject({ status: 'cancelled' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
   it("deduplicates concurrent playback for one content id", async () => {
     let finish;
     const fetchImpl = vi.fn(async (url) => url.endsWith("manifest.json")
