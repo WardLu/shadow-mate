@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "repository": "WardLu/shadow-mate",
+  "productionBranch": "production",
+  "tagPattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$",
+  "vercel": {
+    "cliVersion": "50.28.0",
+    "teamId": "team_yq83S2zZ3jAfc1JBRuU31M1I",
+    "projectId": "prj_1kfuNaq0h7r8w2vkfhrXXNOsoMpC",
+    "projectName": "shadow-mate",
+    "projectRoot": ".",
+    "rootDirectory": null,
+    "vercelJsonPath": "vercel.json",
+    "productionBranch": "production",
+    "autoAssignCustomDomains": false,
+    "productionDomains": [
+      "sm.shadow.wang"
+    ]
+  },
+  "acceptance": {
+    "path": "/",
+    "bodyIncludes": "Shadow Mate",
+    "maxSeconds": 30,
+    "requiredHeaders": [
+      "content-type",
+      "strict-transport-security"
+    ]
+  }
+}
