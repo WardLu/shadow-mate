@@ -42,11 +42,16 @@ fi
 
 TEAM_ID=$(node -p "require('./$CONFIG_FILE').vercel?.teamId || ''")
 PROJECT_ID=$(node -p "require('./$CONFIG_FILE').vercel?.projectId || ''")
+PROJECT_NAME_VERCEL=$(node -p "require('./$CONFIG_FILE').vercel?.projectName || 'shadow-mate'")
 if [ -z "$TEAM_ID" ] || [ -z "$PROJECT_ID" ]; then
   echo "❌ 错误: 无法从 $CONFIG_FILE 解析 teamId 或 projectId" >&2
   exit 1
 fi
-echo "✅ 绑定 Vercel Team: $TEAM_ID, Project: $PROJECT_ID"
+echo "✅ 绑定 Vercel Team: $TEAM_ID, Project: $PROJECT_ID ($PROJECT_NAME_VERCEL)"
+
+# 确保 .vercel/project.json 始终指向权威 project ID（防止 worktree 路径漂移创建虚假新项目）
+mkdir -p .vercel
+echo "{\"projectId\":\"$PROJECT_ID\",\"orgId\":\"$TEAM_ID\",\"projectName\":\"$PROJECT_NAME_VERCEL\"}" > .vercel/project.json
 
 # ------------------------------------------------------------------------------
 # 3. 拉取最新的生产环境变量与配置

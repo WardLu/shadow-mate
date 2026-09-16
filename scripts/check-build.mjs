@@ -56,7 +56,7 @@ if (!html.includes('href="manifest.json"') || !html.includes("/assets/")) {
 const privacyHtml = await readFile("dist/privacy.html", "utf8");
 if (
   !privacyHtml.includes('<meta charset="utf-8">') ||
-  !privacyHtml.includes("<title>影伴隐私说明</title>") ||
+  !privacyHtml.includes("<title>影伴 Shadow Mate 隐私政策与家庭数据保护说明 | Privacy Policy</title>") ||
   !privacyHtml.includes('<link rel="stylesheet" href="/privacy-policy.css">')
 ) {
   throw new Error("Built privacy HTML is missing its charset, title, or stylesheet");

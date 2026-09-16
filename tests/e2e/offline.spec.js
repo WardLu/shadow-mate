@@ -222,7 +222,7 @@ test.describe("Offline mode (no login)", () => {
   test("local privacy route serves the standalone policy page", async ({ page }) => {
     const response = await page.goto("/privacy");
     expect(response?.headers()["content-type"]).toContain("text/html");
-    await expect(page).toHaveTitle("影伴隐私说明");
+    await expect(page).toHaveTitle("影伴 Shadow Mate 隐私政策与家庭数据保护说明 | Privacy Policy");
     await expect(page.locator("#zh .language-title")).toContainText("隐私说明");
     await expect(page.locator("#en")).toBeVisible();
     await expect(page.locator('link[rel="stylesheet"][href="/privacy-policy.css"]')).toHaveCount(1);
