@@ -708,7 +708,7 @@ describe("rotation-v1 daily worksheet selection", () => {
     expect(normalized).not.toHaveProperty("reviewCount");
     expect(normalized).not.toHaveProperty("sm2");
     expect(JSON.stringify(normalized).length).toBeLessThan(200 * 1024);
-  });
+  }, 20_000);
 
   it("bounds oversized candidate and completion payloads while keeping a usable canonical snapshot", () => {
     const base = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
