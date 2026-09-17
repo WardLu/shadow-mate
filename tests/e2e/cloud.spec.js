@@ -127,6 +127,7 @@ async function mockCloudApi(page, {
   workspaceAncillaryDelayMs = 0,
   consentMetadataResponses = null,
   consentMetadataDelayMs = workspaceAncillaryDelayMs,
+  holdWorkspaceMetadata = false,
 } = {}) {
   let state = structuredClone(remoteState);
   let version = 3;
@@ -144,6 +145,11 @@ async function mockCloudApi(page, {
   const createdProfiles = [];
   const createdHouseholds = [];
   const createdConsents = [];
+  // 由用例自己决定延迟元数据何时到达，避免"固定延迟 vs 登出耗时"的竞速
+  let releaseWorkspaceMetadata = () => {};
+  const workspaceMetadataGate = holdWorkspaceMetadata
+    ? new Promise((resolve) => { releaseWorkspaceMetadata = resolve; })
+    : Promise.resolve();
   const profileRows = [{
     id: PROFILE_ID,
     household_id: HOUSEHOLD_ID,
@@ -289,6 +295,7 @@ async function mockCloudApi(page, {
         ? consentMetadataDelayMs[Math.min(responseIndex, consentMetadataDelayMs.length - 1)]
         : consentMetadataDelayMs;
       if (consentDelay) await new Promise((resolve) => setTimeout(resolve, consentDelay));
+      await workspaceMetadataGate;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -365,6 +372,7 @@ async function mockCloudApi(page, {
         return;
       }
       if (workspaceAncillaryDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceAncillaryDelayMs));
+      await workspaceMetadataGate;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -387,6 +395,7 @@ async function mockCloudApi(page, {
     createdConsents,
     getGrowthPointItemsRequests: () => growthPointItemsRequests,
     getConsentMetadataRequests: () => consentMetadataResponseIndex,
+    releaseWorkspaceMetadata: () => releaseWorkspaceMetadata(),
     getRpcSettledCount: () => rpcSettledCount,
     getState: () => state,
   };
@@ -631,7 +640,7 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("ignores delayed workspace metadata after signing out", async ({ page }) => {
     await seedAuthenticatedSession(page);
-    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 1600 });
+    const api = await mockCloudApi(page, { holdWorkspaceMetadata: true });
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
@@ -665,7 +674,10 @@ test.describe("Authenticated cloud workspace", () => {
       metadataReady: false,
     });
 
-    await page.waitForTimeout(1900);
+    // 现在才放行元数据：它严格在登出之后到达，这才是本用例要验证的场景。
+    // （此前用固定延迟和登出耗时竞速，偶发时元数据在登出完成前就已到达，标记为真是合法的，用例因此假红。）
+    api.releaseWorkspaceMetadata();
+    await page.waitForTimeout(200);
     await expect.poll(() => page.evaluate(() => ({
       accountState: document.querySelector("#accountButton")?.dataset.state || null,
       growth: window.growthLoop.getScope(),
