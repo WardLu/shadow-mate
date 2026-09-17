@@ -203,7 +203,7 @@ test.describe("Offline mode (no login)", () => {
   test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".site-footer")).toBeVisible();
-    await expect(page.locator('a[href="https://www.shadow.wang/"]')).toHaveAttribute("target", "_blank");
+    await expect(page.locator('a[href="https://shadow.wang/"]')).toHaveAttribute("target", "_blank");
     await expect(page.locator(".site-footer-links > .site-footer-link").first()).toContainText("Shadow Lab");
     await expect(page.locator('a[href="/privacy"]')).toHaveAttribute("target", "_blank");
     await expect(page.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
@@ -212,8 +212,8 @@ test.describe("Offline mode (no login)", () => {
 
     await page.locator("#wechatButton").click();
     await expect(page.locator("#wechatDialog")).toBeVisible();
-    await expect(page.locator("#wechatDialog img")).toHaveAttribute("src", "/brand_assets/wechat-public-account.jpg");
-    await expect(page.locator("#wechatDialog img")).toHaveAttribute("alt", "微信公众号二维码");
+    await expect(page.locator("#wechatDialog img")).toHaveAttribute("src", "/brand_assets/wechat-public-account.png");
+    await expect(page.locator("#wechatDialog img")).toHaveAttribute("alt", "Ward的AI产品实战微信公众号二维码");
     await page.locator("#wechatDialogClose").click();
     await expect(page.locator("#wechatDialog")).toBeHidden();
     await expect(page.locator("#wechatButton")).toBeFocused();
