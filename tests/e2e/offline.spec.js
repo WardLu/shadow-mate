@@ -78,7 +78,7 @@ async function expectRichLearningCards(root, { includeSpeech = false, gridCells 
 test.describe("Offline mode (no login)", () => {
   test("app loads with correct title", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
+    await expect(page).toHaveTitle("影伴 Shadow Mate - 免费家庭成长工作台 | 陪伴有方法，成长有动力");
     await expect(page.locator(".topbar h1")).toHaveText("影伴 Shadow Mate");
     await expect(page.locator(".topbar .sub")).toHaveText("家庭成长工作台 · 陪伴有方法，成长有动力");
   });
@@ -155,7 +155,7 @@ test.describe("Offline mode (no login)", () => {
     await context.setOffline(true);
     try {
       await page.reload();
-      await expect(page).toHaveTitle("影伴 Shadow Mate - 家庭成长工作台 | 陪伴有方法，成长有动力");
+      await expect(page).toHaveTitle("影伴 Shadow Mate - 免费家庭成长工作台 | 陪伴有方法，成长有动力");
       const offlinePackage = await page.evaluate(async (fixture) => {
         const resourcePackage = { ...fixture, baseUrl: `${location.origin}/piper-lifecycle-fixture` };
         const cache = await caches.open(`shadow-mate-piper-${resourcePackage.id}-${resourcePackage.version}`);
