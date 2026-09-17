@@ -58,6 +58,9 @@ shadow-wang-home.png
 /docs/releases/
 /docs/adr/
 
+# Internal operational and analytics queries are not published from this repository
+/supabase/queries/
+
 # Local large media & marketing project workspaces
 /assets/fonts/
 /assets/marketing/
