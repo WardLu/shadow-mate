@@ -2,6 +2,15 @@
 
 > This file lists user-visible product changes for each published version.
 
+## v1.5.4 - 2026-09-17
+
+### AITDK 3D Zero-Defect and Footer Matrix Alignment
+
+- AITDK Zero-Defect Governance: Standardized Page Title [30, 60], Description [140, 160], and H1/H2/H3 heading hierarchy, eliminating HTML entity escape expansion flaws.
+- Social Sharing & Full-Frame Banner: Upgraded social sharing cards from a single icon to a high-fidelity widescreen OG banner (1200x630).
+- Footer Product Matrix & Authoritative Channels: Added "Product Details" link in the footer leading to the official Shadow Lab portal product page, and included direct links to the creator's Xiaohongshu and 𝕏 profiles.
+- GEO Structured Data (@graph): Formatted and linked WebSite, Organization, Person (Ward Lu), WebApplication, and FAQPage with deep semantic relationships.
+
 ## v1.5.3 - 2026-09-14
 
 ### More reliable learner switching and offline recovery
