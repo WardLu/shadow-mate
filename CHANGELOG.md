@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.4] - 2026-09-17
+
+### Added
+
+- 生产发布唯一入口 `scripts/release/deploy-production.sh`（`npm run release:production`）：锁定 Node 22 运行时、绑定 Vercel Team/Project、构建预产物后 promote 并做端点验收，附 `config/release-production.json`；Vercel 自动部署保持关闭。
+- 新增构建产物与线上端点两套 AITDK 审计脚本：`npm run seo:audit` 与 `npm run seo:live`，`verify` 在 build 之后执行产物审计。
+
+### Changed
+
+- AITDK 零缺陷治理：Title 收敛到 [30, 60]、Description 收敛到 [140, 160]，消除 HTML 实体转义膨胀，并统一 H1/H2/H3 层级与链接、图片的可读标题。
+- 首页 Title 与 Description 补齐「免费」定位关键词。
+- 社交分享卡片由单图标升级为 1200x630 宽屏 OG 卡片；JSON-LD 收敛为 `@graph`，串联 WebSite、Organization、Person、WebApplication 与 FAQPage。
+- 页脚新增「产品介绍」入口直达 Shadow Lab 官网产品页，并补齐创作者小红书与 𝕏 渠道；Shadow Lab 官方链接统一为规范域名 `shadow.wang`。
+
+### Fixed
+
+- 版本号统一：`package.json`、`package-lock.json`、`index.html` 的 `softwareVersion`、README 版本徽标与 `seo-metadata` 断言此前停在旧的 1.5.3，本版一并更新为 `1.5.4`。
+
 ## [1.5.3] - 2026-09-14
 
 ### Changed
