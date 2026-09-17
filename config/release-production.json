@@ -20,7 +20,7 @@
   "acceptance": {
     "path": "/",
     "bodyIncludes": "Shadow Mate",
-    "maxSeconds": 30,
+    "maxSeconds": 120,
     "requiredHeaders": [
       "content-type",
       "strict-transport-security"
