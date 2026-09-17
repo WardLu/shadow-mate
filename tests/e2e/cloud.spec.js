@@ -929,7 +929,16 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("当前孩子未变，请重试");
     await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(secondProfileId);
     await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(secondProfileId);
-    await expect.poll(() => page.evaluate(() => window.__growthWriteScopes)).toEqual([]);
+    // 切换失败期间只保证不把写入落到目标作用域；对仍处于 active 的当前学习者的
+    // 排空/重试写入是合法行为，若断言"零写入"会与它竞态。
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (target) => window.__growthWriteScopes.filter((id) => id === target).length,
+          PROFILE_ID,
+        ),
+      )
+      .toBe(0);
 
     await page.evaluate(() => {
       window.__rejectLearningDbReopen = false;
