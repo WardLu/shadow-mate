@@ -7,6 +7,7 @@
 ### AITDK 三维零缺陷与页脚产品矩阵对齐
 
 - AITDK 零缺陷治理：对齐页面 Title [30, 60]、Description [140, 160] 与 H1/H2/H3 规范，彻底消除 HTML 实体转义膨胀陷阱。
+- 首页 Title 与 Description 补充「免费」定位关键词。
 - 社交分享与全画幅宣传图：社交卡片由单 Icon 升级为高保真宽屏横版 OG 卡片（1200x630）。
 - 页脚产品矩阵与权威渠道：页脚新增「产品介绍」直达 Shadow Lab 官网详情页，补齐创作者小红书与 𝕏 渠道入口。
 - GEO 结构化数据 (@graph)：规范化收纳 WebSite、Organization、Person（Ward Lu）、WebApplication、FAQPage 深度语义关联。
