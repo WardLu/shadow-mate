@@ -18,6 +18,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 发布纪律（CONTRIBUTING.md「Release 闸门」）：tag 只能打在已合并、且可证明位于
+      # main 祖先链的提交上。v1.5.3 曾从 rebase 前的侧分支取 tag，导致 provenance 无法
+      # 判定为 clean；这一步把该纪律变成硬门禁，早失败、不消耗后续步骤。
+      - name: Verify the tagged commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          # checkout 已按 fetch-depth: 0 取全历史与分支；这里的刷新只是保险，失败不致命。
+          git fetch --quiet origin main || echo "::warning::Could not refresh origin/main; using the refs fetched by checkout."
+          tag_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} points at ${tag_commit}, which is not an ancestor of origin/main. Create release tags on commits already merged into main; rebuild the tag from the merged commit instead of a side branch."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} (${tag_commit}) is an ancestor of origin/main."
+
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
