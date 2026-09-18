@@ -1742,7 +1742,18 @@ test.describe("Authenticated cloud workspace", () => {
 
     await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
     await secondChoice.click();
-    await page.waitForTimeout(250);
+    // 等切换真正提交后再开始记录活动：提交之前给旧学习者排队写入是合法行为
+    // （那时旧学习者仍是 active），本用例要守的是"提交之后延迟加载不得再写旧作用域"。
+    await expect.poll(() => page.evaluate(() => ({
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+    }))).toEqual({
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+    });
+    await page.evaluate(() => { window.__growthActivityScopes = []; });
     await page.evaluate(() => window.__releaseDelayedGrowthLoad());
 
     await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({
