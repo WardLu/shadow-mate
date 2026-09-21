@@ -49,7 +49,7 @@ if (!jsAssets.length || !cssAssets.length) {
 }
 
 const html = await readFile("dist/index.html", "utf8");
-if (!html.includes('href="manifest.json"') || !html.includes("/assets/")) {
+if (!/href="\/?manifest\.json"/.test(html) || !html.includes("/assets/")) {
   throw new Error("Built HTML is missing manifest or bundled asset references");
 }
 

@@ -51,15 +51,37 @@ if [ -z "$TEAM_ID" ] || [ -z "$PROJECT_ID" ]; then
 fi
 echo "✅ 绑定 Vercel Team: $TEAM_ID, Project: $PROJECT_ID ($PROJECT_NAME_VERCEL)"
 
-# 确保 .vercel/project.json 始终指向权威 project ID（防止 worktree 路径漂移创建虚假新项目）
-mkdir -p .vercel
-echo "{\"projectId\":\"$PROJECT_ID\",\"orgId\":\"$TEAM_ID\",\"projectName\":\"$PROJECT_NAME_VERCEL\"}" > .vercel/project.json
+# Release only a clean, reviewed production commit that matches the live remote.
+EXPECTED_BRANCH=$(node -p "require('./$CONFIG_FILE').productionBranch || ''")
+CURRENT_BRANCH="$(git symbolic-ref --quiet --short HEAD)"
+if [ -z "$EXPECTED_BRANCH" ] || [ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]; then
+  echo "❌ 拒绝发布: 必须在配置声明的发布分支 $EXPECTED_BRANCH 上执行" >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+  echo "❌ 拒绝发布: 工作区不干净（含未跟踪文件）" >&2
+  exit 1
+fi
+HEAD_SHA="$(git rev-parse HEAD)"
+TRACKING_SHA="$(git rev-parse "origin/$CURRENT_BRANCH")"
+LIVE_REMOTE_LINE="$(git ls-remote --exit-code origin "refs/heads/$CURRENT_BRANCH")"
+LIVE_REMOTE_SHA="${LIVE_REMOTE_LINE%%[[:space:]]*}"
+if [ "$HEAD_SHA" != "$TRACKING_SHA" ] || [ "$HEAD_SHA" != "$LIVE_REMOTE_SHA" ]; then
+  echo "❌ 拒绝发布: HEAD 与 origin/$CURRENT_BRANCH 或真实远端不一致" >&2
+  exit 1
+fi
+
 
 # ------------------------------------------------------------------------------
 # 3. 拉取最新的生产环境变量与配置
 # ------------------------------------------------------------------------------
 echo "👉 [3/6] 同步 Vercel 生产环境变量..."
+# Fail closed on conflicting inherited identity or an existing wrong local link.
+node scripts/release/vercel-project-binding.mjs
+export VERCEL_ORG_ID="$TEAM_ID"
+export VERCEL_PROJECT_ID="$PROJECT_ID"
 vercel pull --yes --environment=production --scope "$TEAM_ID"
+node scripts/release/vercel-project-binding.mjs --check
 
 # ------------------------------------------------------------------------------
 # 4. 执行生产打包构建
@@ -71,7 +93,8 @@ vercel build --prod
 # 5. 上传预构建包并提升到正式域名
 # ------------------------------------------------------------------------------
 echo "👉 [5/6] 部署预构建产物并 Promote 到正式域名..."
-DEPLOY_OUTPUT=$(vercel deploy --prebuilt --prod --skip-domain --yes --scope "$TEAM_ID")
+node scripts/release/vercel-project-binding.mjs --check
+DEPLOY_OUTPUT=$(vercel deploy --meta "releaseCommitSha=${HEAD_SHA}" --prebuilt --prod --skip-domain --yes --scope "$TEAM_ID")
 DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -Eo 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -n 1 || true)
 
 if [ -z "$DEPLOY_URL" ]; then
@@ -82,6 +105,10 @@ fi
 
 echo "✅ 预构建部署完成: $DEPLOY_URL"
 echo "正在提升（Promote）到生产正式域名..."
+# A successful CLI response is not sufficient: verify the deployed resource identity.
+node scripts/release/vercel-project-binding.mjs --check
+vercel api "/v13/deployments/${DEPLOY_URL#https://}" --scope "$TEAM_ID" --raw | node scripts/release/vercel-project-binding.mjs --deployment "$HEAD_SHA"
+node scripts/release/verify-deployment-assets.mjs "$DEPLOY_URL"
 vercel promote "$DEPLOY_URL" --yes --scope "$TEAM_ID"
 echo "✅ Promote 成功！"
 
@@ -168,6 +195,9 @@ if [ -n "$DOMAINS" ]; then
 else
   echo "ℹ️ 未配置 productionDomains，跳过域名验收"
 fi
+
+node scripts/release/verify-deployment-assets.mjs --production "$DEPLOY_URL"
+echo "线上版本 = 提交 $HEAD_SHA（工作区干净，与远端一致）"
 
 echo "========================================================"
 echo "🎉 ${PROJECT_NAME} 生产发布全流程闭环成功！线上已完全生效！"

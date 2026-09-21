@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.5.4</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.5</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -237,3 +237,9 @@ I share product and AI-building work across several channels:
 ## License
 
 The code is released under the [MIT License](LICENSE). Third-party content, models, and trademarks remain the property of their respective owners; MIT does not grant rights to them. See [TRADEMARKS.md](TRADEMARKS.md) for Shadow Mate brand boundaries.
+
+### Vercel 项目身份校验
+
+发布入口以 `config/release-production.json` 为项目与团队身份的唯一事实源。缺少本地 `.vercel/project.json` 时按配置创建；已有链接或 `VERCEL_PROJECT_ID` / `VERCEL_ORG_ID` 与配置冲突时立即中止，不覆盖错误链接、不创建替代项目。先核对冲突来源和正式项目 ID，再修复本地环境。
+
+`pull` 后及上传前再次核对链接，Promote 前回读部署所属项目、团队和 Ready/Production 状态。校验失败不得手工 Promote 或直接调用部署 CLI 绕过；本地测试使用合成数据和 CLI mock，不触发实际部署。
