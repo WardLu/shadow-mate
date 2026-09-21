@@ -196,7 +196,7 @@ else
   echo "ℹ️ 未配置 productionDomains，跳过域名验收"
 fi
 
-node scripts/release/verify-deployment-assets.mjs
+node scripts/release/verify-deployment-assets.mjs --production "$DEPLOY_URL"
 echo "线上版本 = 提交 $HEAD_SHA（工作区干净，与远端一致）"
 
 echo "========================================================"

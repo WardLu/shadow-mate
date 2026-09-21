@@ -38,9 +38,30 @@ export async function verifyAssets({ root = process.cwd(), deploymentUrl, run = 
   } finally { await rm(temporary, { recursive: true, force: true }); }
   return { assets: assets.length, origins: origins.length };
 }
+export function verifyProductionAliases({ root = process.cwd(), config, candidateUrl, run = spawnSync }) {
+  const api = resource => {
+    const response = run('vercel', ['api', resource, '--scope', config.vercel.teamId, '--raw'], { cwd: root, encoding: 'utf8' });
+    if (response.status !== 0) throw new Error('production_alias_read_failed');
+    return JSON.parse(response.stdout);
+  };
+  const host = new URL(candidateUrl).hostname;
+  if (!host.endsWith('.vercel.app')) throw new Error('production_candidate_host_invalid');
+  const candidate = api(`/v13/deployments/${host}`);
+  if (!candidate.id || candidate.projectId !== config.vercel.projectId) throw new Error('production_candidate_identity_mismatch');
+  if (!config.vercel.productionDomains?.length) throw new Error('production_domains_missing');
+  for (const domain of config.vercel.productionDomains) {
+    const alias = api(`/v4/aliases/${encodeURIComponent(domain)}`);
+    if (alias.deploymentId !== candidate.id || alias.projectId !== config.vercel.projectId) throw new Error('production_alias_mismatch');
+  }
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    if (process.argv.length > 3) throw new Error('artifact_arguments_invalid');
-    console.log(JSON.stringify(await verifyAssets({ deploymentUrl: process.argv[2] })));
+    const production = process.argv[2] === '--production';
+    if (production) {
+      if (process.argv.length !== 4) throw new Error('artifact_arguments_invalid');
+      const config = JSON.parse(await readFile('config/release-production.json', 'utf8'));
+      verifyProductionAliases({ config, candidateUrl: process.argv[3] });
+    } else if (process.argv.length !== 3) throw new Error('artifact_arguments_invalid');
+    console.log(JSON.stringify(await verifyAssets({ deploymentUrl: production ? undefined : process.argv[2] })));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
