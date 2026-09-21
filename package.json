@@ -37,7 +37,7 @@
     "@supabase/supabase-js": "2.115.0",
     "@vercel/analytics": "^2.0.1",
     "lucide": "^1.37.0",
-    "pinyin-pro": "3.29.3"
+    "pinyin-pro": "3.29.4"
   },
   "devDependencies": {
     "@emnapi/core": "2.0.0-alpha.5",
