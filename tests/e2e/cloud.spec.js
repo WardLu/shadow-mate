@@ -127,6 +127,7 @@ async function mockCloudApi(page, {
   workspaceAncillaryDelayMs = 0,
   consentMetadataResponses = null,
   consentMetadataDelayMs = workspaceAncillaryDelayMs,
+  holdWorkspaceMetadata = false,
 } = {}) {
   let state = structuredClone(remoteState);
   let version = 3;
@@ -144,6 +145,11 @@ async function mockCloudApi(page, {
   const createdProfiles = [];
   const createdHouseholds = [];
   const createdConsents = [];
+  // 由用例自己决定延迟元数据何时到达，避免"固定延迟 vs 登出耗时"的竞速
+  let releaseWorkspaceMetadata = () => {};
+  const workspaceMetadataGate = holdWorkspaceMetadata
+    ? new Promise((resolve) => { releaseWorkspaceMetadata = resolve; })
+    : Promise.resolve();
   const profileRows = [{
     id: PROFILE_ID,
     household_id: HOUSEHOLD_ID,
@@ -289,6 +295,7 @@ async function mockCloudApi(page, {
         ? consentMetadataDelayMs[Math.min(responseIndex, consentMetadataDelayMs.length - 1)]
         : consentMetadataDelayMs;
       if (consentDelay) await new Promise((resolve) => setTimeout(resolve, consentDelay));
+      await workspaceMetadataGate;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -365,6 +372,7 @@ async function mockCloudApi(page, {
         return;
       }
       if (workspaceAncillaryDelayMs) await new Promise((resolve) => setTimeout(resolve, workspaceAncillaryDelayMs));
+      await workspaceMetadataGate;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -387,6 +395,7 @@ async function mockCloudApi(page, {
     createdConsents,
     getGrowthPointItemsRequests: () => growthPointItemsRequests,
     getConsentMetadataRequests: () => consentMetadataResponseIndex,
+    releaseWorkspaceMetadata: () => releaseWorkspaceMetadata(),
     getRpcSettledCount: () => rpcSettledCount,
     getState: () => state,
   };
@@ -631,7 +640,7 @@ test.describe("Authenticated cloud workspace", () => {
 
   test("ignores delayed workspace metadata after signing out", async ({ page }) => {
     await seedAuthenticatedSession(page);
-    const api = await mockCloudApi(page, { workspaceAncillaryDelayMs: 1600 });
+    const api = await mockCloudApi(page, { holdWorkspaceMetadata: true });
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
@@ -665,7 +674,10 @@ test.describe("Authenticated cloud workspace", () => {
       metadataReady: false,
     });
 
-    await page.waitForTimeout(1900);
+    // 现在才放行元数据：它严格在登出之后到达，这才是本用例要验证的场景。
+    // （此前用固定延迟和登出耗时竞速，偶发时元数据在登出完成前就已到达，标记为真是合法的，用例因此假红。）
+    api.releaseWorkspaceMetadata();
+    await page.waitForTimeout(200);
     await expect.poll(() => page.evaluate(() => ({
       accountState: document.querySelector("#accountButton")?.dataset.state || null,
       growth: window.growthLoop.getScope(),
@@ -929,7 +941,16 @@ test.describe("Authenticated cloud workspace", () => {
     await expect(page.locator("#syncToast")).toContainText("当前孩子未变，请重试");
     await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_active_profile"))).toBe(secondProfileId);
     await expect.poll(() => page.evaluate(() => window.growthLoop.getScope().profile_id)).toBe(secondProfileId);
-    await expect.poll(() => page.evaluate(() => window.__growthWriteScopes)).toEqual([]);
+    // 切换失败期间只保证不把写入落到目标作用域；对仍处于 active 的当前学习者的
+    // 排空/重试写入是合法行为，若断言"零写入"会与它竞态。
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (target) => window.__growthWriteScopes.filter((id) => id === target).length,
+          PROFILE_ID,
+        ),
+      )
+      .toBe(0);
 
     await page.evaluate(() => {
       window.__rejectLearningDbReopen = false;
@@ -1721,7 +1742,18 @@ test.describe("Authenticated cloud workspace", () => {
 
     await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
     await secondChoice.click();
-    await page.waitForTimeout(250);
+    // 等切换真正提交后再开始记录活动：提交之前给旧学习者排队写入是合法行为
+    // （那时旧学习者仍是 active），本用例要守的是"提交之后延迟加载不得再写旧作用域"。
+    await expect.poll(() => page.evaluate(() => ({
+      key: localStorage.getItem("shadow_mate_active_profile"),
+      learning: window.learningDesk.getEnvelope().scope?.profile_id,
+      growth: window.growthLoop.getScope().profile_id,
+    }))).toEqual({
+      key: SECOND_PROFILE_ID,
+      learning: SECOND_PROFILE_ID,
+      growth: SECOND_PROFILE_ID,
+    });
+    await page.evaluate(() => { window.__growthActivityScopes = []; });
     await page.evaluate(() => window.__releaseDelayedGrowthLoad());
 
     await expect.poll(() => page.evaluate(({ firstProfileId, secondProfileId }) => ({

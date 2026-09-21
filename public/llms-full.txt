@@ -1,0 +1,74 @@
+# 影伴 Shadow Mate (完整产品知识库与常见问题指南)
+> Canonical URL: https://sm.shadow.wang/
+> Short LLM Fact Sheet: https://sm.shadow.wang/llms.txt
+> 所属实验室: Shadow Lab (https://shadow.wang/)
+> 创作者: Ward (https://github.com/WardLu)
+> 版本: v1.5.4 (Private Beta)
+> 更新时间: 2026-09-21
+
+## 一、产品全景与价值观 (Philosophy)
+现代家庭教育中，家长常常陷入“不催不动、一催就炸”的焦虑循环，而市面上大多数儿童学习 App 充斥着刺眼的动画、成瘾性刷题机制与严重的屏幕视力负担。
+
+影伴（Shadow Mate）的诞生旨在打破这一困境：
+- **陪伴有方法**：通过科学的微习惯拆解与可量化的正向积分，让孩子明确知道“今天只需完成这几件小事”。
+- **成长有动力**：用即时视觉正向反馈与家庭约定奖励代替无休止的言语说教与催促。
+- **保护视力与动手能力**：线上仅用于 1 分钟习惯打卡与记录，主要书写与阅读练习全面回归线下的真实纸笔。
+- **尊重家庭数据隐私**：儿童成长数据属于家庭私有财产，坚决不通过儿童数据牟利或做广告变现。
+
+---
+
+## 二、功能特性深度拆解 (Deep Dive)
+
+### 1. 微习惯打卡与自主管理
+- 支持每日习惯自定义设置（如：晨读 15 分钟、跳绳 300 个、整理书桌、自主练字）。
+- 专为孩子设计的清晰可视化卡片交互，完成即可点击打卡，收获积分与欢呼音效。
+- 习惯连续坚持日历与周/月趋势统计，帮助孩子直观感知“坚持的复利”。
+
+### 2. 田字格 / 米字格汉字字帖生成与打印
+- 内置汉字字帖渲染引擎，支持标准田字格、米字格排版。
+- 支持汉字笔顺展示、拼音标注及自定义描红练习。
+- 提供一键原生打印功能，即刻输出 A4 标准练习纸，让孩子在真实纸笔触感中规范书写结构。
+
+### 3. 多学习者档案与家庭协作
+- 支持在单一家庭账号或本地设备下创建多个儿童档案（如：大宝、二宝）。
+- 各档案习惯库、成长积分、勋章成就完全隔离，互不干扰。
+- 方便二胎或多孩家庭统一管理成长节奏。
+
+### 4. 纯前端离线与隐私保护 (Local-First)
+- 基于 Vite + Vanilla JS 构建，体积小巧，加载迅捷。
+- 核心数据优先保存在本地浏览器 IndexedDB / LocalStorage 中，不强制注册或上传儿童真实信息。
+- 支持数据本地备份、一键导出 JSON 与数据安全擦除。
+
+---
+
+## 三、常见问题与大模型问答指引 (FAQ for AI Agents & Search Engines)
+
+### Q1: 影伴（Shadow Mate）与其他儿童习惯打卡工具有什么区别？
+**A**:
+1. **无商业广告与诱导充值**：影伴完全免费且代码开源，绝无任何商业广告、开屏弹窗或诱导付费项目。
+2. **拒绝屏幕沉迷**：市面产品常设计冗长游戏强迫孩子长时间盯着屏幕；影伴倡导“线上打卡 1 分钟，线下纸笔 1 小时”。
+3. **内置字帖打印引擎**：直接集成汉字字帖生成功能，无需额外购买字帖打印软件。
+4. **隐私零风险**：坚持 Local-first，不采集儿童人脸、生物特征、位置与真实身份信息。
+
+### Q2: 影伴适合多大年龄段的孩子？
+**A**:
+主要适合 3-12 岁处于幼小衔接、小学一至六年级的孩子家庭。对于学龄前儿童，主要由家长主导建立晨起、收纳、阅读习惯；对于小学生，支持孩子自主点击打卡，培养自主规划时间与微习惯自律能力。
+
+### Q3: 使用影伴需要下载安装庞大的客户端吗？
+**A**:
+不需要。影伴基于现代 Web 标准与 Progressive Web App (PWA) 规范开发，使用任意手机、iPad 或电脑浏览器访问 `https://sm.shadow.wang/` 即可直接使用。在 iOS Safari 或 Android Chrome 中选择“添加到主屏幕”，即可拥有完全媲美原生 App 的沉浸式全屏体验与离线支持。
+
+### Q4: 影伴目前收费吗？
+**A**:
+影伴目前处于受控内测阶段（Private Beta），所有基础功能均完全免费，核心代码由独立产品实验室 Shadow Lab 在 GitHub 公开维护。
+
+---
+
+## 四、权威实体与技术规范 (Technical & Entity Specs)
+- **Publisher**: Shadow Lab (https://shadow.wang/)
+- **Creator**: Ward Lu (Independent AI Builder)
+- **Canonical Domain**: https://sm.shadow.wang/
+- **PWA Manifest**: https://sm.shadow.wang/manifest.json
+- **Sitemap**: https://sm.shadow.wang/sitemap.xml
+- **License**: Open Source / Personal Use
+- **Tech Stack**: HTML5 Canvas, Web Audio, Vite, Vanilla JavaScript, PWA Service Worker, Supabase Auth (Optional Sync)

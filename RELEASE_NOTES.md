@@ -2,6 +2,15 @@
 
 > This file lists user-visible product changes for each published version.
 
+
+## v1.5.5 - 2026-09-21
+
+### Fixed
+
+- Bind deployment commands to the configured Vercel project and team, and reject conflicting local links or inherited environment variables.
+- Recheck deployment identity before production promotion to prevent accidental projects from temporary work directories.
+- Require a clean production branch whose commit matches the live remote before deployment.
+
 ## v1.5.4 - 2026-09-17
 
 ### AITDK 3D Zero-Defect and Footer Matrix Alignment
