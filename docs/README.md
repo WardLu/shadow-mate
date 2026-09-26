@@ -32,7 +32,7 @@
 | [变更日志 (Changelog)](../CHANGELOG.md) | 按版本记录的工程变更明细 | 开发者 / 发布 |
 | [贡献指南 (Contributing)](../CONTRIBUTING.md) | 环境要求、测试入口与提交规范 | 贡献者 |
 
-生产发布只通过 `npm run release:production`（即 `bash scripts/release/deploy-production.sh`）执行；仓库已关闭 Vercel 自动部署。
+Vercel 项目设置与 `vercel.json` 均关闭 Git 自动部署。GitHub Release 工作流只更新 `production` 分支指针；生产发布只通过 `npm run release:production`（即 `bash scripts/release/deploy-production.sh`）执行。
 
 ---
 
