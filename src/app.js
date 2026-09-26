@@ -2,6 +2,7 @@ import { createSpeechSession } from "./speech-session.js";
 import { createLearningDesk } from "./learning-desk.js";
 import { createLearnerSession } from "./learner-session.js";
 import { inject } from "@vercel/analytics";
+import { installVibeCafeTelemetry } from "./channel-telemetry.js";
 import { ANALYTICS_EVENTS, hasConsecutiveCheckinDays, recordAnalyticsEvent } from "./analytics.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
@@ -52,6 +53,7 @@ import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-so
 import { praise, flyStars, shake } from "./learning-feedback.js";
 
 inject();
+installVibeCafeTelemetry();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
 const publishedSpeechPlayer = createPublishedSpeechPlayer({
