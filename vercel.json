@@ -2,6 +2,9 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "outputDirectory": "dist",
+  "git": {
+    "deploymentEnabled": false
+  },
   "rewrites": [
     {
       "source": "/privacy",

@@ -1,7 +1,7 @@
-name: Deploy release to production
+name: Advance production branch to release
 
 # GitHub Release 发布后，把 `production` 分支指针快进到该 release 的 commit，
-# 触发 Vercel 对 `production` 分支（Branch Tracking）的生产构建与部署。
+# 不触发 Vercel 构建或部署；生产发布只能由 scripts/release/deploy-production.sh 执行。
 # 只更新指针、不创建新提交；strict fast-forward，绝不 force。
 # 发布前必须已通过 `.github/workflows/release.yml`（Release verification）的产物验证，
 # 「创建 GitHub Release」即代表该 tag 已验收（见 CONTRIBUTING.md「Release 闸门」）。
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要部署的 Release tag，例如 v1.3.9（补发/重跑用；回滚请按 CONTRIBUTING.md 手动 force-with-lease）"
+        description: "要更新到的 Release tag，例如 v1.3.9（补发/重跑用；回滚请按 CONTRIBUTING.md 手动 force-with-lease）"
         required: false
         type: string
 
