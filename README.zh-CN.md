@@ -176,6 +176,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 影伴当前仓库版本为 v1.5.5，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录页面访问数据；正式域名配置后，VibeCafé 页面浏览统计还会使用保存在浏览器中的随机访客标识参与公开作品榜单。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 VibeCafé 统计只在构建时设置 `VITE_VIBECAFE_AUTH_KEY` 且站点为 `https://sm.shadow.wang` 时加载。该客户端 Key 会出现在浏览器产物中，必须在 VibeCafé 将允许上报的 Origin 限定为正式域名。本地和预览环境不会发送榜单事件。配置生产构建环境后，仍须使用仓库的受控发布流程部署；只改环境变量不会更新已部署产物。
+第三方脚本已通过子资源完整性哈希固定；如果 VibeCafé 更新 `telemetry/v1.js`，先审查实际上报内容和隐私行为，再更新 `src/channel-telemetry.js` 中的哈希并重新发布。
 
 ## 中英文发音
 

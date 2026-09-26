@@ -31,6 +31,7 @@ describe("VibeCafé pageview loader", () => {
     expect(scripts).toHaveLength(1);
     expect(scripts[0].src).toBe("https://vibecafe.ai/telemetry/v1.js");
     expect(scripts[0].crossOrigin).toBe("anonymous");
+    expect(scripts[0].integrity).toBe("sha384-rfu8ChHJhFjk0uvMPW4tO/l2WGoV8XXBtgyOOfudSEt127avRjqY87msn7Ouz1Fg");
     expect(scripts[0].dataset.vcAuthKey).toBe("synthetic-key");
     expect(scripts[0].dataset.vcProductId).toBe("cmui558e400000agml82y2kn1");
   });

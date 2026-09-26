@@ -181,6 +181,7 @@ The local Supabase profile and migration sources are checked by the shared local
 Shadow Mate is an open-source family learning PWA. It has no advertising and no independent child accounts. Page-visit data may be collected through [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). When configured for the production origin, VibeCafé pageview telemetry also uses a persistent random browser identifier for its public work ranking. See [Privacy](PRIVACY.md) for data scope and deletion behavior, and [Security](SECURITY.md) for private vulnerability reports.
 
 VibeCafé telemetry loads only on `https://sm.shadow.wang` when `VITE_VIBECAFE_AUTH_KEY` is set at build time. Its client key is visible in the built browser bundle and must remain restricted to that exact Origin in VibeCafé. Local and preview builds do not send ranking events. Set the key in the production build environment and use the repository's controlled release flow; changing the environment alone does not update the deployed bundle.
+The third-party script is pinned with Subresource Integrity. If VibeCafé changes `telemetry/v1.js`, inspect its payload and privacy behavior before updating the hash in `src/channel-telemetry.js` and redeploying.
 
 ## Speech fallback
 
