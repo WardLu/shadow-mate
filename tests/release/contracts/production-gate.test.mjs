@@ -21,3 +21,48 @@ for(const mode of ['dirty','branch','unpushed','environment'])test(`${mode} fail
 });
 test('clean production reaches only mocked pull with authoritative environment',t=>{const f=fixture(t);const r=run(f);assert.equal(r.status,77,r.stdout+r.stderr);assert.match(readFileSync(path.join(f.base,'calls'),'utf8'),/pull .*\|team_test\|prj_test/);});
 test('advanced remote is rejected even when local tracking ref is stale',t=>{const f=fixture(t);git(f.base,'clone',path.join(f.base,'remote.git'),'other');const other=path.join(f.base,'other');git(other,'switch','production');git(other,'config','user.name','Fixture');git(other,'config','user.email','fixture@example.test');writeFileSync(path.join(other,'advanced'),'x');git(other,'add','.');git(other,'commit','-m','advanced');git(other,'push','origin','production');const r=run(f);assert.notEqual(r.status,0);assert.match(r.stderr,/真实远端/);assert.equal(existsSync(path.join(f.base,'calls')),false);});
+test('a build that changes tracked files is rejected before deployment',t=>{
+ const f=fixture(t);
+ writeFileSync(path.join(f.bin,'vercel'),`#!/bin/sh
+case "$1" in
+  pull) exit 0 ;;
+  build) printf 'changed' >> package.json; exit 0 ;;
+  deploy) touch "$CALL_LOG"; exit 0 ;;
+esac
+exit 77
+`,{mode:0o755});
+ const r=run(f);
+ assert.notEqual(r.status,0);
+ assert.equal(existsSync(path.join(f.base,'calls')),false);
+ assert.match(r.stderr,/工作区不干净/);
+});
+test('a failed post-build git status is rejected before deployment',t=>{
+ const f=fixture(t),marker=path.join(f.base,'build-marker'),gitBinary=spawnSync('which',['git'],{encoding:'utf8'}).stdout.trim();
+ writeFileSync(path.join(f.bin,'git'),`#!/bin/sh
+if [ "$1" = status ] && [ -f "$BUILD_MARKER" ]; then exit 1; fi
+exec "${gitBinary}" "$@"
+`,{mode:0o755});
+ writeFileSync(path.join(f.bin,'vercel'),`#!/bin/sh
+case "$1" in
+  pull) exit 0 ;;
+  build) touch "$BUILD_MARKER"; exit 0 ;;
+  deploy) touch "$CALL_LOG"; exit 0 ;;
+esac
+exit 77
+`,{mode:0o755});
+ const r=run(f,{BUILD_MARKER:marker});
+ assert.notEqual(r.status,0);
+ assert.equal(existsSync(path.join(f.base,'calls')),false);
+ assert.match(r.stderr,/无法检查工作区/);
+});
+test('a failed initial git status is rejected before Vercel writes',t=>{
+ const f=fixture(t),gitBinary=spawnSync('which',['git'],{encoding:'utf8'}).stdout.trim();
+ writeFileSync(path.join(f.bin,'git'),`#!/bin/sh
+if [ "$1" = status ]; then exit 1; fi
+exec "${gitBinary}" "$@"
+`,{mode:0o755});
+ const r=run(f);
+ assert.notEqual(r.status,0);
+ assert.equal(existsSync(path.join(f.base,'calls')),false);
+ assert.match(r.stderr,/无法检查工作区/);
+});
