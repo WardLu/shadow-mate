@@ -58,7 +58,11 @@ if [ -z "$EXPECTED_BRANCH" ] || [ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]; the
   echo "❌ 拒绝发布: 必须在配置声明的发布分支 $EXPECTED_BRANCH 上执行" >&2
   exit 1
 fi
-if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+WORKTREE_STATUS="$(git status --porcelain --untracked-files=all)" || {
+  echo "❌ 拒绝发布: 无法检查工作区状态" >&2
+  exit 1
+}
+if [ -n "$WORKTREE_STATUS" ]; then
   echo "❌ 拒绝发布: 工作区不干净（含未跟踪文件）" >&2
   exit 1
 fi
@@ -88,7 +92,11 @@ node scripts/release/vercel-project-binding.mjs --check
 # ------------------------------------------------------------------------------
 echo "👉 [4/6] 执行生产打包构建..."
 vercel build --prod
-if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+WORKTREE_STATUS="$(git status --porcelain --untracked-files=all)" || {
+  echo "❌ 拒绝发布: 构建后无法检查工作区状态" >&2
+  exit 1
+}
+if [ -n "$WORKTREE_STATUS" ]; then
   echo "❌ 拒绝发布: 构建后工作区不干净（含未跟踪文件）" >&2
   exit 1
 fi

@@ -36,3 +36,33 @@ exit 77
  assert.equal(existsSync(path.join(f.base,'calls')),false);
  assert.match(r.stderr,/工作区不干净/);
 });
+test('a failed post-build git status is rejected before deployment',t=>{
+ const f=fixture(t),marker=path.join(f.base,'build-marker'),gitBinary=spawnSync('which',['git'],{encoding:'utf8'}).stdout.trim();
+ writeFileSync(path.join(f.bin,'git'),`#!/bin/sh
+if [ "$1" = status ] && [ -f "$BUILD_MARKER" ]; then exit 1; fi
+exec "${gitBinary}" "$@"
+`,{mode:0o755});
+ writeFileSync(path.join(f.bin,'vercel'),`#!/bin/sh
+case "$1" in
+  pull) exit 0 ;;
+  build) touch "$BUILD_MARKER"; exit 0 ;;
+  deploy) touch "$CALL_LOG"; exit 0 ;;
+esac
+exit 77
+`,{mode:0o755});
+ const r=run(f,{BUILD_MARKER:marker});
+ assert.notEqual(r.status,0);
+ assert.equal(existsSync(path.join(f.base,'calls')),false);
+ assert.match(r.stderr,/无法检查工作区/);
+});
+test('a failed initial git status is rejected before Vercel writes',t=>{
+ const f=fixture(t),gitBinary=spawnSync('which',['git'],{encoding:'utf8'}).stdout.trim();
+ writeFileSync(path.join(f.bin,'git'),`#!/bin/sh
+if [ "$1" = status ]; then exit 1; fi
+exec "${gitBinary}" "$@"
+`,{mode:0o755});
+ const r=run(f);
+ assert.notEqual(r.status,0);
+ assert.equal(existsSync(path.join(f.base,'calls')),false);
+ assert.match(r.stderr,/无法检查工作区/);
+});
