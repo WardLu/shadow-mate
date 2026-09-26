@@ -462,12 +462,6 @@
   .site-footer-link:hover{color:var(--green-deep);}
   .site-footer-link:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:4px;}
   .site-footer-link:active,.social-qr-close:active{transform:scale(.96);}
-  .site-channel-badge{display:inline-flex;align-items:center;gap:10px;width:200px;min-height:54px;box-sizing:border-box;margin-top:4px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);text-align:left;text-decoration:none;}
-  .site-channel-badge-mark{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:8px;background:#111;color:#fff;font-size:22px;line-height:1;}
-  .site-channel-badge-copy{display:flex;flex-direction:column;line-height:1.2;}
-  .site-channel-badge-copy small{font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-soft);}
-  .site-channel-badge-copy strong{font-size:16px;}
-  .site-channel-badge:focus-visible{outline:2px solid var(--focus);outline-offset:3px;}
   .social-qr-dialog{
     width:min(calc(100vw - 32px),320px);padding:0;border:0;border-radius:22px;
     background:transparent;box-shadow:0 16px 48px rgba(31,122,57,.24);
