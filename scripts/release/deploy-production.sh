@@ -88,6 +88,10 @@ node scripts/release/vercel-project-binding.mjs --check
 # ------------------------------------------------------------------------------
 echo "👉 [4/6] 执行生产打包构建..."
 vercel build --prod
+if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+  echo "❌ 拒绝发布: 构建后工作区不干净（含未跟踪文件）" >&2
+  exit 1
+fi
 
 # ------------------------------------------------------------------------------
 # 5. 上传预构建包并提升到正式域名
