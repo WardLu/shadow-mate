@@ -127,7 +127,9 @@ cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` for release candidates. `test:fast` includes static checks and all unit tests; real Supabase E2E requires the corresponding environment. Coverage thresholds are defined in the test configuration.
+Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` for release candidates and high-risk boundaries. `test:fast` includes static checks and all unit tests; real Supabase E2E requires the corresponding environment. Coverage thresholds are defined in the test configuration.
+
+Hosted CI runs for pull requests and pushes to `main` or `preview`. It checks out the event SHA and keeps `verify` as the stable gate: core checks always run, while database, Functions, and browser checks follow the changed-file scope. Unknown or untrusted scope runs the full route. A PR's temporary merge commit and the commit later pushed to `main` are checked separately. See [Contributing](CONTRIBUTING.md) and the [CI workflow](.github/workflows/ci.yml) for the current route and evidence rules.
 
 ## How it works
 
