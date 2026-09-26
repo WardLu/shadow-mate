@@ -13,6 +13,8 @@
 
 当前版本不要求儿童提供邮箱、手机号、生日、学校、地址、精确位置或照片，也不包含广告。应用通过 `@vercel/analytics` 使用 Vercel Web Analytics 记录匿名、聚合的页面访问数据，以及以下不带自定义属性的最小事件：首次激活、首次打卡、达到连续 3 天打卡、用户可见的学习记录同步失败和用户可见的 TTS 失败。事件不会发送学习状态、邮箱、家庭/孩子 ID、儿童显示名称、错误文本或语音文本；首次和连续使用事件只在本机用标记去重。Vercel 文档说明页面访问和自定义事件可能包含时间、页面 URL、来源、设备/浏览器/操作系统和粗略地理位置；其设计不使用第三方 Cookie，也不跨站识别访客。使用 Vercel Analytics 的数据会发送到 Vercel 服务器，详情见 [Vercel Web Analytics Privacy and Compliance](https://vercel.com/docs/analytics/privacy-policy)。正式对外运营前仍需重新审查 URL、Referrer-Policy、家长同意和数据处理条款。
 
+正式站点配置 VibeCafé 作品统计后，打开影伴即加载其页面浏览脚本，用于公开作品榜单的 UV/PV。当前脚本会在本站 `localStorage` 保存随机访客标识 `vc:telemetry:visitor:cmui558e400000agml82y2kn1`，向 VibeCafé 发送该标识及 `pageview` 事件；同一浏览器后续访问可被识别。脚本请求还会按普通网络连接向 VibeCafé 暴露 IP、浏览器等连接信息。当前脚本不会在事件正文中发送学习状态、账号邮箱、家庭/孩子 ID、儿童名称或页面 URL；正式站点的 `Referrer-Policy: no-referrer` 阻止浏览器发送来源页面。Do Not Track 或 Global Privacy Control 开启时，当前脚本不创建访客标识，也不上报事件。清除本站浏览器数据可移除该标识；应用内“清除本机数据”只清理学习与账号状态，不会清除它。VibeCafé 的数据处理和保留期限需以该服务的实际政策为准。
+
 固定课程文字会在发布准备阶段发送给腾讯云语音合成，生成后的 MP3 保存在项目自己的 COS/CDN 中供所有用户复用。用户点击播放时不会把文字、学习记录、账号信息或儿童资料发送给腾讯云，也不会触发新的付费合成。浏览器可能按标准 HTTP 规则缓存这些音频。影伴不采集麦克风录音。
 
 ## 家长同意和学习者档案
