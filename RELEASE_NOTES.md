@@ -3,7 +3,7 @@
 > This file lists user-visible product changes for each published version.
 
 
-## v1.5.6 - 2026-10-10
+## v1.5.8 - 2026-10-10
 
 ### Added
 
