@@ -78,6 +78,7 @@ const learnerSession = window.learnerSession;
 const scopeBlocked = () => learnerSession.getStatus().phase === "blocked";
 
 let session = null;
+let usageAuthInitialized = false;
 let memberships = [];
 let profiles = [];
 let guardianConsentHouseholds = new Set();
@@ -1748,6 +1749,7 @@ function scheduleSave(manual = false) {
 }
 
 window.cloudSync = {
+  getUsageMode: () => !usageAuthInitialized ? "unknown" : session ? "signed_in" : "local",
   schedule: scheduleSave,
   scheduleGrowthLoop: scheduleGrowthLoopSync,
   isProfileScopeWriteBlocked: () => scopeBlocked(),
@@ -1778,6 +1780,7 @@ async function maybePromptPasswordSetup(options = {}) {
 }
 
 async function onAuthChange(nextSession, event = "") {
+  usageAuthInitialized = true;
   if (nextSession && localResetInProgress) return;
   const authSessionKey = nextSession?.access_token || null;
   if (authSessionKey === lastAuthSessionKey && event !== "PASSWORD_RECOVERY") return;

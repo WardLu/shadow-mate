@@ -16,10 +16,10 @@
 - [ ] 已以最新 `main` 为目标基线运行 `npm run check:integration`
 - [ ] 如涉及生产 hotfix，已回灌 `main`；如不涉及，已在 PR 中说明
 - [ ] 如存在基线重叠文件，已说明冲突处理方式，并在隔离 worktree 中完成集成
-- [ ] `npm run test:fast` 通过（如涉及逻辑或代码）
+- [ ] 逻辑/代码相关的定向测试或 `test:fast` 已通过；若由 `npm run verify` 覆盖，已记录替代证据
 - [ ] 相关 UI/E2E 测试通过（如涉及页面、导航、离线或 PWA）
 - [ ] 数据库/Functions/集成测试通过（如涉及对应边界）
-- [ ] `npm run test:full` 通过（合并前、发布前或高风险改动）
+- [ ] 已按风险判断是否需要 `npm run test:full`；发布候选或高风险改动已执行，普通 PR 核对当前 PR 状态对应的受检临时合并提交与适用 CI 门禁
 - [ ] 未提交 `.env`、`.vercel`、secret key 或个人数据
 - [ ] 数据库变更附带迁移文件
 - [ ] 已检查本次变更涉及的 README、公开 docs、CHANGELOG、发布说明及隐私/安全文档，并已同步实现差异
@@ -29,9 +29,11 @@
 - [ ] 如包含外部贡献或第三方代码，已阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)，并在 PR 中说明来源与授权状态
 - [ ] 已运行 `npm run public:check`，并复查暂存区没有内部、敏感或不必要文件
 - [ ] 如果这是发布准备变更，已确认 `release-gate.config.json`、版本文件和发布说明同步
+- [ ] 已说明 `db-migration`、`production-impact` 标签或无需数据库/生产跟进的理由
 
 ## 验证记录
 
 - 选定层级：
 - 命令与结果：
 - 未运行或被环境阻塞的检查及原因：
+- 托管 CI 的受检 SHA 与适用检查结果：

@@ -122,7 +122,9 @@ cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-日常按变更范围选择检查；发布候选运行 `npm run test:full`。`test:fast` 包含静态检查与全部单元测试，真实 Supabase E2E 需要相应环境。覆盖率门槛以测试配置为准。
+日常按变更范围选择检查；发布候选和高风险边界运行 `npm run test:full`。`test:fast` 包含静态检查与全部单元测试，真实 Supabase E2E 需要相应环境。覆盖率门槛以测试配置为准。
+
+托管 CI 在 PR 及 `main`、`preview` 的 push 上运行，固定检出事件 SHA，并保留稳定的 `verify` 门禁。核心检查每次执行；数据库、Functions 和浏览器检查按变更范围选择，范围未知或来源不可信时运行完整路线。PR 临时合并提交与之后进入 `main` 的提交分别受检。路由及证据规则见[贡献指南](CONTRIBUTING.md)和 [CI 工作流](.github/workflows/ci.yml)。
 
 ## 工作方式
 

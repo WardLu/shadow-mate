@@ -329,6 +329,9 @@ for (const marker of [
 }
 
 const vercel = JSON.parse(await readFile("vercel.json", "utf8"));
+if (vercel.git?.deploymentEnabled !== false) {
+  throw new Error("Vercel Git deployments must be disabled; use the controlled production release script");
+}
 for (const source of ["/privacy", "/privacy/"]) {
   const route = vercel.rewrites?.find((item) => item.source === source);
   if (route?.destination !== "/privacy.html") {

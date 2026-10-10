@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.5.5</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.5.8</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -127,7 +127,9 @@ cd ../shadow-size/merchant-admin
 npx supabase db lint --local --schema public --level warning --fail-on error
 ```
 
-Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` for release candidates. `test:fast` includes static checks and all unit tests; real Supabase E2E requires the corresponding environment. Coverage thresholds are defined in the test configuration.
+Choose the smallest sufficient validation scope for ordinary changes. Run `npm run test:full` for release candidates and high-risk boundaries. `test:fast` includes static checks and all unit tests; real Supabase E2E requires the corresponding environment. Coverage thresholds are defined in the test configuration.
+
+Hosted CI runs for pull requests and pushes to `main` or `preview`. It checks out the event SHA and keeps `verify` as the stable gate: core checks always run, while database, Functions, and browser checks follow the changed-file scope. Unknown or untrusted scope runs the full route. A PR's temporary merge commit and the commit later pushed to `main` are checked separately. See [Contributing](CONTRIBUTING.md) and the [CI workflow](.github/workflows/ci.yml) for the current route and evidence rules.
 
 ## How it works
 
@@ -178,7 +180,7 @@ The local Supabase profile and migration sources are checked by the shared local
 
 ## Current release boundary
 
-Shadow Mate is an open-source family learning PWA. It has no advertising and no independent child accounts. Page-visit data may be collected through [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). When configured for the production origin, VibeCafé pageview telemetry also uses a persistent random browser identifier for its public work ranking. See [Privacy](PRIVACY.md) for data scope and deletion behavior, and [Security](SECURITY.md) for private vulnerability reports.
+Shadow Mate is an open-source family learning PWA. It has no advertising and no independent child accounts. Page-visit data may be collected through [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). When configured for the production origin, VibeCafé pageview telemetry also uses a persistent random browser identifier for its public work ranking. The production site also uses Sentry for fixed usage events and filtered unhandled errors; reporting can be turned off in Settings → Privacy. See [usage analytics](docs/usage-analytics.md) for measurement limits. See [Privacy](PRIVACY.md) for data scope and deletion behavior, and [Security](SECURITY.md) for private vulnerability reports.
 
 VibeCafé telemetry loads only on `https://sm.shadow.wang` when `VITE_VIBECAFE_AUTH_KEY` is set at build time. Its client key is visible in the built browser bundle and must remain restricted to that exact Origin in VibeCafé. Local and preview builds do not send ranking events. Set the key in the production build environment and use the repository's controlled release flow; changing the environment alone does not update the deployed bundle.
 The third-party script is pinned with Subresource Integrity. If VibeCafé changes `telemetry/v1.js`, inspect its payload and privacy behavior before updating the hash in `src/channel-telemetry.js` and redeploying.

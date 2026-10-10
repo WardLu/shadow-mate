@@ -16,35 +16,57 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Require lockfile
+        id: lockfile
+        run: test -f package-lock.json
 
       - name: Set up Node.js
-        if: ${{ hashFiles('package-lock.json') != '' }}
+        id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
 
+      - name: Select CI scope
+        id: scope
+        run: node scripts/ci-scope.mjs
+
       - name: Install locked dependencies
-        if: ${{ hashFiles('package-lock.json') != '' }}
+        id: install
         run: npm ci
 
+      - name: Test CI scope and required gate
+        id: ci_scope_tests
+        run: node --test tests/ci/*.test.mjs
+
       - name: Verify source and build
-        if: ${{ hashFiles('package-lock.json') != '' }}
+        id: source
         run: npm run verify
         env:
           SECURITY_CHECK_HISTORY: "1"
 
       - name: Validate release metadata baseline
-        if: ${{ hashFiles('package-lock.json') != '' }}
+        id: release_metadata
         run: npm run release:check
 
       - name: Audit dependencies
-        if: ${{ hashFiles('package-lock.json') != '' }}
+        id: audit
         run: npm audit --audit-level=high
+
+      - name: Test release contracts
+        id: release_contracts
+        if: ${{ steps.scope.outputs.release_contracts == 'true' }}
+        run: node --test tests/release/contracts/*.test.mjs
+
       - name: Start local Supabase
+        id: supabase_start
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         shell: bash
         run: |
           for attempt in 1 2 3; do
@@ -58,6 +80,8 @@ jobs:
           done
           exit 1
       - name: Configure local Supabase for E2E
+        id: supabase_config
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         shell: bash
         run: |
           status="$(npx supabase status --output env 2>/dev/null)"
@@ -72,10 +96,16 @@ jobs:
           echo "VITE_SUPABASE_PUBLISHABLE_KEY=$publishable_key" >> "$GITHUB_ENV"
           echo "E2E_REAL_SUPABASE=1" >> "$GITHUB_ENV"
       - name: Run database tests
+        id: db_tests
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npm run test:db
       - name: Lint database schema
+        id: db_lint
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npx supabase db lint --local --schema public --level warning --fail-on error
       - name: Serve account deletion function
+        id: function_serve
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         shell: bash
         run: |
           npx supabase functions serve delete-account > "$RUNNER_TEMP/delete-account-function.log" 2>&1 &
@@ -90,12 +120,28 @@ jobs:
           cat "$RUNNER_TEMP/delete-account-function.log"
           exit 1
       - name: Test account deletion isolation guard
+        id: function_tests
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npm run test:functions
       - name: Install Playwright browsers
+        id: browsers
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run E2E tests
+        id: desktop_e2e
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npm run test:e2e
 
       - name: Run mobile viewport E2E tests
+        id: mobile_e2e
+        if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npm run test:e2e:mobile
+
+      - name: Enforce selected CI scope
+        if: ${{ always() }}
+        env:
+          CI_MODE: ${{ steps.scope.outputs.mode }}
+          RELEASE_CONTRACTS: ${{ steps.scope.outputs.release_contracts }}
+          STEP_RESULTS: ${{ toJSON(steps) }}
+        run: node scripts/ci-scope-gate.mjs
