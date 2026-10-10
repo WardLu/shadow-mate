@@ -4,6 +4,8 @@ import { createLearnerSession } from "./learner-session.js";
 import { inject } from "@vercel/analytics";
 import { installVibeCafeTelemetry } from "./channel-telemetry.js";
 import { ANALYTICS_EVENTS, hasConsecutiveCheckinDays, recordAnalyticsEvent } from "./analytics.js";
+import { createUsageAnalytics } from "./usage-analytics.js";
+import { installErrorMonitoring } from "./error-monitoring.js";
 import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
   renderWritingPrintSheetHtml,
@@ -53,6 +55,9 @@ import { createSoundEngine, SOUND_EVENTS, SOUND_EVENT_KEYS } from "./learning-so
 import { praise, flyStars, shake } from "./learning-feedback.js";
 
 inject();
+const usageAnalytics = createUsageAnalytics({ getMode: () => window.cloudSync?.getUsageMode?.() || "unknown" });
+installErrorMonitoring({ isEnabled: () => usageAnalytics.status().enabled });
+void usageAnalytics.record("open");
 installVibeCafeTelemetry();
 installRapidActionGuard(document);
 startVersionGuard({ checkIntervalMs: 60_000 });
@@ -352,6 +357,7 @@ function toggleCheckin(mod){
   if (shouldRecordWorksheet) recordActiveWorksheetCompletion();
   const saved = save();
   if (saved && !wasChecked && hasCheckin(store.checkins[checkinDate], mod)) {
+    void usageAnalytics.record("checkin", { meaningful: true });
     recordAnalyticsEvent(ANALYTICS_EVENTS.firstCheckin, { once: true });
     if (hasConsecutiveCheckinDays(store.checkins, 3)) {
       recordAnalyticsEvent(ANALYTICS_EVENTS.threeDayStreak, { once: true });
@@ -419,7 +425,10 @@ function togglePoint(itemId, day){
   const requestId = clientRequestId("point");
   const wasOn = pointOn(itemId, day);
   const delta = Number(item.default_points ?? item.pts);
-  void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then(() => {
+  void window.growthLoop.recordPoint({ item, occurred_on: dateKeyForDay(day), request_id: requestId }).then((result) => {
+    if (!result.error && !wasOn && result.ledger?.some(entry => entry.request_id === requestId && entry.entry_type === "manual")) {
+      void usageAnalytics.record("point_recorded", { meaningful: true });
+    }
     void queueGrowthActivity(
       ACTIVITY_EVENT_TYPES.GROWTH_ACTIVITY_RECORDED,
       { source: "point_item", entry_type: Number(item.default_points ?? item.pts) < 0 ? "adjustment" : "manual" },
@@ -1611,6 +1620,7 @@ function renderGrow(){
         return;
       }
       void queueGrowthActivity(ACTIVITY_EVENT_TYPES.REWARD_REDEEMED, { source: "reward" }, requestId);
+      if (result.redemptions?.some(entry => entry.request_id === requestId)) void usageAnalytics.record("reward_redeemed");
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
       soundEffects.play("points_deducted");
@@ -1635,6 +1645,9 @@ function renderGrow(){
       window.cloudSync?.scheduleGrowthLoop?.();
       renderGrow();
       praise("奖励已兑现！🎉");
+      if (result.redemptions?.some(entry => entry.id === button.dataset.fulfillId && entry.status === "fulfilled")) {
+        void usageAnalytics.record("reward_fulfilled");
+      }
       flyStars(10);
     };
   });
@@ -2188,6 +2201,7 @@ function renderSettings(options = {}){
     { id: "points", icon: "star", label: "积分规则" },
     { id: "growth", icon: "sprout", label: "愿望成长" },
     { id: "sound", icon: "volume", label: "声音音效" },
+    { id: "privacy", icon: "shield", label: "隐私" },
   ];
   const tabsBar = $(`
     <div class="settings-tabs" role="tablist" aria-label="设置分类">
@@ -2203,6 +2217,9 @@ function renderSettings(options = {}){
     </div>
   `);
   main.appendChild(tabsBar);
+  const activeTab = tabsBar.querySelector(".settings-tab.active");
+  const hiddenWidth = activeTab?.getBoundingClientRect().right - tabsBar.getBoundingClientRect().right;
+  if (hiddenWidth > 0) tabsBar.scrollLeft += hiddenWidth + 8;
   tabsBar.querySelectorAll(".settings-tab").forEach((btn) => {
     btn.onclick = () => {
       currentSettingsTab = btn.dataset.tab;
@@ -2218,7 +2235,31 @@ function renderSettings(options = {}){
     renderSettingsGrowth(main);
   } else if (currentSettingsTab === "sound") {
     renderSettingsSound(main);
+  } else if (currentSettingsTab === "privacy") {
+    renderSettingsPrivacy(main);
   }
+}
+
+function renderSettingsPrivacy(main) {
+  const status = usageAnalytics.status();
+  const card = $(`<div class="card">
+    <h3>${icon("shield")} 体验改进</h3>
+    <label class="switch-row">
+      <span class="switch-label"><strong>使用统计</strong><span class="desc">收集使用数据，帮助改进产品体验。</span></span>
+      <input id="usageConsent" type="checkbox" class="switch" role="switch" aria-label="使用统计" ${status.configured && status.consent ? "checked" : ""} ${status.configured ? "" : "disabled"}>
+    </label>
+    <a class="guide-link" href="/privacy" target="_blank" rel="noopener">隐私政策</a>
+  </div>`);
+  main.appendChild(card);
+  card.querySelector("#usageConsent").onchange = (event) => {
+    const enabled = event.target.checked;
+    if (!usageAnalytics.setConsent(enabled)) {
+      event.target.checked = usageAnalytics.status().consent;
+      alert("浏览器无法保存统计偏好，使用统计保持关闭。");
+      return;
+    }
+    if (enabled) void usageAnalytics.record("open");
+  };
 }
 
 function renderSettingsLearning(main){
@@ -2818,6 +2859,7 @@ function checkinBtn(mod,label){
    导航切换
    ========================================================= */
 function switchMod(mod, options = {}){
+  if (mod !== CURRENT_MOD) void usageAnalytics.record("view", { view: mod });
   CURRENT_MOD = mod;
   removeWritingPrintRoot();
   stopPoemSpeech();
