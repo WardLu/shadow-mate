@@ -20,6 +20,7 @@
 
 | 文档 | 说明 | 适用对象 |
 | :--- | :--- | :--- |
+| [使用统计与云端业务报表](usage-analytics.md) | Sentry 查看入口、免费额度、上线状态与分析口径 | 维护者 / 数据分析 |
 | [系统架构与数据模型 (Architecture)](architecture.md) | 模块职责、学习者作用域切换、Web Audio 声音引擎、Local-first 兑现闭环与数据隔离 | 开发者 / 架构师 |
 
 ---

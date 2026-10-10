@@ -10,6 +10,14 @@
 
 仅正式域名 `https://sm.shadow.wang` 上报；localhost/Preview/缺配置均不上报。默认开启，家长可在“设置 → 隐私”关闭，此前明确关闭的偏好保持有效。DNT/GPC 或本机存储不可用时不上报。本人及测试人员关闭以排除自己的浏览器。关闭同样停止错误上报；开关文案保持简短，完整说明在隐私页。
 
+## 查看入口与免费额度
+
+- 使用统计：[Explore → Logs](https://shadow-we.sentry.io/explore/logs/)，项目下拉选择 `shadow-mate`，环境选择 `production`，搜索 `sm_`。`sm_local_open` 表示未登录浏览器打开应用，不等于有效打卡或活跃家庭。
+- 错误监控：[Issues](https://shadow-we.sentry.io/issues/)，选择 `shadow-mate` 和 `production`。没有 Issue 不代表所有操作都成功；这里只收集符合过滤条件的未处理错误。
+- 应用内“设置 → 隐私 → 使用统计”只控制上报，不展示统计看板。
+
+[Sentry 官方说明](https://sentry.zendesk.com/hc/en-us/articles/37503692223003-What-is-the-pricing-for-Sentry-Logs)：所有套餐每月包含 5 GB Logs，Developer 免费套餐不支持配置按量付费预算。页面顶部“Try Logging for free / Start trial”是可选的 14 天无限日志试用，使用已有免费额度无需启动试用。额度由同一组织内项目共享，当前用量和套餐以 Settings → Subscription / Billing 为准。本次未开启试用或升级。
+
 ## 事件与局限
 
 前缀 `sm_local_` / `sm_signed_in_` / `sm_unknown_` 表示未登录/已登录/尚未确认登录状态。只发送固定事件名，绝不关联 Auth、家庭或孩子 ID：
@@ -29,13 +37,13 @@
 
 请求失败不影响学习，无持久离线队列。完全离线、拦截器、网络阻断会漏计；HTTP 成功不证明后台可查询。数据只覆盖未关闭统计且请求到达的浏览器，不能拿全部 Vercel Visitors 作分母，也不能与家庭表直接拼接。
 
-## 最小看板与上线验收
+## 建议分析口径（尚未创建业务看板）
 
 1. 近 7/30 天核心操作独立浏览器数，分 local/signed_in/unknown；混合状态总数按 usage.browser_id 去重，不能直接相加。
 2. `active_day` 每日独立浏览器和核心操作后的浏览器留存；看板统一 Asia/Taipei，注明浏览器当地日期去重的边界差异。
 3. 模块访问到核心操作的浏览器漏斗，兑换/兑现单列。
 
-正式发布后仍需正式域名 CSP 及国内网络可达性验收；当前本地 mock 不证明它们成立。Logs 在 Explore → Logs 中按 project:shadow-mate 筛选；属性 usage.event / usage.mode / usage.browser_id / usage.day 用于分组及去重。日志额度限制和 HTTP 429 会退避，不重试刷量。HTTP 接收成功不等于后台已可查询。历史未采集的本地行为不能还原。
+正式域名 CSP 已核对，国内网络可达性仍未验证。Logs 可按项目及 `sentry.environment:production` 筛选；属性 usage.event / usage.mode / usage.browser_id / usage.day 用于分组及去重。日志额度限制和 HTTP 429 会退避，不重试刷量。HTTP 接收成功不等于后台已可查询。历史未采集的本地行为不能还原。
 
 ## 错误诊断边界
 
@@ -46,3 +54,9 @@ GlobalHandlers 捕获未处理异常和 Promise 拒绝。beforeSend 每次检查
 ## 云端业务报表
 
 现有家庭业务报表与浏览器统计分别分析。家庭报表只能看到已同步记录；统计使用固定事件和随机浏览器标识，不与家庭、账号或学习者表关联。本人和测试流量须在各自分析来源排除。自然周活跃家庭与浏览器有效使用日不是同一指标。
+
+## 已上线状态（2026-10-10）
+
+应用 v1.5.8 已通过受控脚本部署到 [sm.shadow.wang](https://sm.shadow.wang/)，生产分支 `production`，提交 `1fdc59f964f14b7ce12b97cc469f711e9335ddaa`。候选部署和正式域名的 8 个 JS/CSS 资源已逐字节校验，移动端默认开启与关闭后刷新持久化已验收。功能及版本 CI、CodeQL 和独立审查通过；发布验收器的大资源下载超时已修复并通过定向契约与实际资源验收。
+
+Sentry Logs 已可查询 `sm_local_open`；`sm_setup_verified` 属于接收端验证数据，分析时应排除 `setup-validation` 环境。这只证明有使用事件到达，不代表已建立活跃或留存指标，也不能还原历史未采集的本地行为。尚未创建业务看板，未上传 Source Maps；国内网络可达性及告警通知投递仍未验证。此次发布未修改共享生产数据库，已有 SQL 报表的替换和实际查询状态需单独核对。
