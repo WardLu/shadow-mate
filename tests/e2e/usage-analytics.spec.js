@@ -29,7 +29,7 @@ async function allowUsage(page) {
   await page.getByRole("switch", { name: "使用统计", exact: true }).check();
 }
 
-test("new browsers collect by default and switching off stops collection", async ({ page }) => {
+test("new browsers collect by default and switching off stops collection", async ({ page }, testInfo) => {
   const events = await mockCollector(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -39,9 +39,9 @@ test("new browsers collect by default and switching off stops collection", async
   await expect(page.getByRole("switch", { name: "使用统计", exact: true })).toBeChecked();
   const privacyTab = await page.getByRole("tab", { name: "隐私", exact: true }).boundingBox();
   expect(privacyTab.x + privacyTab.width).toBeLessThanOrEqual(390);
-  await page.screenshot({ path: "/private/tmp/shadow-mate-usage-enabled-mobile.png" });
+  await page.screenshot({ path: testInfo.outputPath("usage-enabled-mobile.png") });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.screenshot({ path: "/private/tmp/shadow-mate-usage-enabled-desktop.png" });
+  await page.screenshot({ path: testInfo.outputPath("usage-enabled-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.click('[data-mod="learning"]');
   await page.click('[data-go="math"]');
@@ -80,7 +80,7 @@ test("failed reporting leaves a successful local check-in usable", async ({ page
   await expect(page.locator('[data-cmod="math-mental"]')).toHaveAttribute("aria-pressed", "true");
 });
 
-test("unconfigured settings disclose disabled collection", async ({ page }) => {
+test("unconfigured settings disclose disabled collection", async ({ page }, testInfo) => {
   await captureAnalytics(page);
   await page.goto("/");
   await page.click('[data-mod="settings"]');
@@ -88,10 +88,10 @@ test("unconfigured settings disclose disabled collection", async ({ page }) => {
   await expect(page.getByRole("switch", { name: "使用统计", exact: true })).toBeDisabled();
   await expect(page.getByText("收集使用数据，帮助改进产品体验。", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "隐私政策", exact: true }).first()).toHaveAttribute("href", "/privacy");
-  await page.screenshot({ path: "/private/tmp/shadow-mate-usage-privacy-desktop.png" });
+  await page.screenshot({ path: testInfo.outputPath("usage-privacy-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
-  await page.screenshot({ path: "/private/tmp/shadow-mate-usage-privacy-mobile.png" });
+  await page.screenshot({ path: testInfo.outputPath("usage-privacy-mobile.png") });
 });
 
 test("ordinary points, local redemption and fulfillment emit separate categories", async ({ page }) => {
