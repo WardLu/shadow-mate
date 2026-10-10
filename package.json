@@ -37,7 +37,7 @@
     "@sentry/browser": "11.6.0",
     "@supabase/supabase-js": "2.117.2",
     "@vercel/analytics": "^2.0.1",
-    "lucide": "^1.37.0",
+    "lucide": "^1.52.0",
     "pinyin-pro": "3.29.4"
   },
   "devDependencies": {
