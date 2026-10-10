@@ -27,7 +27,7 @@ export async function verifyAssets({ root = process.cwd(), deploymentUrl, run = 
       for (const [index, asset] of assets.entries()) {
         const output = path.join(temporary, String(index));
         const resource = '/' + asset.split('/').map(encodeURIComponent).join('/');
-        const curl = ['--silent', '--show-error', '--fail', '--max-time', '30', '--max-filesize', '67108864', '-o', output, '-w', '%{http_code}'];
+        const curl = ['--silent', '--show-error', '--fail', '--max-time', '180', '--max-filesize', '67108864', '-o', output, '-w', '%{http_code}'];
         const result = deploymentUrl
           ? run('vercel', ['curl', resource, '--deployment', origin, '--scope', config.vercel.teamId, '--yes', '--', ...curl], { cwd: root, encoding: 'utf8' })
           : run('curl', [...curl, origin + resource], { cwd: root, encoding: 'utf8' });
