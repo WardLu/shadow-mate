@@ -1,0 +1,6 @@
+{
+  "provider": "sentry",
+  "publicKey": "1159222b769935d7cefc150f487e3b5e",
+  "ingestHost": "o4510781021945856.ingest.us.sentry.io",
+  "projectId": "4512231282245632"
+}
