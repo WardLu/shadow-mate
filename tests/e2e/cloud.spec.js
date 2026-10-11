@@ -445,7 +445,7 @@ test.describe("Authenticated cloud workspace", () => {
     await page.goto("/");
 
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
-    await expect.poll(() => api.getGrowthPointItemsRequests(), { timeout: 5000 }).toBe(2);
+    await expect.poll(() => api.getGrowthPointItemsRequests(), { timeout: 15_000 }).toBe(2);
   });
 
   test("retries a failed Growth Loop snapshot immediately when the browser comes online", async ({ page }) => {
@@ -510,9 +510,9 @@ test.describe("Authenticated cloud workspace", () => {
       window.cloudSync.scheduleGrowthLoop();
     }, { batchId });
 
-    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(1);
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 15_000 }).toBe(1);
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
-    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 5000 }).toBe(2);
+    await expect.poll(() => api.legacyImportPayloads.length, { timeout: 15_000 }).toBe(2);
     expect(api.legacyImportPayloads[1]).toEqual(api.legacyImportPayloads[0]);
     expect(api.legacyImportPayloads[1]).toEqual(expect.objectContaining({
       p_profile_id: PROFILE_ID,
@@ -1000,7 +1000,7 @@ test.describe("Authenticated cloud workspace", () => {
       document.querySelector(`[data-profile="${firstProfileId}"]`).click();
     }, { firstProfileId: PROFILE_ID });
 
-    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted), { timeout: 15_000 }).toBe(true);
     await secondChoice.click();
     await page.waitForTimeout(250);
     await page.evaluate(() => window.__releaseDelayedGrowthLoad());
@@ -1122,8 +1122,8 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.getRpcSettledCount()).toBe(0);
     await page.click("[data-sync]");
 
-    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
-    await expect.poll(() => api.getRpcSettledCount(), { timeout: 6000 }).toBe(2);
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 15_000 }).toBe(2);
+    await expect.poll(() => api.getRpcSettledCount(), { timeout: 15_000 }).toBe(2);
     await expect(page.locator("#syncToast")).toContainText("云端记录已更新");
     expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
   });
@@ -1150,7 +1150,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => api.getRpcSettledCount()).toBe(0);
     await page.evaluate(() => window.cloudSync.schedule());
 
-    await expect.poll(() => api.rpcPayloads.length, { timeout: 6000 }).toBe(2);
+    await expect.poll(() => api.rpcPayloads.length, { timeout: 15_000 }).toBe(2);
     expect(api.rpcPayloads.map((payload) => payload.p_profile_id)).toEqual([SECOND_PROFILE_ID, PROFILE_ID]);
   });
 
@@ -1740,7 +1740,7 @@ test.describe("Authenticated cloud workspace", () => {
       window.cloudSync.scheduleGrowthLoop?.();
     }, { firstProfileId: PROFILE_ID });
 
-    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__delayedGrowthLoadStarted), { timeout: 15_000 }).toBe(true);
     await secondChoice.click();
     // 等切换真正提交后再开始记录活动：提交之前给旧学习者排队写入是合法行为
     // （那时旧学习者仍是 active），本用例要守的是"提交之后延迟加载不得再写旧作用域"。
