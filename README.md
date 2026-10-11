@@ -81,6 +81,8 @@ npm run dev
 
 Open the local URL printed by Vite. Do not open `index.html` directly with `file://`; browser modules require the development server.
 
+Node 22 is the local and release runtime (`mise.toml`); CI validates on Node 24, and `package.json` requires `node >= 22`.
+
 The local privacy page is available at [http://localhost:5173/privacy](http://localhost:5173/privacy). It is served by the same Vite development server as the main application.
 
 ### Validation
