@@ -20,7 +20,10 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
-    actionTimeout: 5000,
+    // 应用在导航时会同步重渲染整个主区域,共享 runner 卡顿时单次交互可远超 5s:
+    // 2026-10-10 观察到 offline.spec.js 与 growth-loop.spec.js 的点击在 5s 预算内
+    // 超时(同一提交重跑即通过)。放宽到 15s,坏掉的交互仍会失败,只是晚 15s 报错。
+    actionTimeout: 15_000,
   },
   projects: [
     {
