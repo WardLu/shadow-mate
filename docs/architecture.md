@@ -26,6 +26,8 @@ Run `npm run tts:catalog` for a network-free inventory. `npm run tts:prewarm` re
 
 Prewarm calls the paid TTS service and writes missing objects to COS; its final `reused`, `generated` and `entries` statistics describe the completed run. The manifest updates only after every readback passes. Validate with `npm run tts:smoke -- --origin http://192.168.124.14:5173` for the local device-test origin, and `npm run verify` for catalog parity, build and unit checks. Existing objects are reused, including identical text shared across entries.
 
+CDN smoke checks keep a 20-second deadline per request, including response-body download, with four concurrent checks. Failures report the public content ID, a fixed reason and the stage (`entry`, `request`, `headers`, `body`, `verify` or `decode`); logs omit the raw URL, response body and underlying error text. `request` identifies waiting for a response but does not distinguish DNS, TLS or first-byte delays. A passing check on one network does not replace acceptance on another path.
+
 On 2026-09-09, all 634 manifest entries passed CDN hash, size, media and CORS checks (4,003,200 summed bytes). The user confirmed Xiaomi/Quark playback via the LAN development server, including literacy and writing-card taps. This is local device acceptance, not production deployment evidence.
 
 The app-shell cache generation is v5. Service Worker registration requires a secure context; a plain HTTP LAN address normally does not register one. The earlier attribution of the Quark failure to a stale Service Worker was not established by device evidence. An empty voice list alone also does not establish absent Web Speech support.
