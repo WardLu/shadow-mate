@@ -7,12 +7,12 @@
 
 ### Changed
 
-- 更新应用图标库与基础依赖，保持既有学习、记录和云同步流程。
-- 完善使用统计说明，明确浏览器统计与家庭活跃、留存指标的区别。
+- Update the icon library and core dependencies while retaining the existing learning, recording and cloud synchronization flows.
+- Clarify usage analytics documentation and distinguish browser statistics from household activity and retention metrics.
 
 ### Fixed
 
-- 改进语音资源发布检查的失败诊断，便于定位下载或解码问题。
+- Improve failure diagnostics in speech-resource release checks to help locate download or decoding problems.
 
 ## v1.5.8 - 2026-10-10
 
