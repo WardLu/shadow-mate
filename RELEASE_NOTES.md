@@ -3,6 +3,17 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.5.9 - 2026-10-13
+
+### Changed
+
+- 更新应用图标库与基础依赖，保持既有学习、记录和云同步流程。
+- 完善使用统计说明，明确浏览器统计与家庭活跃、留存指标的区别。
+
+### Fixed
+
+- 改进语音资源发布检查的失败诊断，便于定位下载或解码问题。
+
 ## v1.5.8 - 2026-10-10
 
 ### Added
