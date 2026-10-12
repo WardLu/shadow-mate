@@ -44,14 +44,14 @@
     "@emnapi/core": "2.0.0-alpha.5",
     "@emnapi/runtime": "2.0.0-alpha.5",
     "@playwright/test": "1.63.0",
-    "@vitest/coverage-v8": "5.0.0",
-    "@vitest/ui": "5.0.0",
+    "@vitest/coverage-v8": "5.0.3",
+    "@vitest/ui": "5.0.3",
     "cos-nodejs-sdk-v5": "3.0.0",
     "jsdom": "30.1.2",
     "supabase": "2.117.0",
     "tencentcloud-sdk-nodejs-tts": "4.1.237",
     "vite": "8.3.4",
-    "vitest": "5.0.0"
+    "vitest": "5.0.3"
   },
   "overrides": {
     "nanoid": "3.3.18",
