@@ -3,6 +3,17 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.6.0 - 2026-10-13
+
+### Added
+
+- Age-aware learning packages: Introduce Foundation V2 (suggested ages 4–5) and Bridging V1 (suggested ages 5–6) in Settings → Learning Settings, configurable per child.
+- Experience-driven review ledger: Pace new introductions and scheduled reviews from confirmed family experiences without dropping unpracticed items.
+- Expanded curriculum content: 602 literacy cards, 61 poems, 313 English words, 128 writing items, 16 picture-book picks, and 24 reading-list recommendations.
+- Mathematics and number sense: Add hands-on number sense activities, Number Planet fill-in grids, and 4x4 intro Sudoku alongside arithmetic questions.
+- 2,385 pre-generated speech clips: Complete CDN-verified audio coverage using Zhike (Mandarin) and WeJack (English) across curriculum cards, writing breakdowns, poems, and prompts.
+- Optional spoken language foundation: Add module settings and course schemas for spoken language learning, kept disabled by default while courses remain in preparation.
+
 ## v1.5.9 - 2026-10-13
 
 ### Changed
