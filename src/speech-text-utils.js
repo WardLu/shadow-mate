@@ -52,15 +52,19 @@ export function cleanSpeechText(text) {
   return s;
 }
 
-/**
- * Determine if a voice locale represents Mandarin Chinese.
- * Excludes Cantonese (yue) while supporting standard subtags and 3-letter codes.
- * @param {string} locale
- * @returns {boolean}
- */
+function normalizeVoiceLocale(locale) {
+  return typeof locale === "string" ? locale.trim().replace(/_/g, "-").toLowerCase() : "";
+}
+
+export function isCantoneseVoiceLocale(locale) {
+  const normalized = normalizeVoiceLocale(locale);
+  return /^yue(?:-|$)/.test(normalized) || /^zh-(?:hans-|hant-)?hk(?:-|$)/.test(normalized);
+}
+
+/** Mandarin aliases must never capture a Cantonese voice. */
 export function isMandarinChineseVoiceLocale(locale) {
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
-  if (!normalizedLocale || /^yue(?:-|$)/.test(normalizedLocale)) return false;
+  const normalizedLocale = normalizeVoiceLocale(locale);
+  if (!normalizedLocale || isCantoneseVoiceLocale(normalizedLocale)) return false;
   if (/^cmn(?:-|$)/.test(normalizedLocale)) return true;
   if (normalizedLocale === "zh") return true;
   if (!/^zh-/.test(normalizedLocale) && !/^zho-/.test(normalizedLocale) && !/^chi-/.test(normalizedLocale)) return false;
@@ -69,20 +73,21 @@ export function isMandarinChineseVoiceLocale(locale) {
   return subtags.includes("hans") || subtags.includes("cn") || subtags.includes("sg") || subtags.includes("chn");
 }
 
-/**
- * Find best matching system voice from a given list of voices.
- * @param {Array} voices
- * @param {string} locale
- * @returns {object|null}
- */
-export function findMatchingVoice(voices, locale) {
+/** Exact match first; only known variety aliases may cross locales in strict mode. */
+export function findMatchingVoice(voices, locale, { strictVoice = false } = {}) {
   if (!Array.isArray(voices)) return null;
-  const normalizedLocale = String(locale || "").replace(/_/g, "-").toLowerCase();
+  const normalizedLocale = normalizeVoiceLocale(locale);
+  if (!normalizedLocale) return null;
+  const voiceLocale = (voice) => normalizeVoiceLocale(voice?.lang);
+  const exact = voices.find((voice) => voiceLocale(voice) === normalizedLocale);
+  if (exact) return exact;
+  if (isCantoneseVoiceLocale(normalizedLocale)) {
+    return voices.find((voice) => isCantoneseVoiceLocale(voiceLocale(voice))) || null;
+  }
+  if (isMandarinChineseVoiceLocale(normalizedLocale)) {
+    return voices.find((voice) => isMandarinChineseVoiceLocale(voiceLocale(voice))) || null;
+  }
+  if (strictVoice) return null;
   const language = normalizedLocale.split("-")[0];
-  const normalizeVoiceLocale = (voice) => String(voice?.lang || "").replace(/_/g, "-").toLowerCase();
-  return voices.find((voice) => normalizeVoiceLocale(voice) === normalizedLocale)
-    || voices.find((voice) => locale === "zh-CN"
-      ? isMandarinChineseVoiceLocale(normalizeVoiceLocale(voice))
-      : normalizeVoiceLocale(voice).split("-")[0] === language)
-    || null;
+  return voices.find((voice) => voiceLocale(voice).split("-")[0] === language) || null;
 }

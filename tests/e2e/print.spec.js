@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 const FIXED_NOW = new Date("2026-09-01T02:00:00.000Z");
 const TIME_ZONE = "Asia/Singapore";
@@ -17,6 +18,7 @@ async function openLearningModule(page, module) {
 async function openChineseAtFixedTime(page) {
   await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
   await page.goto("/");
+  await seedIssuedWritingPlan(page);
   await openLearningModule(page, "chinese");
   await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
   await page.clock.pauseAt(FIXED_NOW);
@@ -106,7 +108,7 @@ test.describe("Snapshot-only Hanzi print sheet", () => {
     expect(before.screen).toMatchObject({
       dayKey: "2026-09-01",
       packId: "hanzi-writing-v2",
-      packVersion: "hanzi-v2-pilot-1",
+      packVersion: "hanzi-v2-expanded-1",
     });
     expect(before.screen.rows).toHaveLength(4);
     expect(before.print).toEqual(before.screen);

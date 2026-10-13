@@ -1,10 +1,10 @@
-import { HANZI } from "./literacy.js";
+import { HANZI, literacyItemId } from "./literacy.js";
 import { getActiveHanziWritingPack } from "./hanzi-writing/manifest.js";
 import { cleanSpeechText } from "../speech-text-utils.js";
 
 export const LITERACY_SPEECH_ENTRIES = [
   ...HANZI.map((item, index) => ({
-    contentId: `literacy-${String(index + 1).padStart(3, "0")}:reading`,
+    contentId: `${literacyItemId(item, index)}:reading`,
     locale: "zh-CN",
     text: cleanSpeechText(`${item[0]}，${item[2]}`),
   })),
@@ -14,7 +14,7 @@ export const LITERACY_SPEECH_ENTRIES = [
       ["visual", `${item.concept.label}，${item.concept.visual.alt}`],
       ...words.map((word, index) => [`word-${index + 1}`, word]),
       ["sentence", `例句：${item.sentence}`],
-      ["hint", item.writing.hint],
+      ...(item.writing?.hint ? [["hint", item.writing.hint]] : []),
     ].map(([kind, rawText]) => ({
       contentId: `${item.id}:${kind}`,
       locale: "zh-CN",

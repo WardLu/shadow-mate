@@ -1,3 +1,10 @@
+import { isHanziWritingDiagram } from "./content/hanzi-writing/visuals.js";
+import * as hanziWritingManifest from "./content/hanzi-writing/manifest.js";
+
+const REGISTERED_HANZI_WRITING_PACKS = hanziWritingManifest.HANZI_WRITING_PACK_REGISTRY
+  ? Object.values(hanziWritingManifest.HANZI_WRITING_PACK_REGISTRY)
+  : [hanziWritingManifest.HANZI_WRITING_V2_PILOT];
+
 const ROTATION_SEED = "stable-local-seed";
 const WORKSHEET_LAYOUT_VERSION = "focus-rows-v1";
 const WORKSHEET_ROWS_PER_DAY = 4;
@@ -155,8 +162,12 @@ function normalizeSnapshotText(value) {
 }
 
 function normalizeSnapshotMetadata(source) {
-  if (!isRecord(source) || !isRecord(source.concept) || !isRecord(source.concept.visual) ||
-    source.concept.visual.kind !== "emoji" || !Array.isArray(source.exampleWords) ||
+  const visual = source?.concept?.visual;
+  const validVisual = isRecord(visual) && (
+    visual.kind === "emoji" && isNonEmptyString(visual.value) ||
+    visual.kind === "diagram" && isHanziWritingDiagram(visual.value)
+  );
+  if (!isRecord(source) || !isRecord(source.concept) || !validVisual || !Array.isArray(source.exampleWords) ||
     source.exampleWords.length < 2 || source.exampleWords.length > MAX_SNAPSHOT_ARRAY_LENGTH ||
     !isRecord(source.writing) || !Number.isInteger(source.writing.strokeCount) ||
     source.writing.strokeCount < 1 || source.writing.strokeCount > 64) {
@@ -182,7 +193,7 @@ function normalizeSnapshotMetadata(source) {
   const concept = {
       label: conceptLabel,
       visual: {
-        kind: "emoji",
+        kind: source.concept.visual.kind,
         value: visualValue,
         alt: visualAlt,
       },
@@ -229,11 +240,15 @@ function getSnapshotMetadata(row, item) {
 
 function getPackItems(pack, worksheetPackRef) {
   if (pack === undefined) return undefined;
-  if (!isRecord(pack) || !samePackRef(getPackRef(pack), worksheetPackRef)) return null;
-  if (!Array.isArray(pack.items)) return new Map();
+  if (!isRecord(pack)) return null;
+  const worksheetPack = hasCompatibleRegisteredPackRefs(getPackRef(pack), worksheetPackRef)
+    ? getRegisteredPack(worksheetPackRef)
+    : (samePackRef(getPackRef(pack), worksheetPackRef) ? pack : undefined);
+  if (!worksheetPack) return null;
+  if (!Array.isArray(worksheetPack.items)) return new Map();
 
   return new Map(
-    pack.items
+    worksheetPack.items
       .filter((item) => isRecord(item) && isBoundedString(item.id))
       .map((item) => [item.id, item])
   );
@@ -256,7 +271,8 @@ function normalizeWorksheet(
     !Array.isArray(worksheet.rows)) {
     return undefined;
   }
-  if (expectedPackRef && !samePackRef(worksheet.packRef, expectedPackRef) && !allowHistoricalPack) {
+  if (expectedPackRef && !samePackRef(worksheet.packRef, expectedPackRef) &&
+    !hasCompatibleRegisteredPackRefs(worksheet.packRef, expectedPackRef) && !allowHistoricalPack) {
     return undefined;
   }
 
@@ -478,6 +494,39 @@ function samePackRef(left, right) {
     left.setId === right.setId && left.contentVersion === right.contentVersion;
 }
 
+function getRegisteredPackIndex(packRef) {
+  return isValidPackRef(packRef)
+    ? REGISTERED_HANZI_WRITING_PACKS.findIndex((pack) => samePackRef(getPackRef(pack), packRef))
+    : -1;
+}
+
+function getRegisteredPack(packRef) {
+  return REGISTERED_HANZI_WRITING_PACKS[getRegisteredPackIndex(packRef)];
+}
+
+function hasCompatibleRegisteredPackRefs(left, right) {
+  return isValidPackRef(left) && isValidPackRef(right) && left.setId === right.setId &&
+    getRegisteredPackIndex(left) >= 0 && getRegisteredPackIndex(right) >= 0;
+}
+
+function chooseActivePack(left, right) {
+  return getRegisteredPackIndex(left) >= getRegisteredPackIndex(right) ? left : right;
+}
+
+function assertRegisteredWorksheetPackRefs(state) {
+  if (!isRecord(state.assignments)) return;
+
+  Object.values(state.assignments).forEach((assignment) => {
+    if (!isRecord(assignment) || !isRecord(assignment.candidates)) return;
+    Object.values(assignment.candidates).forEach((worksheet) => {
+      if (isRecord(worksheet) && isValidPackRef(worksheet.packRef) &&
+        !hasCompatibleRegisteredPackRefs(state.activePack, worksheet.packRef)) {
+        throw new Error("rotation states have incompatible historical pack ref");
+      }
+    });
+  });
+}
+
 function chooseStableValue(left, right) {
   if (left === undefined) return cloneValue(right);
   if (right === undefined) return cloneValue(left);
@@ -594,7 +643,7 @@ function assertMergeCompatibility(localState, remoteState) {
     localState.learnerScope !== remoteState.learnerScope) {
     throw new Error("rotation states have incompatible learnerScope");
   }
-  if (!samePackRef(localState.activePack, remoteState.activePack)) {
+  if (!hasCompatibleRegisteredPackRefs(localState.activePack, remoteState.activePack)) {
     throw new Error("rotation states have incompatible pack ref");
   }
 }
@@ -736,12 +785,17 @@ export function normalizeRotationState(input, options = {}) {
   return enforcePayloadBudget(state);
 }
 
+/**
+ * Reuses the issued daily snapshot. For an unissued day, selectedItemIds pins
+ * four unique active items in the supplied order; otherwise rotation-v1 selects them.
+ */
 export function resolveDailyWorksheet({
   rotationState,
   pack,
   learnerScope,
   now,
   timeZone,
+  selectedItemIds,
 }) {
   const dayKey = getDayKey(now, timeZone);
   if (!isRecord(pack) || !isValidPackRef({ setId: pack.setId, contentVersion: pack.contentVersion }) ||
@@ -785,29 +839,44 @@ export function resolveDailyWorksheet({
     }
   }
 
-  const recentDayKeys = getRecentDayKeys(state.assignments, dayKey, pack.worksheetPolicy.recentDayWindow);
-  const recentItemIds = getItemIdsForDays(state.assignments, recentDayKeys);
-  const lastAppearanceDays = getLastAppearanceDays(state.assignments);
   const activeItems = pack.items.filter((item) => item.status === "active");
-  const makeSelectionItem = (item) => ({
-    ...item,
-    hash: stableHash(`${ROTATION_SEED}${learnerScope}${dayKey}${item.id}`),
-  });
-  const availableItems = activeItems
-    .filter((item) => !recentItemIds.has(item.id))
-    .map(makeSelectionItem)
-    .sort(compareItems);
-  const selectedItems = availableItems.slice(0, pack.worksheetPolicy.rowsPerDay);
-  if (selectedItems.length < pack.worksheetPolicy.rowsPerDay) {
-    const selectedIds = new Set(selectedItems.map((item) => item.id));
-    activeItems
-      .filter((item) => !selectedIds.has(item.id))
+  let selectedItems;
+  if (selectedItemIds !== undefined) {
+    if (!Array.isArray(selectedItemIds) || selectedItemIds.length !== WORKSHEET_ROWS_PER_DAY ||
+      new Set(selectedItemIds).size !== WORKSHEET_ROWS_PER_DAY) {
+      throw new TypeError("selectedItemIds must contain four unique active item IDs");
+    }
+    const activeItemsById = new Map(activeItems.map((item) => [item.id, item]));
+    selectedItems = Array.from(selectedItemIds, (itemId) =>
+      isBoundedString(itemId) ? activeItemsById.get(itemId) : undefined
+    );
+    if (selectedItems.some((item) => item === undefined)) {
+      throw new TypeError("selectedItemIds must contain four unique active item IDs");
+    }
+  } else {
+    const recentDayKeys = getRecentDayKeys(state.assignments, dayKey, pack.worksheetPolicy.recentDayWindow);
+    const recentItemIds = getItemIdsForDays(state.assignments, recentDayKeys);
+    const lastAppearanceDays = getLastAppearanceDays(state.assignments);
+    const makeSelectionItem = (item) => ({
+      ...item,
+      hash: stableHash(`${ROTATION_SEED}${learnerScope}${dayKey}${item.id}`),
+    });
+    const availableItems = activeItems
+      .filter((item) => !recentItemIds.has(item.id))
       .map(makeSelectionItem)
-      .sort((left, right) => compareFallbackItems(left, right, lastAppearanceDays))
-      .some((item) => {
-        selectedItems.push(item);
-        return selectedItems.length === pack.worksheetPolicy.rowsPerDay;
-      });
+      .sort(compareItems);
+    selectedItems = availableItems.slice(0, pack.worksheetPolicy.rowsPerDay);
+    if (selectedItems.length < pack.worksheetPolicy.rowsPerDay) {
+      const selectedIds = new Set(selectedItems.map((item) => item.id));
+      activeItems
+        .filter((item) => !selectedIds.has(item.id))
+        .map(makeSelectionItem)
+        .sort((left, right) => compareFallbackItems(left, right, lastAppearanceDays))
+        .some((item) => {
+          selectedItems.push(item);
+          return selectedItems.length === pack.worksheetPolicy.rowsPerDay;
+        });
+    }
   }
   if (selectedItems.length !== WORKSHEET_ROWS_PER_DAY) {
     return {
@@ -878,8 +947,14 @@ export function recordWorksheetCompletion({ rotationState, worksheet, completedA
   });
 }
 
+/**
+ * Merges snapshots only within the manifest's registered set and versions.
+ * The registry order selects activePack; candidates retain their own packRef.
+ */
 export function mergeRotationState(localState, remoteState) {
   assertMergeCompatibility(localState, remoteState);
+  assertRegisteredWorksheetPackRefs(localState);
+  assertRegisteredWorksheetPackRefs(remoteState);
   const local = normalizeRotationState(localState, {
     learnerScope: localState.learnerScope,
     packRef: localState.activePack,
@@ -906,7 +981,7 @@ export function mergeRotationState(localState, remoteState) {
     schemaVersion: 1,
     learnerScope: local.learnerScope,
     algorithmVersion: ROTATION_ALGORITHM_VERSION,
-    activePack: clonePackRef(local.activePack),
+    activePack: clonePackRef(chooseActivePack(local.activePack, remote.activePack)),
     assignments: retainedAssignments,
     lastIssuedDayKey: issuedDayKeys.length > 0 ? issuedDayKeys[issuedDayKeys.length - 1] : null,
   });

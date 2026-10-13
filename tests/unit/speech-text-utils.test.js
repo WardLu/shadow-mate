@@ -51,6 +51,8 @@ describe("isMandarinChineseVoiceLocale", () => {
     expect(isMandarinChineseVoiceLocale("yue")).toBe(false);
     expect(isMandarinChineseVoiceLocale("yue-HK")).toBe(false);
     expect(isMandarinChineseVoiceLocale("zh-HK")).toBe(false);
+    expect(isMandarinChineseVoiceLocale("zh-Hans-HK")).toBe(false);
+    expect(isMandarinChineseVoiceLocale("zh-Hant-HK")).toBe(false);
     expect(isMandarinChineseVoiceLocale("zh-TW")).toBe(false);
     expect(isMandarinChineseVoiceLocale("en-US")).toBe(false);
     expect(isMandarinChineseVoiceLocale("ja-JP")).toBe(false);
@@ -101,6 +103,27 @@ describe("findMatchingVoice", () => {
     expect(findMatchingVoice([], "zh-CN")).toBeNull();
     expect(findMatchingVoice(null, "zh-CN")).toBeNull();
     expect(findMatchingVoice(undefined, "en-US")).toBeNull();
+  });
+
+  it("matches Cantonese varieties only to Cantonese voices", async () => {
+    const { findMatchingVoice, isCantoneseVoiceLocale } = await import("../../src/speech-text-utils.js");
+    const mandarinVoices = [{ lang: "cmn-Hans-CN" }, { lang: "zh-CN" }, { lang: "en-US" }];
+    for (const locale of ["yue", "yue-HK", "YUE_hant_hk", "zh-HK", "zh-Hant-HK"]) {
+      expect(isCantoneseVoiceLocale(locale)).toBe(true);
+      expect(findMatchingVoice(mandarinVoices, locale)).toBeNull();
+      expect(findMatchingVoice([{ lang: "zh-Hant-HK" }], locale)).toMatchObject({ lang: "zh-Hant-HK" });
+    }
+    expect(findMatchingVoice([{ lang: "yue-Hant-HK" }], "zh-HK")).toMatchObject({ lang: "yue-Hant-HK" });
+    expect(findMatchingVoice([{ lang: "zh-HK" }], "ZH_cn")).toBeNull();
+    expect(findMatchingVoice([{ lang: "zh-Hans-CN" }], "ZH_cn")).toMatchObject({ lang: "zh-Hans-CN" });
+  });
+
+  it("does not guess a future dialect voice or match missing locale metadata", async () => {
+    const { findMatchingVoice } = await import("../../src/speech-text-utils.js");
+    expect(findMatchingVoice([{ lang: "en-US" }], "en-GB", { strictVoice: true })).toBeNull();
+    expect(findMatchingVoice([{ lang: "zh-CN" }], "zh-Nan", { strictVoice: true })).toBeNull();
+    expect(findMatchingVoice([{}], "")).toBeNull();
+    expect(findMatchingVoice([{ lang: "zh-Nan" }], "zh-Nan", { strictVoice: true })).toMatchObject({ lang: "zh-Nan" });
   });
 });
 

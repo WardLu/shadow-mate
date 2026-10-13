@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 async function openChinese(page) {
   await page.goto("/");
+  await seedIssuedWritingPlan(page);
   await page.click('[data-mod="learning"]');
   await page.click('[data-go="chinese"]');
 }

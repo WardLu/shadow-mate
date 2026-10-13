@@ -2,6 +2,7 @@ import {
   getLearningStateStorageKey,
   migrateLegacyLearningState,
 } from "./learning-state-envelope.js";
+import { CONTENT_LEARNING_STATE_KEY, hasCompatibleContentLearningScope, rebindContentLearningScope } from "./learning-state.js";
 
 export const LEGACY_LEARNING_STATE_KEY = "shadow_mate_workbench_v1";
 export const PENDING_LEARNING_STATE_KEY = getLearningStateStorageKey();
@@ -48,8 +49,13 @@ function parseStoredState(raw) {
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      && Object.hasOwn(parsed, "schema_version") && parsed.schema_version !== 2) {
+      throw new RangeError(`Unsupported learning state schema version: ${parsed.schema_version}`);
+    }
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
+  } catch (error) {
+    if (/^Unsupported learning state schema version:/.test(String(error?.message || ""))) throw error;
     return {};
   }
 }
@@ -94,10 +100,19 @@ function isEmptyEnvelope(envelope) {
     && Object.keys(envelope?.extensions?.legacy_unknown || {}).length === 0;
 }
 
+function unsupportedSchemaError(state, key) {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+  const schemaVersion = state.schema_version;
+  if (schemaVersion === undefined || schemaVersion === 1 || schemaVersion === 2) return null;
+  return new RangeError(`Unsupported learning state schema_version ${schemaVersion} in ${key}`);
+}
+
 function loadPendingEnvelope(storage) {
   const pendingRaw = storage.getItem(PENDING_LEARNING_STATE_KEY);
   if (pendingRaw !== null) {
     const pendingState = parseStoredState(pendingRaw);
+    const pendingSchemaError = unsupportedSchemaError(pendingState, PENDING_LEARNING_STATE_KEY);
+    if (pendingSchemaError) throw pendingSchemaError;
     if (pendingState?.schema_version === 2 && pendingState.learning && matchesScope(pendingState, {})) {
       return pendingState;
     }
@@ -131,6 +146,8 @@ export function loadLearningStateEnvelope(storage, scope = {}) {
   const scopedRaw = storage.getItem(scopedKey);
   if (scopedRaw !== null) {
     const scopedState = parseStoredState(scopedRaw);
+    const scopedSchemaError = unsupportedSchemaError(scopedState, scopedKey);
+    if (scopedSchemaError) throw scopedSchemaError;
     if (scopedState?.schema_version === 2 && scopedState.learning && matchesScope(scopedState, scope)) {
       return scopedState;
     }
@@ -161,12 +178,17 @@ export function adoptPendingLearningState(storage, scope = {}) {
   const existingRaw = storage.getItem(scopedKey);
   if (existingRaw !== null) {
     const existing = parseStoredState(existingRaw);
+    const existingSchemaError = unsupportedSchemaError(existing, scopedKey);
+    if (existingSchemaError) throw existingSchemaError;
     if (
       existing?.schema_version === 2
       && existing.learning
       && matchesScope(existing, scope)
       && !isEmptyEnvelope(existing)
     ) {
+      if (!hasCompatibleContentLearningScope(existing.learning, `profile:${scope.profileId ?? scope.profile_id}`)) {
+        throw new RangeError("Content learning ledger scope does not match the adopted learner");
+      }
       return existing;
     }
   }
@@ -177,6 +199,15 @@ export function adoptPendingLearningState(storage, scope = {}) {
     household_id: scope.householdId ?? scope.household_id ?? null,
     profile_id: scope.profileId ?? scope.profile_id ?? null,
   };
+  const contentLearning = adopted.learning?.extra?.[CONTENT_LEARNING_STATE_KEY];
+  const targetLearnerScope = `profile:${adopted.scope.profile_id}`;
+  if (contentLearning) {
+    if (!hasCompatibleContentLearningScope(pending.learning, "anonymous")) {
+      throw new RangeError("Pending content learning ledger scope is invalid");
+    }
+    const rebound = rebindContentLearningScope(adopted.learning, targetLearnerScope);
+    adopted.learning.extra[CONTENT_LEARNING_STATE_KEY] = rebound.extra[CONTENT_LEARNING_STATE_KEY];
+  }
   adopted.migration = {
     ...(adopted.migration || {}),
     adopted_from: "pending",

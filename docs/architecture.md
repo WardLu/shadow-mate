@@ -14,17 +14,29 @@ There is no cross-storage atomic transaction. Existing guarded IndexedDB writes,
 
 The temporary `window.learningDesk`, `window.growthLoop`, `window.learnerSession` and `window.cloudSync` entries share the runtime instances. `getPersistenceScope`, `renderCurrent` and the string-based `activateScope` bridge remain for existing browser integration; unused persistence-status and cloud-confirmation stubs were removed. The detached `src/local-state.js` implementation and retired voice assets are outside this refactor's cleanup scope.
 
+## 年龄学习包与内容进度
+
+`src/learning-content-package.js` 定义 4–5 岁启蒙包、5–6 岁幼小衔接包及默认关闭的语言听说模块。年龄包引用共用内容目录；切换包保留同一孩子的实际体验记录。推荐年龄不表示自动能力测评。
+
+`src/content-learning.js` 在 `learning.extra.contentLearningV1` 保存内容引入、完成、家长反馈、跳过、撤回标记和每日计划候选。计划按未完成、到期重温和新体验的预算安排，首页与学科页共用同一计划。完成使用稳定 occurrence ID；取消模块打卡不删除内容事实。多端合并保留分歧计划和撤回标记，不把两端练习计数相加。内层账本和云端 envelope 都必须匹配当前孩子作用域，匿名导入需要明确的作用域迁移。
+
+写字保留 `rotation-v1` 四行快照，通过 `selectedItemIds` 接收统一计划的选题。材料不足四行时不随机补题；已发当天字帖继续复用。版本合并只接受同一 `setId` 下实际登记的内容版本，保留历史快照自己的 `packRef`。
+
+`src/spoken-language-courses.js` 分开定义目标语言、地区变体和课程身份。当前课程均为准备中，不提供完成入口，不计入有效打卡模块。粤语系统语音要求匹配目标声音，没有匹配声音时返回不可用。
+
 ## Fixed curriculum speech
 
 `src/tencent-tts-catalog.js` derives stable speech IDs and content-addressed object keys from the writing curriculum and `src/content/core-learning-speech.js`. `src/content/literacy.js` supplies the literacy cards; `src/content/literacy-speech.js` maps their text and every writing-card image, word, sentence and hint to published speech IDs using the same text normalization as the UI. The release-only `scripts/tencent-tts-prewarm.mjs` calls Tencent Cloud TTS with Zhike (`101030`) for `zh-CN` and WeJack (`101050`) for `en-US`, uploads only missing immutable MP3 objects to COS, verifies every object through `voice.shadow.wang`, and atomically writes the public manifest only after all readbacks pass.
 
 ### Speech catalog maintenance
 
-The current catalog contains 634 entries (537 Chinese, 97 English): 98 literacy readings, 256 writing-card readings, 80 poem clips, 65 English words, 104 math fragments and 31 prompts. Math operands range from 0 to 100; each random question plays four fragments (operand, operator, operand, question suffix). Other learning content rotates within fixed libraries. New or edited text requires catalog regeneration; synthesis is never performed during user playback.
+The published manifest contains 2,385 entries (1,944 Chinese, 441 English). The expanded catalog is derived from the active content registries; `npm run tts:catalog` reports unchanged, added, changed and removed entries without network writes. All 2,385 entries match the published manifest. Existing published IDs, text hashes and synthesis parameters stay compatible. Speech assets require paid synthesis, CDN readback and verification before release; local fallback does not satisfy manifest parity. Math fragments cover numbers from 0 to 100, while age-package settings constrain each question's operands and result. Each question plays four fragments (operand, operator, operand, question suffix). Synthesis is never performed during user playback.
 
 Run `npm run tts:catalog` for a network-free inventory. `npm run tts:prewarm` reads exported `TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY` from the same terminal, or the optional `.env.tts.local` file. An absent file is harmless when environment variables are present. Exported values are inherited only by child processes, not unrelated terminals or agent sessions. Never put credentials in browser variables or tracked files.
 
 Prewarm calls the paid TTS service and writes missing objects to COS; its final `reused`, `generated` and `entries` statistics describe the completed run. The manifest updates only after every readback passes. Validate with `npm run tts:smoke -- --origin http://192.168.124.14:5173` for the local device-test origin, and `npm run verify` for catalog parity, build and unit checks. Existing objects are reused, including identical text shared across entries.
+
+CDN smoke checks keep a 20-second deadline per request, including response-body download, with four concurrent checks. Failures report the public content ID, a fixed reason and the stage (`entry`, `request`, `headers`, `body`, `verify` or `decode`); logs omit the raw URL, response body and underlying error text. `request` identifies waiting for a response but does not distinguish DNS, TLS or first-byte delays. A passing check on one network does not replace acceptance on another path.
 
 On 2026-09-09, all 634 manifest entries passed CDN hash, size, media and CORS checks (4,003,200 summed bytes). The user confirmed Xiaomi/Quark playback via the LAN development server, including literacy and writing-card taps. This is local device acceptance, not production deployment evidence.
 

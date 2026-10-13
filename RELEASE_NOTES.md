@@ -3,6 +3,17 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.5.9 - 2026-10-13
+
+### Changed
+
+- Update the icon library and core dependencies while retaining the existing learning, recording and cloud synchronization flows.
+- Clarify usage analytics documentation and distinguish browser statistics from household activity and retention metrics.
+
+### Fixed
+
+- Improve failure diagnostics in speech-resource release checks to help locate download or decoding problems.
+
 ## v1.5.8 - 2026-10-10
 
 ### Added

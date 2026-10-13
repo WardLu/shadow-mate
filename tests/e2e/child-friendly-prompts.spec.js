@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 async function installSpeechMocks(page) {
   await page.route("**/*manifest.json*", (route) => route.fulfill({ status: 503, body: "fallback" }));
@@ -76,6 +77,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
   test("supports tap-to-read on writing worksheet items (visual, word, sentence, hint)", async ({ page }) => {
     await installSpeechMocks(page);
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
 
@@ -158,6 +160,9 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await expect.poll(async () => {
       return (await page.evaluate(() => window.__speechUtterances.length));
     }).toBe(1);
+
+    // Complete the first planned word to populate the past words history
+    await page.locator('[data-content-observation="complete"]').first().click();
 
     // Past word chip
     const chip = page.locator('.mr-chip[data-word]').first();

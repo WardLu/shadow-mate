@@ -29,6 +29,24 @@ async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-
 test.describe("Ancient poetry interactive reading", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("continues the same unfinished poem after an absent week without recording playback as completion", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-10-13T02:00:00.000Z") });
+    await installSystemSpeech(page);
+    await page.goto("/");
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    const title = await page.locator(".poem-title").innerText();
+    await page.locator(".poem-line").first().click();
+    expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
+    await page.clock.setFixedTime(new Date("2026-10-20T02:00:00.000Z"));
+    await page.reload();
+    await page.click('[data-mod="learning"]');
+    await page.click('[data-go="chinese"]');
+    await expect(page.locator(".poem-title")).toHaveText(title);
+    await expect(page.locator(".poem-box")).toContainText("继续上次");
+    expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
+  });
+
   test("renders poem with interactive clickable lines and reads single line on tap", async ({ page }) => {
     await installSystemSpeech(page);
     await page.goto("/");

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  HANZI_WRITING_V2_EXPANDED,
+} from "../../src/content/hanzi-writing/manifest.js";
+import {
   renderWritingPrintSheetHtml,
   renderWritingWorksheetHtml,
 } from "../../src/hanzi-writing-view.js";
@@ -183,6 +186,61 @@ describe("Hanzi writing snapshot renderers", () => {
     expect(print.querySelectorAll("[data-hanzi-sentence]")).toHaveLength(4);
     expect(print.querySelectorAll("[data-hanzi-writing-hint]")).toHaveLength(4);
     expect(print.querySelectorAll("[data-hanzi-speak], button")).toHaveLength(0);
+  });
+
+  it("renders the expanded pack's four corrected visuals in screen and print snapshots", () => {
+    const items = ["子", "网", "桌", "足"].map((glyph) =>
+      HANZI_WRITING_V2_EXPANDED.items.find((item) => item.glyph === glyph)
+    );
+    const expandedWorksheet = {
+      ...worksheet,
+      rows: items.map((item, index) => ({
+        ...item,
+        rowId: `visual-row-${index}`,
+        itemId: item.id,
+      })),
+    };
+    const expected = new Map([
+      ["子", { kind: "emoji", value: "🧒" }],
+      ["网", { kind: "diagram", value: "fishing-net" }],
+      ["桌", { kind: "diagram", value: "table" }],
+      ["足", { kind: "emoji", value: "⚽" }],
+    ]);
+
+    for (const html of [
+      renderWritingWorksheetHtml(expandedWorksheet),
+      renderWritingPrintSheetHtml(expandedWorksheet),
+    ]) {
+      const rendered = parse(html);
+      expect(rendered.querySelectorAll("[data-hanzi-learning-card]")).toHaveLength(4);
+      for (const row of expandedWorksheet.rows) {
+        const card = [...rendered.querySelectorAll("[data-hanzi-learning-card]")]
+          .find((candidate) => candidate.querySelector("[data-writing-glyph]")?.textContent === row.glyph);
+        const visual = card.querySelector("[data-hanzi-visual]");
+        const expectedVisual = expected.get(row.glyph);
+        expect(visual.dataset.hanziVisualKind).toBe(expectedVisual.kind);
+        if (expectedVisual.kind === "diagram") {
+          const svg = visual.querySelector("svg");
+          expect(svg).not.toBeNull();
+          expect(svg.querySelectorAll("path").length).toBeGreaterThan(0);
+          expect(visual.textContent).toContain(row.concept.visual.alt);
+        } else {
+          expect(visual.querySelector(".hanzi-visual-value").textContent).toBe(expectedVisual.value);
+        }
+      }
+    }
+  });
+
+  it("renders unknown diagram markup as escaped text", () => {
+    const forged = structuredClone(hostileWorksheet);
+    forged.rows[0].concept.visual.kind = "diagram";
+    forged.rows[0].concept.visual.value = '<svg onload="alert(1)"><image href="https://example.com/a.svg"/></svg>';
+
+    for (const html of [renderWritingWorksheetHtml(forged), renderWritingPrintSheetHtml(forged)]) {
+      const visual = parse(html).querySelector("[data-hanzi-visual]");
+      expect(visual.querySelector("svg, image, script, [onload]")).toBeNull();
+      expect(visual.querySelector(".hanzi-visual-value").textContent).toBe(forged.rows[0].concept.visual.value);
+    }
   });
 
   it("escapes hostile snapshot fields as text and data attributes", () => {

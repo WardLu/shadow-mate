@@ -1,3 +1,5 @@
+import { isHanziWritingDiagram } from "./visuals.js";
+
 const REQUIRED_SOURCE_REF = "shadow-mate-preschool-hanzi-curriculum";
 const UNSAFE_TEXT_PATTERN = /<\s*\/?\s*[a-z][^>]*>|(?:java|vb)script\s*:|on[a-z]+\s*=/iu;
 const VISUAL_VALUE_URL_PATTERN = /(?:[a-z][a-z\d+.-]*:|\/\/|(?:^|[\s(])www\.)/iu;
@@ -103,30 +105,36 @@ function validateConcept(item, path, errors) {
   requireBoundedString(item.concept.characterEnglishLabel, `${conceptPath}.characterEnglishLabel`, errors);
   requireBoundedString(item.concept.characterMeaning, `${conceptPath}.characterMeaning`, errors);
 
+  const visual = item.concept.visual;
   const visualPath = `${conceptPath}.visual`;
-  if (!isRecord(item.concept.visual)) {
+  if (!isRecord(visual)) {
     errors.push(`${visualPath} must be an object`);
     return;
   }
 
-  if (item.concept.visual.kind !== "emoji") {
-    errors.push(`${visualPath}.kind must be "emoji"`);
-  }
-
   const visualValuePath = `${visualPath}.value`;
-  if (!isNonEmptyString(item.concept.visual.value)) {
-    errors.push(`${visualValuePath} must be a non-empty string`);
+  if (visual.kind === "emoji") {
+    if (!isNonEmptyString(visual.value)) {
+      errors.push(`${visualValuePath} must be a non-empty string`);
+    } else {
+      const graphemeCount = countGraphemes(visual.value);
+      if (graphemeCount < 1 || graphemeCount > MAX_VISUAL_GRAPHEME_COUNT) {
+        errors.push(`${visualValuePath} must contain 1-${MAX_VISUAL_GRAPHEME_COUNT} Unicode graphemes`);
+      }
+      if (VISUAL_VALUE_URL_PATTERN.test(visual.value)) {
+        errors.push(`${visualValuePath} must not contain a URL`);
+      }
+    }
+  } else if (visual.kind === "diagram") {
+    if (!isHanziWritingDiagram(visual.value)) {
+      errors.push(`${visualValuePath} must name a registered diagram`);
+    }
   } else {
-    const graphemeCount = countGraphemes(item.concept.visual.value);
-    if (graphemeCount < 1 || graphemeCount > MAX_VISUAL_GRAPHEME_COUNT) {
-      errors.push(`${visualValuePath} must contain 1-${MAX_VISUAL_GRAPHEME_COUNT} Unicode graphemes`);
-    }
-    if (VISUAL_VALUE_URL_PATTERN.test(item.concept.visual.value)) {
-      errors.push(`${visualValuePath} must not contain a URL`);
-    }
+    errors.push(`${visualPath}.kind must be "emoji" or "diagram"`);
+    if (!isNonEmptyString(visual.value)) errors.push(`${visualValuePath} must be a non-empty string`);
   }
 
-  requireBoundedString(item.concept.visual.alt, `${visualPath}.alt`, errors);
+  requireBoundedString(visual.alt, `${visualPath}.alt`, errors);
 }
 
 function validateExampleWords(item, path, errors) {
@@ -245,7 +253,8 @@ export function validateHanziWritingPack(pack) {
     errors.push('algorithmCompatibility must be "rotation-v1"');
   }
   if (pack.locale !== "zh-CN") errors.push('locale must be "zh-CN"');
-  validateExactTuple(pack.targetAgeRange, [4, 5], "targetAgeRange", errors);
+  const expanded = pack.contentVersion === "hanzi-v2-expanded-1";
+  validateExactTuple(pack.targetAgeRange, expanded ? [4, 6] : [4, 5], "targetAgeRange", errors);
 
   if (!isRecord(pack.worksheetPolicy)) {
     errors.push("worksheetPolicy must be an object");
@@ -258,9 +267,18 @@ export function validateHanziWritingPack(pack) {
     }
   }
 
-  const reviewersValid = validateStringArray(pack.reviewers, "reviewers", errors);
-  if (reviewersValid && !pack.reviewers.includes("product-owner")) {
-    errors.push('reviewers must include "product-owner"');
+  if (expanded) {
+    if (!Array.isArray(pack.reviewers) || pack.reviewers.length !== 0) {
+      errors.push("reviewers must be empty for the unreviewed expanded pack");
+    }
+    if (pack.reviewStatus !== "pending-product-review") {
+      errors.push('reviewStatus must be "pending-product-review" for the expanded pack');
+    }
+  } else {
+    const reviewersValid = validateStringArray(pack.reviewers, "reviewers", errors);
+    if (reviewersValid && !pack.reviewers.includes("product-owner")) {
+      errors.push('reviewers must include "product-owner"');
+    }
   }
 
   const packSourceRefsValid = validateStringArray(pack.sourceRefs, "sourceRefs", errors);

@@ -29,6 +29,35 @@ async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-
 test.describe("Child-friendly math interactions", () => {
   test.use({ serviceWorkers: "block" });
 
+  test("keeps mental arithmetic inside the selected package range", async ({ page }) => {
+    await page.goto("/");
+    for (const [packageId, maximum] of [["foundation-v2", 5], ["bridging-v1", 10]]) {
+      await page.click('[data-mod="learning"]');
+      await page.click('[data-go-settings="learning"]');
+      await page.locator("[data-package-id]").selectOption(packageId);
+      await page.click('[data-mod="learning"]');
+      await page.click('[data-go="math"]');
+      await expect(page.locator(".lvl-btn[data-lvl]")).toHaveText(
+        packageId === "foundation-v2" ? ["5以内", "10以内"] : ["5以内", "10以内", "20以内"],
+      );
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await expect(page.locator(".card h3").filter({ hasText: "口算打卡" })).toContainText(`${maximum} 以内`);
+        const match = (await page.locator("#qq").innerText()).match(/(\d+)\s*([+\-−])\s*(\d+)/);
+        expect(match).toBeTruthy();
+        const left = Number(match[1]);
+        const right = Number(match[3]);
+        const answer = match[2] === "+" ? left + right : left - right;
+        expect(left).toBeGreaterThanOrEqual(0);
+        expect(right).toBeGreaterThanOrEqual(0);
+        expect(left).toBeLessThanOrEqual(maximum);
+        expect(right).toBeLessThanOrEqual(maximum);
+        expect(answer).toBeGreaterThanOrEqual(0);
+        expect(answer).toBeLessThanOrEqual(maximum);
+        await page.locator(`.lvl-btn[data-lvl="${maximum}"]`).click();
+      }
+    }
+  });
+
   test("plays a mental-math question from CDN fragments without Web Speech API", async ({ page }) => {
     await page.addInitScript(() => {
       window.__publishedAudioPlays = 0;

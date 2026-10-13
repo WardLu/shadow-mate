@@ -1,4 +1,4 @@
-import { findMatchingVoice } from './speech-text-utils.js';
+import { findMatchingVoice, isCantoneseVoiceLocale } from './speech-text-utils.js';
 
 /** Playback protocol without DOM. Every request settles, including cancellation. */
 export function createSpeechSession({ publishedPlayer, synthesis, Utterance,
@@ -47,8 +47,9 @@ export function createSpeechSession({ publishedPlayer, synthesis, Utterance,
     };
     try {
       const voices = typeof synthesis?.getVoices === 'function' ? synthesis.getVoices() : null;
-      const voice = findMatchingVoice(voices, locale);
-      const defaultVoice = !Array.isArray(voices) || voices.length === 0;
+      const strictVoice = Boolean(request.strictVoice) || isCantoneseVoiceLocale(locale);
+      const voice = findMatchingVoice(voices, locale, { strictVoice });
+      const defaultVoice = !strictVoice && (!Array.isArray(voices) || voices.length === 0);
       if (!synthesis || typeof Utterance !== 'function' || (!voice && !defaultVoice)) {
         failed('system-unavailable');
         return;
@@ -76,9 +77,9 @@ export function createSpeechSession({ publishedPlayer, synthesis, Utterance,
     } catch (_) { failed('system-playback'); }
   }
   return {
-    play({ text, locale = 'en-US', contentIds = [], volume = 0.6 }) {
+    play({ text, locale = 'en-US', contentIds = [], volume = 0.6, strictVoice = false }) {
       stop();
-      const request = { done: false, timer: null };
+      const request = { done: false, timer: null, strictVoice };
       const promise = new Promise(resolve => { request.resolve = resolve; });
       active = request;
       notify('playing');

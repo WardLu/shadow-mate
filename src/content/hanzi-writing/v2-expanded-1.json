@@ -1,0 +1,5035 @@
+{
+  "schemaVersion": 1,
+  "setId": "hanzi-writing-v2",
+  "contentVersion": "hanzi-v2-expanded-1",
+  "algorithmCompatibility": "rotation-v1",
+  "locale": "zh-CN",
+  "targetAgeRange": [
+    4,
+    6
+  ],
+  "worksheetPolicy": {
+    "rowsPerDay": 4,
+    "recentDayWindow": 7
+  },
+  "reviewers": [],
+  "sourceRefs": [
+    "shadow-mate-preschool-hanzi-curriculum",
+    "unicode-unihan-17",
+    "original-writing-prompts",
+    "moe-preschool-guidance"
+  ],
+  "items": [
+    {
+      "id": "hz-001",
+      "glyph": "一",
+      "pinyin": "yī",
+      "exampleWord": "一个",
+      "order": 1,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字一",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪵",
+          "alt": "一根小棍子"
+        },
+        "englishLabel": "one",
+        "characterEnglishLabel": "one",
+        "characterMeaning": "表示数量一"
+      },
+      "exampleWords": [
+        "一个",
+        "一天"
+      ],
+      "sentence": "一只小鸟飞。",
+      "writing": {
+        "strokeCount": 1,
+        "structure": "独体字",
+        "hint": "先看一横，再看字的位置。"
+      }
+    },
+    {
+      "id": "hz-002",
+      "glyph": "二",
+      "pinyin": "èr",
+      "exampleWord": "二月",
+      "order": 2,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字二",
+        "visual": {
+          "kind": "emoji",
+          "value": "✌️",
+          "alt": "两根小手指"
+        },
+        "englishLabel": "two",
+        "characterEnglishLabel": "two",
+        "characterMeaning": "表示数量二"
+      },
+      "exampleWords": [
+        "二月",
+        "二人"
+      ],
+      "sentence": "二月有小雨。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "两横要平稳，下面一横更长。"
+      }
+    },
+    {
+      "id": "hz-003",
+      "glyph": "三",
+      "pinyin": "sān",
+      "exampleWord": "三天",
+      "order": 3,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字三",
+        "visual": {
+          "kind": "emoji",
+          "value": "3️⃣",
+          "alt": "数字三的符号"
+        },
+        "englishLabel": "three",
+        "characterEnglishLabel": "three",
+        "characterMeaning": "表示数量三"
+      },
+      "exampleWords": [
+        "三天",
+        "三个"
+      ],
+      "sentence": "三只小猫跑。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "三横有长短，横画之间留一点空。"
+      }
+    },
+    {
+      "id": "hz-004",
+      "glyph": "十",
+      "pinyin": "shí",
+      "exampleWord": "十天",
+      "order": 4,
+      "theme": "数字",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "数字十",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔟",
+          "alt": "十个小手指"
+        },
+        "englishLabel": "ten",
+        "characterEnglishLabel": "ten",
+        "characterMeaning": "表示数量十"
+      },
+      "exampleWords": [
+        "十天",
+        "十个"
+      ],
+      "sentence": "十个小手指。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先写横，再写竖，交叉在中间。"
+      }
+    },
+    {
+      "id": "hz-005",
+      "glyph": "人",
+      "pinyin": "rén",
+      "exampleWord": "大人",
+      "order": 5,
+      "theme": "人物",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小朋友",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "一个小朋友"
+        },
+        "englishLabel": "person",
+        "characterEnglishLabel": "person",
+        "characterMeaning": "人类；有生命的个体"
+      },
+      "exampleWords": [
+        "大人",
+        "人口"
+      ],
+      "sentence": "小朋友是人。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "撇和捺像两条腿，站得要稳。"
+      }
+    },
+    {
+      "id": "hz-006",
+      "glyph": "口",
+      "pinyin": "kǒu",
+      "exampleWord": "口水",
+      "order": 6,
+      "theme": "身体",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "嘴巴",
+        "visual": {
+          "kind": "emoji",
+          "value": "👄",
+          "alt": "一张嘴巴"
+        },
+        "englishLabel": "mouth",
+        "characterEnglishLabel": "mouth",
+        "characterMeaning": "嘴；也表示入口"
+      },
+      "exampleWords": [
+        "口水",
+        "开口"
+      ],
+      "sentence": "小猫张开口。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写外框，最后关好小门。"
+      }
+    },
+    {
+      "id": "hz-007",
+      "glyph": "手",
+      "pinyin": "shǒu",
+      "exampleWord": "小手",
+      "order": 7,
+      "theme": "身体",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小手",
+        "visual": {
+          "kind": "emoji",
+          "value": "🖐️",
+          "alt": "一只张开的手"
+        },
+        "englishLabel": "hand",
+        "characterEnglishLabel": "hand",
+        "characterMeaning": "人的上肢；用来做事"
+      },
+      "exampleWords": [
+        "小手",
+        "手心"
+      ],
+      "sentence": "我用小手拿。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "横画排整齐，弯钩要写得有力。"
+      }
+    },
+    {
+      "id": "hz-008",
+      "glyph": "日",
+      "pinyin": "rì",
+      "exampleWord": "日子",
+      "order": 8,
+      "theme": "时间",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "太阳",
+        "visual": {
+          "kind": "emoji",
+          "value": "☀️",
+          "alt": "一轮温暖的太阳"
+        },
+        "englishLabel": "sun",
+        "characterEnglishLabel": "sun",
+        "characterMeaning": "太阳；也表示一天"
+      },
+      "exampleWords": [
+        "日子",
+        "日出"
+      ],
+      "sentence": "今日有太阳。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "外框要方正，中间横画要清楚。"
+      }
+    },
+    {
+      "id": "hz-009",
+      "glyph": "月",
+      "pinyin": "yuè",
+      "exampleWord": "月儿",
+      "order": 9,
+      "theme": "时间",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "月亮",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌙",
+          "alt": "一弯明亮的月亮"
+        },
+        "englishLabel": "moon",
+        "characterEnglishLabel": "moon",
+        "characterMeaning": "月亮；也表示月份"
+      },
+      "exampleWords": [
+        "月儿",
+        "月光"
+      ],
+      "sentence": "月亮出来了。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先写外框，再把里面的横画写匀。"
+      }
+    },
+    {
+      "id": "hz-010",
+      "glyph": "水",
+      "pinyin": "shuǐ",
+      "exampleWord": "水果",
+      "order": 10,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "水滴",
+        "visual": {
+          "kind": "emoji",
+          "value": "💧",
+          "alt": "一滴清清的水"
+        },
+        "englishLabel": "water",
+        "characterEnglishLabel": "water",
+        "characterMeaning": "没有颜色、会流动的液体"
+      },
+      "exampleWords": [
+        "水果",
+        "水花"
+      ],
+      "sentence": "小鱼在水里。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "中间的竖钩要挺直，左右要舒展。"
+      }
+    },
+    {
+      "id": "hz-011",
+      "glyph": "火",
+      "pinyin": "huǒ",
+      "exampleWord": "火山",
+      "order": 11,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "火山",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌋",
+          "alt": "一座火山"
+        },
+        "englishLabel": "volcano",
+        "characterEnglishLabel": "fire",
+        "characterMeaning": "燃烧时发光发热的东西"
+      },
+      "exampleWords": [
+        "火山",
+        "火光"
+      ],
+      "sentence": "火山有火。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先看两点，再写中间像人一样的部分。"
+      }
+    },
+    {
+      "id": "hz-012",
+      "glyph": "木",
+      "pinyin": "mù",
+      "exampleWord": "木头",
+      "order": 12,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "大树",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌳",
+          "alt": "一棵枝叶茂盛的大树"
+        },
+        "englishLabel": "tree",
+        "characterEnglishLabel": "wood",
+        "characterMeaning": "树木；木头"
+      },
+      "exampleWords": [
+        "木头",
+        "木马"
+      ],
+      "sentence": "小鸟站在木头上。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "横要平，竖在中间，撇捺向两边展开。"
+      }
+    },
+    {
+      "id": "hz-013",
+      "glyph": "山",
+      "pinyin": "shān",
+      "exampleWord": "大山",
+      "order": 13,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "高山",
+        "visual": {
+          "kind": "emoji",
+          "value": "⛰️",
+          "alt": "一座高高的山"
+        },
+        "englishLabel": "mountain",
+        "characterEnglishLabel": "mountain",
+        "characterMeaning": "地面上高起的地方"
+      },
+      "exampleWords": [
+        "大山",
+        "山羊"
+      ],
+      "sentence": "山上有云。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "中间的竖最高，三笔要站稳。"
+      }
+    },
+    {
+      "id": "hz-014",
+      "glyph": "石",
+      "pinyin": "shí",
+      "exampleWord": "石头",
+      "order": 14,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "石头",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪨",
+          "alt": "一块圆圆的石头"
+        },
+        "englishLabel": "stone",
+        "characterEnglishLabel": "stone",
+        "characterMeaning": "坚硬的石块"
+      },
+      "exampleWords": [
+        "石头",
+        "石子"
+      ],
+      "sentence": "石头在地上。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "上面一横要稳，下面的口要方正。"
+      }
+    },
+    {
+      "id": "hz-015",
+      "glyph": "田",
+      "pinyin": "tián",
+      "exampleWord": "田地",
+      "order": 15,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "田地",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌾",
+          "alt": "一片金色的田地"
+        },
+        "englishLabel": "field",
+        "characterEnglishLabel": "field",
+        "characterMeaning": "种庄稼的土地"
+      },
+      "exampleWords": [
+        "田地",
+        "田野"
+      ],
+      "sentence": "小鸟飞过田地。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先写外框，再把里面分成整齐的小格。"
+      }
+    },
+    {
+      "id": "hz-016",
+      "glyph": "土",
+      "pinyin": "tǔ",
+      "exampleWord": "土地",
+      "order": 16,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "泥土",
+        "visual": {
+          "kind": "emoji",
+          "value": "🟫",
+          "alt": "一块松松的泥土"
+        },
+        "englishLabel": "soil",
+        "characterEnglishLabel": "soil",
+        "characterMeaning": "地面上的泥土"
+      },
+      "exampleWords": [
+        "土地",
+        "泥土"
+      ],
+      "sentence": "花长在土里。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写短横，再写竖，最后托住一长横。"
+      }
+    },
+    {
+      "id": "hz-017",
+      "glyph": "上",
+      "pinyin": "shàng",
+      "exampleWord": "上下",
+      "order": 17,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "向上",
+        "visual": {
+          "kind": "emoji",
+          "value": "⬆️",
+          "alt": "指向上方的箭头"
+        },
+        "englishLabel": "up",
+        "characterEnglishLabel": "up",
+        "characterMeaning": "位置在高处或前面"
+      },
+      "exampleWords": [
+        "上下",
+        "上学"
+      ],
+      "sentence": "小鸟飞上天。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "竖要站在中间，短横和长横分开。"
+      }
+    },
+    {
+      "id": "hz-018",
+      "glyph": "下",
+      "pinyin": "xià",
+      "exampleWord": "下雨",
+      "order": 18,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "向下",
+        "visual": {
+          "kind": "emoji",
+          "value": "⬇️",
+          "alt": "指向下方的箭头"
+        },
+        "englishLabel": "down",
+        "characterEnglishLabel": "down",
+        "characterMeaning": "位置在低处或后面"
+      },
+      "exampleWords": [
+        "下雨",
+        "下来"
+      ],
+      "sentence": "小猫跳下台阶。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "横要写平，竖要写直，最后一点落在下面。"
+      }
+    },
+    {
+      "id": "hz-019",
+      "glyph": "大",
+      "pinyin": "dà",
+      "exampleWord": "大门",
+      "order": 19,
+      "theme": "比较",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "大象",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐘",
+          "alt": "一头大大的象"
+        },
+        "englishLabel": "elephant",
+        "characterEnglishLabel": "big",
+        "characterMeaning": "体积、面积或程度较大"
+      },
+      "exampleWords": [
+        "大门",
+        "大人"
+      ],
+      "sentence": "大象很大。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "撇捺打开像两只手，横要托住全字。"
+      }
+    },
+    {
+      "id": "hz-020",
+      "glyph": "小",
+      "pinyin": "xiǎo",
+      "exampleWord": "小猫",
+      "order": 20,
+      "theme": "比较",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小猫",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐈",
+          "alt": "一只小小的猫"
+        },
+        "englishLabel": "kitten",
+        "characterEnglishLabel": "small",
+        "characterMeaning": "体积、面积或程度较小"
+      },
+      "exampleWords": [
+        "小猫",
+        "小鸟"
+      ],
+      "sentence": "小猫睡觉了。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先写中间的竖钩，再写两边的小点。"
+      }
+    },
+    {
+      "id": "hz-021",
+      "glyph": "中",
+      "pinyin": "zhōng",
+      "exampleWord": "中间",
+      "order": 21,
+      "theme": "方位",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "中间",
+        "visual": {
+          "kind": "emoji",
+          "value": "🎯",
+          "alt": "靶心在正中间"
+        },
+        "englishLabel": "middle",
+        "characterEnglishLabel": "middle",
+        "characterMeaning": "位置在两边之间"
+      },
+      "exampleWords": [
+        "中间",
+        "中心"
+      ],
+      "sentence": "小球在中间。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "口字要方正，竖从中间穿过去。"
+      }
+    },
+    {
+      "id": "hz-022",
+      "glyph": "天",
+      "pinyin": "tiān",
+      "exampleWord": "天空",
+      "order": 22,
+      "theme": "自然",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "天空",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌤️",
+          "alt": "有云的蓝蓝天空"
+        },
+        "englishLabel": "sky",
+        "characterEnglishLabel": "sky",
+        "characterMeaning": "天空；一天的时间"
+      },
+      "exampleWords": [
+        "天空",
+        "天气"
+      ],
+      "sentence": "今天的天很蓝。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "两横有变化，撇捺要向外打开。"
+      }
+    },
+    {
+      "id": "hz-023",
+      "glyph": "王",
+      "pinyin": "wáng",
+      "exampleWord": "王子",
+      "order": 23,
+      "theme": "人物",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "国王",
+        "visual": {
+          "kind": "emoji",
+          "value": "🤴",
+          "alt": "一位戴王冠的国王"
+        },
+        "englishLabel": "king",
+        "characterEnglishLabel": "king",
+        "characterMeaning": "古代的最高统治者"
+      },
+      "exampleWords": [
+        "王子",
+        "大王"
+      ],
+      "sentence": "王子骑马。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "三横要有长短，竖线要穿过中间。"
+      }
+    },
+    {
+      "id": "hz-024",
+      "glyph": "马",
+      "pinyin": "mǎ",
+      "exampleWord": "马车",
+      "order": 24,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "马儿",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐎",
+          "alt": "一匹奔跑的小马"
+        },
+        "englishLabel": "horse",
+        "characterEnglishLabel": "horse",
+        "characterMeaning": "一种常见的哺乳动物"
+      },
+      "exampleWords": [
+        "马车",
+        "马上"
+      ],
+      "sentence": "马儿跑得快。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "横折要连贯，最后一横向右伸展。"
+      }
+    },
+    {
+      "id": "hz-025",
+      "glyph": "牛",
+      "pinyin": "niú",
+      "exampleWord": "水牛",
+      "order": 25,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "奶牛",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐄",
+          "alt": "一头黑白花奶牛"
+        },
+        "englishLabel": "cow",
+        "characterEnglishLabel": "cow",
+        "characterMeaning": "一种能耕地的家畜"
+      },
+      "exampleWords": [
+        "水牛",
+        "牛奶"
+      ],
+      "sentence": "奶牛吃草。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "撇要短，竖要直，最后一横写舒展。"
+      }
+    },
+    {
+      "id": "hz-026",
+      "glyph": "羊",
+      "pinyin": "yáng",
+      "exampleWord": "山羊",
+      "order": 26,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小羊",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐑",
+          "alt": "一只软软的小羊"
+        },
+        "englishLabel": "sheep",
+        "characterEnglishLabel": "sheep",
+        "characterMeaning": "一种有角的家畜"
+      },
+      "exampleWords": [
+        "山羊",
+        "小羊"
+      ],
+      "sentence": "小羊在山上。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "点和撇像羊角，三横要排得整齐。"
+      }
+    },
+    {
+      "id": "hz-027",
+      "glyph": "鸟",
+      "pinyin": "niǎo",
+      "exampleWord": "小鸟",
+      "order": 27,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小鸟",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐦",
+          "alt": "一只飞翔的小鸟"
+        },
+        "englishLabel": "bird",
+        "characterEnglishLabel": "bird",
+        "characterMeaning": "有羽毛、会飞的动物"
+      },
+      "exampleWords": [
+        "小鸟",
+        "鸟儿"
+      ],
+      "sentence": "小鸟在唱歌。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "鸟头小，身体宽，最后一横要托住全字。"
+      }
+    },
+    {
+      "id": "hz-028",
+      "glyph": "虫",
+      "pinyin": "chóng",
+      "exampleWord": "虫子",
+      "order": 28,
+      "theme": "动物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小虫",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐛",
+          "alt": "一只慢慢爬的小虫"
+        },
+        "englishLabel": "bug",
+        "characterEnglishLabel": "bug",
+        "characterMeaning": "小型无脊椎动物的统称"
+      },
+      "exampleWords": [
+        "虫子",
+        "小虫"
+      ],
+      "sentence": "小虫爬过叶子。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "中间的口要圆，最后一笔像小虫的脚。"
+      }
+    },
+    {
+      "id": "hz-029",
+      "glyph": "云",
+      "pinyin": "yún",
+      "exampleWord": "白云",
+      "order": 29,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "白云",
+        "visual": {
+          "kind": "emoji",
+          "value": "☁️",
+          "alt": "一朵软绵绵的白云"
+        },
+        "englishLabel": "cloud",
+        "characterEnglishLabel": "cloud",
+        "characterMeaning": "天空中由水汽形成的团状物"
+      },
+      "exampleWords": [
+        "白云",
+        "云朵"
+      ],
+      "sentence": "白云飘在天上。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "上横短，下横长，撇折要连起来。"
+      }
+    },
+    {
+      "id": "hz-030",
+      "glyph": "雨",
+      "pinyin": "yǔ",
+      "exampleWord": "下雨",
+      "order": 30,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "下雨",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌧️",
+          "alt": "天空下着细细的雨"
+        },
+        "englishLabel": "rain",
+        "characterEnglishLabel": "rain",
+        "characterMeaning": "从云中降落的水滴"
+      },
+      "exampleWords": [
+        "下雨",
+        "雨水"
+      ],
+      "sentence": "下雨了，带好伞。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "独体字",
+        "hint": "先写雨字头，里面四点要分开。"
+      }
+    },
+    {
+      "id": "hz-031",
+      "glyph": "风",
+      "pinyin": "fēng",
+      "exampleWord": "大风",
+      "order": 31,
+      "theme": "自然",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "风车",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌬️",
+          "alt": "一阵轻轻吹来的风"
+        },
+        "englishLabel": "wind",
+        "characterEnglishLabel": "wind",
+        "characterMeaning": "空气的流动"
+      },
+      "exampleWords": [
+        "大风",
+        "风车"
+      ],
+      "sentence": "风车转起来。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "半包围结构",
+        "hint": "外面的弯钩像风，里面的撇点要靠近。"
+      }
+    },
+    {
+      "id": "hz-032",
+      "glyph": "花",
+      "pinyin": "huā",
+      "exampleWord": "花朵",
+      "order": 32,
+      "theme": "植物",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "shadow-mate-preschool-hanzi-curriculum"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "花朵",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌸",
+          "alt": "一朵粉色的小花"
+        },
+        "englishLabel": "flower",
+        "characterEnglishLabel": "flower",
+        "characterMeaning": "植物开放的部分"
+      },
+      "exampleWords": [
+        "花朵",
+        "花开"
+      ],
+      "sentence": "花朵开了。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "上下结构",
+        "hint": "草字头要扁，下面的化字写在中间。"
+      }
+    },
+    {
+      "id": "hz-u56db",
+      "glyph": "四",
+      "pinyin": "sì",
+      "exampleWord": "四个",
+      "order": 33,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "四个",
+        "englishLabel": "four items",
+        "characterEnglishLabel": "four",
+        "characterMeaning": "表示数量四",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "四个"
+        }
+      },
+      "exampleWords": [
+        "四个",
+        "四季"
+      ],
+      "sentence": "四季有不同的景色。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "全包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e94",
+      "glyph": "五",
+      "pinyin": "wǔ",
+      "exampleWord": "五个",
+      "order": 34,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "五个",
+        "englishLabel": "five items",
+        "characterEnglishLabel": "five",
+        "characterMeaning": "表示数量五",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "五个"
+        }
+      },
+      "exampleWords": [
+        "五个",
+        "五天"
+      ],
+      "sentence": "桌上有五个苹果。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u516d",
+      "glyph": "六",
+      "pinyin": "liù",
+      "exampleWord": "六个",
+      "order": 35,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "六个",
+        "englishLabel": "six items",
+        "characterEnglishLabel": "six",
+        "characterMeaning": "表示数量六",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "六个"
+        }
+      },
+      "exampleWords": [
+        "六个",
+        "六月"
+      ],
+      "sentence": "篮子里有六个鸡蛋。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e03",
+      "glyph": "七",
+      "pinyin": "qī",
+      "exampleWord": "七个",
+      "order": 36,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "七个",
+        "englishLabel": "seven items",
+        "characterEnglishLabel": "seven",
+        "characterMeaning": "表示数量七",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "七个"
+        }
+      },
+      "exampleWords": [
+        "七个",
+        "七天"
+      ],
+      "sentence": "一周有七天。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u516b",
+      "glyph": "八",
+      "pinyin": "bā",
+      "exampleWord": "八个",
+      "order": 37,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "八个",
+        "englishLabel": "eight items",
+        "characterEnglishLabel": "eight",
+        "characterMeaning": "表示数量八",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "八个"
+        }
+      },
+      "exampleWords": [
+        "八个",
+        "八月"
+      ],
+      "sentence": "盘子里有八个饺子。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e5d",
+      "glyph": "九",
+      "pinyin": "jiǔ",
+      "exampleWord": "九个",
+      "order": 38,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "九个",
+        "englishLabel": "nine items",
+        "characterEnglishLabel": "nine",
+        "characterMeaning": "表示数量九",
+        "visual": {
+          "kind": "emoji",
+          "value": "🔢",
+          "alt": "九个"
+        }
+      },
+      "exampleWords": [
+        "九个",
+        "九月"
+      ],
+      "sentence": "我画了九个圆。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e2a",
+      "glyph": "个",
+      "pinyin": "gè",
+      "exampleWord": "一个",
+      "order": 39,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "一个",
+        "englishLabel": "one item",
+        "characterEnglishLabel": "item counter",
+        "characterMeaning": "数人或物时用的量词",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍎",
+          "alt": "一个"
+        }
+      },
+      "exampleWords": [
+        "一个",
+        "几个"
+      ],
+      "sentence": "我拿了一个苹果。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5b50",
+      "glyph": "子",
+      "pinyin": "zǐ",
+      "exampleWord": "孩子",
+      "order": 40,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "孩子",
+        "englishLabel": "child",
+        "characterEnglishLabel": "child",
+        "characterMeaning": "可以指孩子，也见于种子等词",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "孩子"
+        }
+      },
+      "exampleWords": [
+        "孩子",
+        "种子"
+      ],
+      "sentence": "种子发芽了。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5973",
+      "glyph": "女",
+      "pinyin": "nǚ",
+      "exampleWord": "女孩",
+      "order": 41,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "女孩",
+        "englishLabel": "girl",
+        "characterEnglishLabel": "female",
+        "characterMeaning": "表示女性",
+        "visual": {
+          "kind": "emoji",
+          "value": "👧",
+          "alt": "女孩"
+        }
+      },
+      "exampleWords": [
+        "女孩",
+        "女儿"
+      ],
+      "sentence": "女孩在画画。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6bdb",
+      "glyph": "毛",
+      "pinyin": "máo",
+      "exampleWord": "毛衣",
+      "order": 42,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "毛衣",
+        "englishLabel": "sweater",
+        "characterEnglishLabel": "hair or fur",
+        "characterMeaning": "人或动物身上细细的毛发",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧺",
+          "alt": "毛衣"
+        }
+      },
+      "exampleWords": [
+        "毛衣",
+        "毛巾"
+      ],
+      "sentence": "我用毛巾擦手。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u76ae",
+      "glyph": "皮",
+      "pinyin": "pí",
+      "exampleWord": "皮球",
+      "order": 43,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "皮球",
+        "englishLabel": "ball",
+        "characterEnglishLabel": "skin or peel",
+        "characterMeaning": "身体或果实表面的一层",
+        "visual": {
+          "kind": "emoji",
+          "value": "⚽",
+          "alt": "皮球"
+        }
+      },
+      "exampleWords": [
+        "皮球",
+        "果皮"
+      ],
+      "sentence": "皮球滚到了门边。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u79be",
+      "glyph": "禾",
+      "pinyin": "hé",
+      "exampleWord": "禾苗",
+      "order": 44,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "禾苗",
+        "englishLabel": "seedling",
+        "characterEnglishLabel": "grain plant",
+        "characterMeaning": "可以指谷类植物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌱",
+          "alt": "禾苗"
+        }
+      },
+      "exampleWords": [
+        "禾苗",
+        "禾田"
+      ],
+      "sentence": "禾苗长高了。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5348",
+      "glyph": "午",
+      "pinyin": "wǔ",
+      "exampleWord": "中午",
+      "order": 45,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "中午",
+        "englishLabel": "noon",
+        "characterEnglishLabel": "noon",
+        "characterMeaning": "白天中间的一段时间",
+        "visual": {
+          "kind": "emoji",
+          "value": "☀️",
+          "alt": "中午"
+        }
+      },
+      "exampleWords": [
+        "中午",
+        "午饭"
+      ],
+      "sentence": "中午我们一起吃午饭。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5915",
+      "glyph": "夕",
+      "pinyin": "xī",
+      "exampleWord": "夕阳",
+      "order": 46,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "夕阳",
+        "englishLabel": "sunset",
+        "characterEnglishLabel": "evening",
+        "characterMeaning": "太阳落下时的傍晚",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌇",
+          "alt": "夕阳"
+        }
+      },
+      "exampleWords": [
+        "夕阳",
+        "七夕"
+      ],
+      "sentence": "夕阳照着小河。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5149",
+      "glyph": "光",
+      "pinyin": "guāng",
+      "exampleWord": "阳光",
+      "order": 47,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "阳光",
+        "englishLabel": "sunlight",
+        "characterEnglishLabel": "light",
+        "characterMeaning": "让我们看清东西的光亮",
+        "visual": {
+          "kind": "emoji",
+          "value": "☀️",
+          "alt": "阳光"
+        }
+      },
+      "exampleWords": [
+        "阳光",
+        "灯光"
+      ],
+      "sentence": "阳光照进窗户。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8d1d",
+      "glyph": "贝",
+      "pinyin": "bèi",
+      "exampleWord": "贝壳",
+      "order": 48,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "贝壳",
+        "englishLabel": "shell",
+        "characterEnglishLabel": "shell",
+        "characterMeaning": "贝类动物的硬壳",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐚",
+          "alt": "贝壳"
+        }
+      },
+      "exampleWords": [
+        "贝壳",
+        "宝贝"
+      ],
+      "sentence": "海边有小小的贝壳。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7f51",
+      "glyph": "网",
+      "pinyin": "wǎng",
+      "exampleWord": "渔网",
+      "order": 49,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "渔网",
+        "englishLabel": "fishing net",
+        "characterEnglishLabel": "net",
+        "characterMeaning": "用线交织成的网",
+        "visual": {
+          "kind": "diagram",
+          "value": "fishing-net",
+          "alt": "渔网"
+        }
+      },
+      "exampleWords": [
+        "渔网",
+        "网球"
+      ],
+      "sentence": "我看见了一个网球。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5165",
+      "glyph": "入",
+      "pinyin": "rù",
+      "exampleWord": "入口",
+      "order": 50,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "入口",
+        "englishLabel": "entrance",
+        "characterEnglishLabel": "enter",
+        "characterMeaning": "从外面到里面",
+        "visual": {
+          "kind": "emoji",
+          "value": "🚪",
+          "alt": "入口"
+        }
+      },
+      "exampleWords": [
+        "入口",
+        "进入"
+      ],
+      "sentence": "我们从入口走进公园。",
+      "writing": {
+        "strokeCount": 2,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u51fa",
+      "glyph": "出",
+      "pinyin": "chū",
+      "exampleWord": "出口",
+      "order": 51,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "出口",
+        "englishLabel": "exit",
+        "characterEnglishLabel": "go out",
+        "characterMeaning": "从里面到外面",
+        "visual": {
+          "kind": "emoji",
+          "value": "🚪",
+          "alt": "出口"
+        }
+      },
+      "exampleWords": [
+        "出口",
+        "出去"
+      ],
+      "sentence": "我们出去看看小花。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7acb",
+      "glyph": "立",
+      "pinyin": "lì",
+      "exampleWord": "站立",
+      "order": 52,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "站立",
+        "englishLabel": "stand",
+        "characterEnglishLabel": "stand",
+        "characterMeaning": "直直地站着",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧍",
+          "alt": "站立"
+        }
+      },
+      "exampleWords": [
+        "站立",
+        "立正"
+      ],
+      "sentence": "小朋友站立在树旁。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6b63",
+      "glyph": "正",
+      "pinyin": "zhèng",
+      "exampleWord": "正好",
+      "order": 53,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "正好",
+        "englishLabel": "just right",
+        "characterEnglishLabel": "correct",
+        "characterMeaning": "可以表示正确或端正",
+        "visual": {
+          "kind": "emoji",
+          "value": "👕",
+          "alt": "正好"
+        }
+      },
+      "exampleWords": [
+        "正好",
+        "正面"
+      ],
+      "sentence": "这件衣服正好合身。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5e73",
+      "glyph": "平",
+      "pinyin": "píng",
+      "exampleWord": "平地",
+      "order": 54,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "平地",
+        "englishLabel": "level ground",
+        "characterEnglishLabel": "level",
+        "characterMeaning": "没有高低起伏",
+        "visual": {
+          "kind": "emoji",
+          "value": "🛤️",
+          "alt": "平地"
+        }
+      },
+      "exampleWords": [
+        "平地",
+        "平安"
+      ],
+      "sentence": "皮球放在平地上。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5b89",
+      "glyph": "安",
+      "pinyin": "ān",
+      "exampleWord": "安全",
+      "order": 55,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "安全",
+        "englishLabel": "safety",
+        "characterEnglishLabel": "safe",
+        "characterMeaning": "可以表示安全或安定",
+        "visual": {
+          "kind": "emoji",
+          "value": "🚦",
+          "alt": "安全"
+        }
+      },
+      "exampleWords": [
+        "安全",
+        "平安"
+      ],
+      "sentence": "过马路时要注意安全。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4f4f",
+      "glyph": "住",
+      "pinyin": "zhù",
+      "exampleWord": "住家",
+      "order": 56,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "住家",
+        "englishLabel": "home",
+        "characterEnglishLabel": "live or stay",
+        "characterMeaning": "在某个地方生活或停留",
+        "visual": {
+          "kind": "emoji",
+          "value": "🏠",
+          "alt": "住家"
+        }
+      },
+      "exampleWords": [
+        "住家",
+        "住处"
+      ],
+      "sentence": "小鸟的住处在树上。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e50",
+      "glyph": "乐",
+      "pinyin": "lè",
+      "exampleWord": "快乐",
+      "order": 57,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "快乐",
+        "englishLabel": "happy",
+        "characterEnglishLabel": "happy",
+        "characterMeaning": "这里读lè，表示快乐",
+        "visual": {
+          "kind": "emoji",
+          "value": "🙂",
+          "alt": "快乐"
+        }
+      },
+      "exampleWords": [
+        "快乐",
+        "乐园"
+      ],
+      "sentence": "我们在乐园里玩得很快乐。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7f8e",
+      "glyph": "美",
+      "pinyin": "měi",
+      "exampleWord": "美丽",
+      "order": 58,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "美丽",
+        "englishLabel": "beautiful",
+        "characterEnglishLabel": "beautiful",
+        "characterMeaning": "让人觉得好看的样子",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌸",
+          "alt": "美丽"
+        }
+      },
+      "exampleWords": [
+        "美丽",
+        "美好"
+      ],
+      "sentence": "花园里的花很美丽。",
+      "writing": {
+        "strokeCount": 9,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8863",
+      "glyph": "衣",
+      "pinyin": "yī",
+      "exampleWord": "衣服",
+      "order": 59,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "衣服",
+        "englishLabel": "clothes",
+        "characterEnglishLabel": "clothing",
+        "characterMeaning": "穿在身上的衣服",
+        "visual": {
+          "kind": "emoji",
+          "value": "👕",
+          "alt": "衣服"
+        }
+      },
+      "exampleWords": [
+        "衣服",
+        "上衣"
+      ],
+      "sentence": "我把衣服挂好了。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5305",
+      "glyph": "包",
+      "pinyin": "bāo",
+      "exampleWord": "书包",
+      "order": 60,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "书包",
+        "englishLabel": "school bag",
+        "characterEnglishLabel": "bag or wrap",
+        "characterMeaning": "可以指装东西的袋子，也可以表示包起来",
+        "visual": {
+          "kind": "emoji",
+          "value": "🎒",
+          "alt": "书包"
+        }
+      },
+      "exampleWords": [
+        "书包",
+        "面包"
+      ],
+      "sentence": "我把书放进书包。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7389",
+      "glyph": "玉",
+      "pinyin": "yù",
+      "exampleWord": "玉米",
+      "order": 61,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "玉米",
+        "englishLabel": "corn",
+        "characterEnglishLabel": "jade",
+        "characterMeaning": "一种光滑的石头；玉米是植物名字",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌽",
+          "alt": "玉米"
+        }
+      },
+      "exampleWords": [
+        "玉米",
+        "玉石"
+      ],
+      "sentence": "玉米煮好了。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4e95",
+      "glyph": "井",
+      "pinyin": "jǐng",
+      "exampleWord": "水井",
+      "order": 62,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "水井",
+        "englishLabel": "well",
+        "characterEnglishLabel": "well",
+        "characterMeaning": "向地下挖出的取水洞",
+        "visual": {
+          "kind": "emoji",
+          "value": "💧",
+          "alt": "水井"
+        }
+      },
+      "exampleWords": [
+        "水井",
+        "井水"
+      ],
+      "sentence": "水井旁边有一棵树。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7238",
+      "glyph": "爸",
+      "pinyin": "bà",
+      "exampleWord": "爸爸",
+      "order": 63,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "爸爸",
+        "englishLabel": "dad",
+        "characterEnglishLabel": "dad",
+        "characterMeaning": "对父亲的称呼",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧑",
+          "alt": "爸爸"
+        }
+      },
+      "exampleWords": [
+        "爸爸",
+        "老爸"
+      ],
+      "sentence": "爸爸和我一起看书。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5988",
+      "glyph": "妈",
+      "pinyin": "mā",
+      "exampleWord": "妈妈",
+      "order": 64,
+      "theme": "生活与书写准备",
+      "difficulty": 1,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "foundation-v2",
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "妈妈",
+        "englishLabel": "mom",
+        "characterEnglishLabel": "mom",
+        "characterMeaning": "对母亲的称呼",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧑",
+          "alt": "妈妈"
+        }
+      },
+      "exampleWords": [
+        "妈妈",
+        "姑妈"
+      ],
+      "sentence": "妈妈和我一起散步。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u59d0",
+      "glyph": "姐",
+      "pinyin": "jiě",
+      "exampleWord": "姐姐",
+      "order": 65,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "姐姐",
+        "englishLabel": "older sister",
+        "characterEnglishLabel": "older sister",
+        "characterMeaning": "比自己年长的姐妹",
+        "visual": {
+          "kind": "emoji",
+          "value": "👧",
+          "alt": "姐姐"
+        }
+      },
+      "exampleWords": [
+        "姐姐",
+        "姐妹"
+      ],
+      "sentence": "姐姐正在唱歌。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u59b9",
+      "glyph": "妹",
+      "pinyin": "mèi",
+      "exampleWord": "妹妹",
+      "order": 66,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "妹妹",
+        "englishLabel": "younger sister",
+        "characterEnglishLabel": "younger sister",
+        "characterMeaning": "比自己年幼的姐妹",
+        "visual": {
+          "kind": "emoji",
+          "value": "👧",
+          "alt": "妹妹"
+        }
+      },
+      "exampleWords": [
+        "妹妹",
+        "姐妹"
+      ],
+      "sentence": "妹妹在玩积木。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u54e5",
+      "glyph": "哥",
+      "pinyin": "gē",
+      "exampleWord": "哥哥",
+      "order": 67,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "哥哥",
+        "englishLabel": "older brother",
+        "characterEnglishLabel": "older brother",
+        "characterMeaning": "比自己年长的兄弟",
+        "visual": {
+          "kind": "emoji",
+          "value": "👦",
+          "alt": "哥哥"
+        }
+      },
+      "exampleWords": [
+        "哥哥",
+        "大哥"
+      ],
+      "sentence": "哥哥帮我拿书。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5f1f",
+      "glyph": "弟",
+      "pinyin": "dì",
+      "exampleWord": "弟弟",
+      "order": 68,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "弟弟",
+        "englishLabel": "younger brother",
+        "characterEnglishLabel": "younger brother",
+        "characterMeaning": "比自己年幼的兄弟",
+        "visual": {
+          "kind": "emoji",
+          "value": "👦",
+          "alt": "弟弟"
+        }
+      },
+      "exampleWords": [
+        "弟弟",
+        "兄弟"
+      ],
+      "sentence": "弟弟在拍皮球。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5976",
+      "glyph": "奶",
+      "pinyin": "nǎi",
+      "exampleWord": "牛奶",
+      "order": 69,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "牛奶",
+        "englishLabel": "milk",
+        "characterEnglishLabel": "milk",
+        "characterMeaning": "可以指乳汁，也见于奶奶这个称呼",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥛",
+          "alt": "牛奶"
+        }
+      },
+      "exampleWords": [
+        "牛奶",
+        "奶奶"
+      ],
+      "sentence": "杯子里有牛奶。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7237",
+      "glyph": "爷",
+      "pinyin": "yé",
+      "exampleWord": "爷爷",
+      "order": 70,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "爷爷",
+        "englishLabel": "grandpa",
+        "characterEnglishLabel": "grandfather",
+        "characterMeaning": "见于爷爷、姥爷等家人称呼",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧓",
+          "alt": "爷爷"
+        }
+      },
+      "exampleWords": [
+        "爷爷",
+        "姥爷"
+      ],
+      "sentence": "爷爷在给花浇水。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5e8a",
+      "glyph": "床",
+      "pinyin": "chuáng",
+      "exampleWord": "小床",
+      "order": 71,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小床",
+        "englishLabel": "small bed",
+        "characterEnglishLabel": "bed",
+        "characterMeaning": "供人躺着睡觉的家具",
+        "visual": {
+          "kind": "emoji",
+          "value": "🛏️",
+          "alt": "小床"
+        }
+      },
+      "exampleWords": [
+        "小床",
+        "床单"
+      ],
+      "sentence": "我的小床铺好了。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u684c",
+      "glyph": "桌",
+      "pinyin": "zhuō",
+      "exampleWord": "桌子",
+      "order": 72,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "桌子",
+        "englishLabel": "table",
+        "characterEnglishLabel": "table",
+        "characterMeaning": "可以放东西的家具",
+        "visual": {
+          "kind": "diagram",
+          "value": "table",
+          "alt": "桌子"
+        }
+      },
+      "exampleWords": [
+        "桌子",
+        "书桌"
+      ],
+      "sentence": "桌子上放着一本书。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6905",
+      "glyph": "椅",
+      "pinyin": "yǐ",
+      "exampleWord": "椅子",
+      "order": 73,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "椅子",
+        "englishLabel": "chair",
+        "characterEnglishLabel": "chair",
+        "characterMeaning": "供人坐的家具",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪑",
+          "alt": "椅子"
+        }
+      },
+      "exampleWords": [
+        "椅子",
+        "座椅"
+      ],
+      "sentence": "椅子放在桌子旁。",
+      "writing": {
+        "strokeCount": 12,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u706f",
+      "glyph": "灯",
+      "pinyin": "dēng",
+      "exampleWord": "台灯",
+      "order": 74,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "台灯",
+        "englishLabel": "desk lamp",
+        "characterEnglishLabel": "lamp",
+        "characterMeaning": "用来照明的东西",
+        "visual": {
+          "kind": "emoji",
+          "value": "💡",
+          "alt": "台灯"
+        }
+      },
+      "exampleWords": [
+        "台灯",
+        "灯光"
+      ],
+      "sentence": "台灯照亮了书桌。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u676f",
+      "glyph": "杯",
+      "pinyin": "bēi",
+      "exampleWord": "水杯",
+      "order": 75,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "水杯",
+        "englishLabel": "cup",
+        "characterEnglishLabel": "cup",
+        "characterMeaning": "用来盛水等饮品的容器",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥤",
+          "alt": "水杯"
+        }
+      },
+      "exampleWords": [
+        "水杯",
+        "杯子"
+      ],
+      "sentence": "我拿水杯喝水。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7897",
+      "glyph": "碗",
+      "pinyin": "wǎn",
+      "exampleWord": "饭碗",
+      "order": 76,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "饭碗",
+        "englishLabel": "rice bowl",
+        "characterEnglishLabel": "bowl",
+        "characterMeaning": "用来盛饭或汤的容器",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥣",
+          "alt": "饭碗"
+        }
+      },
+      "exampleWords": [
+        "饭碗",
+        "碗口"
+      ],
+      "sentence": "饭碗里有米饭。",
+      "writing": {
+        "strokeCount": 13,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7b77",
+      "glyph": "筷",
+      "pinyin": "kuài",
+      "exampleWord": "筷子",
+      "order": 77,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "筷子",
+        "englishLabel": "chopsticks",
+        "characterEnglishLabel": "chopsticks",
+        "characterMeaning": "夹取食物的细长餐具",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥢",
+          "alt": "筷子"
+        }
+      },
+      "exampleWords": [
+        "筷子",
+        "竹筷"
+      ],
+      "sentence": "筷子放在碗旁边。",
+      "writing": {
+        "strokeCount": 13,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u52fa",
+      "glyph": "勺",
+      "pinyin": "sháo",
+      "exampleWord": "小勺",
+      "order": 78,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小勺",
+        "englishLabel": "spoon",
+        "characterEnglishLabel": "spoon",
+        "characterMeaning": "舀取食物或水的小工具",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥄",
+          "alt": "小勺"
+        }
+      },
+      "exampleWords": [
+        "小勺",
+        "勺子"
+      ],
+      "sentence": "我用小勺喝汤。",
+      "writing": {
+        "strokeCount": 3,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u9505",
+      "glyph": "锅",
+      "pinyin": "guō",
+      "exampleWord": "铁锅",
+      "order": 79,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "铁锅",
+        "englishLabel": "iron pot",
+        "characterEnglishLabel": "pot",
+        "characterMeaning": "用来煮食物的器具",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍲",
+          "alt": "铁锅"
+        }
+      },
+      "exampleWords": [
+        "铁锅",
+        "锅盖"
+      ],
+      "sentence": "锅盖盖在锅上。",
+      "writing": {
+        "strokeCount": 12,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4f1e",
+      "glyph": "伞",
+      "pinyin": "sǎn",
+      "exampleWord": "雨伞",
+      "order": 80,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "雨伞",
+        "englishLabel": "umbrella",
+        "characterEnglishLabel": "umbrella",
+        "characterMeaning": "遮雨或遮阳的工具",
+        "visual": {
+          "kind": "emoji",
+          "value": "☂️",
+          "alt": "雨伞"
+        }
+      },
+      "exampleWords": [
+        "雨伞",
+        "伞面"
+      ],
+      "sentence": "下雨了，我拿出雨伞。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u996d",
+      "glyph": "饭",
+      "pinyin": "fàn",
+      "exampleWord": "米饭",
+      "order": 81,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "米饭",
+        "englishLabel": "cooked rice",
+        "characterEnglishLabel": "rice or meal",
+        "characterMeaning": "可以指煮熟的米，也可以指一餐食物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍚",
+          "alt": "米饭"
+        }
+      },
+      "exampleWords": [
+        "米饭",
+        "饭菜"
+      ],
+      "sentence": "今天的饭菜很香。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u83dc",
+      "glyph": "菜",
+      "pinyin": "cài",
+      "exampleWord": "青菜",
+      "order": 82,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "青菜",
+        "englishLabel": "vegetables",
+        "characterEnglishLabel": "vegetables or dish",
+        "characterMeaning": "可以指蔬菜或做好的食物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥬",
+          "alt": "青菜"
+        }
+      },
+      "exampleWords": [
+        "青菜",
+        "白菜"
+      ],
+      "sentence": "篮子里装着青菜。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8089",
+      "glyph": "肉",
+      "pinyin": "ròu",
+      "exampleWord": "牛肉",
+      "order": 83,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "牛肉",
+        "englishLabel": "beef",
+        "characterEnglishLabel": "meat",
+        "characterMeaning": "动物身体柔软的部分，也可以作为食物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥩",
+          "alt": "牛肉"
+        }
+      },
+      "exampleWords": [
+        "牛肉",
+        "肉片"
+      ],
+      "sentence": "碗里有几片牛肉。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u86cb",
+      "glyph": "蛋",
+      "pinyin": "dàn",
+      "exampleWord": "鸡蛋",
+      "order": 84,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "鸡蛋",
+        "englishLabel": "egg",
+        "characterEnglishLabel": "egg",
+        "characterMeaning": "鸟类等动物产下的卵",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥚",
+          "alt": "鸡蛋"
+        }
+      },
+      "exampleWords": [
+        "鸡蛋",
+        "蛋壳"
+      ],
+      "sentence": "鸡蛋煮熟了。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u9762",
+      "glyph": "面",
+      "pinyin": "miàn",
+      "exampleWord": "面条",
+      "order": 85,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "面条",
+        "englishLabel": "noodles",
+        "characterEnglishLabel": "face or flour",
+        "characterMeaning": "可以指表面；面条里的面指面粉做的食物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍜",
+          "alt": "面条"
+        }
+      },
+      "exampleWords": [
+        "面条",
+        "面粉"
+      ],
+      "sentence": "面条盛在碗里。",
+      "writing": {
+        "strokeCount": 9,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6c64",
+      "glyph": "汤",
+      "pinyin": "tāng",
+      "exampleWord": "菜汤",
+      "order": 86,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "菜汤",
+        "englishLabel": "vegetable soup",
+        "characterEnglishLabel": "soup",
+        "characterMeaning": "有汁水的熟食",
+        "visual": {
+          "kind": "emoji",
+          "value": "🥣",
+          "alt": "菜汤"
+        }
+      },
+      "exampleWords": [
+        "菜汤",
+        "汤水"
+      ],
+      "sentence": "菜汤还很热。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8336",
+      "glyph": "茶",
+      "pinyin": "chá",
+      "exampleWord": "茶水",
+      "order": 87,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "茶水",
+        "englishLabel": "tea",
+        "characterEnglishLabel": "tea",
+        "characterMeaning": "用茶叶泡出的饮品",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍵",
+          "alt": "茶水"
+        }
+      },
+      "exampleWords": [
+        "茶水",
+        "茶杯"
+      ],
+      "sentence": "茶杯里装着茶水。",
+      "writing": {
+        "strokeCount": 9,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u997c",
+      "glyph": "饼",
+      "pinyin": "bǐng",
+      "exampleWord": "饼干",
+      "order": 88,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "饼干",
+        "englishLabel": "biscuit",
+        "characterEnglishLabel": "flat cake",
+        "characterMeaning": "用面粉等做成的扁形食物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍪",
+          "alt": "饼干"
+        }
+      },
+      "exampleWords": [
+        "饼干",
+        "月饼"
+      ],
+      "sentence": "我把饼干放在盘子里。",
+      "writing": {
+        "strokeCount": 9,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5bb6",
+      "glyph": "家",
+      "pinyin": "jiā",
+      "exampleWord": "回家",
+      "order": 89,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "回家",
+        "englishLabel": "go home",
+        "characterEnglishLabel": "home or family",
+        "characterMeaning": "可以指住的地方或家人",
+        "visual": {
+          "kind": "emoji",
+          "value": "🏠",
+          "alt": "回家"
+        }
+      },
+      "exampleWords": [
+        "回家",
+        "家人"
+      ],
+      "sentence": "我们和家人一起回家。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6211",
+      "glyph": "我",
+      "pinyin": "wǒ",
+      "exampleWord": "我们",
+      "order": 90,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "我们",
+        "englishLabel": "we",
+        "characterEnglishLabel": "I or me",
+        "characterMeaning": "说话的人称自己",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "我们"
+        }
+      },
+      "exampleWords": [
+        "我们",
+        "我的"
+      ],
+      "sentence": "我的书放在桌上。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4f60",
+      "glyph": "你",
+      "pinyin": "nǐ",
+      "exampleWord": "你好",
+      "order": 91,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "你好",
+        "englishLabel": "hello",
+        "characterEnglishLabel": "you",
+        "characterMeaning": "称呼正在听自己说话的人",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "你好"
+        }
+      },
+      "exampleWords": [
+        "你好",
+        "你们"
+      ],
+      "sentence": "我对朋友说你好。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u4ed6",
+      "glyph": "他",
+      "pinyin": "tā",
+      "exampleWord": "他们",
+      "order": 92,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "他们",
+        "englishLabel": "they",
+        "characterEnglishLabel": "he or him",
+        "characterMeaning": "称呼另外的人，这里指男性",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "他们"
+        }
+      },
+      "exampleWords": [
+        "他们",
+        "他的"
+      ],
+      "sentence": "他在公园里看花。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5979",
+      "glyph": "她",
+      "pinyin": "tā",
+      "exampleWord": "她们",
+      "order": 93,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "她们",
+        "englishLabel": "they",
+        "characterEnglishLabel": "she or her",
+        "characterMeaning": "称呼另外的人，这里指女性",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧒",
+          "alt": "她们"
+        }
+      },
+      "exampleWords": [
+        "她们",
+        "她的"
+      ],
+      "sentence": "她在给小花浇水。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u53cb",
+      "glyph": "友",
+      "pinyin": "yǒu",
+      "exampleWord": "朋友",
+      "order": 94,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "朋友",
+        "englishLabel": "friend",
+        "characterEnglishLabel": "friend",
+        "characterMeaning": "一起相处、互相关心的朋友",
+        "visual": {
+          "kind": "emoji",
+          "value": "🤝",
+          "alt": "朋友"
+        }
+      },
+      "exampleWords": [
+        "朋友",
+        "友好"
+      ],
+      "sentence": "我和朋友一起画画。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u540c",
+      "glyph": "同",
+      "pinyin": "tóng",
+      "exampleWord": "同学",
+      "order": 95,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "同学",
+        "englishLabel": "classmate",
+        "characterEnglishLabel": "same or together",
+        "characterMeaning": "可以表示一样或一起",
+        "visual": {
+          "kind": "emoji",
+          "value": "🤝",
+          "alt": "同学"
+        }
+      },
+      "exampleWords": [
+        "同学",
+        "同伴"
+      ],
+      "sentence": "我和同伴一起搭积木。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5e08",
+      "glyph": "师",
+      "pinyin": "shī",
+      "exampleWord": "老师",
+      "order": 96,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "老师",
+        "englishLabel": "teacher",
+        "characterEnglishLabel": "teacher",
+        "characterMeaning": "教别人知识或本领的人",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧑",
+          "alt": "老师"
+        }
+      },
+      "exampleWords": [
+        "老师",
+        "师生"
+      ],
+      "sentence": "老师和我们一起读故事。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u540d",
+      "glyph": "名",
+      "pinyin": "míng",
+      "exampleWord": "名字",
+      "order": 97,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "名字",
+        "englishLabel": "name",
+        "characterEnglishLabel": "name",
+        "characterMeaning": "人或事物的称呼",
+        "visual": {
+          "kind": "emoji",
+          "value": "🏷️",
+          "alt": "名字"
+        }
+      },
+      "exampleWords": [
+        "名字",
+        "姓名"
+      ],
+      "sentence": "我会说出自己的名字。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6821",
+      "glyph": "校",
+      "pinyin": "xiào",
+      "exampleWord": "学校",
+      "order": 98,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "学校",
+        "englishLabel": "school",
+        "characterEnglishLabel": "school",
+        "characterMeaning": "这里读xiào，见于学校",
+        "visual": {
+          "kind": "emoji",
+          "value": "🏫",
+          "alt": "学校"
+        }
+      },
+      "exampleWords": [
+        "学校",
+        "校园"
+      ],
+      "sentence": "学校里有一个小花园。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u56ed",
+      "glyph": "园",
+      "pinyin": "yuán",
+      "exampleWord": "公园",
+      "order": 99,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "公园",
+        "englishLabel": "park",
+        "characterEnglishLabel": "garden or park",
+        "characterMeaning": "供游玩或种植物的地方",
+        "visual": {
+          "kind": "emoji",
+          "value": "🌳",
+          "alt": "公园"
+        }
+      },
+      "exampleWords": [
+        "公园",
+        "花园"
+      ],
+      "sentence": "公园里有好多花。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "全包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8bfe",
+      "glyph": "课",
+      "pinyin": "kè",
+      "exampleWord": "上课",
+      "order": 100,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "上课",
+        "englishLabel": "lesson",
+        "characterEnglishLabel": "lesson",
+        "characterMeaning": "学习或教学的一段活动",
+        "visual": {
+          "kind": "emoji",
+          "value": "📖",
+          "alt": "上课"
+        }
+      },
+      "exampleWords": [
+        "上课",
+        "课本"
+      ],
+      "sentence": "上课时我们一起讲故事。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6587",
+      "glyph": "文",
+      "pinyin": "wén",
+      "exampleWord": "文字",
+      "order": 101,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "文字",
+        "englishLabel": "text",
+        "characterEnglishLabel": "writing or text",
+        "characterMeaning": "可以指文字或文章",
+        "visual": {
+          "kind": "emoji",
+          "value": "📖",
+          "alt": "文字"
+        }
+      },
+      "exampleWords": [
+        "文字",
+        "中文"
+      ],
+      "sentence": "书上有文字和图画。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u753b",
+      "glyph": "画",
+      "pinyin": "huà",
+      "exampleWord": "画画",
+      "order": 102,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "画画",
+        "englishLabel": "draw",
+        "characterEnglishLabel": "draw or picture",
+        "characterMeaning": "画出形象，也可以指图画",
+        "visual": {
+          "kind": "emoji",
+          "value": "🖼️",
+          "alt": "画画"
+        }
+      },
+      "exampleWords": [
+        "画画",
+        "图画"
+      ],
+      "sentence": "我画了一幅图画。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "半包围结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6b4c",
+      "glyph": "歌",
+      "pinyin": "gē",
+      "exampleWord": "唱歌",
+      "order": 103,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "唱歌",
+        "englishLabel": "sing",
+        "characterEnglishLabel": "song",
+        "characterMeaning": "配着曲调唱出的声音",
+        "visual": {
+          "kind": "emoji",
+          "value": "🎵",
+          "alt": "唱歌"
+        }
+      },
+      "exampleWords": [
+        "唱歌",
+        "儿歌"
+      ],
+      "sentence": "我们一起唱儿歌。",
+      "writing": {
+        "strokeCount": 14,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8bfb",
+      "glyph": "读",
+      "pinyin": "dú",
+      "exampleWord": "读书",
+      "order": 104,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "读书",
+        "englishLabel": "read",
+        "characterEnglishLabel": "read",
+        "characterMeaning": "看文字或把文字念出来",
+        "visual": {
+          "kind": "emoji",
+          "value": "📖",
+          "alt": "读书"
+        }
+      },
+      "exampleWords": [
+        "读书",
+        "朗读"
+      ],
+      "sentence": "我和家人一起读书。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5199",
+      "glyph": "写",
+      "pinyin": "xiě",
+      "exampleWord": "写字",
+      "order": 105,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "写字",
+        "englishLabel": "write",
+        "characterEnglishLabel": "write",
+        "characterMeaning": "用笔等工具记下文字",
+        "visual": {
+          "kind": "emoji",
+          "value": "✏️",
+          "alt": "写字"
+        }
+      },
+      "exampleWords": [
+        "写字",
+        "书写"
+      ],
+      "sentence": "我愿意试着写自己的名字。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u542c",
+      "glyph": "听",
+      "pinyin": "tīng",
+      "exampleWord": "听见",
+      "order": 106,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "听见",
+        "englishLabel": "hear",
+        "characterEnglishLabel": "listen or hear",
+        "characterMeaning": "用耳朵接收声音",
+        "visual": {
+          "kind": "emoji",
+          "value": "👂",
+          "alt": "听见"
+        }
+      },
+      "exampleWords": [
+        "听见",
+        "听话"
+      ],
+      "sentence": "我听见了小鸟的声音。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8bf4",
+      "glyph": "说",
+      "pinyin": "shuō",
+      "exampleWord": "说话",
+      "order": 107,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "说话",
+        "englishLabel": "speak",
+        "characterEnglishLabel": "speak",
+        "characterMeaning": "这里读shuō，表示用话表达",
+        "visual": {
+          "kind": "emoji",
+          "value": "💬",
+          "alt": "说话"
+        }
+      },
+      "exampleWords": [
+        "说话",
+        "说笑"
+      ],
+      "sentence": "我和朋友一起说笑。",
+      "writing": {
+        "strokeCount": 9,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7eb8",
+      "glyph": "纸",
+      "pinyin": "zhǐ",
+      "exampleWord": "白纸",
+      "order": 108,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "白纸",
+        "englishLabel": "white paper",
+        "characterEnglishLabel": "paper",
+        "characterMeaning": "可以写字或画画的薄片材料",
+        "visual": {
+          "kind": "emoji",
+          "value": "📄",
+          "alt": "白纸"
+        }
+      },
+      "exampleWords": [
+        "白纸",
+        "纸张"
+      ],
+      "sentence": "我在白纸上画了一朵花。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u672c",
+      "glyph": "本",
+      "pinyin": "běn",
+      "exampleWord": "本子",
+      "order": 109,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "本子",
+        "englishLabel": "notebook",
+        "characterEnglishLabel": "book or root",
+        "characterMeaning": "可以指书本，也可以指植物的根",
+        "visual": {
+          "kind": "emoji",
+          "value": "📓",
+          "alt": "本子"
+        }
+      },
+      "exampleWords": [
+        "本子",
+        "书本"
+      ],
+      "sentence": "本子放在书包里。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u6843",
+      "glyph": "桃",
+      "pinyin": "táo",
+      "exampleWord": "桃子",
+      "order": 110,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "桃子",
+        "englishLabel": "peach",
+        "characterEnglishLabel": "peach",
+        "characterMeaning": "一种水果，也见于桃花这个词",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍑",
+          "alt": "桃子"
+        }
+      },
+      "exampleWords": [
+        "桃子",
+        "桃花"
+      ],
+      "sentence": "桃花开了。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u68a8",
+      "glyph": "梨",
+      "pinyin": "lí",
+      "exampleWord": "梨子",
+      "order": 111,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "梨子",
+        "englishLabel": "pear",
+        "characterEnglishLabel": "pear",
+        "characterMeaning": "一种常见水果",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍐",
+          "alt": "梨子"
+        }
+      },
+      "exampleWords": [
+        "梨子",
+        "梨树"
+      ],
+      "sentence": "梨树上结了梨子。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u82f9",
+      "glyph": "苹",
+      "pinyin": "píng",
+      "exampleWord": "苹果",
+      "order": 112,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "苹果",
+        "englishLabel": "apple",
+        "characterEnglishLabel": "apple character",
+        "characterMeaning": "这里读píng，见于苹果",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍎",
+          "alt": "苹果"
+        }
+      },
+      "exampleWords": [
+        "苹果",
+        "苹果树"
+      ],
+      "sentence": "我洗好了一个苹果。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8549",
+      "glyph": "蕉",
+      "pinyin": "jiāo",
+      "exampleWord": "香蕉",
+      "order": 113,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "香蕉",
+        "englishLabel": "banana",
+        "characterEnglishLabel": "banana character",
+        "characterMeaning": "见于香蕉、芭蕉等植物名字",
+        "visual": {
+          "kind": "emoji",
+          "value": "🍌",
+          "alt": "香蕉"
+        }
+      },
+      "exampleWords": [
+        "香蕉",
+        "芭蕉"
+      ],
+      "sentence": "香蕉放在盘子里。",
+      "writing": {
+        "strokeCount": 15,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u732b",
+      "glyph": "猫",
+      "pinyin": "māo",
+      "exampleWord": "小猫",
+      "order": 114,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小猫",
+        "englishLabel": "cat",
+        "characterEnglishLabel": "cat",
+        "characterMeaning": "一种常见动物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐈",
+          "alt": "小猫"
+        }
+      },
+      "exampleWords": [
+        "小猫",
+        "猫咪"
+      ],
+      "sentence": "小猫在窗边睡觉。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u72d7",
+      "glyph": "狗",
+      "pinyin": "gǒu",
+      "exampleWord": "小狗",
+      "order": 115,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小狗",
+        "englishLabel": "dog",
+        "characterEnglishLabel": "dog",
+        "characterMeaning": "一种常见动物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐕",
+          "alt": "小狗"
+        }
+      },
+      "exampleWords": [
+        "小狗",
+        "狗尾巴"
+      ],
+      "sentence": "小狗摇着尾巴。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u732a",
+      "glyph": "猪",
+      "pinyin": "zhū",
+      "exampleWord": "小猪",
+      "order": 116,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小猪",
+        "englishLabel": "pig",
+        "characterEnglishLabel": "pig",
+        "characterMeaning": "一种常见家畜",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐖",
+          "alt": "小猪"
+        }
+      },
+      "exampleWords": [
+        "小猪",
+        "猪圈"
+      ],
+      "sentence": "小猪在吃东西。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5154",
+      "glyph": "兔",
+      "pinyin": "tù",
+      "exampleWord": "白兔",
+      "order": 117,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "白兔",
+        "englishLabel": "white rabbit",
+        "characterEnglishLabel": "rabbit",
+        "characterMeaning": "有长耳朵的小动物",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐇",
+          "alt": "白兔"
+        }
+      },
+      "exampleWords": [
+        "白兔",
+        "兔子"
+      ],
+      "sentence": "白兔有两只长耳朵。",
+      "writing": {
+        "strokeCount": 8,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u9e2d",
+      "glyph": "鸭",
+      "pinyin": "yā",
+      "exampleWord": "小鸭",
+      "order": 118,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小鸭",
+        "englishLabel": "duckling",
+        "characterEnglishLabel": "duck",
+        "characterMeaning": "有扁嘴、会游水的鸟",
+        "visual": {
+          "kind": "emoji",
+          "value": "🦆",
+          "alt": "小鸭"
+        }
+      },
+      "exampleWords": [
+        "小鸭",
+        "鸭子"
+      ],
+      "sentence": "小鸭在池塘里游泳。",
+      "writing": {
+        "strokeCount": 10,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u9e21",
+      "glyph": "鸡",
+      "pinyin": "jī",
+      "exampleWord": "小鸡",
+      "order": 119,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "小鸡",
+        "englishLabel": "chick",
+        "characterEnglishLabel": "chicken",
+        "characterMeaning": "一种常见家禽",
+        "visual": {
+          "kind": "emoji",
+          "value": "🐤",
+          "alt": "小鸡"
+        }
+      },
+      "exampleWords": [
+        "小鸡",
+        "鸡蛋"
+      ],
+      "sentence": "小鸡跟着妈妈走。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u9e45",
+      "glyph": "鹅",
+      "pinyin": "é",
+      "exampleWord": "白鹅",
+      "order": 120,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "白鹅",
+        "englishLabel": "white goose",
+        "characterEnglishLabel": "goose",
+        "characterMeaning": "脖子较长、会游水的家禽",
+        "visual": {
+          "kind": "emoji",
+          "value": "🪿",
+          "alt": "白鹅"
+        }
+      },
+      "exampleWords": [
+        "白鹅",
+        "鹅毛"
+      ],
+      "sentence": "白鹅在水里游泳。",
+      "writing": {
+        "strokeCount": 12,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8eab",
+      "glyph": "身",
+      "pinyin": "shēn",
+      "exampleWord": "身体",
+      "order": 121,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "身体",
+        "englishLabel": "body",
+        "characterEnglishLabel": "body",
+        "characterMeaning": "人或动物的身体",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧍",
+          "alt": "身体"
+        }
+      },
+      "exampleWords": [
+        "身体",
+        "身边"
+      ],
+      "sentence": "运动让身体更有力气。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8138",
+      "glyph": "脸",
+      "pinyin": "liǎn",
+      "exampleWord": "笑脸",
+      "order": 122,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "笑脸",
+        "englishLabel": "smiling face",
+        "characterEnglishLabel": "face",
+        "characterMeaning": "头的前面部分",
+        "visual": {
+          "kind": "emoji",
+          "value": "🙂",
+          "alt": "笑脸"
+        }
+      },
+      "exampleWords": [
+        "笑脸",
+        "脸蛋"
+      ],
+      "sentence": "我洗干净了脸。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u7259",
+      "glyph": "牙",
+      "pinyin": "yá",
+      "exampleWord": "牙齿",
+      "order": 123,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "牙齿",
+        "englishLabel": "teeth",
+        "characterEnglishLabel": "tooth",
+        "characterMeaning": "嘴里用来咬食物的硬硬部分",
+        "visual": {
+          "kind": "emoji",
+          "value": "🦷",
+          "alt": "牙齿"
+        }
+      },
+      "exampleWords": [
+        "牙齿",
+        "刷牙"
+      ],
+      "sentence": "早晚我都认真刷牙。",
+      "writing": {
+        "strokeCount": 4,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u773c",
+      "glyph": "眼",
+      "pinyin": "yǎn",
+      "exampleWord": "眼睛",
+      "order": 124,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "眼睛",
+        "englishLabel": "eyes",
+        "characterEnglishLabel": "eye",
+        "characterMeaning": "用来看东西的器官",
+        "visual": {
+          "kind": "emoji",
+          "value": "👁️",
+          "alt": "眼睛"
+        }
+      },
+      "exampleWords": [
+        "眼睛",
+        "眼前"
+      ],
+      "sentence": "我的眼睛看到了彩虹。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "左右结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u5934",
+      "glyph": "头",
+      "pinyin": "tóu",
+      "exampleWord": "头发",
+      "order": 125,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "头发",
+        "englishLabel": "hair",
+        "characterEnglishLabel": "head",
+        "characterMeaning": "身体上方有眼耳鼻嘴的部分",
+        "visual": {
+          "kind": "emoji",
+          "value": "🧑",
+          "alt": "头发"
+        }
+      },
+      "exampleWords": [
+        "头发",
+        "头顶"
+      ],
+      "sentence": "帽子戴在头上。",
+      "writing": {
+        "strokeCount": 5,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8033",
+      "glyph": "耳",
+      "pinyin": "ěr",
+      "exampleWord": "耳朵",
+      "order": 126,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "耳朵",
+        "englishLabel": "ears",
+        "characterEnglishLabel": "ear",
+        "characterMeaning": "用来听声音的器官",
+        "visual": {
+          "kind": "emoji",
+          "value": "👂",
+          "alt": "耳朵"
+        }
+      },
+      "exampleWords": [
+        "耳朵",
+        "耳边"
+      ],
+      "sentence": "耳朵听见了歌声。",
+      "writing": {
+        "strokeCount": 6,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u8db3",
+      "glyph": "足",
+      "pinyin": "zú",
+      "exampleWord": "足球",
+      "order": 127,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "足球",
+        "englishLabel": "football",
+        "characterEnglishLabel": "foot",
+        "characterMeaning": "脚，也见于足球这个词",
+        "visual": {
+          "kind": "emoji",
+          "value": "⚽",
+          "alt": "足球"
+        }
+      },
+      "exampleWords": [
+        "足球",
+        "足迹"
+      ],
+      "sentence": "我们在草地上踢足球。",
+      "writing": {
+        "strokeCount": 7,
+        "structure": "独体字",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    },
+    {
+      "id": "hz-u96ea",
+      "glyph": "雪",
+      "pinyin": "xuě",
+      "exampleWord": "下雪",
+      "order": 128,
+      "theme": "生活与书写准备",
+      "difficulty": 2,
+      "status": "active",
+      "sourceRefs": [
+        "unicode-unihan-17",
+        "original-writing-prompts",
+        "moe-preschool-guidance"
+      ],
+      "agePackages": [
+        "bridging-v1"
+      ],
+      "traceEligible": true,
+      "concept": {
+        "label": "下雪",
+        "englishLabel": "snowfall",
+        "characterEnglishLabel": "snow",
+        "characterMeaning": "天气冷时从云中落下的白色冰晶",
+        "visual": {
+          "kind": "emoji",
+          "value": "❄️",
+          "alt": "下雪"
+        }
+      },
+      "exampleWords": [
+        "下雪",
+        "雪花"
+      ],
+      "sentence": "雪花落在树枝上。",
+      "writing": {
+        "strokeCount": 11,
+        "structure": "上下结构",
+        "hint": "先观察字形，再慢慢描画；也可以先画图形或写自己的名字。"
+      }
+    }
+  ],
+  "reviewStatus": "pending-product-review",
+  "sourceRegistry": {
+    "unicode-unihan-17": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip",
+      "fields": [
+        "kMandarin",
+        "kTotalStrokes"
+      ],
+      "note": "笔画总数按目标简体字的IRG代表字形核对；未核验规范逐笔笔顺或动画模板。"
+    },
+    "original-writing-prompts": {
+      "kind": "original",
+      "note": "例词、例句、结构和练习提示为原创整理，待产品审阅。"
+    },
+    "moe-preschool-guidance": {
+      "url": "https://www.moe.gov.cn/jyb_xwfb/s271/201210/t20121015_143257.html",
+      "note": "材料可选，先做绘画与书写准备，不作为小学入学门槛。"
+    }
+  }
+}

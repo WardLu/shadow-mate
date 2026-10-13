@@ -1,5 +1,9 @@
 import { normalizeRotationState } from "./hanzi-worksheet-rotation.js";
 import { normalizeContentConfig } from "./learning-content-package.js";
+import { CONTENT_LEARNING_STATE_KEY, hasContentLearningData, migrateAnonymousContentLearning, normalizeContentLearning } from "./content-learning.js";
+import { LEGACY_BOOK_IDS, LEGACY_READING_LIST_IDS, migrateLegacyBookState } from "./content/books.js";
+
+export { CONTENT_LEARNING_STATE_KEY };
 
 const STATE_KEYS = ["checkins", "extra", "points", "bookShelf", "peanutLog", "peanutRead"];
 const HANZI_ROTATION_STATE_KEY = "hanziWorksheetRotationV1";
@@ -8,6 +12,7 @@ export const CHECKIN_GROUPS = {
   chinese: ["chinese-literacy", "chinese-poem", "chinese-writing"],
   math: ["math-mental", "math-sense"],
   english: ["english-vocabulary"],
+  speaking: ["speaking-practice"],
   book: ["book-reading"],
 };
 
@@ -28,20 +33,76 @@ function normalizeExtra(value) {
   if (Object.hasOwn(extra, HANZI_ROTATION_STATE_KEY)) {
     extra[HANZI_ROTATION_STATE_KEY] = normalizeRotationState(extra[HANZI_ROTATION_STATE_KEY]);
   }
+  if (Object.hasOwn(extra, CONTENT_LEARNING_STATE_KEY)) {
+    const contentLearning = extra[CONTENT_LEARNING_STATE_KEY];
+    const hasLearnerScope = isRecord(contentLearning) && typeof contentLearning.learnerScope === "string" && contentLearning.learnerScope.trim();
+    const hasSchemaVersion = isRecord(contentLearning) && Object.hasOwn(contentLearning, "schemaVersion");
+    if (!hasLearnerScope && !hasContentLearningData(contentLearning) && !hasSchemaVersion) {
+      delete extra[CONTENT_LEARNING_STATE_KEY];
+    } else {
+      extra[CONTENT_LEARNING_STATE_KEY] = normalizeContentLearning(contentLearning);
+    }
+  }
   return extra;
 }
 
 export function createLearningState(initial = {}) {
   const source = isRecord(initial) ? initial : {};
+  const migratedBooks = migrateLegacyBookState(source);
   return {
     checkins: cloneRecord(source.checkins),
     extra: normalizeExtra(source.extra),
     points: cloneRecord(source.points),
-    bookShelf: cloneRecord(source.bookShelf),
+    bookShelf: migratedBooks.bookShelf,
     peanutLog: Array.isArray(source.peanutLog) ? structuredClone(source.peanutLog) : [],
-    peanutRead: cloneRecord(source.peanutRead),
+    peanutRead: migratedBooks.peanutRead,
     content_config: normalizeContentConfig(source.content_config),
   };
+}
+
+export function getContentLearningState(state) {
+  return state?.extra?.[CONTENT_LEARNING_STATE_KEY] || null;
+}
+
+export function hasCompatibleContentLearningScope(state, learnerScope) {
+  const contentLearning = getContentLearningState(state);
+  if (!contentLearning) return true;
+  if (typeof learnerScope !== "string" || !learnerScope.trim()) return false;
+  try {
+    normalizeContentLearning(contentLearning, learnerScope);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export function replaceContentLearningState(state, contentLearning, learnerScope = null) {
+  if (contentLearning === null || contentLearning === undefined) {
+    const source = isRecord(state) ? state : {};
+    const extra = cloneRecord(source.extra);
+    delete extra[CONTENT_LEARNING_STATE_KEY];
+    return createLearningState({ ...source, extra });
+  }
+
+  const next = createLearningState(state);
+  const existingScope = getContentLearningState(next)?.learnerScope;
+  const expectedLearnerScope = learnerScope || existingScope;
+  next.extra[CONTENT_LEARNING_STATE_KEY] = normalizeContentLearning(contentLearning, expectedLearnerScope || undefined);
+  return next;
+}
+
+export function rebindContentLearningScope(state, learnerScope) {
+  const current = createLearningState(state);
+  const contentLearning = getContentLearningState(current);
+  if (!contentLearning) return current;
+  if (contentLearning.learnerScope !== "anonymous" || learnerScope === "anonymous") {
+    throw new RangeError("Content learning ledger scope mismatch");
+  }
+  return replaceContentLearningState(
+    current,
+    migrateAnonymousContentLearning(contentLearning, learnerScope),
+    learnerScope,
+  );
 }
 
 export function getHanziRotationState(state) {
@@ -102,6 +163,12 @@ function toggleFlag(record, key) {
   else record[normalizedKey] = 1;
 }
 
+function stableBookId(ids, key) {
+  if (typeof key === "number" && Number.isInteger(key)) return ids[key] || String(key);
+  const value = String(key);
+  return /^\d+$/.test(value) ? ids[Number(value)] || value : value;
+}
+
 function toggleCheckin(state, { date, key }) {
   if (!date || !key) return state;
   if (!state.checkins[date]) state.checkins[date] = {};
@@ -132,6 +199,7 @@ function togglePoint(state, { month, itemIndex, day }) {
 
 export function transitionLearningState(current, action = {}) {
   if (action.type === "STATE_REPLACED") return createLearningState(action.state);
+  if (action.type === "CONTENT_LEARNING_REPLACED") return replaceContentLearningState(current, action.contentLearning);
 
   const state = createLearningState(current);
   switch (action.type) {
@@ -143,10 +211,14 @@ export function transitionLearningState(current, action = {}) {
       if (action.month) delete state.points[String(action.month)];
       return state;
     case "SHELF_TOGGLED":
-      toggleFlag(state.bookShelf, action.bookIndex);
+      if (action.bookIndex !== undefined && action.bookIndex !== null && action.bookIndex !== "") {
+        toggleFlag(state.bookShelf, stableBookId(LEGACY_BOOK_IDS, action.bookIndex));
+      }
       return state;
     case "PEANUT_READ_TOGGLED":
-      toggleFlag(state.peanutRead, action.bookIndex);
+      if (action.bookIndex !== undefined && action.bookIndex !== null && action.bookIndex !== "") {
+        toggleFlag(state.peanutRead, stableBookId(LEGACY_READING_LIST_IDS, action.bookIndex));
+      }
       return state;
     case "HANZI_ROTATION_REPLACED":
       return replaceHanziRotationState(state, action.rotationState);

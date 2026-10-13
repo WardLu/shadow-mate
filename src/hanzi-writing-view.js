@@ -1,3 +1,4 @@
+import { isHanziWritingDiagram, renderHanziWritingDiagram } from "./content/hanzi-writing/visuals.js";
 import { escapeHtml } from "./lib.js";
 
 const STROKE_ORDER_BY_GLYPH = Object.freeze({
@@ -70,8 +71,11 @@ function renderVisual(row, { interactive = false } = {}) {
   const tapAttr = interactive
     ? ` data-speech-tap data-speech-text="${text(`${label}，${alt}`)}" role="button" tabindex="0"`
     : ` role="img"`;
+  const visualMarkup = visual.kind === "diagram" && isHanziWritingDiagram(visual.value)
+    ? renderHanziWritingDiagram(visual.value)
+    : text(visual.value);
   return `<div class="hanzi-visual${interactive ? " speech-tap" : ""}" data-hanzi-visual data-hanzi-visual-kind="${text(visual.kind)}" data-hanzi-visual-alt="${text(alt)}"${tapAttr} aria-label="${text(alt)}">
-    <span class="hanzi-visual-value">${text(visual.value)}</span>
+    <span class="hanzi-visual-value">${visualMarkup}</span>
     <span class="hanzi-concept-label" data-hanzi-concept-label>${text(row?.concept?.label)}</span>
     <span class="hanzi-english-label" data-hanzi-english-label>${text(row?.concept?.englishLabel)}</span>
     <span class="hanzi-visual-alt">${text(alt)}</span>

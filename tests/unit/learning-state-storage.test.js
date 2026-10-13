@@ -1,10 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { getLearningStateStorageKey, migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
+import { resolveDailyLearningPlan, recordContentCompletion } from "../../src/content-learning.js";
 import {
   clearLearningDeskStorage,
   adoptPendingLearningState,
   loadLearningStateEnvelope,
 } from "../../src/learning-state-storage.js";
+
+const PROFILE_B_SCOPE = { household_id: "household-1", profile_id: "profile-b" };
+
+function makeAnonymousLedger() {
+  const planned = resolveDailyLearningPlan({
+    learning: null,
+    learnerScope: "anonymous",
+    dayKey: "2026-10-12",
+    packageId: "foundation-v2",
+    catalog: { version: "test-v1", english: [{ id: "word-a", order: 1 }, { id: "word-b", order: 2 }] },
+    enabledActivities: ["english"],
+    deviceId: "device-a",
+  });
+  const completion = recordContentCompletion({
+    learning: planned.nextLearning,
+    plan: planned.plan,
+    activityId: "english",
+    itemId: planned.plan.activities.english[0].itemId,
+    dayKey: "2026-10-12",
+    deviceId: "device-a",
+    completedAt: "2026-10-12T08:00:00.000Z",
+  });
+  return { ledger: completion, plan: planned.plan };
+}
 
 function memoryStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -68,6 +93,83 @@ describe("learning state storage", () => {
     });
     expect(otherChildAfterAdoption.learning.checkins).toEqual({});
     expect(storage.getItem("shadow_mate_learning_v2:pending")).toBe(JSON.stringify(pending));
+  });
+
+  it("rebinds only pending anonymous content learning to the explicitly selected child", () => {
+    const { ledger, plan } = makeAnonymousLedger();
+    const pending = migrateLegacyLearningState({ extra: { contentLearningV1: ledger } });
+    const storage = memoryStorage({ ["shadow_mate_learning_v2:pending"]: JSON.stringify(pending) });
+    const adopted = adoptPendingLearningState(storage, PROFILE_B_SCOPE);
+    const migrated = adopted.learning.extra.contentLearningV1;
+    const expectedScope = "profile:profile-b";
+
+    expect(adopted.scope).toEqual(PROFILE_B_SCOPE);
+    expect(migrated.learnerScope).toBe(expectedScope);
+    const migratedPlan = Object.values(migrated.plans["2026-10-12"].candidates)[0];
+    expect(migratedPlan.learnerScope).toBe(expectedScope);
+    expect(migratedPlan.planId).not.toBe(plan.planId);
+    expect(migratedPlan.activities).toEqual(plan.activities);
+    expect(migrated.introductions).toEqual(ledger.introductions);
+    expect(migrated.occurrences).toEqual(ledger.occurrences);
+    expect(migrated.occurrences[0].occurrenceId).toBe(plan.activities.english[0].occurrenceId);
+    expect(adoptPendingLearningState(storage, PROFILE_B_SCOPE).learning.extra.contentLearningV1).toEqual(migrated);
+    expect(JSON.parse(storage.getItem("shadow_mate_learning_v2:pending")).learning.extra.contentLearningV1).toEqual(ledger);
+
+    const otherChild = loadLearningStateEnvelope(storage, { household_id: "household-1", profile_id: "profile-c" });
+    expect(otherChild.learning.extra.contentLearningV1).toBeUndefined();
+  });
+
+  it("refuses explicit adoption of content learning already owned by another profile", () => {
+    const { ledger } = makeAnonymousLedger();
+    const profileLedger = { ...ledger, learnerScope: "profile:profile-a" };
+    const pending = migrateLegacyLearningState({ extra: { contentLearningV1: profileLedger } });
+    const storage = memoryStorage({ ["shadow_mate_learning_v2:pending"]: JSON.stringify(pending) });
+
+    expect(() => adoptPendingLearningState(storage, PROFILE_B_SCOPE)).toThrow(/scope/i);
+    expect(storage.getItem("shadow_mate_learning_v2:household-1:profile-b")).toBeNull();
+  });
+
+  it("rejects a pending ledger with a mismatched plan before creating a child key", () => {
+    const { ledger } = makeAnonymousLedger();
+    Object.values(ledger.plans["2026-10-12"].candidates)[0].learnerScope = "profile:profile-b";
+    const pending = migrateLegacyLearningState({ extra: { contentLearningV1: ledger } });
+    const raw = JSON.stringify(pending);
+    const storage = memoryStorage({ ["shadow_mate_learning_v2:pending"]: raw });
+
+    expect(() => adoptPendingLearningState(storage, PROFILE_B_SCOPE)).toThrow(/scope/i);
+    expect(storage.getItem(getLearningStateStorageKey(PROFILE_B_SCOPE))).toBeNull();
+    expect(storage.getItem("shadow_mate_learning_v2:pending")).toBe(raw);
+  });
+
+  it("preserves unknown schema envelopes instead of migrating them as empty state", () => {
+    const pendingRaw = JSON.stringify({
+      schema_version: 3,
+      learning: { checkins: { retained: { math: true } } },
+      extensions: { future: { value: true } },
+    });
+    const scopedKey = getLearningStateStorageKey(PROFILE_B_SCOPE);
+    const scopedRaw = JSON.stringify({
+      schema_version: 7,
+      scope: PROFILE_B_SCOPE,
+      learning: { checkins: { retained: { chinese: true } } },
+    });
+    const storage = memoryStorage({
+      ["shadow_mate_learning_v2:pending"]: pendingRaw,
+      [scopedKey]: scopedRaw,
+    });
+
+    expect(() => loadLearningStateEnvelope(storage)).toThrow(/unsupported.*schema/i);
+    expect(() => loadLearningStateEnvelope(storage, PROFILE_B_SCOPE)).toThrow(/unsupported.*schema/i);
+    expect(() => adoptPendingLearningState(storage, PROFILE_B_SCOPE)).toThrow(/unsupported.*schema/i);
+    expect(() => adoptPendingLearningState(storage, { household_id: "household-1", profile_id: "profile-c" })).toThrow(/unsupported.*schema/i);
+    expect(storage.getItem(getLearningStateStorageKey({ household_id: "household-1", profile_id: "profile-c" }))).toBeNull();
+    expect(storage.getItem("shadow_mate_learning_v2:pending")).toBe(pendingRaw);
+    expect(storage.getItem(scopedKey)).toBe(scopedRaw);
+    expect([...storage.data.keys()]).toEqual(expect.arrayContaining([
+      "shadow_mate_learning_v2:pending",
+      scopedKey,
+    ]));
+    expect([...storage.data.keys()].some((key) => key.includes("legacy_backup"))).toBe(false);
   });
 
   it("does not return a state whose embedded scope belongs to another child", () => {

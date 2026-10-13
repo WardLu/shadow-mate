@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 import { CORE_LEARNING_SPEECH_ENTRIES } from "../../src/content/core-learning-speech.js";
 
 async function installPublishedSpeechOnly(page) {
@@ -66,9 +67,11 @@ test.describe("Core learning published speech", () => {
     await expect(button).toBeDisabled();
   });
 
-  test("reads both literacy cards and every worksheet tap without system speech", async ({ page }) => {
+  test("reads literacy cards and every issued worksheet tap without system speech", async ({ page }) => {
     await installPublishedSpeechOnly(page);
+    await page.clock.install({ time: new Date("2026-09-01T02:00:00.000Z") });
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
     const targets = page.locator('[data-hanzi-mini], [data-writing-worksheet] [data-speech-tap]:not([data-hanzi-meaning-row])');
@@ -100,9 +103,8 @@ test.describe("Core learning published speech", () => {
     await expectPublishedPlays(page, 3);
     await page.locator("[data-speak]").first().click();
     await expectPublishedPlays(page, 4);
-    await page.locator(".btn-read-prompt").nth(1).click();
-    await expectPublishedPlays(page, 5);
+    await page.locator('[data-content-observation="complete"]').first().click();
     await page.locator(".mr-chip[data-word]").first().click();
-    await expectPublishedPlays(page, 6);
+    await expectPublishedPlays(page, 5);
   });
 });
