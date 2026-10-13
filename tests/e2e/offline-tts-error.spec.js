@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 test.describe("Published voice errors", () => {
   test.use({ serviceWorkers: "block" });
@@ -28,6 +29,7 @@ test.describe("Published voice errors", () => {
       });
     });
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
     const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
@@ -53,6 +55,7 @@ test.describe("Published voice errors", () => {
       });
     });
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
     const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
