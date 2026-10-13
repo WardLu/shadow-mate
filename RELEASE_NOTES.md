@@ -3,6 +3,12 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.6.1 - 2026-10-13
+
+### Fixed
+
+- Improve release delivery on slow networks so the age-aware packages, experience-based reviews, expanded curriculum, and 2,385 shared audio clips introduced in v1.6.0 can reach the production site.
+
 ## v1.6.0 - 2026-10-13
 
 ### Added
