@@ -16,8 +16,35 @@ import {
 } from "../../src/lib.js";
 import { recordWorksheetCompletion, resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
 import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
+import {
+  mergeContentLearning,
+  recordContentCompletion,
+  resolveDailyLearningPlan,
+  revokeContentCompletion,
+  setContentFeedback,
+} from "../../src/content-learning.js";
 
 const HANZI_PACK = getActiveHanziWritingPack();
+
+function makeContentLearning(learnerScope = "profile:learner-a") {
+  const result = resolveDailyLearningPlan({
+    learning: null,
+    learnerScope,
+    dayKey: "2026-10-13",
+    packageId: "foundation-v2",
+    catalog: { version: "test-v1", english: [{ id: "word-a", order: 1 }] },
+    enabledActivities: ["english"],
+    deviceId: "device-a",
+  });
+  const learning = recordContentCompletion({
+    learning: result.nextLearning,
+    plan: result.plan,
+    activityId: "english",
+    dayKey: "2026-10-13",
+    deviceId: "device-a",
+  });
+  return learning;
+}
 
 function makeRotationState(learnerScope = "anonymous") {
   return resolveDailyWorksheet({
@@ -188,6 +215,13 @@ describe("stateHasData", () => {
       extra: { hanziWorksheetRotationV1: makeRotationState() },
     })).toBe(true);
   });
+  it("counts only normalized content learning facts", () => {
+    expect(stateHasData({ extra: { contentLearningV1: makeContentLearning() } })).toBe(true);
+    expect(stateHasData({ extra: { contentLearningV1: {} } })).toBe(false);
+    expect(stateHasData({ extra: { contentLearningV1: [] } })).toBe(false);
+    expect(stateHasData({ extra: { contentLearningV1: { learnerScope: "profile:learner-a", occurrences: [{}] } } })).toBe(false);
+    expect(stateHasData({ extra: { contentLearningV1: { learnerScope: "profile:learner-a", schemaVersion: 99, occurrences: [{}] } } })).toBe(false);
+  });
   it("rejects empty, malformed, and cross-scope rotation state", () => {
     const malformed = makeRotationState();
     malformed.assignments["2026-09-01"] = {};
@@ -292,6 +326,42 @@ describe("mergeState", () => {
     expect(Object.keys(rotation.assignments)).toEqual(["2026-09-01", "2026-09-02"]);
     expect(rotation.assignments["2026-09-01"].completions)
       .toHaveProperty(first.worksheet.assignmentId);
+  });
+
+  it("merges content learning deterministically and keeps revocation tombstones", () => {
+    const base = makeContentLearning();
+    const occurrenceId = base.occurrences[0].occurrenceId;
+    const local = setContentFeedback({ learning: base, occurrenceId, feedback: "needs-help", deviceId: "device-a" });
+    const remote = setContentFeedback({ learning: base, occurrenceId, feedback: "independent", deviceId: "device-b" });
+    const revoked = revokeContentCompletion({ learning: local, occurrenceId, deviceId: "device-c" });
+    const stateWith = (learning) => ({ extra: { contentLearningV1: learning, marker: "keep" } });
+    const merged = mergeState(stateWith(local), stateWith(remote));
+
+    expect(merged.extra.contentLearningV1).toEqual(mergeContentLearning(local, remote));
+    expect(merged.extra.contentLearningV1).toEqual(mergeState(stateWith(remote), stateWith(local)).extra.contentLearningV1);
+    expect(mergeState(merged, stateWith(local)).extra.contentLearningV1).toEqual(merged.extra.contentLearningV1);
+    expect(mergeState(stateWith(revoked), stateWith(base)).extra.contentLearningV1.occurrences[0].revoked).toBe(true);
+    expect(merged.extra.marker).toBe("keep");
+  });
+
+  it("retains a single valid content ledger and rejects cross-learner merges", () => {
+    const learning = makeContentLearning();
+    expect(() => mergeState({ extra: { contentLearningV1: { schemaVersion: 99 } } }, {})).toThrow(/version/i);
+    expect(mergeState({ extra: { contentLearningV1: {} } }, { extra: { contentLearningV1: learning } }).extra.contentLearningV1)
+      .toEqual(learning);
+    expect(mergeState({ extra: { contentLearningV1: [] } }, { extra: {} }).extra).toEqual({});
+    expect(() => mergeState(
+      { extra: { contentLearningV1: { ...learning, schemaVersion: 99 } } },
+      { extra: { contentLearningV1: learning } },
+    )).toThrow(/version/i);
+    expect(() => mergeState(
+      { extra: { contentLearningV1: { ...learning, learnerScope: undefined } } },
+      { extra: { contentLearningV1: learning } },
+    )).toThrow(/scope/i);
+    expect(() => mergeState(
+      { extra: { contentLearningV1: makeContentLearning("profile:learner-a") } },
+      { extra: { contentLearningV1: makeContentLearning("profile:learner-b") } },
+    )).toThrow(/scope/i);
   });
 
   it("rejects rotation merge across learner scopes", () => {

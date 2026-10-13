@@ -191,7 +191,21 @@ The third-party script is pinned with Subresource Integrity. If VibeCafé change
 
 Fixed curriculum speech is generated during release preparation with Tencent Cloud TTS and served as immutable MP3 files from `voice.shadow.wang`. Mandarin uses Zhike (`101030`) and English uses WeJack (`101050`). Playback does not require a local model download or call Tencent's synthesis API. Shadow Mate does not collect microphone recordings.
 
-The current working-tree catalog has 634 entries: 98 literacy cards; 256 writing-card clips covering 32 characters (Chinese/English pronunciation, meaning, picture description, two words, example sentence and writing hint); 80 poem clips; 65 English words; 104 math fragments; and 31 instructions. Random math questions combine two numbers, an operator and “equals what”; daily content rotates within the fully covered curriculum. Adding or changing text requires another prewarm run. Browsers may cache audio under standard HTTP rules; offline availability depends on retained cache entries.
+The current source catalog offers two parent-selected packages. These are available materials, not daily learning targets; unfinished items continue on a later day, and reviews follow recorded experiences.
+
+| Source catalog | Foundation V2 (suggested age 4–5) | Bridging V1 (suggested age 5–6) |
+| --- | ---: | ---: |
+| Literacy cards | 282 | 602 |
+| Poems | 21 | 61 |
+| English words | 160 | 313 |
+| Optional writing characters | 64 | 128 |
+| Physical picture-book recommendations | 16 | 16 |
+
+The packages share content, so their counts must not be added together. There are also 24 reading-list recommendations. Writing can offer up to four suitable rows; fewer available rows do not produce a four-row print sheet. Speaking courses remain in preparation and do not count toward the check-in denominator.
+
+The complete source speech catalog is built by `buildTencentSpeechCatalog` from the active writing pack and `CORE_LEARNING_SPEECH_ENTRIES`. The latter is a supplemental set of 2,001 entries; it does not include the 384 glyph, English, and meaning entries generated for the 128-item writing pack. The offline `npm run tts:catalog` dry run builds the complete catalog of 2,385 entries and compares it with the committed CDN manifest: all 2,385 entries match the published manifest, with no added, changed, or removed items. All audio files are generated during release preparation, uploaded to COS, and verified through CDN readback. Missing CDN audio uses the system-speech fallback below.
+
+Math questions combine two numbers, an operator, and “equals what” within the selected number range. Browsers may cache published audio under standard HTTP rules; offline availability depends on retained cache entries.
 
 If CDN playback fails, the app tries a matching system voice. With an empty voice list it attempts the browser default with the requested language; this does not guarantee that the device supports speech. On 2026-09-09, the user confirmed playback on Xiaomi/Quark through the local development server. This validates that device/browser combination, not all mobile browsers or a production deployment. See [speech maintenance](docs/architecture.md#speech-catalog-maintenance) for generation and verification commands.
 

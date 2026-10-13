@@ -1,21 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHECKIN_GROUPS,
   createLearningState,
+  getContentLearningState,
   getHanziRotationState,
+  hasCompatibleContentLearningScope,
   hasCompatibleHanziRotationScope,
   hasCheckin,
   isPointMarked,
   dropIncompatibleHanziRotation,
   normalizeLearningStateForScope,
   normalizeLearningState,
+  replaceContentLearningState,
   replaceHanziRotationState,
   transitionLearningState,
 } from "../../src/learning-state.js";
+import { resolveDailyLearningPlan } from "../../src/content-learning.js";
+import { getEnabledModuleIds } from "../../src/learning-content-package.js";
 import { resolveDailyWorksheet } from "../../src/hanzi-worksheet-rotation.js";
 import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
 
 const toggle = (state, action) => transitionLearningState(state, action);
 const HANZI_PACK = getActiveHanziWritingPack();
+
+function makeContentLearning(learnerScope = "profile:learner-a") {
+  return resolveDailyLearningPlan({
+    learning: null,
+    learnerScope,
+    dayKey: "2026-10-13",
+    packageId: "foundation-v2",
+    catalog: { version: "test-v1", english: [{ id: "word-a", order: 1 }] },
+    enabledActivities: ["english"],
+    deviceId: "device-a",
+  }).nextLearning;
+}
 
 function makeRotationState(learnerScope = "anonymous") {
   return resolveDailyWorksheet({
@@ -51,6 +69,31 @@ describe("learning state machine", () => {
     });
   });
 
+  it("migrates legacy book flags while preserving every other learning state field", () => {
+    const learning = makeContentLearning();
+    const initial = {
+      checkins: { "2026-10-13": { english: true } },
+      extra: { marker: "keep", contentLearningV1: learning },
+      points: { legacy: { total: 3 } },
+      bookShelf: { 0: true, "book-brown-bear": false, 99: true },
+      peanutLog: [{ date: "2026-10-13", title: "Keep this log", rating: 4 }],
+      peanutRead: { 7: true, 11: false },
+      content_config: { enabled: false },
+    };
+    const normalized = createLearningState(initial);
+
+    expect(normalized.bookShelf).toEqual({ "book-very-hungry-caterpillar": true, "book-brown-bear": false, 99: true });
+    expect(normalized.peanutRead).toEqual({ "reading-very-hungry-caterpillar": true, "reading-i-can-read": false });
+    expect(normalized.checkins).toEqual(initial.checkins);
+    expect(normalized.extra).toEqual(initial.extra);
+    expect(normalized.points).toEqual(initial.points);
+    expect(normalized.peanutLog).toEqual(initial.peanutLog);
+    expect(normalized.content_config.enabled).toBe(false);
+    expect(createLearningState(normalized)).toEqual(normalized);
+    expect(initial.bookShelf[0]).toBe(true);
+    expect(initial.peanutRead[7]).toBe(true);
+  });
+
   it("normalizes malformed state containers and legacy group queries", () => {
     const normalized = normalizeLearningState({
       checkins: [],
@@ -63,7 +106,7 @@ describe("learning state machine", () => {
       checkins: {},
       extra: {},
       points: {},
-      bookShelf: { "2": 1 },
+      bookShelf: { "book-guess-how-much": 1 },
       peanutLog: [],
       peanutRead: {},
       content_config: {
@@ -194,6 +237,64 @@ describe("learning state machine", () => {
       .toEqual(profileAState);
   });
 
+  it("normalizes content learning separately and preserves unrelated extra settings", () => {
+    const learning = makeContentLearning();
+    const malformedRecord = { activityId: "english", itemId: "invalid", firstPlannedDay: "not-a-day" };
+    const state = createLearningState({ extra: { contentLearningV1: learning, mathQuestionCount: 3 } });
+
+    expect(getContentLearningState(state)).toEqual(learning);
+    expect(createLearningState({ extra: {
+      contentLearningV1: { ...learning, introductions: [...learning.introductions, malformedRecord] },
+    } }).extra.contentLearningV1.introductions).toEqual(learning.introductions);
+    expect(state.extra.mathQuestionCount).toBe(3);
+    expect(state.extra.contentLearningV1).not.toBe(learning);
+    expect(createLearningState({ extra: { contentLearningV1: [] } }).extra).toEqual({});
+    expect(createLearningState({ extra: { contentLearningV1: {} } }).extra).toEqual({});
+    expect(() => createLearningState({ extra: { contentLearningV1: { ...learning, schemaVersion: 99 } } })).toThrow(/version/i);
+    expect(() => createLearningState({ extra: { contentLearningV1: { schemaVersion: 99 } } })).toThrow(/version/i);
+    const withoutScope = { ...learning, learnerScope: undefined };
+    expect(() => createLearningState({ extra: { contentLearningV1: withoutScope } })).toThrow(/scope/i);
+  });
+
+  it("preserves another learner's ledger for explicit scope rejection", () => {
+    const state = createLearningState({ extra: { contentLearningV1: makeContentLearning("profile:learner-a") } });
+
+    expect(hasCompatibleContentLearningScope(state, "profile:learner-a")).toBe(true);
+    expect(hasCompatibleContentLearningScope(state, "profile:learner-b")).toBe(false);
+    expect(hasCompatibleContentLearningScope(state, "anonymous")).toBe(false);
+    expect(hasCompatibleContentLearningScope(createLearningState(), "profile:learner-b")).toBe(true);
+    const mismatchedPlan = structuredClone(state);
+    const candidates = mismatchedPlan.extra.contentLearningV1.plans["2026-10-13"].candidates;
+    Object.values(candidates)[0].learnerScope = "profile:learner-b";
+    expect(hasCompatibleContentLearningScope(mismatchedPlan, "profile:learner-a")).toBe(false);
+    expect(hasCompatibleContentLearningScope({ extra: { contentLearningV1: { learnerScope: "profile:learner-a", occurrences: [{}] } } }, "profile:learner-a")).toBe(false);
+    expect(getContentLearningState(normalizeLearningStateForScope(state, "profile:learner-b")))
+      .toEqual(state.extra.contentLearningV1);
+  });
+
+  it("replaces content learning through a transition and refuses another learner scope", () => {
+    const learning = makeContentLearning();
+    const initial = createLearningState({ extra: { marker: "keep" } });
+    const next = toggle(initial, { type: "CONTENT_LEARNING_REPLACED", contentLearning: learning });
+
+    expect(getContentLearningState(next)).toEqual(learning);
+    expect(next.extra.marker).toBe("keep");
+    expect(initial.extra).toEqual({ marker: "keep" });
+    expect(next).not.toHaveProperty("contentLearningV1");
+    expect(() => replaceContentLearningState(next, makeContentLearning("profile:learner-b"))).toThrow(/scope/i);
+    expect(() => replaceContentLearningState(next, learning, "profile:learner-b")).toThrow(/scope/i);
+    expect(getContentLearningState(replaceContentLearningState(next, null))).toBeNull();
+  });
+
+  it("explicitly removes an invalid old content ledger without normalizing it first", () => {
+    const invalidState = { extra: { marker: "keep", contentLearningV1: makeContentLearning() } };
+    Object.values(invalidState.extra.contentLearningV1.plans["2026-10-13"].candidates)[0].learnerScope = "profile:other";
+
+    expect(replaceContentLearningState(invalidState, null).extra).toEqual({ marker: "keep" });
+    expect(toggle(invalidState, { type: "CONTENT_LEARNING_REPLACED", contentLearning: null }).extra).toEqual({ marker: "keep" });
+    expect(invalidState.extra.contentLearningV1).toBeDefined();
+  });
+
   it("toggles a task check-in and removes an empty day", () => {
     let state = createLearningState();
     const action = { type: "CHECKIN_TOGGLED", date: "2026-08-01", key: "chinese-literacy" };
@@ -203,6 +304,22 @@ describe("learning state machine", () => {
 
     state = toggle(state, action);
     expect(state.checkins).not.toHaveProperty("2026-08-01");
+  });
+
+  it("keeps the optional speaking group independent and retains exposures when a check-in is canceled", () => {
+    const learning = makeContentLearning();
+    const initial = createLearningState({ extra: { contentLearningV1: learning } });
+    const action = { type: "CHECKIN_TOGGLED", date: "2026-10-13", key: "speaking-practice" };
+    const completed = toggle(initial, action);
+    const canceled = toggle(completed, action);
+
+    expect(CHECKIN_GROUPS.speaking).toEqual(["speaking-practice"]);
+    expect(getEnabledModuleIds(initial.content_config)).not.toContain("speaking");
+    expect(hasCheckin(completed.checkins["2026-10-13"], "speaking")).toBe(true);
+    expect(hasCheckin(completed.checkins["2026-10-13"], "english")).toBe(false);
+    expect(canceled.checkins).toEqual({});
+    expect(getContentLearningState(canceled)).toEqual(learning);
+    expect(getContentLearningState(canceled).introductions).toHaveLength(1);
   });
 
   it("expands a legacy module check-in before toggling one task", () => {
@@ -251,8 +368,8 @@ describe("learning state machine", () => {
 
     state = toggle(state, { type: "SHELF_TOGGLED", bookIndex: 2 });
     state = toggle(state, { type: "PEANUT_READ_TOGGLED", bookIndex: 2 });
-    expect(state.bookShelf).toEqual({ "2": 1 });
-    expect(state.peanutRead).toEqual({ "2": 1 });
+    expect(state.bookShelf).toEqual({ "book-guess-how-much": 1 });
+    expect(state.peanutRead).toEqual({ "reading-pearson-kids": 1 });
 
     state = toggle(state, { type: "SHELF_TOGGLED", bookIndex: 2 });
     state = toggle(state, { type: "PEANUT_READ_TOGGLED", bookIndex: 2 });

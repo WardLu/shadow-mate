@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 const FIXED_NOW = new Date("2026-09-01T02:00:00.000Z");
 const TIME_ZONE = "Asia/Singapore";
@@ -17,6 +18,7 @@ async function openLearningModule(page, module) {
 async function openChineseAtFixedTime(page) {
   await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
   await page.goto("/");
+  await seedIssuedWritingPlan(page);
   await openLearningModule(page, "chinese");
   await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
   await page.clock.pauseAt(FIXED_NOW);
@@ -109,7 +111,7 @@ async function installSpeechMock(page, {
 
 async function readWorksheetSnapshot(page) {
   return page.evaluate(() => {
-    const readRows = (root) => [...root.querySelectorAll("[data-writing-row]")].map((row) => ({
+    const readRows = (root) => [...(root?.querySelectorAll("[data-writing-row]") || [])].map((row) => ({
       rowId: row.dataset.writingRowId,
       itemId: row.dataset.writingItemId,
       glyph: row.querySelector("[data-writing-glyph]")?.textContent,
@@ -150,7 +152,7 @@ test.describe("Hanzi writing worksheet", () => {
     const snapshot = await readWorksheetSnapshot(page);
     expect(snapshot.screen).toMatchObject({
       dayKey: "2026-09-01",
-      packVersion: "hanzi-v2-pilot-1",
+      packVersion: "hanzi-v2-expanded-1",
     });
     expect(snapshot.screen.assignmentId).toMatch(/^rotation-v1-/);
     expect(snapshot.screen.rows).toHaveLength(4);
@@ -162,7 +164,7 @@ test.describe("Hanzi writing worksheet", () => {
       dayKey: "2026-09-01",
       packRef: {
         setId: "hanzi-writing-v2",
-        contentVersion: "hanzi-v2-pilot-1",
+        contentVersion: "hanzi-v2-expanded-1",
       },
       rows: snapshot.screen.rows,
     });
@@ -277,7 +279,7 @@ test.describe("Hanzi writing worksheet", () => {
     );
   });
 
-  test("creates a different assignment when the local day changes", async ({ page }) => {
+  test("keeps unfinished writing rows when the local day changes", async ({ page }) => {
     await openChineseAtFixedTime(page);
     const first = await readWorksheetSnapshot(page);
 
@@ -287,7 +289,7 @@ test.describe("Hanzi writing worksheet", () => {
     const nextDay = await readWorksheetSnapshot(page);
     expect(nextDay.screen.dayKey).toBe("2026-09-02");
     expect(nextDay.screen.assignmentId).not.toBe(first.screen.assignmentId);
-    expect(nextDay.screen.rows.map((row) => row.itemId)).not.toEqual(first.screen.rows.map((row) => row.itemId));
+    expect(nextDay.screen.rows.map((row) => row.itemId)).toEqual(first.screen.rows.map((row) => row.itemId));
     expect(Object.keys(nextDay.state.extra.hanziWorksheetRotationV1.assignments)).toEqual([
       "2026-09-01",
       "2026-09-02",
@@ -353,13 +355,18 @@ test.describe("Hanzi writing worksheet", () => {
       state: {},
       persist: false,
     }));
+    await seedIssuedWritingPlan(page, { reload: false });
+    await openLearningModule(page, "chinese");
     const profile = await readWorksheetSnapshot(page);
     expect(profile.screen.assignmentId).not.toBe(anonymous.screen.assignmentId);
     expect(profile.print).toEqual(profile.screen);
-    expect(await page.locator("[data-writing-print-sheet]").count()).toBe(1);
 
     await page.evaluate(() => window.learningDesk.clearLocalData({ reload: false }));
+    await seedIssuedWritingPlan(page, { reload: false });
+    await openLearningModule(page, "chinese");
     const cleared = await readWorksheetSnapshot(page);
+    expect(cleared.state.extra.contentLearningV1.learnerScope).toBe("anonymous");
+    expect(cleared.state.extra.contentLearningV1.occurrences).toEqual([]);
     expect(cleared.state.extra.hanziWorksheetRotationV1.learnerScope).toBe("anonymous");
     expect(cleared.screen.assignmentId).not.toBe(profile.screen.assignmentId);
     expect(cleared.print).toEqual(cleared.screen);

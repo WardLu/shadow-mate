@@ -6,6 +6,7 @@ import { escapeHtml, formatAuthError, formatCloudError, passwordStrength, stateH
 import { runLockedAction } from "./action-lock.js";
 import { icon } from "./icons.js";
 import { buildCloudSavePayload, normalizeCloudLearningState } from "./learning-cloud-state.js";
+import { hasCompatibleContentLearningScope } from "./learning-state.js";
 import { createGrowthLoopTransport, fetchGrowthLoopSnapshot } from "./learning-growth-cloud.js";
 import { buildHouseholdExport } from "./learning-export.js";
 import { ACTIVITY_EVENT_TYPES, activityEventIdFor } from "./learning-analytics.js";
@@ -1531,12 +1532,15 @@ async function hydrateProfileRemote(profile, { migrateLocal = false, generation 
       return;
     }
     const normalizedRemote = data ? normalizeCloudLearningState(data, scope) : null;
-    if (normalizedRemote?.scope_mismatch) {
+    const localState = window.learningDesk.getState();
+    const learnerScope = `profile:${profile.id}`;
+    if (normalizedRemote?.scope_mismatch
+      || !hasCompatibleContentLearningScope(localState, learnerScope)
+      || (normalizedRemote && !hasCompatibleContentLearningScope(normalizedRemote.state.learning, learnerScope))) {
       markPerformance("shadow-mate:profile:remote-hydrate-failed");
       failClosedProfileScope();
       return;
     }
-    const localState = window.learningDesk.getState();
     if (!data) {
       cloudVersion = null;
       if (migrateLocal || stateHasData(localState)) {
@@ -1546,10 +1550,15 @@ async function hydrateProfileRemote(profile, { migrateLocal = false, generation 
     } else {
       lastSyncAt = latestUpdatedAt([{ updated_at: data.updated_at }, { updated_at: lastSyncAt }]);
       cloudVersion = normalizedRemote.version;
-      const remoteLearningState = normalizedRemote.state.learning;
-      const merged = stateHasData(localState) ? mergeState(localState, remoteLearningState) : remoteLearningState;
-      window.learningDesk.replaceState(merged, { persist: true });
-      if (JSON.stringify(merged) !== JSON.stringify(remoteLearningState)) {
+      const remoteEnvelope = normalizedRemote.state;
+      const mergedEnvelope = stateHasData(localState)
+        ? mergeObjects(window.learningDesk.getEnvelope(), remoteEnvelope)
+        : structuredClone(remoteEnvelope);
+      mergedEnvelope.learning = stateHasData(localState)
+        ? mergeState(localState, remoteEnvelope.learning)
+        : structuredClone(remoteEnvelope.learning);
+      window.learningDesk.replaceState(mergedEnvelope, { persist: true });
+      if (JSON.stringify(mergedEnvelope) !== JSON.stringify(remoteEnvelope)) {
         await saveCloudState(true, { generation, profileId: profile.id, allowPendingRemoteHydrate: true });
         if (!isCurrent()) return;
       }
@@ -1650,6 +1659,15 @@ async function saveCloudState(manual = false, {
   try {
     while (true) {
       if (!canWrite()) break;
+      const saveScope = { household_id: saveProfile.household_id, profile_id: saveProfile.id };
+      const normalizedRequest = normalizeCloudLearningState({ state: requestState }, saveScope);
+      if (normalizedRequest.scope_mismatch
+        || !hasCompatibleContentLearningScope(normalizedRequest.state.learning, `profile:${saveProfile.id}`)) {
+        failClosedProfileScope();
+        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
+        break;
+      }
+      requestState = normalizedRequest.state;
       const { data, error } = await supabase.rpc("learning_save_state", {
         p_profile_id: saveProfile.id,
         ...buildCloudSavePayload(requestState, requestVersion),
@@ -1714,10 +1732,25 @@ async function saveCloudState(manual = false, {
       }
 
       if (!canWrite()) break;
-      requestVersion = remote.version;
-      requestState = mergeState(requestState, remote.state);
+      const normalizedRemote = normalizeCloudLearningState(remote, saveScope);
+      if (normalizedRemote.scope_mismatch
+        || !hasCompatibleContentLearningScope(normalizedRemote.state.learning, `profile:${saveProfile.id}`)) {
+        failClosedProfileScope();
+        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
+        break;
+      }
+      const mergedEnvelope = mergeObjects(normalizedRequest.state, normalizedRemote.state);
+      mergedEnvelope.learning = mergeState(normalizedRequest.state.learning, normalizedRemote.state.learning);
+      if (!sameProfileScope(mergedEnvelope.scope, saveScope)
+        || !hasCompatibleContentLearningScope(mergedEnvelope.learning, `profile:${saveProfile.id}`)) {
+        failClosedProfileScope();
+        recordAnalyticsEvent(ANALYTICS_EVENTS.syncFailed);
+        break;
+      }
+      requestVersion = normalizedRemote.version;
+      requestState = mergedEnvelope;
       if (canApplyActiveState()) {
-        cloudVersion = remote.version;
+        cloudVersion = normalizedRemote.version;
         window.learningDesk.replaceState(requestState, { persist: true });
       }
       conflictRetries += 1;

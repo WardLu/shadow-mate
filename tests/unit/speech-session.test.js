@@ -57,6 +57,43 @@ it('allows browser default voices but rejects a listed wrong-language voice', as
   await expect(wrong.speech.play(request)).resolves.toMatchObject({ status: 'failed', code: 'system-unavailable' });
   expect(wrong.utterances).toHaveLength(0);
 });
+it('requires a matching voice for Cantonese and never submits it to browser default', async () => {
+  for (const locale of ['yue', 'YUE_hk', 'zh-HK', 'zh-Hant-HK']) {
+    const empty = fixture([]);
+    await expect(empty.speech.play({ ...request, locale, contentIds: [] }))
+      .resolves.toMatchObject({ status: 'failed', code: 'system-unavailable' });
+    expect(empty.utterances).toHaveLength(0);
+
+    const mandarin = fixture([{ lang: 'zh-CN' }, { lang: 'cmn-Hans-CN' }]);
+    await expect(mandarin.speech.play({ ...request, locale, contentIds: [] }))
+      .resolves.toMatchObject({ status: 'failed', code: 'system-unavailable' });
+    expect(mandarin.utterances).toHaveLength(0);
+  }
+
+  const cantonese = fixture([{ lang: 'zh-CN' }, { lang: 'yue-HK' }]);
+  const playing = cantonese.speech.play({ ...request, locale: 'yue-HK', contentIds: [] });
+  await vi.waitFor(() => expect(cantonese.utterances).toHaveLength(1));
+  expect(cantonese.utterances[0].voice).toEqual({ lang: 'yue-HK' });
+  cantonese.utterances[0].onend();
+  await expect(playing).resolves.toEqual({ status: 'ended' });
+});
+it('supports strict matching for future varieties without changing default fallback', async () => {
+  const strict = fixture([]);
+  await expect(strict.speech.play({ ...request, locale: 'en-US', contentIds: [], strictVoice: true }))
+    .resolves.toMatchObject({ status: 'failed', code: 'system-unavailable' });
+  expect(strict.utterances).toHaveLength(0);
+  const wrongVariety = fixture([{ lang: 'zh-CN' }]);
+  await expect(wrongVariety.speech.play({ ...request, locale: 'zh-Nan', contentIds: [], strictVoice: true }))
+    .resolves.toMatchObject({ status: 'failed', code: 'system-unavailable' });
+  expect(wrongVariety.utterances).toHaveLength(0);
+
+  const legacy = fixture([]);
+  const playing = legacy.speech.play({ ...request, contentIds: [] });
+  await vi.waitFor(() => expect(legacy.utterances).toHaveLength(1));
+  expect(legacy.utterances[0].voice).toBeUndefined();
+  legacy.utterances[0].onend();
+  await expect(playing).resolves.toEqual({ status: 'ended' });
+});
 it('ignores old system callbacks after a newer request starts', async () => {
   const { speech, utterances } = fixture();
   const first = speech.play(request);

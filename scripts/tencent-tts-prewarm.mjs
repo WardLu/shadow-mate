@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import COS from "cos-nodejs-sdk-v5";
 import tencentcloud from "tencentcloud-sdk-nodejs-tts";
-import hanziWritingV2Pilot from "../src/content/hanzi-writing/v2-pilot-1.json" with { type: "json" };
+import { getActiveHanziWritingPack } from "../src/content/hanzi-writing/manifest.js";
 import { CORE_LEARNING_SPEECH_ENTRIES } from "../src/content/core-learning-speech.js";
 import { createPiperResourceSha256 } from "../src/piper-resource-hash.js";
 import {
@@ -55,18 +55,36 @@ function publicEntry(record, bytes) {
   };
 }
 
+async function retryOperation(operation, { retries = 3, delayMs = 1000 } = {}) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      attempt++;
+      if (attempt > retries) throw error;
+      const isTransient = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket hang up|timeout|TimeoutError/i.test(error?.message || error?.code || "");
+      if (!isTransient && attempt > 1) throw error;
+      await new Promise((r) => setTimeout(r, delayMs * attempt));
+    }
+  }
+}
+
 export async function prewarmTencentTts({ catalog, ttsClient, cosClient, cdnClient, manifestPath, dryRun = false, outputDir } = {}) {
   if (!Array.isArray(catalog) || !catalog.length) throw new Error("empty-tts-catalog");
-  if (dryRun) return { reused: 0, generated: 0, missing: catalog.length, entries: [] };
+  if (dryRun) {
+    const diff = diffTencentSpeechCatalog(catalog, manifestPath ? await readCurrentManifestEntries(manifestPath) : []);
+    return { reused: 0, generated: 0, missing: diff.added.length + diff.changed.length, entries: [], ...diff, networkWrites: 0 };
+  }
   const entries = [];
   let reused = 0;
   let generated = 0;
   for (const record of catalog) {
-    const exists = await cosClient.exists(record.objectKey);
+    const exists = await retryOperation(() => cosClient.exists(record.objectKey));
     if (!exists) {
       let synthesized;
       try {
-        synthesized = await ttsClient.synthesize(record);
+        synthesized = await retryOperation(() => ttsClient.synthesize(record));
       } catch (error) {
         const category = error?.name === "AbortError" || error?.name === "TimeoutError" || /timeout/i.test(error?.code || "")
           ? "provider-timeout"
@@ -75,18 +93,18 @@ export async function prewarmTencentTts({ catalog, ttsClient, cosClient, cdnClie
       }
       const bytes = new Uint8Array(synthesized);
       assertMp3(bytes);
-      await cosClient.put(record.objectKey, bytes, {
+      await retryOperation(() => cosClient.put(record.objectKey, bytes, {
         ContentType: "audio/mpeg",
         CacheControl: "public, max-age=31536000, immutable",
         "x-cos-meta-provider": "tencent",
         "x-cos-meta-synthesis-version": "v1",
         "x-cos-meta-voice-id": record.voiceId,
-      });
+      }));
       generated += 1;
     } else {
       reused += 1;
     }
-    const bytes = validateReadback(await cdnClient.read(record));
+    const bytes = validateReadback(await retryOperation(() => cdnClient.read(record)));
     if (outputDir) {
       await mkdir(outputDir, { recursive: true });
       await writeFile(resolve(outputDir, `${record.contentId.replace(/:/g, "-")}.mp3`), bytes);
@@ -177,14 +195,51 @@ function parseArguments(argv) {
   return options;
 }
 
+export function diffTencentSpeechCatalog(catalog, manifestEntries = []) {
+  if (!Array.isArray(catalog) || !Array.isArray(manifestEntries)) throw new Error("invalid-tts-catalog-diff-input");
+  const currentById = new Map(manifestEntries.map((entry) => [entry?.contentId, entry]));
+  const expectedById = new Map(catalog.map((entry) => [entry?.contentId, entry]));
+  const fields = ["textSha256", "provider", "synthesisVersion", "locale", "voiceId", "speed", "codec", "sampleRate"];
+  const added = [];
+  const changed = [];
+  let unchanged = 0;
+
+  for (const expected of catalog) {
+    const current = currentById.get(expected.contentId);
+    if (!current) {
+      added.push(expected.contentId);
+      continue;
+    }
+    if (fields.some((field) => current[field] !== expected[field])) changed.push(expected.contentId);
+    else unchanged += 1;
+  }
+
+  const removed = [...currentById.keys()].filter((contentId) => !expectedById.has(contentId)).sort();
+  return { unchanged, added, changed, removed };
+}
+
+async function readCurrentManifestEntries(manifestPath) {
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    if (!Array.isArray(manifest?.entries)) throw new Error("invalid-manifest-shape");
+    return manifest.entries;
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items, CORE_LEARNING_SPEECH_ENTRIES);
+  const activePack = getActiveHanziWritingPack();
+  const catalog = await buildTencentSpeechCatalog(activePack.items, CORE_LEARNING_SPEECH_ENTRIES);
   if (options.dryRun) {
     const locales = Object.fromEntries([...new Set(catalog.map((entry) => entry.locale))]
       .sort()
       .map((locale) => [locale, catalog.filter((entry) => entry.locale === locale).length]));
-    console.log(JSON.stringify({ catalogEntries: catalog.length, locales, networkWrites: 0 }));
+    const audit = await prewarmTencentTts({ catalog, ...options });
+    const { unchanged, added, changed, removed, networkWrites } = audit;
+    console.log(JSON.stringify({ catalogEntries: catalog.length, locales, unchanged, added, changed, removed, networkWrites }));
     return;
   }
   const result = await prewarmTencentTts({ catalog, ...createReleaseClients(), ...options });

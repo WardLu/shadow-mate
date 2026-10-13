@@ -5,6 +5,7 @@ import {
   mergeRotationState,
   normalizeRotationState,
 } from "./hanzi-worksheet-rotation.js";
+import { CONTENT_LEARNING_STATE_KEY, hasContentLearningData, mergeContentLearning, normalizeContentLearning } from "./content-learning.js";
 
 const HANZI_ROTATION_STATE_KEY = "hanziWorksheetRotationV1";
 
@@ -17,6 +18,18 @@ function normalizeRotationWithData(rotationState) {
   const normalized = normalizeRotationState(rotationState);
   if (!isRecord(normalized.activePack)) return null;
   return Object.keys(normalized.assignments).length > 0 ? normalized : null;
+}
+
+function normalizeContentLearningOrNull(contentLearning, { rejectInvalid = false } = {}) {
+  if (!isRecord(contentLearning)) return null;
+  if ((typeof contentLearning.learnerScope !== "string" || !contentLearning.learnerScope.trim())
+    && !(rejectInvalid && (hasContentLearningData(contentLearning) || Object.hasOwn(contentLearning, "schemaVersion")))) return null;
+  try {
+    return normalizeContentLearning(contentLearning);
+  } catch (error) {
+    if (rejectInvalid) throw error;
+    return null;
+  }
 }
 
 export function escapeHtml(value = "") {
@@ -98,6 +111,7 @@ export function formatCloudError(error, fallback = "云端操作失败，请稍�
 export function stateHasData(state) {
   const rotationState = state?.extra?.hanziWorksheetRotationV1;
   const normalizedRotation = normalizeRotationWithData(rotationState);
+  const contentLearning = normalizeContentLearningOrNull(state?.extra?.[CONTENT_LEARNING_STATE_KEY]);
 
   return Boolean(
     Object.keys(state?.checkins || {}).length ||
@@ -105,7 +119,8 @@ export function stateHasData(state) {
       Object.keys(state?.bookShelf || {}).length ||
       Object.keys(state?.peanutRead || {}).length ||
       (state?.peanutLog || []).length ||
-      normalizedRotation !== null
+      normalizedRotation !== null ||
+      hasContentLearningData(contentLearning)
   );
 }
 
@@ -147,6 +162,19 @@ export function mergeState(local, remote) {
     }
     if (rotationState) merged.extra[HANZI_ROTATION_STATE_KEY] = rotationState;
     else delete merged.extra[HANZI_ROTATION_STATE_KEY];
+  }
+
+  const localContentLearning = local?.extra?.[CONTENT_LEARNING_STATE_KEY];
+  const remoteContentLearning = remote?.extra?.[CONTENT_LEARNING_STATE_KEY];
+  if (localContentLearning !== undefined || remoteContentLearning !== undefined) {
+    const normalizedLocal = normalizeContentLearningOrNull(localContentLearning, { rejectInvalid: true });
+    const normalizedRemote = normalizeContentLearningOrNull(remoteContentLearning, { rejectInvalid: true });
+    const contentLearning = normalizedLocal && normalizedRemote
+      ? mergeContentLearning(normalizedLocal, normalizedRemote)
+      : normalizedLocal || normalizedRemote;
+    if (!isRecord(merged.extra)) merged.extra = {};
+    if (contentLearning) merged.extra[CONTENT_LEARNING_STATE_KEY] = contentLearning;
+    else delete merged.extra[CONTENT_LEARNING_STATE_KEY];
   }
 
   const logMap = new Map();

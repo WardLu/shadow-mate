@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 
 const PIPER_LIFECYCLE_FIXTURE = {
   id: "test-piper-lifecycle",
@@ -415,6 +416,7 @@ test.describe("Offline mode (no login)", () => {
     });
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await openModule(page, "chinese");
     await page.clock.pauseAt(new Date("2026-09-01T02:00:00.000Z"));
 
@@ -446,7 +448,7 @@ test.describe("Offline mode (no login)", () => {
     expect(beforePrint.screen).toMatchObject({
       dayKey: "2026-09-01",
       packId: "hanzi-writing-v2",
-      packVersion: "hanzi-v2-pilot-1",
+      packVersion: "hanzi-v2-expanded-1",
     });
     expect(beforePrint.screen.rows).toHaveLength(4);
     expect(beforePrint.print).toEqual(beforePrint.screen);
@@ -490,6 +492,7 @@ test.describe("Offline mode (no login)", () => {
 
   test("cancelling one checkin does not cancel other tasks in the module", async ({ page }) => {
     await page.goto("/");
+    await seedIssuedWritingPlan(page);
     await openModule(page, "chinese");
     const buttons = page.locator('[data-cmod^="chinese-"]');
     await expect(buttons).toHaveCount(3);

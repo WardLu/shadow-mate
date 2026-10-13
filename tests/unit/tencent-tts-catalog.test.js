@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import hanziWritingV2Pilot from "../../src/content/hanzi-writing/v2-pilot-1.json" with { type: "json" };
-import { CORE_LEARNING_SPEECH_ENTRIES } from "../../src/content/core-learning-speech.js";
+import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
+import currentTencentTtsManifest from "../../public/tts/tencent-v1-manifest.json" with { type: "json" };
+import {
+  CORE_LEARNING_SPEECH_ENTRIES,
+  ENGLISH,
+  englishWordSpeechId,
+  POEMS,
+  poemSpeechIds,
+} from "../../src/content/core-learning-speech.js";
+import { HANZI, literacyItemId } from "../../src/content/literacy.js";
+import { literacySpeechId } from "../../src/content/literacy-speech.js";
+import { cleanSpeechText } from "../../src/speech-text-utils.js";
 import {
   buildTencentSpeechCatalog,
   createTencentSpeechHash,
@@ -10,10 +20,19 @@ import {
 
 describe("Tencent TTS catalog", () => {
   it("maps every active curriculum item to fixed Chinese and English voices", async () => {
-    const catalog = await buildTencentSpeechCatalog(hanziWritingV2Pilot.items, CORE_LEARNING_SPEECH_ENTRIES);
+    const activePack = getActiveHanziWritingPack();
+    const catalog = await buildTencentSpeechCatalog(activePack.items, CORE_LEARNING_SPEECH_ENTRIES);
+    expect(catalog).toHaveLength(activePack.items.length * 3 + CORE_LEARNING_SPEECH_ENTRIES.length);
 
-    expect(catalog).toHaveLength(634);
-    expect(catalog.map(({ contentId }) => contentId)).toEqual([...catalog.map(({ contentId }) => contentId)].sort());
+    const expectedIds = new Set(catalog.map(({ contentId }) => contentId));
+    expect(catalog.map(({ contentId }) => contentId)).toEqual([...expectedIds].sort());
+    const manifestById = new Map(currentTencentTtsManifest.entries.map((entry) => [entry.contentId, entry]));
+    expect(currentTencentTtsManifest.entries.every((entry) => expectedIds.has(entry.contentId))).toBe(true);
+    expect(catalog.filter((entry) => {
+      const previous = manifestById.get(entry.contentId);
+      return previous && ["textSha256", "locale", "voiceId", "speed", "codec", "sampleRate"]
+        .every((field) => previous[field] === entry[field]);
+    })).toHaveLength(currentTencentTtsManifest.entries.length);
     expect(catalog.find(({ contentId }) => contentId === "hz-001:glyph")).toMatchObject({
       locale: "zh-CN", voiceId: "101030", text: "一", codec: "mp3", sampleRate: 16000,
     });
@@ -40,6 +59,27 @@ describe("Tencent TTS catalog", () => {
     });
   });
 
+  it("covers current facts through stable speech id helpers, including expanded items", async () => {
+    const catalog = await buildTencentSpeechCatalog(getActiveHanziWritingPack().items, CORE_LEARNING_SPEECH_ENTRIES);
+    const byId = new Map(catalog.map((entry) => [entry.contentId, entry]));
+    HANZI.forEach((item, index) => {
+      const text = cleanSpeechText(`${item[0]}，${item[2]}`);
+      const contentId = `${literacyItemId(item, index)}:reading`;
+      expect(literacySpeechId(text)).toBe(contentId);
+      expect(byId.get(contentId)).toMatchObject({ text, locale: "zh-CN" });
+    });
+    ENGLISH.forEach((word, index) => {
+      expect(byId.get(englishWordSpeechId(index))).toMatchObject({ text: word[0], locale: "en-US" });
+    });
+    POEMS.forEach((poem, index) => {
+      const ids = poemSpeechIds(index);
+      expect(byId.get(ids.header)).toMatchObject({ text: `古诗《${poem.t}》，${poem.a}`, locale: "zh-CN" });
+      poem.c.forEach((line, lineIndex) => {
+        expect(byId.get(ids.line(lineIndex))).toMatchObject({ text: line.replace(/[，。！？、；：]/g, ""), locale: "zh-CN" });
+      });
+    });
+  });
+
   it("normalizes safe whitespace and rejects unsafe release input", () => {
     expect(normalizeSpeechText("  花\n朵  ")).toBe("花 朵");
     expect(() => normalizeSpeechText("https://example.test/audio")).toThrow("invalid-speech-text");
@@ -54,7 +94,7 @@ describe("Tencent TTS catalog", () => {
   });
 
   it("accepts only an exact sorted immutable manifest", async () => {
-    const expected = (await buildTencentSpeechCatalog([hanziWritingV2Pilot.items[0]]))
+    const expected = (await buildTencentSpeechCatalog([getActiveHanziWritingPack().items[0]]))
       .find(({ contentId }) => contentId === "hz-001:glyph");
     const entry = {
       contentId: expected.contentId,

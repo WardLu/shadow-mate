@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   HANZI_WRITING_V2_PILOT,
+  HANZI_WRITING_V2_EXPANDED,
+  getHanziWritingPack,
   getActiveHanziWritingPack,
 } from "../../src/content/hanzi-writing/manifest.js";
 import { validateHanziWritingPack } from "../../src/content/hanzi-writing/validate-pack.js";
@@ -45,7 +47,7 @@ function expectInvalid(pack, messagePart) {
 
 describe("Hanzi writing V2 Pilot content pack", () => {
   it("exposes the fixed pilot metadata and enough active writing items", () => {
-    const pack = getActiveHanziWritingPack();
+    const pack = HANZI_WRITING_V2_PILOT;
 
     expect(pack).toBe(HANZI_WRITING_V2_PILOT);
     expect(pack).toMatchObject({
@@ -92,7 +94,48 @@ describe("Hanzi writing V2 Pilot content pack", () => {
   });
 
   it("accepts the checked-in pilot pack", () => {
-    expect(validateHanziWritingPack(getActiveHanziWritingPack())).toEqual({ valid: true, errors: [] });
+    expect(validateHanziWritingPack(HANZI_WRITING_V2_PILOT)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("activates the expanded pool with honest review provenance and preserves historical identity", () => {
+    const pack = getActiveHanziWritingPack();
+    expect(pack).toBe(HANZI_WRITING_V2_EXPANDED);
+    expect(pack).toMatchObject({ contentVersion: "hanzi-v2-expanded-1", targetAgeRange: [4, 6], reviewers: [], reviewStatus: "pending-product-review" });
+    expect(pack.items).toHaveLength(128);
+    expect(pack.items.slice(0, 32)).toEqual(HANZI_WRITING_V2_PILOT.items);
+    expect(getActiveHanziWritingPack("foundation-v2").items).toHaveLength(64);
+    expect(getActiveHanziWritingPack("bridging-v1").items).toHaveLength(128);
+    expect(getHanziWritingPack("hanzi-v2-pilot-1")).toBe(HANZI_WRITING_V2_PILOT);
+    expect(getHanziWritingPack("unknown")).toBeNull();
+    expect(validateHanziWritingPack(pack)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("keeps the four requested concept visuals accurate without changing their speech identity", () => {
+    const pack = getActiveHanziWritingPack();
+    const expected = new Map([
+      ["子", { kind: "emoji", value: "🧒", alt: "孩子" }],
+      ["网", { kind: "diagram", value: "fishing-net", alt: "渔网" }],
+      ["桌", { kind: "diagram", value: "table", alt: "桌子" }],
+      ["足", { kind: "emoji", value: "⚽", alt: "足球" }],
+    ]);
+
+    for (const [glyph, visual] of expected) {
+      const item = pack.items.find((candidate) => candidate.glyph === glyph);
+      expect(item?.concept.visual).toMatchObject(visual);
+      expect(item?.id).toBeTruthy();
+    }
+  });
+
+  it("reports malformed expanded age metadata without throwing", () => {
+    const pack = structuredClone(HANZI_WRITING_V2_EXPANDED);
+    delete pack.targetAgeRange;
+    expectInvalid(pack, "targetAgeRange must be [4, 6]");
+  });
+
+  it("does not allow an unreviewed expansion to claim product-owner review", () => {
+    const pack = structuredClone(HANZI_WRITING_V2_EXPANDED);
+    pack.reviewers = ["product-owner"];
+    expectInvalid(pack, "reviewers must be empty");
   });
 
   it("accepts a complete learning metadata fixture", () => {
@@ -213,11 +256,19 @@ describe("Hanzi writing V2 Pilot content pack", () => {
     expectInvalid(pack, "items[0].writing");
   });
 
-  it("rejects a visual kind other than emoji", () => {
+  it("rejects a diagram value that is not in the local diagram registry", () => {
+    const pack = clonePackWithLearningMetadata();
+    pack.items[0].concept.visual.kind = "diagram";
+    pack.items[0].concept.visual.value = '<svg onload="alert(1)">';
+
+    expectInvalid(pack, "must name a registered diagram");
+  });
+
+  it("rejects a visual kind other than emoji or registered diagram", () => {
     const pack = clonePackWithLearningMetadata();
     pack.items[0].concept.visual.kind = "image";
 
-    expectInvalid(pack, "items[0].concept.visual.kind");
+    expectInvalid(pack, 'items[0].concept.visual.kind must be "emoji" or "diagram"');
   });
 
   it("rejects a visual value with more than eight graphemes", () => {

@@ -1,5 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
+import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { createLearningState } from "../../src/learning-state.js";
+import { migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
+import {
+  mergeContentLearning,
+  recordContentCompletion,
+  resolveDailyLearningPlan,
+  setContentFeedback,
+} from "../../src/content-learning.js";
 
 const PROJECT_REF = "dutepjyocxcvecmsrtfp";
 const HOUSEHOLD_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -17,6 +26,34 @@ const emptyState = {
   peanutLog: [],
   peanutRead: {},
 };
+
+function makeContentLearning(learnerScope = `profile:${PROFILE_ID}`) {
+  const result = resolveDailyLearningPlan({
+    learning: null,
+    learnerScope,
+    dayKey: "2026-10-13",
+    packageId: "foundation-v2",
+    catalog: { version: "cloud-test-v1", english: [{ id: "word-a", order: 1 }] },
+    enabledActivities: ["english"],
+    deviceId: "device-a",
+  });
+  return { learning: result.nextLearning, plan: result.plan };
+}
+
+async function seedScopedLearningEnvelope(page, envelope) {
+  await page.addInitScript((state) => {
+    const scope = state.scope;
+    const key = `shadow_mate_learning_v2:${encodeURIComponent(scope.household_id)}:${encodeURIComponent(scope.profile_id)}`;
+    localStorage.setItem(key, JSON.stringify(state));
+  }, envelope);
+}
+
+function contentEnvelope(learning) {
+  const scope = { household_id: HOUSEHOLD_ID, profile_id: PROFILE_ID };
+  const envelope = migrateLegacyLearningState({}, scope);
+  envelope.learning = createLearningState({ extra: { contentLearningV1: learning }, content_config: { enabled: false } });
+  return envelope;
+}
 
 async function openModule(page, mod) {
   await page.click('[data-mod="learning"]');
@@ -108,6 +145,7 @@ async function seedAuthenticatedSession(page) {
 
 async function mockCloudApi(page, {
   remoteState = emptyState,
+  contentEnabled = false,
   rpcResponses = ["success"],
   legacyImportResponses = ["success"],
   growthPointItemsFailures = 0,
@@ -123,14 +161,31 @@ async function mockCloudApi(page, {
   profileStateResponses = {},
   profileStateData = {},
   profileStateVersions = {},
+  profileHouseholdIds = {},
   initialProfiles = [],
   workspaceAncillaryDelayMs = 0,
   consentMetadataResponses = null,
   consentMetadataDelayMs = workspaceAncillaryDelayMs,
   holdWorkspaceMetadata = false,
 } = {}) {
-  let state = structuredClone(remoteState);
-  let version = 3;
+  const profileStates = new Map();
+  const profileStateFor = (profileId = PROFILE_ID) => {
+    if (!profileStates.has(profileId)) {
+      const envelope = migrateLegacyLearningState(profileStateData[profileId] ?? remoteState, {
+        household_id: profileHouseholdIds[profileId] ?? HOUSEHOLD_ID, profile_id: profileId,
+      });
+      // Sync tests control their own writes; content journeys opt in explicitly.
+      envelope.learning = createLearningState({
+        ...envelope.learning,
+        content_config: { ...envelope.learning.content_config, enabled: contentEnabled },
+      });
+      profileStates.set(profileId, {
+        state: envelope,
+        version: profileStateVersions[profileId] ?? 3,
+      });
+    }
+    return profileStates.get(profileId);
+  };
   let rpcIndex = 0;
   let legacyImportIndex = 0;
   let rpcSettledCount = 0;
@@ -190,12 +245,13 @@ async function mockCloudApi(page, {
         rpcSettledCount += 1;
         return;
       }
-      state = payload.p_state;
-      version += 1;
+      const profileState = profileStateFor(payload.p_profile_id);
+      profileState.state = payload.p_state;
+      profileState.version += 1;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ version, updated_at: "2026-08-01T09:00:00.000Z" }),
+        body: JSON.stringify({ version: profileState.version, updated_at: "2026-08-01T09:00:00.000Z" }),
       });
       rpcSettledCount += 1;
       return;
@@ -350,16 +406,16 @@ async function mockCloudApi(page, {
         return;
       }
       const select = url.searchParams.get("select") || "";
-      const profileState = profileStateData[requestedProfileId] ?? state;
-      const profileVersion = profileStateVersions[requestedProfileId] ?? version;
+      const profileState = profileStateFor(requestedProfileId || PROFILE_ID);
       const body = select.includes("state")
-        ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState, version: profileVersion, updated_at: "2026-08-01T08:00:00.000Z" }]
+        ? [{ profile_id: requestedProfileId || PROFILE_ID, state: profileState.state, version: profileState.version, updated_at: "2026-08-01T08:00:00.000Z" }]
         : [{ profile_id: requestedProfileId || PROFILE_ID, updated_at: "2026-08-01T08:00:00.000Z" }];
       const profileStateDelay = typeof profileStateDelayMs === "object"
         ? profileStateDelayMs[requestedProfileId] || 0
         : profileStateDelayMs;
       if (profileStateDelay) await new Promise((resolve) => setTimeout(resolve, profileStateDelay));
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      const singleObject = request.headers().accept?.includes("application/vnd.pgrst.object+json");
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(singleObject ? body[0] : body) });
       return;
     }
 
@@ -397,7 +453,7 @@ async function mockCloudApi(page, {
     getConsentMetadataRequests: () => consentMetadataResponseIndex,
     releaseWorkspaceMetadata: () => releaseWorkspaceMetadata(),
     getRpcSettledCount: () => rpcSettledCount,
-    getState: () => state,
+    getState: (profileId = PROFILE_ID) => profileStateFor(profileId).state,
   };
 }
 
@@ -717,6 +773,27 @@ test.describe("Authenticated cloud workspace", () => {
     }))).toEqual({ blocked: "1", active: null, canWrite: false });
   });
 
+  test("fails closed when a background hydrate returns another child's content ledger", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const learning = makeContentLearning(`profile:${SECOND_PROFILE_ID}`).learning;
+    await seedScopedLearningEnvelope(page, contentEnvelope());
+    const api = await mockCloudApi(page, {
+      remoteState: {
+        ...contentEnvelope(),
+        learning: createLearningState({ extra: { contentLearningV1: learning }, content_config: { enabled: false } }),
+      },
+    });
+    await page.goto("/");
+
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      canWrite: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({ blocked: "1", active: null, canWrite: false });
+    expect(api.rpcPayloads).toEqual([]);
+    expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1)).toBeUndefined();
+  });
+
   test("does not save against an unknown version while remote hydration is pending", async ({ page }) => {
     await seedAuthenticatedSession(page);
     const api = await mockCloudApi(page, { profileStateDelayMs: 2000 });
@@ -777,10 +854,12 @@ test.describe("Authenticated cloud workspace", () => {
     });
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await seedAuthenticatedSession(page);
-    await mockCloudApi(page);
+    await mockCloudApi(page, { contentEnabled: true });
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.cloudSync.getProfileCommitState().cloud_version)).not.toBeNull();
+    await seedIssuedWritingPlan(page, { reload: false });
     await openModule(page, "chinese");
 
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
@@ -814,11 +893,13 @@ test.describe("Authenticated cloud workspace", () => {
   test("keeps the logged-in writing workbook stable when bilingual learning-card speech is clicked", async ({ page }) => {
     await page.clock.install({ time: new Date("2026-09-01T01:59:00.000Z") });
     await seedAuthenticatedSession(page);
-    await mockCloudApi(page);
+    await mockCloudApi(page, { contentEnabled: true });
     await installSpeechMock(page);
 
     await page.goto("/");
     await expect(page.locator('#accountButton[data-state="online"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.cloudSync.getProfileCommitState().cloud_version)).not.toBeNull();
+    await seedIssuedWritingPlan(page, { reload: false });
     await openModule(page, "chinese");
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
 
@@ -1236,6 +1317,7 @@ test.describe("Authenticated cloud workspace", () => {
           learning: {
             checkins: { "2026-08-20": { math: true } },
             extra: { queuedFromProfileB: true },
+            content_config: { enabled: false },
             bookShelf: {},
             peanutLog: [],
             peanutRead: [],
@@ -1823,6 +1905,92 @@ test.describe("Authenticated cloud workspace", () => {
     expect((await readAnalytics(page)).filter((event) => event.name === "sync_failed")).toEqual([]);
   });
 
+  test("merges content learning facts inside scoped envelopes after a version conflict", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const initial = makeContentLearning();
+    const completed = recordContentCompletion({
+      learning: initial.learning,
+      plan: initial.plan,
+      activityId: "english",
+      dayKey: "2026-10-13",
+      deviceId: "device-a",
+      completedAt: "2026-10-13T08:00:00.000Z",
+    });
+    const occurrenceId = completed.occurrences[0].occurrenceId;
+    const local = setContentFeedback({ learning: completed, occurrenceId, feedback: "needs-help", deviceId: "device-a" });
+    const remote = setContentFeedback({ learning: completed, occurrenceId, feedback: "independent", deviceId: "device-b" });
+    const remoteEnvelope = contentEnvelope(initial.learning);
+    remoteEnvelope.legacy.points_readonly = { "2026-08": { "0": { "1": 1 } } };
+    remoteEnvelope.extensions.test_remote_extension = { kept: true };
+    await seedScopedLearningEnvelope(page, remoteEnvelope);
+    const api = await mockCloudApi(page, { remoteState: remoteEnvelope, rpcResponses: ["conflict", "success"] });
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType("mark")
+      .some((entry) => entry.name === "shadow-mate:profile:remote-hydrate-ready"))).toBe(true);
+    await page.evaluate((learning) => {
+      const state = window.learningDesk.getState();
+      state.extra.contentLearningV1 = learning;
+      window.learningDesk.replaceState(state, { persist: true, render: false });
+    }, local);
+    api.getState().learning.extra.contentLearningV1 = remote;
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    await expect.poll(() => api.rpcPayloads.length).toBe(2);
+    const saved = api.rpcPayloads[1].p_state;
+    expect(saved.scope).toEqual(remoteEnvelope.scope);
+    expect(saved.learning.extra.contentLearningV1).toEqual(mergeContentLearning(local, remote));
+    expect(saved.legacy).toEqual(remoteEnvelope.legacy);
+    expect(saved.extensions).toEqual(remoteEnvelope.extensions);
+    expect(saved).not.toHaveProperty("peanutLog");
+    expect(api.rpcPayloads[1].p_expected_version).toBe(3);
+    await expect.poll(() => page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1))
+      .toEqual(mergeContentLearning(local, remote));
+  });
+
+  test("fails closed when a conflict response belongs to another child", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const remoteEnvelope = contentEnvelope();
+    await seedScopedLearningEnvelope(page, remoteEnvelope);
+    const api = await mockCloudApi(page, { remoteState: remoteEnvelope, rpcResponses: ["conflict", "success"] });
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType("mark")
+      .some((entry) => entry.name === "shadow-mate:profile:remote-hydrate-ready"))).toBe(true);
+    api.getState().scope.profile_id = SECOND_PROFILE_ID;
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    await expect.poll(() => page.evaluate(() => ({
+      blocked: localStorage.getItem("shadow_mate_profile_scope_blocked"),
+      active: localStorage.getItem("shadow_mate_active_profile"),
+      canWrite: window.cloudSync.canWriteLocalState(),
+    }))).toEqual({ blocked: "1", active: null, canWrite: false });
+    expect(api.rpcPayloads).toHaveLength(1);
+    expect(await page.evaluate(() => window.learningDesk.getEnvelope().scope.profile_id)).toBe(PROFILE_ID);
+  });
+
+  test("fails closed when a conflict response contains another child's content ledger", async ({ page }) => {
+    await seedAuthenticatedSession(page);
+    const initial = makeContentLearning();
+    const remoteEnvelope = contentEnvelope(initial.learning);
+    await seedScopedLearningEnvelope(page, remoteEnvelope);
+    const api = await mockCloudApi(page, {
+      remoteState: remoteEnvelope,
+      rpcResponses: ["conflict", "success"],
+    });
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType("mark")
+      .some((entry) => entry.name === "shadow-mate:profile:remote-hydrate-ready"))).toBe(true);
+    api.getState().learning.extra.contentLearningV1 = makeContentLearning(`profile:${SECOND_PROFILE_ID}`).learning;
+    await page.click("#accountButton");
+    await page.click("[data-sync]");
+
+    await expect.poll(() => page.evaluate(() => window.cloudSync.canWriteLocalState())).toBe(false);
+    expect(api.rpcPayloads).toHaveLength(1);
+    expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.learnerScope))
+      .toBe(`profile:${PROFILE_ID}`);
+  });
+
   test("stops after repeated version conflicts instead of retrying forever", async ({ page }) => {
     await captureAnalytics(page);
     await seedAuthenticatedSession(page);
@@ -1997,6 +2165,7 @@ test.describe("Authenticated cloud workspace", () => {
     let setupHouseholdId = null;
     let passwordRequests = 0;
     const createdProfiles = [];
+    const profileHouseholdIds = {};
     const now = Math.floor(Date.now() / 1000);
     const authSession = {
       access_token: "password-after-delete-recreate-access-token",
@@ -2008,7 +2177,7 @@ test.describe("Authenticated cloud workspace", () => {
     };
 
     await seedAuthenticatedSession(page);
-    await mockCloudApi(page);
+    await mockCloudApi(page, { profileHouseholdIds });
     await page.addInitScript(() => {
       window.confirm = () => true;
     });
@@ -2073,6 +2242,7 @@ test.describe("Authenticated cloud workspace", () => {
           household_id: setupHouseholdId,
         };
         createdProfiles.push(createdProfile);
+        profileHouseholdIds[createdProfile.id] = createdProfile.household_id;
         await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(createdProfile) });
         return;
       }

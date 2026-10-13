@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getDayKey,
   isRotationStateScopeCompatible,
@@ -7,9 +7,15 @@ import {
   recordWorksheetCompletion,
   resolveDailyWorksheet,
 } from "../../src/hanzi-worksheet-rotation.js";
-import { getActiveHanziWritingPack } from "../../src/content/hanzi-writing/manifest.js";
+import {
+  HANZI_WRITING_PACK_REGISTRY,
+  HANZI_WRITING_V2_EXPANDED,
+  HANZI_WRITING_V2_PILOT,
+  getActiveHanziWritingPack,
+} from "../../src/content/hanzi-writing/manifest.js";
 
-const PACK = getActiveHanziWritingPack();
+const PACK = HANZI_WRITING_V2_PILOT;
+const HANZI_WRITING_PACKS = Object.values(HANZI_WRITING_PACK_REGISTRY);
 const PACK_REF = {
   setId: "hanzi-writing-v2",
   contentVersion: "hanzi-v2-pilot-1",
@@ -168,6 +174,37 @@ describe("rotation-v1 daily worksheet selection", () => {
     row.concept.visual.alt = "改掉的视觉描述";
     row.writing.hint = "改掉的书写提示";
     expect(resolved.rotationState).toEqual(storedState);
+  });
+
+  it("retains registered diagrams through worksheet issuance and snapshot normalization", () => {
+    const visualItems = ["网", "桌"].map((glyph) =>
+      HANZI_WRITING_V2_EXPANDED.items.find((item) => item.glyph === glyph)
+    );
+    const items = structuredClone([
+      ...visualItems,
+      ...HANZI_WRITING_V2_PILOT.items.slice(0, 2),
+    ]);
+    const pack = { ...structuredClone(HANZI_WRITING_V2_EXPANDED), items };
+    const packRef = { setId: pack.setId, contentVersion: pack.contentVersion };
+    const resolved = resolveDailyWorksheet({
+      rotationState: normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef }),
+      pack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: items.map((item) => item.id),
+    });
+
+    expect(resolved.worksheet.rows.map((row) => row.concept.visual)).toEqual(
+      items.map((item) => item.concept.visual)
+    );
+    const normalized = normalizeRotationState(resolved.rotationState, {
+      learnerScope: LEARNER_SCOPE,
+      packRef,
+      pack,
+    });
+    expect(normalized).toEqual(resolved.rotationState);
+    expect(mergeRotationState(resolved.rotationState, resolved.rotationState)).toEqual(resolved.rotationState);
   });
 
   it("repairs a same-Pilot legacy snapshot from stable item identity without losing completion", () => {
@@ -441,8 +478,8 @@ describe("rotation-v1 daily worksheet selection", () => {
     });
   });
 
-  it("rejects a same-day candidate from a different pack even when its ID is valid for that pack", () => {
-    const newerPackRef = { setId: PACK_REF.setId, contentVersion: "hanzi-v2-pilot-2" };
+  it("rejects a same-day candidate from an unregistered pack even when its ID is valid for that pack", () => {
+    const newerPackRef = { setId: PACK_REF.setId, contentVersion: "hanzi-unregistered" };
     const differentPackState = makeState({
       packRef: newerPackRef,
       itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
@@ -486,6 +523,124 @@ describe("rotation-v1 daily worksheet selection", () => {
     expect(repeated.rotationState.assignments["2026-09-01"]).toEqual(
       first.rotationState.assignments["2026-09-01"]
     );
+  });
+
+  it("keeps default rotation identical when selectedItemIds is explicitly undefined", () => {
+    const request = {
+      rotationState: {},
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+    };
+
+    expect(resolveDailyWorksheet({ ...request, selectedItemIds: undefined }))
+      .toEqual(resolveDailyWorksheet(request));
+  });
+
+  it("builds a four-row snapshot in the daily plan's selected order, including recent review items", () => {
+    const selectedItemIds = ["hz-004", "hz-001", "hz-003", "hz-002"];
+    const initialState = makeState({
+      dayKey: "2026-08-31",
+      itemIds: selectedItemIds,
+    });
+    const before = structuredClone(initialState);
+    const resolved = resolveDailyWorksheet({
+      rotationState: initialState,
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds,
+    });
+
+    expect(resolved.worksheet.rows.map((row) => row.itemId)).toEqual(selectedItemIds);
+    expect(resolved.worksheet).toMatchObject({
+      assignmentId: expect.stringMatching(/^rotation-v1-[0-9a-f]{8}$/),
+      layoutVersion: "focus-rows-v1",
+      packRef: PACK_REF,
+    });
+    expect(resolved.worksheet.rows.map((row) => row.rowId)).toEqual([
+      "row-1", "row-2", "row-3", "row-4",
+    ]);
+    expect(normalizeRotationState(resolved.rotationState, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: PACK_REF,
+      pack: PACK,
+    })).toEqual(resolved.rotationState);
+    expect(initialState).toEqual(before);
+    expect(selectedItemIds).toEqual(["hz-004", "hz-001", "hz-003", "hz-002"]);
+  });
+
+  it("keeps the issued snapshot and completion when a daily plan changes or becomes invalid", () => {
+    const first = resolveDailyWorksheet({
+      rotationState: {},
+      pack: PACK,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    });
+    const completed = recordWorksheetCompletion({
+      rotationState: first.rotationState,
+      worksheet: first.worksheet,
+      completedAt: "2026-09-01T03:00:00.000Z",
+    });
+
+    for (const selectedItemIds of [["hz-008", "hz-007", "hz-006", "hz-005"], []]) {
+      const repeated = resolveDailyWorksheet({
+        rotationState: completed,
+        pack: PACK,
+        learnerScope: LEARNER_SCOPE,
+        now: NOW,
+        timeZone: TIME_ZONE,
+        selectedItemIds,
+      });
+
+      expect(repeated.worksheet).toEqual(first.worksheet);
+      expect(repeated.rotationState).toEqual(completed);
+    }
+  });
+
+  it.each([
+    null,
+    "hz-001",
+    [],
+    ["hz-001", "hz-002", "hz-003"],
+    ["hz-001", "hz-002", "hz-003", "hz-004", "hz-005"],
+    ["hz-001", "hz-001", "hz-003", "hz-004"],
+    ["hz-001", "hz-002", "hz-003", "hz-unknown"],
+    ["hz-001", "hz-002", "hz-003", 4],
+  ].map((selectedItemIds) => ({ selectedItemIds })))(
+    "rejects invalid daily-plan selections before issuing a snapshot: $selectedItemIds",
+    ({ selectedItemIds }) => {
+      const initialState = normalizeRotationState({}, { learnerScope: LEARNER_SCOPE, packRef: PACK_REF });
+      const before = structuredClone(initialState);
+
+      expect(() => resolveDailyWorksheet({
+        rotationState: initialState,
+        pack: PACK,
+        learnerScope: LEARNER_SCOPE,
+        now: NOW,
+        timeZone: TIME_ZONE,
+        selectedItemIds,
+      })).toThrow(/selectedItemIds/);
+      expect(initialState).toEqual(before);
+    }
+  );
+
+  it("rejects a daily plan selecting an inactive item", () => {
+    const pack = structuredClone(PACK);
+    pack.items[0].status = "inactive";
+
+    expect(() => resolveDailyWorksheet({
+      rotationState: {},
+      pack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    })).toThrow(/selectedItemIds/);
   });
 
   it("does not expose the stored snapshot through a mutable worksheet reference", () => {
@@ -895,6 +1050,356 @@ describe("rotation-v1 daily worksheet selection", () => {
     }));
   });
 
+  it("preserves a completed bridging snapshot when the same day switches to the filtered foundation pack", () => {
+    const bridge = getActiveHanziWritingPack("bridging-v1");
+    const foundation = getActiveHanziWritingPack("foundation-v2");
+    const foundationIds = new Set(foundation.items.map((item) => item.id));
+    const bridgeOnlyIds = bridge.items
+      .filter((item) => item.status === "active" && !foundationIds.has(item.id))
+      .slice(0, 4).map((item) => item.id);
+    expect(bridgeOnlyIds).toHaveLength(4);
+    const first = resolveDailyWorksheet({
+      rotationState: {}, pack: bridge, learnerScope: LEARNER_SCOPE, now: NOW,
+      timeZone: TIME_ZONE, selectedItemIds: bridgeOnlyIds,
+    });
+    const completed = recordWorksheetCompletion({
+      rotationState: first.rotationState, worksheet: first.worksheet,
+      completedAt: "2026-09-01T03:00:00.000Z",
+    });
+    const foundationSelection = foundation.items.filter((item) => item.status === "active")
+      .slice(0, 4).map((item) => item.id);
+
+    for (const selectedItemIds of [foundationSelection, []]) {
+      const repeated = resolveDailyWorksheet({
+        rotationState: completed, pack: foundation, learnerScope: LEARNER_SCOPE,
+        now: NOW, timeZone: TIME_ZONE, selectedItemIds,
+      });
+      expect(repeated.worksheet).toEqual(first.worksheet);
+      expect(repeated.rotationState).toEqual(completed);
+    }
+    expect(normalizeRotationState(completed, {
+      pack: foundation, packRef: completed.activePack, learnerScope: LEARNER_SCOPE,
+      referenceDayKey: "2026-09-01",
+    })).toEqual(completed);
+    expect(recordWorksheetCompletion({
+      rotationState: first.rotationState, worksheet: first.worksheet,
+      completedAt: "2026-09-01T03:00:00.000Z", pack: foundation,
+    })).toEqual(completed);
+  });
+
+  it("issues only foundation items on the next day without losing bridging history or completions", () => {
+    const bridge = getActiveHanziWritingPack("bridging-v1");
+    const foundation = getActiveHanziWritingPack("foundation-v2");
+    const foundationIds = new Set(foundation.items.map((item) => item.id));
+    const bridgeOnlyIds = bridge.items
+      .filter((item) => item.status === "active" && !foundationIds.has(item.id))
+      .slice(0, 4).map((item) => item.id);
+    const first = resolveDailyWorksheet({
+      rotationState: {}, pack: bridge, learnerScope: LEARNER_SCOPE, now: NOW,
+      timeZone: TIME_ZONE, selectedItemIds: bridgeOnlyIds,
+    });
+    const completed = recordWorksheetCompletion({
+      rotationState: first.rotationState, worksheet: first.worksheet,
+      completedAt: "2026-09-01T03:00:00.000Z",
+    });
+    const selectedItemIds = foundation.items.filter((item) => item.status === "active")
+      .slice(0, 4).map((item) => item.id);
+    const next = resolveDailyWorksheet({
+      rotationState: completed, pack: foundation, learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-02T00:30:00.000Z"), timeZone: TIME_ZONE, selectedItemIds,
+    });
+
+    expect(next.worksheet.rows.map((row) => row.itemId)).toEqual(selectedItemIds);
+    expect(next.worksheet.rows.every((row) => foundationIds.has(row.itemId))).toBe(true);
+    expect(next.rotationState.assignments["2026-09-01"])
+      .toEqual(completed.assignments["2026-09-01"]);
+    expect(next.worksheet.packRef).toEqual(first.worksheet.packRef);
+    expect(() => resolveDailyWorksheet({
+      rotationState: next.rotationState, pack: foundation, learnerScope: LEARNER_SCOPE,
+      now: new Date("2026-09-03T00:30:00.000Z"), timeZone: TIME_ZONE,
+      selectedItemIds: bridgeOnlyIds,
+    })).toThrow(/selectedItemIds/);
+  });
+
+  it("rejects forged bridging snapshot content while validating through a filtered foundation pack", () => {
+    const bridge = getActiveHanziWritingPack("bridging-v1");
+    const foundation = getActiveHanziWritingPack("foundation-v2");
+    const foundationIds = new Set(foundation.items.map((item) => item.id));
+    const resolved = resolveDailyWorksheet({
+      rotationState: {}, pack: bridge, learnerScope: LEARNER_SCOPE, now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: bridge.items
+        .filter((item) => item.status === "active" && !foundationIds.has(item.id))
+        .slice(0, 4).map((item) => item.id),
+    });
+    for (const mutate of [
+      (row) => { row.glyph = "伪"; },
+      (row) => { row.concept.visual.alt = "伪造描述"; },
+    ]) {
+      const corrupted = structuredClone(resolved.rotationState);
+      const assignment = corrupted.assignments["2026-09-01"];
+      mutate(assignment.candidates[assignment.canonicalAssignmentId].rows[0]);
+      expect(normalizeRotationState(corrupted, {
+        pack: foundation, packRef: corrupted.activePack, learnerScope: LEARNER_SCOPE,
+        referenceDayKey: "2026-09-01",
+      }).assignments["2026-09-01"]).toBeUndefined();
+    }
+  });
+
+  it("merges registered pack versions, retaining same-day snapshots and completions through hydration", () => {
+    const newerPack = HANZI_WRITING_PACKS.at(-1);
+    expect(newerPack.setId).toBe(PACK_REF.setId);
+    expect(newerPack.contentVersion).not.toBe(PACK_REF.contentVersion);
+    const newerPackRef = { setId: newerPack.setId, contentVersion: newerPack.contentVersion };
+    const local = makeState({
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+      completedAt: "2026-09-01T04:00:00.000Z",
+    });
+    const resolvedNewer = resolveDailyWorksheet({
+      rotationState: {},
+      pack: newerPack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: newerPack.items.filter((item) => item.status === "active").slice(-4).map((item) => item.id),
+    });
+    const remote = recordWorksheetCompletion({
+      rotationState: resolvedNewer.rotationState,
+      worksheet: resolvedNewer.worksheet,
+      completedAt: "2026-09-01T05:00:00.000Z",
+    });
+    const localWorksheet = getWorksheet(local);
+    const remoteWorksheet = getWorksheet(remote);
+    const canonicalId = [localWorksheet.assignmentId, remoteWorksheet.assignmentId].sort()[0];
+    const beforeLocal = structuredClone(local);
+    const beforeRemote = structuredClone(remote);
+    const merged = mergeRotationState(local, remote);
+
+    expect(merged.activePack).toEqual(newerPackRef);
+    for (const worksheet of Object.values(merged.assignments["2026-09-01"].candidates)) {
+      expect(worksheet.rows).toHaveLength(4);
+      expect([PACK_REF, newerPackRef]).toContainEqual(worksheet.packRef);
+    }
+    expect(merged.assignments["2026-09-01"]).toEqual({
+      canonicalAssignmentId: canonicalId,
+      candidates: {
+        [localWorksheet.assignmentId]: localWorksheet,
+        [remoteWorksheet.assignmentId]: remoteWorksheet,
+      },
+      completions: {
+        [localWorksheet.assignmentId]: { completedAt: "2026-09-01T04:00:00.000Z" },
+        [remoteWorksheet.assignmentId]: { completedAt: "2026-09-01T05:00:00.000Z" },
+      },
+    });
+    expect(mergeRotationState(remote, local)).toEqual(merged);
+    expect(mergeRotationState(merged, merged)).toEqual(merged);
+    const third = makeState({ itemIds: ["hz-009", "hz-010", "hz-011", "hz-012"] });
+    expect(mergeRotationState(mergeRotationState(local, remote), third))
+      .toEqual(mergeRotationState(local, mergeRotationState(remote, third)));
+
+    for (const pack of [PACK, newerPack]) {
+      const hydrated = normalizeRotationState(merged, {
+        learnerScope: LEARNER_SCOPE,
+        packRef: newerPackRef,
+        pack,
+        referenceDayKey: "2026-09-01",
+      });
+      const resolved = resolveDailyWorksheet({
+        rotationState: hydrated,
+        pack,
+        learnerScope: LEARNER_SCOPE,
+        now: NOW,
+        timeZone: TIME_ZONE,
+        selectedItemIds: [],
+      });
+      expect(hydrated).toEqual(merged);
+      expect(resolved.worksheet).toEqual(merged.assignments["2026-09-01"].candidates[canonicalId]);
+      expect(resolved.rotationState).toEqual(merged);
+      expect(recordWorksheetCompletion({
+        rotationState: merged,
+        worksheet: localWorksheet,
+        completedAt: "2026-09-01T06:00:00.000Z",
+        pack,
+      })).toEqual(merged);
+    }
+    expect(local).toEqual(beforeLocal);
+    expect(remote).toEqual(beforeRemote);
+  });
+
+  it("preserves historical pack references when registered versions merge across days", () => {
+    const newerPack = HANZI_WRITING_PACKS.at(-1);
+    const local = makeState({
+      dayKey: "2026-08-31",
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+      completedAt: "2026-08-31T04:00:00.000Z",
+    });
+    const remote = resolveDailyWorksheet({
+      rotationState: {},
+      pack: newerPack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: newerPack.items.filter((item) => item.status === "active").slice(-4).map((item) => item.id),
+    }).rotationState;
+    const merged = mergeRotationState(local, remote);
+    const historical = getWorksheet(merged, "2026-08-31");
+    const today = getWorksheet(merged);
+
+    expect(historical).toEqual(getWorksheet(local, "2026-08-31"));
+    expect(historical.packRef).toEqual(PACK_REF);
+    expect(today).toEqual(getWorksheet(remote));
+    expect(today.packRef).toEqual(merged.activePack);
+    expect(merged.assignments["2026-08-31"].completions).toEqual(
+      local.assignments["2026-08-31"].completions
+    );
+    expect(normalizeRotationState(merged, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: merged.activePack,
+      pack: newerPack,
+      referenceDayKey: "2026-09-01",
+    })).toEqual(merged);
+  });
+
+  it("records completion for an older same-day snapshot without changing either version's rows", () => {
+    const newerPack = HANZI_WRITING_PACKS.at(-1);
+    const older = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const newer = resolveDailyWorksheet({
+      rotationState: {},
+      pack: newerPack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: newerPack.items.filter((item) => item.status === "active").slice(-4).map((item) => item.id),
+    }).rotationState;
+    const merged = mergeRotationState(older, newer);
+    const olderWorksheet = getWorksheet(older);
+    const completed = recordWorksheetCompletion({
+      rotationState: merged,
+      worksheet: olderWorksheet,
+      completedAt: "2026-09-01T06:00:00.000Z",
+      pack: newerPack,
+    });
+
+    expect(completed.assignments["2026-09-01"].completions).toEqual({
+      [olderWorksheet.assignmentId]: { completedAt: "2026-09-01T06:00:00.000Z" },
+    });
+    expect(completed.assignments["2026-09-01"].candidates).toEqual(
+      merged.assignments["2026-09-01"].candidates
+    );
+    expect(completed.activePack).toEqual(merged.activePack);
+    expect(merged.assignments["2026-09-01"].completions).toEqual({});
+  });
+
+  it("validates each registered-version snapshot against its own pack and keeps a valid peer", () => {
+    const newerPack = HANZI_WRITING_PACKS.at(-1);
+    const older = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const newer = resolveDailyWorksheet({
+      rotationState: {},
+      pack: newerPack,
+      learnerScope: LEARNER_SCOPE,
+      now: NOW,
+      timeZone: TIME_ZONE,
+      selectedItemIds: newerPack.items.filter((item) => item.status === "active").slice(-4).map((item) => item.id),
+    }).rotationState;
+    const merged = mergeRotationState(older, newer);
+    const olderWorksheet = getWorksheet(older);
+    const olderId = olderWorksheet.assignmentId;
+    merged.assignments["2026-09-01"].candidates[olderId].rows[0].glyph = "伪";
+    merged.assignments["2026-09-01"].completions[olderId] = {
+      completedAt: "2026-09-01T03:00:00.000Z",
+    };
+    const normalized = normalizeRotationState(merged, {
+      learnerScope: LEARNER_SCOPE,
+      packRef: merged.activePack,
+      pack: newerPack,
+      referenceDayKey: "2026-09-01",
+    });
+
+    expect(normalized.assignments["2026-09-01"].candidates[olderId]).toBeUndefined();
+    expect(normalized.assignments["2026-09-01"].completions[olderId]).toBeUndefined();
+    expect(getWorksheet(normalized)).toEqual(getWorksheet(newer));
+  });
+
+  it("keeps Pilot merges but rejects unknown and cross-version merges when the registry is absent", async () => {
+    const local = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const remote = makeState({ itemIds: ["hz-005", "hz-006", "hz-007", "hz-008"] });
+    const unknown = makeState({
+      packRef: { setId: PACK_REF.setId, contentVersion: "hanzi-unregistered" },
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    });
+    const registeredNewerPack = HANZI_WRITING_PACKS?.at(-1);
+    const registeredNewer = registeredNewerPack && registeredNewerPack.contentVersion !== PACK_REF.contentVersion
+      ? resolveDailyWorksheet({
+        rotationState: {},
+        pack: registeredNewerPack,
+        learnerScope: LEARNER_SCOPE,
+        now: NOW,
+        timeZone: TIME_ZONE,
+        selectedItemIds: registeredNewerPack.items.filter((item) => item.status === "active").slice(-4).map((item) => item.id),
+      }).rotationState
+      : undefined;
+    vi.resetModules();
+    vi.doMock("../../src/content/hanzi-writing/manifest.js", () => ({
+      HANZI_WRITING_V2_PILOT: PACK,
+      HANZI_WRITING_PACK_REGISTRY: undefined,
+    }));
+    try {
+      const { mergeRotationState: mergeWithoutRegistry } = await import(
+        "../../src/hanzi-worksheet-rotation.js"
+      );
+
+      expect(mergeWithoutRegistry(local, remote)).toEqual(mergeRotationState(local, remote));
+      expect(() => mergeWithoutRegistry(local, unknown)).toThrow(/pack/);
+      expect(() => mergeWithoutRegistry(unknown, unknown)).toThrow(/pack/);
+      if (registeredNewer) {
+        expect(() => mergeWithoutRegistry(local, registeredNewer)).toThrow(/pack/);
+      }
+    } finally {
+      vi.doUnmock("../../src/content/hanzi-writing/manifest.js");
+      vi.resetModules();
+    }
+  });
+
+  it("rejects unregistered versions and different sets, including matching unknown pack refs", () => {
+    const local = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    const unknown = makeState({
+      packRef: { setId: PACK_REF.setId, contentVersion: "hanzi-unregistered" },
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    });
+    const differentSet = makeState({
+      packRef: { setId: "different-writing-set", contentVersion: PACK_REF.contentVersion },
+      itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+    });
+
+    expect(() => mergeRotationState(local, unknown)).toThrow(/pack/);
+    expect(() => mergeRotationState(unknown, local)).toThrow(/pack/);
+    expect(() => mergeRotationState(unknown, unknown)).toThrow(/pack/);
+    expect(() => mergeRotationState(local, differentSet)).toThrow(/pack/);
+  });
+
+  it("rejects unknown or cross-set historical candidates during merge without changing normalization", () => {
+    const local = makeState({ itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"] });
+    for (const packRef of [
+      { setId: PACK_REF.setId, contentVersion: "hanzi-unregistered" },
+      { setId: "different-writing-set", contentVersion: PACK_REF.contentVersion },
+    ]) {
+      const historical = makeState({
+        dayKey: "2026-08-31",
+        packRef,
+        itemIds: ["hz-001", "hz-002", "hz-003", "hz-004"],
+      });
+      const combined = {
+        ...local,
+        assignments: { ...historical.assignments, ...local.assignments },
+      };
+      const normalized = normalizeRotationState(combined);
+
+      expect(normalized.assignments["2026-08-31"]).toBeDefined();
+      expect(() => mergeRotationState(local, combined)).toThrow(/historical pack/);
+      expect(() => mergeRotationState(combined, local)).toThrow(/historical pack/);
+    }
+  });
+
   it("keeps rotation merges associative and rejects incompatible scopes, packs, and algorithms", () => {
     const local = makeState({ itemIds: ["hz-001"] });
     const remote = makeState({ itemIds: ["hz-002"] });
@@ -907,7 +1412,7 @@ describe("rotation-v1 daily worksheet selection", () => {
       itemIds: ["hz-004"],
     }))).toThrow(/learnerScope/);
     expect(() => mergeRotationState(local, makeState({
-      packRef: { setId: PACK_REF.setId, contentVersion: "hanzi-v2-pilot-2" },
+      packRef: { setId: PACK_REF.setId, contentVersion: "hanzi-unregistered" },
       itemIds: ["hz-005"],
     }))).toThrow(/pack/);
     const incompatibleAlgorithm = makeState({ itemIds: ["hz-006"] });

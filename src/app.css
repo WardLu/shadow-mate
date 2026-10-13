@@ -106,6 +106,12 @@
   .btn-subtle:hover{color:var(--green-deep);border-color:var(--green);background:var(--green-soft);}
   .btn-subtle:active{transform:scale(0.96);}
   .btn-subtle svg{width:13px;height:13px;}
+  [data-content-browser] summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;}
+  [data-content-browser] label{display:block;font-size:13px;margin-top:12px;}
+  [data-content-search]{width:100%;box-sizing:border-box;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;}
+  [data-content-items]{max-height:460px;overflow-y:auto;margin-top:12px;}
+  [data-content-items] .word-card{overflow-wrap:anywhere;}
+  [data-learning-pace],[data-package-id]{min-height:44px;min-width:0;max-width:55%;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:6px;font:inherit;font-size:13px;}
 
   /* 设置页面分类标签页 */
   .settings-tabs{

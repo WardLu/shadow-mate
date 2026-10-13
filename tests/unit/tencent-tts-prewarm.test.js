@@ -1,8 +1,8 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { prewarmTencentTts } from "../../scripts/tencent-tts-prewarm.mjs";
+import { prewarmTencentTts, diffTencentSpeechCatalog } from "../../scripts/tencent-tts-prewarm.mjs";
 
 const catalog = [{
   contentId: "hz-001:glyph", text: "一", textSha256: "1".repeat(64), provider: "tencent",
@@ -12,6 +12,44 @@ const catalog = [{
 const audio = Uint8Array.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 1]);
 
 describe("Tencent TTS prewarm", () => {
+  it("audits a manifest locally without calling clients or writing any outputs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shadow-mate-tts-audit-"));
+    const manifestPath = join(root, "manifest.json");
+    const outputDir = join(root, "audio");
+    const current = { entries: [{ ...catalog[0], audioSha256: "a".repeat(64), bytes: 10 }] };
+    const manifestText = JSON.stringify(current);
+    await writeFile(manifestPath, manifestText);
+    const ttsClient = { synthesize: vi.fn() };
+    const cosClient = { exists: vi.fn(), put: vi.fn() };
+    const cdnClient = { read: vi.fn() };
+    const result = await prewarmTencentTts({
+      catalog: [...catalog, { ...catalog[0], contentId: "new:item" }],
+      manifestPath, outputDir, ttsClient, cosClient, cdnClient, dryRun: true,
+    });
+    expect(result).toMatchObject({ unchanged: 1, added: ["new:item"], changed: [], removed: [], networkWrites: 0, generated: 0, missing: 1 });
+    for (const method of [ttsClient.synthesize, cosClient.exists, cosClient.put, cdnClient.read]) expect(method).not.toHaveBeenCalled();
+    expect(await readFile(manifestPath, "utf8")).toBe(manifestText);
+    await expect(stat(outputDir)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports catalog changes by stable id while preserving unchanged audio identity", () => {
+    const current = [
+      { contentId: "hz-001:glyph", textSha256: "old-text", locale: "zh-CN", voiceId: "101030", speed: 0, codec: "mp3", sampleRate: 16000, provider: "tencent", synthesisVersion: "v1", audioSha256: "keep-this" },
+      { contentId: "retired:line", textSha256: "retired", audioSha256: "retired-audio" },
+    ];
+    const expected = [
+      { ...catalog[0], textSha256: "new-text" },
+      { ...catalog[0], contentId: "new:item", textSha256: "new-item" },
+    ];
+    expect(diffTencentSpeechCatalog(expected, current)).toEqual({
+      unchanged: 0,
+      added: ["new:item"],
+      changed: ["hz-001:glyph"],
+      removed: ["retired:line"],
+    });
+    expect(current[0].audioSha256).toBe("keep-this");
+  });
+
   it("reuses verified objects without synthesis and writes a public-only manifest", async () => {
     const root = await mkdtemp(join(tmpdir(), "shadow-mate-tts-"));
     const manifestPath = join(root, "manifest.json");
