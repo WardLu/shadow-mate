@@ -99,8 +99,24 @@ test("required check fails when a selected step is skipped, missing, or failed",
     steps: { ...steps, db_tests: { outcome: "skipped" } } }), /db_tests/);
   assert.throws(() => validateGate({ mode: "release", releaseContracts: "true",
     steps: { ...steps, release_contracts: { outcome: "failure" } } }), /release_contracts/);
+
+  const docsSteps = {
+    "checkout": { outcome: "success" },
+    scope: { outcome: "success" },
+    lockfile: { outcome: "success" },
+    node: { outcome: "success" },
+    ci_scope_tests: { outcome: "success" },
+    docs_verify: { outcome: "success" },
+    install: { outcome: "skipped" },
+    source: { outcome: "skipped" },
+    release_metadata: { outcome: "skipped" },
+    audit: { outcome: "skipped" },
+  };
+  assert.doesNotThrow(() => validateGate({ mode: "docs", releaseContracts: "false", steps: docsSteps }));
   assert.throws(() => validateGate({ mode: "docs", releaseContracts: "false",
-    steps: { ...steps, audit: undefined } }), /audit/);
+    steps: { ...docsSteps, docs_verify: undefined } }), /docs_verify/);
+  assert.throws(() => validateGate({ mode: "docs", releaseContracts: "false",
+    steps: { ...docsSteps, install: { outcome: "success" } } }), /Forbidden CI step install/);
   assert.throws(() => validateGate({ mode: "", releaseContracts: "false", steps }), /Invalid/);
 });
 

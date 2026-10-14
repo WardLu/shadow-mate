@@ -8,6 +8,7 @@ artifacts/
 .supabase/
 .security-local-denylist
 *.log
+ci-offline-result.json
 .DS_Store
 Thumbs.db
 
