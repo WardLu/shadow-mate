@@ -65,6 +65,52 @@ test("direct push remains checked and new application SHA gets the full route", 
   assert.equal(docs.mode, "docs");
 });
 
+test("PR from main to production with zero divergence uses fast-forward release route", () => {
+  const prodPrEvent = {
+    pull_request: {
+      base: { sha: base, ref: "production" },
+      head: { sha: head, ref: "main", repo: { full_name: repository } },
+    },
+  };
+  const git = (args) => {
+    if (args[0] === "rev-parse") return `${merge}\n`;
+    if (args[0] === "rev-list") return `${merge} ${base} ${head}\n`;
+    if (args[0] === "diff") {
+      if (args[4] === head) return "\0";
+      return "src/app.js\0";
+    }
+    throw new Error(`unexpected git command: ${args[0]}`);
+  };
+  const scope = selectScope({
+    eventName: "pull_request", event: prodPrEvent, expectedSha: merge, repository, git,
+  });
+  assert.equal(scope.mode, "release");
+  assert.equal(scope.releaseContracts, true);
+  assert.equal(scope.reason, "production_promotion_fast_forward");
+});
+
+test("PR from main to production with divergence runs full route", () => {
+  const prodPrEvent = {
+    pull_request: {
+      base: { sha: base, ref: "production" },
+      head: { sha: head, ref: "main", repo: { full_name: repository } },
+    },
+  };
+  const git = (args) => {
+    if (args[0] === "rev-parse") return `${merge}\n`;
+    if (args[0] === "rev-list") return `${merge} ${base} ${head}\n`;
+    if (args[0] === "diff") {
+      if (args[4] === head) return "divergent-file.js\0";
+      return "src/app.js\0";
+    }
+    throw new Error(`unexpected git command: ${args[0]}`);
+  };
+  const scope = selectScope({
+    eventName: "pull_request", event: prodPrEvent, expectedSha: merge, repository, git,
+  });
+  assert.equal(scope.mode, "full");
+});
+
 test("release-only files run release contracts; mixed application edits run full checks", () => {
   assert.deepEqual(classifyPaths(["README.md", "scripts/release/deploy-production.sh", "vercel.json"], merge), {
     mode: "release", releaseContracts: true, checkedSha: merge, reason: "release_only",
