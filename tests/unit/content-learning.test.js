@@ -521,7 +521,7 @@ describe("content learning ledger", () => {
     const empty = normalizeContentLearning(null, "profile:learner-1");
     const result = planFor({ learning: empty, dayKey: "2026-10-12", catalog, enabledActivities: [] });
     expect(result.nextLearning).toEqual(empty);
-    expect(() => planFor({ learning: empty, dayKey: "2026-10-12", catalog, limits: { literacy: { new: 3 } } })).toThrow(/limit/i);
+    expect(() => planFor({ learning: empty, dayKey: "2026-10-12", catalog, limits: { literacy: { new: 21 } } })).toThrow(/limit/i);
   });
 
   it("filters only introductions with invalid dates while rejecting incompatible scopes and schemas", () => {

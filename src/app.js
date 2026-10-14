@@ -10,6 +10,7 @@ import { getActiveHanziWritingPack } from "./content/hanzi-writing/manifest.js";
 import {
   renderWritingPrintSheetHtml,
   renderWritingWorksheetHtml,
+  createOptionalWritingLayout,
 } from "./hanzi-writing-view.js";
 import { openWritingPrintWindow } from "./writing-print.js";
 import {
@@ -23,6 +24,9 @@ import { literacySpeechId } from "./content/literacy-speech.js";
 import {
   mathSpeechContentIds,
 } from "./content/core-learning-speech.js";
+import { renderEnglishVisual } from "./content/english-visuals.js";
+import { ENGLISH_DAILY_PROMPT } from "./content/learning-prompts.js";
+import { numberSenseSpeech } from "./content/math-speech.js";
 import { startVersionGuard } from "./version-guard.js";
 import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
@@ -42,7 +46,10 @@ import {
   ALL_CONTENT_MODULES,
   LEARNING_PACKAGES,
   getActiveLearningPackage,
+  getActiveLearningPackages,
   setContentPackageId,
+  setContentPackageIds,
+  getContentLearningPace,
   getContentModuleDefinition,
   getEnabledModuleIds,
   normalizeContentConfig,
@@ -60,6 +67,8 @@ import { resolveDailyLearningPlan, recordContentCompletion, recordManualContentC
 import { getLearningCatalog, getLearningItem } from "./content/learning-catalog.js";
 import { BOOKS, READING_LISTS, migrateLegacyBookState } from "./content/books.js";
 import { canLearnSpokenCourse } from "./spoken-language-courses.js";
+import { summarizeContentLearning } from "./content-learning-summary.js";
+import { createContentLibrary } from "./content-library-view.js";
 
 inject();
 const usageAnalytics = createUsageAnalytics({ getMode: () => window.cloudSync?.getUsageMode?.() || "unknown" });
@@ -81,6 +90,36 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 }
 if (typeof document !== "undefined") {
   document.addEventListener("pointerdown", primeSpeechAudio, { passive: true, capture: true });
+
+  // 监听卡片“更多”操作详情菜单的展开与收起，提升所属卡片层叠上下文并关闭同级打开的菜单
+  document.addEventListener("toggle", (e) => {
+    const details = e.target;
+    if (!details || !details.classList || !details.classList.contains("card-more-details")) return;
+    const card = details.closest(".mini-card, .word-card, .card, .content-options");
+    if (details.open) {
+      if (card) card.classList.add("menu-open");
+      document.querySelectorAll(".card-more-details[open]").forEach((other) => {
+        if (other !== details) {
+          other.removeAttribute("open");
+          const otherCard = other.closest(".mini-card, .word-card, .card, .content-options");
+          if (otherCard) otherCard.classList.remove("menu-open");
+        }
+      });
+    } else {
+      if (card) card.classList.remove("menu-open");
+    }
+  }, true);
+
+  // 点击空白处收起已展开的卡片操作菜单
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".card-more-details")) {
+      document.querySelectorAll(".card-more-details[open]").forEach((el) => {
+        el.removeAttribute("open");
+        const card = el.closest(".mini-card, .word-card, .card, .content-options");
+        if (card) card.classList.remove("menu-open");
+      });
+    }
+  });
 }
 
 /* =========================================================
@@ -221,26 +260,27 @@ const CONTENT_CHECKIN_ACTIVITIES = Object.freeze({
 function dailyLearningPlan() {
   const learnerScope = getHanziLearnerScope();
   if (!hasCompatibleContentLearningScope(store, learnerScope)) return null;
-  const packageId = getActiveLearningPackage(store.content_config).id;
+  const config = normalizeContentConfig(store.content_config);
+  const packageId = getActiveLearningPackage(config).id;
+  const packageIds = config.package_ids || [packageId];
   const enabled = enabledModuleIds();
   const enabledActivities = enabled.flatMap((id) => ({ chinese: ["literacy", "poem", "writing"], english: ["english"], book: ["book"] })[id] || []).sort();
   const dayKey = todayKey();
-  const sourceCatalog = getLearningCatalog(packageId);
+  const sourceCatalog = getLearningCatalog(packageIds);
   const bookState = migrateLegacyBookState(store);
   const catalog = { ...sourceCatalog, books: sourceCatalog.books.map((item) => ({ ...item, read: Boolean(bookState.bookShelf[item.id]) })) };
-  const key = JSON.stringify([learnerScope, packageId, dayKey, catalog.version, enabledActivities]);
-  if (activeLearningPlan?.key === key) return activeLearningPlan.plan;
-  const pace = normalizeContentConfig(store.content_config).learning_pace || {};
+  const pace = getContentLearningPace(store.content_config);
   const requestedLimits = {
-    literacy: { new: pace.literacy_new || 2 }, english: { new: pace.english_new || 2 },
-    poem: { newPerIsoWeek: pace.poems_per_week || 2 },
+    literacy: { new: pace.literacy_new || 2 },
+    english: { new: pace.english_new || 2 },
+    poem: { new: pace.poems_new || 2, newPerIsoWeek: Math.min(20, (pace.poems_new || 2) * 7) },
   };
-  const savedPlan = Object.values(getContentLearningState(store)?.plans?.[dayKey]?.candidates || {})
-    .filter((plan) => plan.packageId === packageId && plan.contentVersion === catalog.version &&
-      JSON.stringify(plan.enabledActivities) === JSON.stringify(enabledActivities))
-    .sort((a, b) => a.planId.localeCompare(b.planId))[0];
-  const resolved = resolveDailyLearningPlan({ learning: getContentLearningState(store), learnerScope, dayKey, packageId, catalog, enabledActivities,
-    limits: savedPlan?.limits || requestedLimits, deviceId: contentDeviceId() });
+  const key = JSON.stringify([learnerScope, packageIds, dayKey, catalog.version, enabledActivities, requestedLimits]);
+  if (activeLearningPlan?.key === key && getContentLearningState(store)?.plans?.[dayKey]?.candidates?.[activeLearningPlan.plan.planId]) {
+    return activeLearningPlan.plan;
+  }
+  const resolved = resolveDailyLearningPlan({ learning: getContentLearningState(store), learnerScope, dayKey, packageId, packageIds, catalog, enabledActivities,
+    limits: requestedLimits, deviceId: contentDeviceId() });
   if (canWriteLearningState() && JSON.stringify(resolved.nextLearning) !== JSON.stringify(getContentLearningState(store))) {
     const previous = store;
     store = replaceContentLearningState(store, resolved.nextLearning);
@@ -267,87 +307,57 @@ function plannedContent(activityId) {
 }
 
 function contentReasonLabel(reason) {
-  return ({ new: "新体验", continue: "继续上次", review: "重温" })[reason] || "亲子体验";
+  return reason === "review" ? "复习" : "";
 }
 
 function contentFeedbackHtml(row) {
   const learning = getContentLearningState(store);
   const skipped = learning?.skips?.some((entry) => entry.activityId === row.activityId && entry.itemId === row.itemId && entry.skipped);
-  if (skipped) return `<div class="row" data-content-feedback="${escapeHtml(row.occurrenceId)}"><span class="desc">已暂时跳过</span><button class="btn-subtle" type="button" data-content-skip="false">恢复推荐</button></div>`;
   const occurrence = learning?.occurrences?.find((entry) => entry.occurrenceId === row.occurrenceId);
-  if (occurrence?.revoked) return '<div class="desc">已撤回这次误录，今天不再重复记录；下次推荐时可继续体验。</div>';
-  if (!occurrence) return `<div class="row" data-content-feedback="${escapeHtml(row.occurrenceId)}">
-    <button class="btn-subtle" type="button" data-content-observation="complete">已一起体验</button>
-    <button class="btn-subtle" type="button" data-content-skip="true">暂时跳过</button>
-  </div>`;
-  return `<div class="row" data-content-feedback="${escapeHtml(row.occurrenceId)}">
-    <button class="btn-subtle" type="button" data-content-observation="independent">熟悉</button>
-    <button class="btn-subtle" type="button" data-content-observation="needs-help">再玩一次</button>
-    <button class="btn-subtle" type="button" data-content-revoke>撤回误录</button>
-  </div>`;
+  const title = row.item?.glyph || row.item?.word || row.item?.title || "本项内容";
+  const status = skipped ? "已跳过" : occurrence?.revoked ? "误录已撤回" : occurrence ? "今天已学" : "";
+  const actions = skipped ? '<button class="btn-subtle" type="button" data-content-skip="false">恢复推荐</button>' : occurrence?.revoked ? '<span class="desc">今天不再重复记录</span>' : `${occurrence ? '<button class="btn-subtle" type="button" data-content-observation="independent">可独立完成</button><button class="btn-subtle" type="button" data-content-observation="needs-help">仍需提示</button><button class="btn-subtle" type="button" data-content-revoke>撤回误录</button>' : ""}<button class="btn-subtle" type="button" data-content-skip="true">暂时跳过</button>`;
+  return `<div class="content-options" data-content-feedback="${escapeHtml(row.occurrenceId)}" onclick="event.stopPropagation()">${status ? `<span class="content-status-pill">${status}</span>` : ""}<details class="card-more-details"><summary class="card-more-btn" aria-label="${escapeHtml(title)}的更多操作" title="更多操作"><span class="more-dots" aria-hidden="true">⋯</span></summary><div class="content-options-menu">${actions}</div></details></div>`;
 }
 
-function appendContentBrowser(main, activityId) {
-  const key = { literacy: "literacy", poem: "poems", english: "english", writing: "writing" }[activityId];
-  const catalog = getLearningCatalog(getActiveLearningPackage(store.content_config).id);
-  const learning = getContentLearningState(store);
-  const history = listContentHistory(learning, activityId);
-  const completed = new Set(history.filter((entry) => !entry.revoked).map((entry) => entry.itemId));
-  const card = $(`<details class="card" data-content-browser="${activityId}"><summary>自由看看 · 内容目录</summary>
-    <div class="desc">可按兴趣选内容，点读不记录完成。已一起体验或重温后，由家长确认；不会替换今天的推荐。</div>
-    <label>搜索内容 <input type="search" data-content-search aria-label="搜索${{ literacy: "识字", poem: "古诗", english: "英语", writing: "写字" }[activityId]}内容" placeholder="输入字、词或主题"></label>
-    <div data-content-items></div></details>`);
-  main.appendChild(card);
-  function renderItems() {
-    const query = card.querySelector("[data-content-search]").value.trim().toLowerCase();
-    const selected = catalog[key].filter((item) => [item.glyph, item.word, item.title, item.theme, item.meaning, item.exampleWord].filter(Boolean).join(" ").toLowerCase().includes(query));
-    card.querySelector("[data-content-items]").innerHTML = selected.map((item) => {
-      const title = item.title || item.glyph || item.word;
-      const description = activityId === "poem" ? `${item.author} · ${item.lines.join("")}` : activityId === "literacy" ? `${item.pinyin} · ${item.word}` : activityId === "english" ? `${item.phonetic} · ${item.meaning}` : `${item.pinyin} · ${item.exampleWord}`;
-      const today = history.find((entry) => entry.itemId === item.id && entry.dayKey === todayKey());
-      const skipped = learning?.skips?.some((entry) => entry.activityId === activityId && entry.itemId === item.id && entry.skipped);
-      return `<div class="word-card" data-browse-item="${escapeHtml(item.id)}"><strong>${escapeHtml(title)}</strong><div class="desc">${escapeHtml(description)}</div><div class="desc">${escapeHtml(item.prompt || "按孩子的兴趣选择，不要求一次学会。")}</div>
-        <button class="btn-subtle" type="button" data-browse-play>听一听</button>
-        ${skipped ? '<button class="btn-subtle" type="button" data-browse-restore>恢复推荐</button>' : today?.revoked ? '<span class="desc">今天这次误录已撤回</span>' : today ? `<span class="desc">今天已体验</span><button class="btn-subtle" type="button" data-browse-revoke>撤回误录</button>` : `<button class="btn-subtle" type="button" data-browse-complete>${completed.has(item.id) ? "已一起重温" : "已一起体验"}</button>`}</div>`;
-    }).join("") || '<div class="desc">没有匹配的内容。</div>';
-    card.querySelectorAll("[data-browse-item]").forEach((group) => {
-      const item = getLearningItem(activityId, group.dataset.browseItem);
-      group.querySelector("[data-browse-play]").onclick = async () => {
-        stopPoemSpeech();
-        if (activityId === "poem") {
-          const sequence = ++currentPoemSpeechId;
-          await speak(`古诗《${item.title}》，${item.author}`, null, "zh-CN", item.headerSpeechId, { isPoemSpeech: true });
-          for (let index = 0; index < item.lines.length && sequence === currentPoemSpeechId; index++) {
-            await speak(item.lines[index].replace(/[，。！？、；：]/g, ""), null, "zh-CN", item.lineSpeechIds[index], { isPoemSpeech: true });
-          }
-        } else {
-          const speechText = activityId === "english" ? item.word : activityId === "literacy" ? `${item.glyph}，${item.word}` : item.glyph;
-          speak(speechText, group.querySelector("[data-browse-play]"), activityId === "english" ? "en-US" : "zh-CN", item.speechId || `${item.id}:glyph`);
+let contentLibrary = null;
+function openContentLibrary(activityId = "literacy", itemId = null) {
+  contentLibrary ||= createContentLibrary({
+    getCatalog: () => getLearningCatalog(normalizeContentConfig(store.content_config).package_ids || getActiveLearningPackage(store.content_config).id),
+    getLearning: () => getContentLearningState(store), getDay: todayKey, getScope: getHanziLearnerScope,
+    onStop: stopPoemSpeech,
+    onMath: (section) => { switchMod("math"); el("main").querySelector(`[data-math-section="${section}"]`)?.scrollIntoView({ block: "start" }); },
+    renderVisual: (item) => renderEnglishVisual(item.word, item.theme, item.meaning),
+    onPlay: async (activity, item, button) => {
+      stopPoemSpeech();
+      if (activity === "poem") {
+        const sequence = ++currentPoemSpeechId;
+        await speak(`古诗《${item.title}》，${item.author}`, button, "zh-CN", item.headerSpeechId, { isPoemSpeech: true });
+        for (let index = 0; index < item.lines.length && sequence === currentPoemSpeechId; index++) {
+          await speak(item.lines[index].replace(/[，。！？、；：]/g, ""), null, "zh-CN", item.lineSpeechIds[index], { isPoemSpeech: true });
         }
-      };
-      for (const action of ["complete", "revoke", "restore"]) {
-        const button = group.querySelector(`[data-browse-${action}]`);
-        if (!button) continue;
-        button.onclick = () => {
-          if (!canWriteLearningState()) return;
-          const previous = store;
-          try {
-            const current = getContentLearningState(store);
-            const next = action === "restore"
-              ? skipContentItem({ learning: current, activityId, itemId: item.id, skipped: false, deviceId: contentDeviceId() })
-              : action === "revoke"
-                ? revokeContentCompletion({ learning: current, occurrenceId: `${activityId}:${item.id}:${todayKey()}`, deviceId: contentDeviceId() })
-                : recordManualContentCompletion({ learning: current, learnerScope: getHanziLearnerScope(), activityId, itemId: item.id, dayKey: todayKey(), deviceId: contentDeviceId(), completedAt: new Date().toISOString() });
-            store = replaceContentLearningState(store, next);
-            if (!save()) store = previous;
-          } catch (_) { store = previous; alert("这次体验未能保存，请刷新后重试。"); }
-          switchMod(CURRENT_MOD);
-        };
+      } else {
+        const text = activity === "english" ? item.word : activity === "literacy" ? `${item.glyph}，${item.word}` : item.glyph || item.title;
+        speak(text, button, activity === "english" ? "en-US" : "zh-CN", item.speechId || (activity === "writing" ? `${item.id}:glyph` : null));
       }
-    });
-  }
-  card.addEventListener("toggle", () => { if (card.open) renderItems(); });
-  card.querySelector("[data-content-search]").oninput = renderItems;
+    },
+    onAction: ({ activityId, itemId, action, occurrenceId }) => {
+      if (!canWriteLearningState() || !getLearningItem(activityId, itemId)) return false;
+      const previous = store;
+      try {
+        const learning = getContentLearningState(store);
+        const next = action === "restore" || action === "skip"
+          ? skipContentItem({ learning, activityId, itemId, skipped: action === "skip", deviceId: contentDeviceId() })
+          : action === "revoke" ? revokeContentCompletion({ learning, occurrenceId, deviceId: contentDeviceId() })
+          : action === "independent" || action === "needs-help" ? setContentFeedback({ learning, occurrenceId, feedback: action, deviceId: contentDeviceId() })
+          : recordManualContentCompletion({ learning, learnerScope: getHanziLearnerScope(), activityId, itemId, dayKey: todayKey(), deviceId: contentDeviceId(), completedAt: new Date().toISOString() });
+        store = replaceContentLearningState(store, next);
+        if (!save()) { store = previous; return false; }
+        return true;
+      } catch (_) { store = previous; alert("这次学习未能保存，请重试。"); return false; }
+    },
+  });
+  contentLibrary.open(activityId, itemId);
 }
 
 function removeWritingPrintRoot() {
@@ -368,17 +378,27 @@ function createWritingPrintRoot(worksheet) {
 function resolveWritingWorksheet() {
   const learnerScope = getHanziLearnerScope();
   if (!hasCompatibleHanziRotationScope(store, learnerScope)) return null;
-  const selectedItemIds = plannedContent("writing").map((row) => row.itemId);
+  const pack = getActiveHanziWritingPack(getActiveLearningPackage(store.content_config).id);
+  const planned = plannedContent("writing");
+  let selectedItemIds = planned.map((row) => row.itemId);
   const existing = getHanziRotationState(store)?.assignments?.[todayKey()];
-  if (selectedItemIds.length !== 4 && !existing) return null;
+  if (!existing && selectedItemIds.length !== 4 && pack?.items) {
+    const activePackItems = pack.items.filter((item) => item.status === "active");
+    for (const item of activePackItems) {
+      if (!selectedItemIds.includes(item.id)) selectedItemIds.push(item.id);
+      if (selectedItemIds.length === 4) break;
+    }
+  }
   const resolved = resolveDailyWorksheet({
     rotationState: getHanziRotationState(store),
-    pack: getActiveHanziWritingPack(getActiveLearningPackage(store.content_config).id),
+    pack,
     learnerScope,
     now: new Date(),
     timeZone: getLearningTimeZone(),
-    selectedItemIds,
+    selectedItemIds: selectedItemIds.length === 4 ? selectedItemIds : undefined,
   });
+  if (!resolved?.worksheet) return null;
+  activeWorksheetSnapshot = resolved.worksheet;
   const nextStore = transitionLearningState(store, {
     type: "STATE_REPLACED",
     state: replaceHanziRotationState(store, resolved.rotationState),
@@ -401,7 +421,7 @@ function hasActiveWorksheetCompletion() {
 }
 
 function recordActiveWorksheetCompletion() {
-  if (!activeWorksheetSnapshot) return;
+  if (!activeWorksheetSnapshot?.assignmentId) return;
   const rotationState = getHanziRotationState(store);
   if (!rotationState) return;
   store = transitionLearningState(store, {
@@ -493,14 +513,20 @@ function toggleCheckin(mod){
     const plan = dailyLearningPlan();
     if (!plan) return;
     let rows = plan.activities[activityId] || [];
-    if (activityId === "poem" || activityId === "book") rows = rows.slice(0, 1);
+    if (activityId === "book") rows = rows.slice(0, 1);
     if (activityId === "writing" && activeWorksheetSnapshot) {
       rows = rows.filter((row) => activeWorksheetSnapshot.rows.some((item) => item.itemId === row.itemId));
     }
     let learning = getContentLearningState(store);
-    for (const row of rows) {
-      if (learning?.occurrences?.some((entry) => entry.occurrenceId === row.occurrenceId && entry.revoked) ||
-          learning?.skips?.some((entry) => entry.activityId === activityId && entry.itemId === row.itemId && entry.skipped)) continue;
+    const eligibleRows = rows.filter((row) =>
+      !learning?.skips?.some((entry) => entry.activityId === activityId && entry.itemId === row.itemId && entry.skipped) &&
+      !learning?.occurrences?.some((entry) => entry.occurrenceId === row.occurrenceId && entry.revoked)
+    );
+    if (rows.length > 0 && eligibleRows.length === 0) {
+      alert("当前内容已全部跳过，可在右上角内容库恢复或选择新内容。");
+      return;
+    }
+    for (const row of eligibleRows) {
       learning = recordContentCompletion({ learning, plan, activityId, itemId: row.itemId, dayKey: checkinDate, deviceId: contentDeviceId(), completedAt: new Date().toISOString() });
     }
     store = replaceContentLearningState(store, learning);
@@ -952,10 +978,11 @@ function renderLearning(){
   const titleRow = $(`
     <div class="module-title-row">
       <div class="module-title"><span class="em">${icon("graduation")}</span><h2>学习</h2></div>
-      <button class="btn-subtle" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button>
+      <div class="module-title-actions"><button class="btn-subtle" type="button" data-open-library>${icon("library")} 内容库</button><button class="btn-subtle" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button></div>
     </div>
   `);
   main.appendChild(titleRow);
+  titleRow.querySelector("[data-open-library]").onclick = () => openContentLibrary();
 
   const enabled = enabledModuleIds();
   if (enabled.length) {
@@ -995,6 +1022,7 @@ function renderLearning(){
    渲染：语文
    ========================================================= */
 let currentPoemSpeechId = 0;
+let currentPoemCardIndex = 0;
 function stopPoemSpeech() {
   currentPoemSpeechId++;
   const readAllButton = document.querySelector(".poem-read-all");
@@ -1015,20 +1043,46 @@ function stopPoemSpeech() {
 function renderChinese(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("book","语文学习"));
+
+  const chineseSections = [
+    { id: "section-chinese-literacy", label: "识字打卡", icon: "pen" },
+    { id: "section-chinese-poem", label: "古诗听读", icon: "bookMarked" },
+    { id: "section-chinese-writing", label: "写字练习", icon: "pencil" },
+  ];
+  const tabs = renderSectionTabs(chineseSections);
+  if (tabs) main.appendChild(tabs);
+
   const literacyRows = plannedContent("literacy");
   const poemRows = plannedContent("poem");
 
+  const pace = getContentLearningPace(store.content_config);
+  const currentPlan = dailyLearningPlan();
+  const litLimits = currentPlan?.limits?.literacy || { new: pace.literacy_new || 2, review: 2 };
+
   const card1 = $(`
-    <div class="card" data-literacy-plan>
-      <h3>${icon("pen")} 识字打卡 <span class="pill">生活识字 · 按实际记录重温</span></h3>
-      <div class="desc">每天最多 2 个新体验和 2 个重温字。未完成的内容继续保留，点读不代表已经掌握。</div>
-      <div class="grid2">${literacyRows.map((row, index) => `<div>
-        <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="${index}" aria-label="点读生字：${escapeHtml(row.item.glyph)}，${escapeHtml(row.item.word)}"><div class="big">${escapeHtml(row.item.glyph)}</div><div class="py">${escapeHtml(row.item.pinyin)}</div><div class="label">${escapeHtml(row.item.word)} · ${contentReasonLabel(row.reason)}</div></div>
-        ${contentFeedbackHtml(row)}</div>`).join("")}</div>
-      ${literacyRows.length ? checkinBtn("chinese-literacy","识字") : '<div class="desc">今天没有安排新的或到期的识字内容，可以在生活中找找熟悉的字。</div>'}
+    <div class="card card-collapsible" data-literacy-plan id="section-chinese-literacy">
+      <div class="card-collapse-header">
+        <h3>${icon("pen")} 识字打卡 <span class="pill">生活识字 · 按实际记录复习</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起识字打卡">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">每天最多 ${litLimits.new} 个新字和 ${litLimits.review} 个复习字。未完成的内容继续保留，点读不代表已经掌握。</div>
+        <div class="grid2">${literacyRows.map((row, index) => `
+          <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="${index}" data-content-reason="${row.reason}" aria-label="点读生字：${escapeHtml(row.item.glyph)}，${escapeHtml(row.item.word)}">
+            ${contentFeedbackHtml(row)}
+            <div class="big">${escapeHtml(row.item.glyph)}</div>
+            <div class="py">${escapeHtml(row.item.pinyin)}</div>
+            <div class="label">${escapeHtml(row.item.word)}${row.reason === "review" ? " · 复习" : ""}</div>
+          </div>`).join("")}</div>
+        ${literacyRows.length ? checkinBtn("chinese-literacy","识字") : '<div class="desc">今天没有安排新的或到期的识字内容，可以在生活中找找熟悉的字。</div>'}
+      </div>
     </div>
   `);
   main.appendChild(card1);
+  makeCollapsible(card1, "chinese_literacy", false);
   card1.querySelectorAll("[data-hanzi-mini]").forEach((mc) => {
     const item = literacyRows[Number(mc.dataset.hanziMini)].item;
     const playHanzi = () => { stopPoemSpeech(); speak(`${item.glyph}，${item.word}`, mc, "zh-CN", item.speechId); };
@@ -1036,140 +1090,224 @@ function renderChinese(){
     mc.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playHanzi(); } };
   });
 
-  // 古诗词按真实体验记录继续听读与重温。
-  const poemRow = poemRows[0];
-  if (poemRow) {
-  const p = poemRow.item;
-  const linesHtml = p.lines.map((line, idx) => `
-    <div class="poem-line" role="button" tabindex="0" data-poem-line="${idx}" aria-label="点读第 ${idx + 1} 句：${escapeHtml(line)}">
-      <span class="poem-line-text">${escapeHtml(line)}</span>
-      <span class="poem-line-icon" aria-hidden="true">${icon("volume")}</span>
-    </div>
-  `).join("");
+  // 古诗词按真实体验记录继续听读与重温，多首诗支持翻页导航
+  if (poemRows.length) {
+    if (currentPoemCardIndex >= poemRows.length) currentPoemCardIndex = 0;
+    const poemContainer = document.createElement("div");
+    poemContainer.className = "poem-container";
+    poemContainer.id = "section-chinese-poem";
+    main.appendChild(poemContainer);
 
-  const card2 = $(`
-    <div class="card poem-box">
-      <h3>${icon("bookMarked")} 古诗亲子听读 <span class="pill">${contentReasonLabel(poemRow.reason)}</span></h3>
-      <div class="poem-title speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.title)}，${escapeHtml(p.author)}">《${escapeHtml(p.title)}》</div>
-      <div class="poem-meta speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.title)}，${escapeHtml(p.author)}">${escapeHtml(p.author)} · 亲子欣赏</div>
-      <div class="poem-lines" role="region" aria-label="古诗诗句">${linesHtml}</div>
-      <div class="poem-controls">
-        <button class="checkin poem-read-all" type="button">${icon("volume")} 朗读整首</button>
-        <a class="video-link poem-video" href="${bilibili(p.title+" 朗诵")}" target="_blank" rel="noopener noreferrer">${icon("play")} 跟读视频</a>
-      </div>
-      <div class="desc text-center mt-8">小提示：点击任意一句，可单独朗读该句</div>
-      <div class="spacer-10"></div>
-      <div class="desc">${escapeHtml(p.prompt || "一起找找诗中出现的景物，说说你想到了什么。不要求一次背会。")}</div>
-      ${checkinBtn("chinese-poem","古诗")}
-      ${contentFeedbackHtml(poemRow)}
-    </div>
-  `);
-  main.appendChild(card2);
-
-  const poemTitleEl = card2.querySelector(".poem-title");
-  const poemMetaEl = card2.querySelector(".poem-meta");
-  const playPoemHeader = () => {
-    stopPoemSpeech();
-    speak(`古诗《${p.title}》，${p.author}`, null, "zh-CN", p.headerSpeechId, { isPoemSpeech: true });
-  };
-  if (poemTitleEl) {
-    poemTitleEl.onclick = playPoemHeader;
-    poemTitleEl.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
-    };
-  }
-  if (poemMetaEl) {
-    poemMetaEl.onclick = playPoemHeader;
-    poemMetaEl.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
-    };
-  }
-
-  card2.querySelectorAll(".poem-line").forEach((lineEl) => {
-    const idx = Number(lineEl.dataset.poemLine);
-    const lineText = p.lines[idx];
-    lineEl.onclick = async () => {
+    function renderActivePoem() {
       stopPoemSpeech();
-      card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
-      lineEl.classList.add("hi");
-      const clean = lineText.replace(/[，。！？、；：]/g, "");
-      try {
-        await speak(clean, null, "zh-CN", p.lineSpeechIds[idx], { isPoemSpeech: true });
-      } catch (_) {}
-    };
-  });
+      const poemRow = poemRows[currentPoemCardIndex];
+      const p = poemRow.item;
+      const linesHtml = p.lines.map((line, idx) => `
+        <div class="poem-line" role="button" tabindex="0" data-poem-line="${idx}" aria-label="点读第 ${idx + 1} 句：${escapeHtml(line)}">
+          <span class="poem-line-text">${escapeHtml(line)}</span>
+          <span class="poem-line-icon" aria-hidden="true">${icon("volume")}</span>
+        </div>
+      `).join("");
 
-  const readAllBtn = card2.querySelector(".poem-read-all");
-  if (readAllBtn) {
-    readAllBtn.onclick = async () => {
-      stopPoemSpeech();
-      const thisSeqId = ++currentPoemSpeechId;
-      readAllBtn.disabled = true;
-      readAllBtn.setAttribute("aria-busy", "true");
+      const card2 = $(`
+        <div class="card card-collapsible poem-box" data-content-reason="${poemRow.reason}">
+          <div class="card-collapse-header poem-card-header">
+            <h3>${icon("bookMarked")} 古诗听读${poemRow.reason === "review" ? ' <span class="pill">复习</span>' : ""}</h3>
+            <div class="card-collapse-actions">
+              ${contentFeedbackHtml(poemRow)}
+              <button class="card-collapse-toggle" type="button" aria-label="展开或收起古诗听读">
+                <span class="card-collapse-label">收起</span>
+                <span class="card-collapse-icon">${icon("chevronDown")}</span>
+              </button>
+            </div>
+          </div>
+          <div class="card-collapse-body">
+            ${poemRows.length > 1 ? `
+              <div class="poem-pager-container">
+                <div class="poem-pager" role="navigation" aria-label="古诗切换">
+                  <button type="button" class="btn-subtle poem-pager-btn" data-poem-prev aria-label="上一首古诗" ${currentPoemCardIndex === 0 ? "disabled" : ""}>
+                    ${icon("chevronLeft")} 上一首
+                  </button>
+                  <span class="poem-pager-index" aria-live="polite">第 ${currentPoemCardIndex + 1} / ${poemRows.length} 首</span>
+                  <button type="button" class="btn-subtle poem-pager-btn" data-poem-next aria-label="下一首古诗" ${currentPoemCardIndex === poemRows.length - 1 ? "disabled" : ""}>
+                    下一首 ${icon("chevronRight")}
+                  </button>
+                </div>
+              </div>
+            ` : ""}
+            <div class="poem-title speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.title)}，${escapeHtml(p.author)}">《${escapeHtml(p.title)}》</div>
+            <div class="poem-meta speech-tap" role="button" tabindex="0" aria-label="点读古诗标题与作者：${escapeHtml(p.title)}，${escapeHtml(p.author)}">${escapeHtml(p.author)} · 亲子欣赏</div>
+            <div class="poem-lines" role="region" aria-label="古诗诗句">${linesHtml}</div>
+            <div class="poem-controls">
+              <button class="checkin poem-read-all" type="button">${icon("volume")} 朗读整首</button>
+              <a class="video-link poem-video" href="${bilibili(p.title+" 朗诵")}" target="_blank" rel="noopener noreferrer">${icon("play")} 跟读视频</a>
+            </div>
+            <div class="desc text-center mt-8">小提示：点击任意一句，可单独朗读该句</div>
+            <div class="spacer-10"></div>
+            <div class="desc">${escapeHtml(p.prompt || "一起找找诗中出现的景物，说说你想到了什么。不要求一次背会。")}</div>
+          </div>
+        </div>
+      `);
 
-      try {
-        await speak(`古诗《${p.title}》，${p.author}`, null, "zh-CN", p.headerSpeechId, { isPoemSpeech: true });
-        if (currentPoemSpeechId !== thisSeqId) return;
+      poemContainer.innerHTML = "";
+      poemContainer.appendChild(card2);
+      makeCollapsible(card2, "chinese_poem", false);
 
-        for (let i = 0; i < p.lines.length; i++) {
-          if (currentPoemSpeechId !== thisSeqId) return;
-          const lineEl = card2.querySelector(`[data-poem-line="${i}"]`);
-          card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
-          if (lineEl) lineEl.classList.add("hi");
-
-          const clean = p.lines[i].replace(/[，。！？、；：]/g, "");
-          await speak(clean, null, "zh-CN", p.lineSpeechIds[i], { isPoemSpeech: true });
-          if (currentPoemSpeechId !== thisSeqId) return;
-        }
-
-        card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
-        soundEffects.play("points_earned");
-        praise("念得真好！");
-        flyStars(8);
-      } catch (_) {
-      } finally {
-        if (currentPoemSpeechId === thisSeqId) {
-          readAllBtn.disabled = false;
-          readAllBtn.removeAttribute("aria-busy");
-        }
+      const prevBtn = card2.querySelector("[data-poem-prev]");
+      if (prevBtn) {
+        prevBtn.onclick = () => {
+          if (currentPoemCardIndex > 0) {
+            currentPoemCardIndex--;
+            renderActivePoem();
+          }
+        };
       }
-    };
-  }
+      const nextBtn = card2.querySelector("[data-poem-next]");
+      if (nextBtn) {
+        nextBtn.onclick = () => {
+          if (currentPoemCardIndex < poemRows.length - 1) {
+            currentPoemCardIndex++;
+            renderActivePoem();
+          }
+        };
+      }
 
+      const poemTitleEl = card2.querySelector(".poem-title");
+      const poemMetaEl = card2.querySelector(".poem-meta");
+      const playPoemHeader = () => {
+        stopPoemSpeech();
+        speak(`古诗《${p.title}》，${p.author}`, null, "zh-CN", p.headerSpeechId, { isPoemSpeech: true });
+      };
+      if (poemTitleEl) {
+        poemTitleEl.onclick = playPoemHeader;
+        poemTitleEl.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+        };
+      }
+      if (poemMetaEl) {
+        poemMetaEl.onclick = playPoemHeader;
+        poemMetaEl.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playPoemHeader(); }
+        };
+      }
+
+      card2.querySelectorAll(".poem-line").forEach((lineEl) => {
+        const idx = Number(lineEl.dataset.poemLine);
+        const lineText = p.lines[idx];
+        lineEl.onclick = async () => {
+          stopPoemSpeech();
+          card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+          lineEl.classList.add("hi");
+          const clean = lineText.replace(/[，。！？、；：]/g, "");
+          try {
+            await speak(clean, null, "zh-CN", p.lineSpeechIds[idx], { isPoemSpeech: true });
+          } catch (_) {}
+        };
+      });
+
+      const readAllBtn = card2.querySelector(".poem-read-all");
+      if (readAllBtn) {
+        readAllBtn.onclick = async () => {
+          stopPoemSpeech();
+          const thisSeqId = ++currentPoemSpeechId;
+          readAllBtn.disabled = true;
+          readAllBtn.setAttribute("aria-busy", "true");
+
+          try {
+            await speak(`古诗《${p.title}》，${p.author}`, null, "zh-CN", p.headerSpeechId, { isPoemSpeech: true });
+            if (currentPoemSpeechId !== thisSeqId) return;
+
+            for (let i = 0; i < p.lines.length; i++) {
+              if (currentPoemSpeechId !== thisSeqId) return;
+              const lineEl = card2.querySelector(`[data-poem-line="${i}"]`);
+              card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+              if (lineEl) lineEl.classList.add("hi");
+
+              const clean = p.lines[i].replace(/[，。！？、；：]/g, "");
+              await speak(clean, null, "zh-CN", p.lineSpeechIds[i], { isPoemSpeech: true });
+              if (currentPoemSpeechId !== thisSeqId) return;
+            }
+
+            card2.querySelectorAll(".poem-line.hi").forEach((el) => el.classList.remove("hi"));
+            soundEffects.play("points_earned");
+            praise("念得真好！");
+            flyStars(8);
+          } catch (_) {
+          } finally {
+            if (currentPoemSpeechId === thisSeqId) {
+              readAllBtn.disabled = false;
+              readAllBtn.removeAttribute("aria-busy");
+            }
+          }
+        };
+      }
+    }
+
+    renderActivePoem();
+    main.appendChild($(`<div class="card">${checkinBtn("chinese-poem", poemRows.length > 1 ? `古诗（共 ${poemRows.length} 首）` : "古诗")}</div>`));
   } else {
-    main.appendChild($(`<div class="card"><h3>${icon("bookMarked")} 古诗亲子听读</h3><div class="desc">今天没有安排新的或到期的古诗。可以休息，也可以一起欣赏家里熟悉的古诗。</div></div>`));
+    const emptyPoemCard = $(`<div class="card card-collapsible" id="section-chinese-poem">
+      <div class="card-collapse-header">
+        <h3>${icon("bookMarked")} 古诗听读</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起古诗听读">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">今天没有安排新的或到期的古诗。可以休息，也可以到内容库自由听读。</div>
+      </div>
+    </div>`);
+    main.appendChild(emptyPoemCard);
+    makeCollapsible(emptyPoemCard, "chinese_poem", false);
   }
 
-  appendContentBrowser(main, "literacy");
-  appendContentBrowser(main, "poem");
   // 写字打卡
   const worksheet = resolveWritingWorksheet();
   if (!worksheet) {
     const writingRows = plannedContent("writing");
-    main.appendChild($(`<div class="card"><h3>${icon("pen")} 可选写字练习</h3>
-      <div class="desc">先一起认识一些简单字。有足够的合适材料后，再提供四行字帖；今天可以用画线、涂画代替练写。</div>
-      ${writingRows.map((row) => `<div class="mini-card"><div class="big">${escapeHtml(row.item.glyph)}</div><div class="py">${escapeHtml(row.item.pinyin)}</div><div class="label">${escapeHtml(row.item.exampleWord || row.item.word || "")} · ${contentReasonLabel(row.reason)}</div>${contentFeedbackHtml(row)}</div>`).join("")}
-    </div>`));
-    appendContentBrowser(main, "writing");
+    const emptyWritingCard = $(`<div class="card card-collapsible" id="section-chinese-writing">
+      <div class="card-collapse-header">
+        <h3>${icon("pen")} 可选写字练习</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起写字练习">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">先一起认识一些简单字。有足够的合适材料后，再提供四行字帖；今天可以用画线、涂画代替练写。</div>
+        ${writingRows.map((row) => `<div class="mini-card" data-content-reason="${row.reason}"><div class="big">${escapeHtml(row.item.glyph)}</div><div class="py">${escapeHtml(row.item.pinyin)}</div><div class="label">${escapeHtml(row.item.exampleWord || row.item.word || "")}${row.reason === "review" ? " · 复习" : ""}</div>${contentFeedbackHtml(row)}</div>`).join("")}
+      </div>
+    </div>`);
+    main.appendChild(emptyWritingCard);
+    makeCollapsible(emptyWritingCard, "chinese_writing", false);
     return;
   }
   const worksheetHtml = renderWritingWorksheetHtml(worksheet);
   createWritingPrintRoot(worksheet);
   const strokesHtml = STROKES.map(renderStrokeChip).join("");
   const card3 = $(`
-    <div class="card" data-writing-practice>
-      <h3>${icon("pen")} 写字打卡 <span class="pill">今日字帖 · 4 行</span></h3>
-      <div class="desc">8 个基础笔画：${strokesHtml}</div>
-      <div class="desc">下面 4 行供家长选择，优先练写已见过的简单字。不要求一天学会 4 个新字，可先描一格再试写。</div>
-      ${worksheetHtml}
-      ${plannedContent("writing").filter((row) => worksheet.rows.some((item) => item.itemId === row.itemId)).map((row) => `<div class="desc">${escapeHtml(row.item.glyph)} · ${contentReasonLabel(row.reason)}</div>${contentFeedbackHtml(row)}`).join("")}
-      <div class="spacer-12"></div>
-      <button class="checkin" type="button" data-print>${icon("download")} 打印 A4 字帖</button>
-      <div class="spacer-10"></div>
-      ${checkinBtn("chinese-writing","写字")}
+    <div class="card card-collapsible" data-writing-practice id="section-chinese-writing">
+      <div class="card-collapse-header">
+        <h3>${icon("pencil")} 写字练习 <span class="pill">可选 · 四行字帖</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起写字练习">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">8 个基础笔画：${strokesHtml}</div>
+        <div class="desc">识字练习看字与认读，这里练描红与书写。四行供家长选择，先描一格，再试着独立书写。打印和点读不会自动记录学习。</div>
+        ${worksheetHtml}
+        <div class="spacer-12"></div>
+        <button class="checkin secondary" type="button" data-print>${icon("download")} 打印 A4 字帖</button>
+        <div class="spacer-10"></div>
+        ${checkinBtn("chinese-writing","写字")}
+      </div>
     </div>
   `);
   main.appendChild(card3);
+  makeCollapsible(card3, "chinese_writing", false);
   const printButton = card3.querySelector("[data-print]");
   const printButtonLabel = printButton.innerHTML;
   let printErrorTimer = null;
@@ -1218,7 +1356,6 @@ function renderChinese(){
       });
     };
   });
-  appendContentBrowser(main, "writing");
   card3.querySelector("[data-writing-worksheet]")?.querySelectorAll("[data-speech-tap]").forEach((el) => {
     el.setAttribute("aria-live", "polite");
     el.setAttribute("aria-atomic", "true");
@@ -1268,6 +1405,15 @@ function renderMath(){
   const main = el("main"); main.innerHTML="";
   main.appendChild(modTitle("calculator","数学与数感"));
 
+  const mathSections = [
+    { id: "section-math-mental", label: "口算打卡", icon: "calculator" },
+    { id: "section-math-sense", label: "生活数感", icon: "brain" },
+    { id: "section-math-sequence", label: "数字规律", icon: "dice" },
+    { id: "section-math-sudoku", label: "简单数独", icon: "grid" },
+  ];
+  const tabs = renderSectionTabs(mathSections);
+  if (tabs) main.appendChild(tabs);
+
   // 口算为家长可选活动，数域由当前学习包约束。
   const packageId = getActiveLearningPackage(store.content_config).id;
   const policy = getMathPolicy(packageId);
@@ -1276,24 +1422,33 @@ function renderMath(){
   const q = genQuiz();
   const lvlHtml = lvls.map(n=>`<button class="lvl-btn ${n===mathLevel?'active':''}" data-lvl="${n}">${n}以内</button>`).join("");
   const card1 = $(`
-    <div class="card">
-      <h3>${icon("calculator")} 口算打卡 <span class="pill">${mathLevel} 以内 · 可选练习</span></h3>
-      <div class="desc">先用积木或小玩具数一数、分一分；有兴趣时再试口算，操作数和答案均在所选数域内。</div>
-      <div class="lvl-row">${lvlHtml}</div>
-      <div class="quiz-box">
-        <div class="quiz-q-row">
-          <div class="quiz-q" id="qq">${q}</div>
-          <button class="btn-read-q" type="button" aria-label="朗读题目">${icon("volume")} 读题目</button>
-        </div>
-        <input class="quiz-input" id="qa" type="number" inputmode="numeric" aria-labelledby="qq" placeholder="?">
-        <div class="feedback" id="qf"></div>
+    <div class="card card-collapsible" id="section-math-mental">
+      <div class="card-collapse-header">
+        <h3>${icon("calculator")} 口算打卡 <span class="pill">${mathLevel} 以内 · 可选练习</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起口算打卡">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <button class="checkin" id="qsubmit">${icon("check")} 提交答案</button>
-      <div class="spacer-8"></div>
-      ${checkinBtn("math-mental","口算")}
+      <div class="card-collapse-body">
+        <div class="desc">先用积木或小玩具数一数、分一分；有兴趣时再试口算，操作数和答案均在所选数域内。</div>
+        <div class="lvl-row">${lvlHtml}</div>
+        <div class="quiz-box">
+          <div class="quiz-q-row">
+            <div class="quiz-q" id="qq">${q}</div>
+            <button class="btn-read-q" type="button" aria-label="朗读题目">${icon("volume")} 读题目</button>
+          </div>
+          <input class="quiz-input" id="qa" type="number" inputmode="numeric" aria-labelledby="qq" placeholder="?">
+          <div class="feedback" id="qf"></div>
+        </div>
+        <button class="checkin" id="qsubmit">${icon("check")} 提交答案</button>
+        <div class="spacer-8"></div>
+        ${checkinBtn("math-mental","口算")}
+      </div>
     </div>
   `);
   main.appendChild(card1);
+  makeCollapsible(card1, "math_mental", false);
   card1.querySelectorAll("[data-lvl]").forEach(b=>b.onclick=()=>{ mathLevel=+b.dataset.lvl; renderMath(); });
   const readQBtn = card1.querySelector(".btn-read-q");
   if (readQBtn) {
@@ -1326,14 +1481,33 @@ function renderMath(){
   };
 
   const activity = buildNumberSenseActivity(`${getHanziLearnerScope()}:${todayKey()}`, packageId);
-  const activityCard = $(`<div class="card" data-number-sense>
-    <h3>${icon("brain")} 生活数感 <span class="pill">亲子游戏</span></h3>
-    <div class="desc">${escapeHtml(activity.prompt)}</div>
-    <div class="desc" data-number-sense-illustration>${escapeHtml(activity.illustration.text)}</div>
-    <div class="lvl-row">${activity.options.map((value, index) => `<button class="lvl-btn" type="button" data-sense-option="${index}">${escapeHtml(value)}</button>`).join("")}</div>
-    <div class="feedback" aria-live="polite"></div>
+  const senseSpeech = numberSenseSpeech(activity);
+  const activityCard = $(`<div class="card card-collapsible" data-number-sense id="section-math-sense">
+    <div class="card-collapse-header">
+      <h3 style="margin:0;">${icon("brain")} 生活数感 <span class="pill">亲子游戏</span></h3>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="btn-subtle btn-read-sense" type="button" aria-label="朗读生活数感题目">${icon("volume")} 读题目</button>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起生活数感">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+    </div>
+    <div class="card-collapse-body">
+      <div class="desc">${escapeHtml(activity.prompt)}</div>
+      <div class="desc" data-number-sense-illustration>${escapeHtml(activity.illustration.text)}</div>
+      <div class="lvl-row">${activity.options.map((value, index) => `<button class="lvl-btn" type="button" data-sense-option="${index}">${escapeHtml(value)}</button>`).join("")}</div>
+      <div class="feedback" aria-live="polite"></div>
+    </div>
   </div>`);
   main.appendChild(activityCard);
+  makeCollapsible(activityCard, "math_sense", false);
+  const readSenseBtn = activityCard.querySelector(".btn-read-sense");
+  if (readSenseBtn) {
+    readSenseBtn.onclick = () => {
+      speak(senseSpeech.speechText, readSenseBtn, "zh-CN", senseSpeech.contentIds);
+    };
+  }
   activityCard.querySelectorAll("[data-sense-option]").forEach((button) => {
     button.onclick = () => {
       const correct = activity.options[Number(button.dataset.senseOption)] === activity.answer;
@@ -1354,18 +1528,27 @@ function renderMath(){
       : `<div class="num-cell">${num}</div>`)
     .join("");
   const card2 = $(`
-    <div class="card">
-      <h3>${icon("brain")} 数感星球 · 数字填写 <span class="pill">1-${policy.maxSequenceValue} · 家长可选</span></h3>
-      <div class="desc desc-with-audio">
-        <span>点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</span>
-        <button class="btn-read-prompt" type="button" aria-label="朗读题目要求">${icon("volume")} 读要求</button>
+    <div class="card card-collapsible" id="section-math-sequence">
+      <div class="card-collapse-header">
+        <h3>${icon("dice")} 数字规律 <span class="pill">1-${policy.maxSequenceValue} · 家长可选</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起数字规律">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <div class="num-grid">${cells}</div>
-      <div class="math-pad" id="mathPad" style="display:none;"></div>
-      <div class="feedback text-center" id="nf"></div>
+      <div class="card-collapse-body">
+        <div class="desc desc-with-audio">
+          <span>点击问号格，选出它应该是哪个数字（按 1 递增顺序）。</span>
+          <button class="btn-read-prompt" type="button" aria-label="朗读题目要求">${icon("volume")} 读要求</button>
+        </div>
+        <div class="num-grid">${cells}</div>
+        <div class="math-pad" id="mathPad" style="display:none;"></div>
+        <div class="feedback text-center" id="nf"></div>
+      </div>
     </div>
   `);
   main.appendChild(card2);
+  makeCollapsible(card2, "math_sequence", false);
 
   const mathPromptBtn = card2.querySelector(".btn-read-prompt");
   if (mathPromptBtn) {
@@ -1421,19 +1604,28 @@ function renderMath(){
 
   // 数独 4x4
   const card3 = $(`
-    <div class="card">
-      <h3>${icon("grid")} 数独游戏 <span class="pill">数感阶段</span></h3>
-      <div class="desc desc-with-audio">
-        <span>把 1-4 填入空格，每行、每列和每个粗框内的 2×2 小宫都不重复。可和家长一起尝试。</span>
-        <button class="btn-read-prompt" type="button" aria-label="朗读游戏规则">${icon("volume")} 读规则</button>
+    <div class="card card-collapsible" id="section-math-sudoku">
+      <div class="card-collapse-header">
+        <h3>${icon("grid")} 简单数独 <span class="pill">数感阶段</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起简单数独">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <div class="sudoku" id="sudoku"></div>
-      <div class="feedback text-center" id="sf"></div>
-      <div class="spacer-10"></div>
-      ${checkinBtn("math-sense","数感")}
+      <div class="card-collapse-body">
+        <div class="desc desc-with-audio">
+          <span>把 1-4 填入空格，每行、每列和每个粗框内的 2×2 小宫都不重复。可和家长一起尝试。</span>
+          <button class="btn-read-prompt" type="button" aria-label="朗读游戏规则">${icon("volume")} 读规则</button>
+        </div>
+        <div class="sudoku" id="sudoku"></div>
+        <div class="feedback text-center" id="sf"></div>
+        <div class="spacer-10"></div>
+        ${checkinBtn("math-sense","数感")}
+      </div>
     </div>
   `);
   main.appendChild(card3);
+  makeCollapsible(card3, "math_sudoku", false);
 
   const sudokuPromptBtn = card3.querySelector(".btn-read-prompt");
   if (sudokuPromptBtn) {
@@ -1496,30 +1688,40 @@ function renderEnglish(){
   main.appendChild(modTitle("languages","英语学习"));
   // 每日快照与首页共享，未体验的单词继续保留。
   const card1 = $(`
-    <div class="card">
-      <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
-      <div class="desc desc-with-audio">
-        <span>和家长一起听听单词，在生活中找找它。愿意时跟读，体验后再确认；不要求拼写。</span>
-        <button class="btn-read-prompt" type="button" aria-label="朗读今日单词要求">${icon("volume")} 读指引</button>
+    <div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起今日主题单词">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      ${rows.map((row, index) => `<div class="word-card">
-        <div class="word-en">${escapeHtml(row.item.word)}</div>
-        <div class="word-ph">${escapeHtml(row.item.phonetic)}</div>
-        <div class="word-cn">${escapeHtml(row.item.meaning)} · ${escapeHtml(row.item.theme)} · ${contentReasonLabel(row.reason)}</div>
-        <div class="desc">${escapeHtml(row.item.prompt || "和家长一起听一听，在生活中找找它。")}</div>
-        <button class="speak-btn" type="button" data-speak="${index}" data-label="听发音">${buttonContent("volume", "听发音")}</button>
-        ${contentFeedbackHtml(row)}
-      </div>`).join("")}
-      <div class="spacer-10"></div>
-      ${rows.length ? checkinBtn("english-vocabulary","单词") : '<div class="desc">今天没有安排新的或到期的词卡，可以在生活中听听、说说熟悉的词。</div>'}
+      <div class="card-collapse-body">
+        <div class="desc desc-with-audio">
+          <span>${escapeHtml(ENGLISH_DAILY_PROMPT.text)}</span>
+          <button class="btn-read-prompt" type="button" aria-label="朗读今日单词要求">${icon("volume")} 读指引</button>
+        </div>
+        ${rows.map((row, index) => `<div class="word-card" data-content-reason="${row.reason}">
+          ${contentFeedbackHtml(row)}
+          ${renderEnglishVisual(row.item.word, row.item.theme, row.item.meaning)}
+          <div class="word-en">${escapeHtml(row.item.word)}</div>
+          <div class="word-ph">${escapeHtml(row.item.phonetic)}</div>
+          <div class="word-cn">${escapeHtml(row.item.meaning)} · ${escapeHtml(row.item.theme)}${row.reason === "review" ? " · 复习" : ""}</div>
+          <div class="desc">${escapeHtml(row.item.prompt || "和家长一起听一听，在生活中找找它。")}</div>
+          <button class="speak-btn" type="button" data-speak="${index}" data-label="听发音">${buttonContent("volume", "听发音")}</button>
+        </div>`).join("")}
+        <div class="spacer-10"></div>
+        ${rows.length ? checkinBtn("english-vocabulary","单词") : '<div class="desc">今天没有安排新的或到期的词卡，可以在生活中听听、说说熟悉的词。</div>'}
+      </div>
     </div>
   `);
   main.appendChild(card1);
+  makeCollapsible(card1, "english_vocab", false);
 
   const englishPromptBtn = card1.querySelector(".btn-read-prompt");
   if (englishPromptBtn) {
     englishPromptBtn.onclick = () => {
-      speak("拼读并朗读下面的单词，读完点完成今日打卡。", englishPromptBtn, "zh-CN", "prompt:english-daily");
+      speak(ENGLISH_DAILY_PROMPT.text, englishPromptBtn, "zh-CN", ENGLISH_DAILY_PROMPT.speechId);
     };
   }
 
@@ -1538,15 +1740,23 @@ function renderEnglish(){
   const historyWords = completedIds.map((id) => getLearningItem("english", id)).filter(Boolean);
   const chips = historyWords.map((item) => `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(item.word)}" data-word-id="${escapeHtml(item.speechId)}" aria-label="听发音：${escapeHtml(item.word)}">${escapeHtml(item.word)}</span>`).join("");
   const card2 = $(`
-    <div class="card">
-      <h3>${icon("calendar")} 往期单词回看 <span class="pill">实际体验历史</span></h3>
-      <div class="desc">这里只列出已确认体验的单词，点读不会增加完成次数。</div>
-      <div class="month-review">${chips || '<span class="desc">还没有逐词体验记录，旧打卡历史继续保留。</span>'}</div>
+    <div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("calendar")} 往期单词回看 <span class="pill">已学记录</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起往期单词回看">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">这里只列出已确认打卡的单词，点读不会增加完成次数。</div>
+        <div class="month-review">${chips || '<span class="desc">还没有单词打卡记录，旧打卡历史继续保留。</span>'}</div>
+      </div>
     </div>
   `);
   main.appendChild(card2);
+  makeCollapsible(card2, "english_review", false);
 
-  appendContentBrowser(main, "english");
   card2.querySelectorAll(".mr-chip[data-word]").forEach((chip) => {
     chip.addEventListener("pointerdown", primeSpeechAudio, { passive: true });
     const playChip = () => {
@@ -1695,10 +1905,104 @@ function makeCollapsible(cardEl, storageKey, defaultCollapsed = false) {
   if (header) {
     header.onclick = (e) => {
       if (e.target.closest("button") && e.target.closest("button") !== toggleBtn) return;
-      if (e.target.closest("input, select, textarea, a")) return;
+      if (e.target.closest("input, select, textarea, a, .content-options, details, summary")) return;
       toggle();
     };
   }
+}
+
+function renderSectionTabs(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) return null;
+  const container = document.createElement("nav");
+  container.className = "section-nav-tabs";
+  container.setAttribute("role", "tablist");
+  container.setAttribute("aria-label", "页面板块快速跳转");
+
+  let isClickScrolling = false;
+  let clickTimeout = null;
+
+  const setActiveTab = (targetId) => {
+    container.querySelectorAll(".section-nav-tab").forEach((t) => {
+      const match = t.dataset.targetSection === targetId;
+      t.classList.toggle("active", match);
+      t.setAttribute("aria-selected", match ? "true" : "false");
+      if (match) {
+        // 仅在横向溢出时轻量调整 TAB 容器自身的 scrollLeft，严禁调用 t.scrollIntoView 阻断页面纵向滚动
+        const cRect = container.getBoundingClientRect();
+        const tRect = t.getBoundingClientRect();
+        if (tRect.left < cRect.left) {
+          container.scrollLeft += (tRect.left - cRect.left) - 8;
+        } else if (tRect.right > cRect.right) {
+          container.scrollLeft += (tRect.right - cRect.right) + 8;
+        }
+      }
+    });
+  };
+
+  sections.forEach((sec, idx) => {
+    const tabBtn = document.createElement("button");
+    tabBtn.type = "button";
+    tabBtn.className = `section-nav-tab ${idx === 0 ? "active" : ""}`;
+    tabBtn.setAttribute("role", "tab");
+    tabBtn.setAttribute("aria-selected", idx === 0 ? "true" : "false");
+    tabBtn.setAttribute("data-target-section", sec.id);
+    tabBtn.innerHTML = `${sec.icon ? icon(sec.icon) : ""} <span>${escapeHtml(sec.label)}</span>`;
+
+    tabBtn.onclick = () => {
+      const target = document.getElementById(sec.id);
+      if (!target) return;
+
+      isClickScrolling = true;
+      if (clickTimeout) clearTimeout(clickTimeout);
+      setActiveTab(sec.id);
+
+      const toggleBtn = target.querySelector('.card-collapse-toggle[aria-expanded="false"]');
+      if (toggleBtn) {
+        toggleBtn.click();
+      }
+
+      if (typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      clickTimeout = setTimeout(() => {
+        isClickScrolling = false;
+      }, 800);
+    };
+
+    container.appendChild(tabBtn);
+  });
+
+  let ticking = false;
+  const onScroll = () => {
+    if (isClickScrolling) return;
+    if (!ticking) {
+      window.requestAnimationFrame(() => {
+        if (!container.isConnected) {
+          window.removeEventListener("scroll", onScroll);
+          return;
+        }
+        const scrollPosition = window.scrollY + 130;
+        let currentSectionId = sections[0].id;
+
+        for (let i = 0; i < sections.length; i++) {
+          const el = document.getElementById(sections[i].id);
+          if (el) {
+            const top = el.getBoundingClientRect().top + window.scrollY;
+            if (scrollPosition >= top) {
+              currentSectionId = sections[i].id;
+            }
+          }
+        }
+        setActiveTab(currentSectionId);
+        ticking = false;
+      });
+      ticking = true;
+    }
+  };
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  return container;
 }
 
 function renderGrow(){
@@ -1711,6 +2015,101 @@ function renderGrow(){
   `);
   main.appendChild(titleRow);
   titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "growth" });
+
+  const enabled = availableModuleIds();
+  const learningOn = enabled.length > 0;
+  const growSections = [
+    { id: "section-grow-footprint", label: "学习足迹", icon: "sprout" },
+    { id: "section-grow-rewards", label: "奖励兑换", icon: "gift" },
+    { id: "section-grow-ledger", label: "积分明细", icon: "list" },
+    ...(learningOn ? [{ id: "section-grow-overview", label: "打卡记录", icon: "trophy" }] : []),
+  ];
+  const tabs = renderSectionTabs(growSections);
+  if (tabs) main.appendChild(tabs);
+
+  const footprint = summarizeContentLearning(getContentLearningState(store), { referenceDay: todayKey() });
+  const activityItems = [
+    { id: "literacy", label: "识字", unit: "字", icon: "book" },
+    { id: "poem", label: "古诗听读", unit: "首", icon: "bookMarked" },
+    { id: "english", label: "英语", unit: "词", icon: "languages" },
+    { id: "writing", label: "练写", unit: "字", icon: "pencil" },
+    { id: "book", label: "共读推荐", unit: "本", icon: "bookCheck" },
+    { id: "math", label: "数学打卡", unit: "天", icon: "calculator", isMath: true },
+  ];
+  const bookState = migrateLegacyBookState(store);
+
+  const footprintCardsHtml = activityItems.map((item) => {
+    if (item.isMath) {
+      const mathDays = totalChecked("math");
+      return `
+        <button type="button" class="footprint-card" data-footprint-activity="math" aria-label="数学打卡 ${mathDays} 天，查看学习内容">
+          <div class="footprint-card-header">
+            <span class="footprint-card-title">${icon(item.icon)} <span>${item.label}</span></span>
+            <span class="footprint-card-arrow" aria-hidden="true">${icon("chevronRight")}</span>
+          </div>
+          <div class="footprint-card-metric">
+            <span class="footprint-card-val">${mathDays}</span>
+            <span class="footprint-card-unit">${item.unit}</span>
+          </div>
+          <div class="footprint-card-sub">模块打卡天数 · 每日口算</div>
+        </button>
+      `;
+    }
+    const summary = footprint.activities[item.id] || { itemCount: 0, occurrenceCount: 0 };
+    const subText = `${summary.occurrenceCount} ${item.id === "writing" ? "行次" : "次记录"}${summary.latestDay ? ` · ${summary.latestDay.slice(5)}` : ""}`;
+    return `
+      <button type="button" class="footprint-card" data-footprint-activity="${item.id}" aria-label="${item.label} ${summary.itemCount} ${item.unit}，${subText}，点击查看条目与历史">
+        <div class="footprint-card-header">
+          <span class="footprint-card-title">${icon(item.icon)} <span>${item.label}</span></span>
+          <span class="footprint-card-arrow" aria-hidden="true">${icon("chevronRight")}</span>
+        </div>
+        <div class="footprint-card-metric">
+          <span class="footprint-card-val">${summary.itemCount}</span>
+          <span class="footprint-card-unit">${item.unit}</span>
+        </div>
+        <div class="footprint-card-sub">${subText}</div>
+      </button>
+    `;
+  }).join("");
+
+  const footprintCard = $(`
+    <section class="card card-collapsible" data-learning-footprint id="section-grow-footprint">
+      <div class="card-collapse-header">
+        <h3>${icon("sprout")} 学习足迹</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起学习足迹">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="footprint-summary-row">
+          <div class="footprint-stat-pill">
+            <span class="n">${footprint.dayCount}</span>
+            <span class="t">学习天数</span>
+          </div>
+          <div class="footprint-stat-pill">
+            <span class="n">${footprint.occurrenceCount}</span>
+            <span class="t">有效记录</span>
+          </div>
+          <div class="footprint-stat-pill">
+            <span class="n">${footprint.reviewCount}</span>
+            <span class="t">温故复习</span>
+          </div>
+        </div>
+        <div class="footprint-grid" role="group" aria-label="各学科学习足迹">
+          ${footprintCardsHtml}
+        </div>
+        <div class="footprint-footer-notes">
+          <p class="desc">记录按实际内容和学习日期计数，不表示掌握程度。点击学科卡片可查看条目与历史；关闭学习包不会删除这些足迹。</p>
+          ${footprint.occurrenceCount ? "" : '<p class="desc">还没有逐项内容记录。旧打卡会保留，但不能推算具体学过哪些内容。</p>'}
+          <p class="desc">书架已读 ${Object.values(bookState.bookShelf || {}).filter(Boolean).length} 本 · 自填阅读日志 ${(store.peanutLog || []).length} 条（与共读推荐分别统计）</p>
+        </div>
+      </div>
+    </section>
+  `);
+  main.appendChild(footprintCard);
+  footprintCard.querySelectorAll("[data-footprint-activity]").forEach(button => { button.onclick = () => openContentLibrary(button.dataset.footprintActivity); });
+  makeCollapsible(footprintCard, "grow_footprint", false);
 
   const balance = getBalance(growthLoopSnapshot);
   const FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1761,7 +2160,7 @@ function renderGrow(){
   }).join("");
 
   // 1. 置顶核心：奖励兑换（可折叠，默认展开）
-  const rewardCard = $(`<div class="card growth-reward-card card-collapsible">
+  const rewardCard = $(`<div class="card growth-reward-card card-collapsible" id="section-grow-rewards">
       <div class="card-collapse-header">
         <h3>${icon("gift")} 奖励兑换</h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起奖励兑换">
@@ -1978,9 +2377,9 @@ function renderGrow(){
     </div>`;
   }).join("");
 
-  const historyCard = $(`<div class="card growth-history-card card-collapsible">
+  const historyCard = $(`<div class="card growth-history-card card-collapsible" id="section-grow-ledger">
       <div class="card-collapse-header">
-        <h3>${icon("list")} 最近积分明细</h3>
+        <h3>${icon("list")} 积分明细</h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起积分明细">
           <span class="card-collapse-label">收起</span>
           <span class="card-collapse-icon">${icon("chevronDown")}</span>
@@ -2021,10 +2420,7 @@ function renderGrow(){
   }
   makeCollapsible(historyCard, "grow_ledger", false);
 
-  // 3. 辅助功能：学习打卡总览与近 30 天日历（置于底部，可折叠）
-  const enabled = availableModuleIds();
-  const learningOn = enabled.length > 0;
-
+  // 3. 辅助功能：打卡记录与近 30 天日历（置于底部，可折叠）
   if (learningOn) {
     const total = enabled.reduce((sum, module) => sum + totalChecked(module), 0);
     // 日历式最近记录（只统计已启用模块）
@@ -2041,10 +2437,10 @@ function renderGrow(){
       `<span class="cal-legend-item"><i class="cal-swatch lvl-${level}" aria-hidden="true"></i>${level}/${enabled.length} ${level === 0 ? "未打卡" : level === enabled.length ? "全部完成" : "模块"}</span>`
     ).join("");
     const learningCard = $(`
-      <div class="card card-collapsible growth-learning-card">
+      <div class="card card-collapsible growth-learning-card" id="section-grow-overview">
         <div class="card-collapse-header">
-          <h3>${icon("trophy")} 学习打卡总览与近 30 天趋势</h3>
-          <button class="card-collapse-toggle" type="button" aria-label="展开或收起学习打卡总览与日历">
+          <h3>${icon("trophy")} 打卡记录</h3>
+          <button class="card-collapse-toggle" type="button" aria-label="展开或收起打卡记录">
             <span class="card-collapse-label">收起</span>
             <span class="card-collapse-icon">${icon("chevronDown")}</span>
           </button>
@@ -2119,6 +2515,14 @@ function renderPoints(){
   `);
   main.appendChild(titleRow);
   titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "points" });
+
+  const pointsSections = [
+    { id: "section-points-checkin", label: "习惯打卡", icon: "checkCircle" },
+    { id: "section-points-calendar", label: "打卡日历", icon: "calendar" },
+  ];
+  const tabs = renderSectionTabs(pointsSections);
+  if (tabs) main.appendChild(tabs);
+
   const currentDate = new Date();
   const today = currentDate.getDate();
   const year = currentDate.getFullYear();
@@ -2149,7 +2553,7 @@ function renderPoints(){
 
   // 1. 打卡区（卡片化，置顶核心）
   const isToday = activeDay===today;
-  const head = $(`<div class="card card-collapsible">
+  const head = $(`<div class="card card-collapsible" id="section-points-checkin">
       <div class="card-collapse-header">
         <div class="pts-sec" style="margin-bottom:0;">${icon("checkCircle")} 为 ${new Date().getMonth()+1}月${activeDay}日打卡 ${isToday?'<span class="pill">今天</span>':''}</div>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起打卡区">
@@ -2184,10 +2588,10 @@ function renderPoints(){
     const selectedText=d===activeDay?"，当前选中":"";
     chips+=`<button class="cal-chip ${cls}" type="button" data-d="${d}" aria-pressed="${d===activeDay}" aria-label="${d}日，${stateText}${selectedText}">${d}</button>`;
   }
-  const calCard=$(`<div class="card card-collapsible">
+  const calCard=$(`<div class="card card-collapsible" id="section-points-calendar">
       <div class="card-collapse-header">
-        <h3>${icon("calendar")} 补打卡日历 <span class="pill">${ymLabel}</span></h3>
-        <button class="card-collapse-toggle" type="button" aria-label="展开或收起补打卡日历">
+        <h3>${icon("calendar")} 打卡日历 <span class="pill">${ymLabel}</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起打卡日历">
           <span class="card-collapse-label">收起</span>
           <span class="card-collapse-icon">${icon("chevronDown")}</span>
         </button>
@@ -2231,20 +2635,44 @@ function renderBook(){
   // 推荐实体绘本，不提供书内正文或插图。
   if (b) {
   const card1 = $(`
-    <div class="card">
-      <h3>${icon("book")} 今日绘本 <span class="pill">${contentReasonLabel(bookRows[0].reason)}</span></h3>
-      <div class="desc">《${escapeHtml(b.t)}》— ${escapeHtml(b.a)}</div>
-      <div class="desc">这是实体书共读推荐，请选择家里或图书馆可借到的书。</div>
-      <div class="desc">${escapeHtml(b.prompt)}</div>
-      <div class="spacer-10"></div>
-      ${checkinBtn("book-reading","绘本")}
-      ${contentFeedbackHtml(bookRows[0])}
+    <div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("book")} 今日绘本${bookRows[0].reason === "review" ? ' <span class="pill">复习</span>' : ""}</h3>
+        <div class="card-collapse-actions">
+          ${contentFeedbackHtml(bookRows[0])}
+          <button class="card-collapse-toggle" type="button" aria-label="展开或收起今日绘本">
+            <span class="card-collapse-label">收起</span>
+            <span class="card-collapse-icon">${icon("chevronDown")}</span>
+          </button>
+        </div>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">《${escapeHtml(b.t)}》— ${escapeHtml(b.a)}</div>
+        <div class="desc">这是实体书共读推荐，请选择家里或图书馆可借到的书。</div>
+        <div class="desc">${escapeHtml(b.prompt)}</div>
+        <div class="spacer-10"></div>
+        ${checkinBtn("book-reading","绘本")}
+      </div>
     </div>
   `);
   main.appendChild(card1);
+  makeCollapsible(card1, "book_today", false);
 
   } else {
-    main.appendChild($(`<div class="card"><h3>${icon("book")} 今日绘本</h3><div class="desc">今天没有到期推荐，可在小书架自由选一本共读。</div></div>`));
+    const emptyBookCard = $(`<div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("book")} 今日绘本</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起今日绘本">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">今天没有到期推荐，可在小书架自由选一本共读。</div>
+      </div>
+    </div>`);
+    main.appendChild(emptyBookCard);
+    makeCollapsible(emptyBookCard, "book_today", false);
   }
 
   // 我的小书架（已读标记，永久存档）
@@ -2258,14 +2686,23 @@ function renderBook(){
   }).join("");
   const readN = BOOKS.filter((item) => store.bookShelf[item.id]).length;
   const card2 = $(`
-    <div class="card">
-      <h3>${icon("bookMarked")} 我的小书架 <span class="pill">点击标记已读</span></h3>
-      <div class="desc">这里是实体书共读参考书目。按孩子的兴趣选读，共读后可标记已读，不要求完成统一题目。</div>
-      <div class="grid2">${shelf}</div>
-      <div class="desc mt-12">已读 <b>${readN}</b> / ${BOOKS.length} 本</div>
+    <div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("bookMarked")} 我的小书架 <span class="pill">点击标记已读</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起我的小书架">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
+        <div class="desc">这里是实体书共读参考书目。按孩子的兴趣选读，共读后可标记已读，不要求完成统一题目。</div>
+        <div class="grid2">${shelf}</div>
+        <div class="desc mt-12">已读 <b>${readN}</b> / ${BOOKS.length} 本</div>
+      </div>
     </div>
   `);
   main.appendChild(card2);
+  makeCollapsible(card2, "book_shelf", false);
   card2.querySelectorAll("[data-bk]").forEach(c=>{
     c.style.opacity = store.bookShelf[c.dataset.bk] ? 1 : 0.55;
     c.onclick=()=>{
@@ -2296,24 +2733,33 @@ function renderBook(){
   }).join("");
 
   const card3 = $(`
-    <div class="card">
-      <h3>${icon("bookOpenCheck")} 共读参考书单 <span class="pill">自由选读</span></h3>
-      <div class="desc">按孩子的兴趣和当前阅读状态选择童书或分级读物，级别不代表年龄要求。点一下标记已读，也可添加自己的阅读记录。</div>
-      <div class="grid2">${peanutRead}</div>
-      <div class="spacer-12"></div>
-      <div class="pts-sec">${icon("notebook")} 我的阅读记录</div>
-      <div class="peanut-form">
-        <label class="peanut-label" for="pbTitle">阅读书名</label>
-        <input class="peanut-input" id="pbTitle" aria-label="阅读书名" placeholder="输入书名（如：牛津阅读树 L3）">
-        <div class="peanut-stars" id="pbStars" role="group" aria-label="阅读评分">
-          ${[1,2,3,4,5].map(n=>`<button class="pstar" type="button" data-n="${n}" aria-label="${n}星">${icon("star", { filled: n <= 3 })}</button>`).join("")}
-        </div>
-        <button class="checkin mt-8" id="pbAdd">${icon("plus")} 添加阅读记录</button>
+    <div class="card card-collapsible">
+      <div class="card-collapse-header">
+        <h3>${icon("bookOpenCheck")} 共读参考书单 <span class="pill">自由选读</span></h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起共读参考书单">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
       </div>
-      <div class="peanut-log">${logRows || '<div class="desc">还没有记录，添加一本吧～</div>'}</div>
+      <div class="card-collapse-body">
+        <div class="desc">按孩子的兴趣和当前阅读状态选择童书或分级读物，级别不代表年龄要求。点一下标记已读，也可添加自己的阅读记录。</div>
+        <div class="grid2">${peanutRead}</div>
+        <div class="spacer-12"></div>
+        <div class="pts-sec">${icon("notebook")} 我的阅读记录</div>
+        <div class="peanut-form">
+          <label class="peanut-label" for="pbTitle">阅读书名</label>
+          <input class="peanut-input" id="pbTitle" aria-label="阅读书名" placeholder="输入书名（如：牛津阅读树 L3）">
+          <div class="peanut-stars" id="pbStars" role="group" aria-label="阅读评分">
+            ${[1,2,3,4,5].map(n=>`<button class="pstar" type="button" data-n="${n}" aria-label="${n}星">${icon("star", { filled: n <= 3 })}</button>`).join("")}
+          </div>
+          <button class="checkin mt-8" id="pbAdd">${icon("plus")} 添加阅读记录</button>
+        </div>
+        <div class="peanut-log">${logRows || '<div class="desc">还没有记录，添加一本吧～</div>'}</div>
+      </div>
     </div>
   `);
   main.appendChild(card3);
+  makeCollapsible(card3, "book_peanut", false);
 
   // 绑定：书单已读标记
   card3.querySelectorAll("[data-pb]").forEach(c=>{
@@ -2459,17 +2905,36 @@ function renderSettingsPrivacy(main) {
 
 function renderSettingsLearning(main){
   const config = normalizeContentConfig(store.content_config);
-  const pkg = getActiveLearningPackage(config);
-  const pace = config.learning_pace || { literacy_new: 2, english_new: 2, poems_per_week: 2 };
+  const selectedPackages = getActiveLearningPackages(config);
+  const pace = getContentLearningPace(config);
   const settings = $(`
     <div class="card">
       <h3>${icon("grid")} 学习包设置</h3>
-      <label class="switch-row"><span class="switch-label"><strong>推荐阶段</strong><span class="desc">家长按孩子当前兴趣和能力选择，切换后保留已体验内容和复习记录。</span></span>
-        <select data-package-id aria-label="选择学习包">${LEARNING_PACKAGES.map((item) => `<option value="${item.id}" ${item.id === pkg.id ? "selected" : ""}>${escapeHtml(item.name)} · ${item.suggested_age} 岁</option>`).join("")}</select>
-      </label>
-      <div class="desc">${escapeHtml(pkg.name)} · 建议年龄 ${escapeHtml(pkg.suggested_age)} 岁 · 按孩子独立启停。关闭模块只影响入口和统计，不会删除学习历史。</div>
-      <div class="desc">节奏调整从下一天的新推荐生效，今天已安排的内容保持不变。重温间隔表示练习节奏，不表示掌握程度。</div>
-      ${[["literacy_new", "每天识字新体验", "个"], ["english_new", "每天英语新体验", "个"], ["poems_per_week", "每周古诗新体验", "首"]].map(([key, label, unit]) => `<label class="switch-row"><span class="switch-label"><strong>${label}</strong></span><select data-learning-pace="${key}" aria-label="${label}">${[1, 2].map((amount) => `<option value="${amount}" ${pace[key] === amount ? "selected" : ""}>${amount} ${unit}</option>`).join("")}</select></label>`).join("")}
+      <div class="desc" style="font-weight:700;margin-top:8px;">推荐阶段（支持多选，至少选 1 项）</div>
+      <div class="package-list" role="group" aria-label="选择学习包">
+        ${LEARNING_PACKAGES.map((item) => `
+          <label class="switch-row">
+            <span class="switch-label"><strong>${escapeHtml(item.name)}</strong><span class="desc">建议年龄 ${escapeHtml(item.suggested_age)} 岁 · ${escapeHtml(item.description)}</span></span>
+            <input type="checkbox" class="switch" data-package-toggle="${item.id}" ${config.package_ids.includes(item.id) ? "checked" : ""} aria-label="选择 ${escapeHtml(item.name)}">
+          </label>
+        `).join("")}
+      </div>
+      <div class="desc">按孩子独立启停。关闭模块只影响入口和统计，不会删除学习历史。</div>
+      <div class="desc">调整后将即时按新推荐节奏安排；已完成打卡的内容保持记录不变。复习间隔表示练习节奏，不表示掌握程度。</div>
+      ${[["literacy_new", "每天新学生字", "个"], ["english_new", "每天新学单词", "词"], ["poems_new", "每天新学古诗", "首"]].map(([key, label, unit]) => `
+        <div class="switch-row stepper-row">
+          <span class="switch-label">
+            <strong>${label}</strong>
+            <span class="desc">每天推荐 1–20 ${unit}，默认 2</span>
+          </span>
+          <div class="stepper-control" role="group" aria-label="${label}">
+            <button type="button" class="stepper-btn stepper-btn-minus" data-pace-step="${key}" data-step="-1" aria-label="减少${label}">−</button>
+            <input class="stepper-input" type="number" min="1" max="20" step="1" data-learning-pace="${key}" value="${pace[key] || 2}" aria-label="${label}">
+            <button type="button" class="stepper-btn stepper-btn-plus" data-pace-step="${key}" data-step="1" aria-label="增加${label}">+</button>
+            <span class="stepper-unit">${unit}/天</span>
+          </div>
+        </div>
+      `).join("")}
       <label class="switch-row">
         <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
         <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
@@ -2482,24 +2947,60 @@ function renderSettingsLearning(main){
     </div>
   `);
   main.appendChild(settings);
+  function handlePaceUpdate(key, nextVal) {
+    if (!canWriteLearningState()) return;
+    let val = Math.floor(Number(nextVal));
+    if (!Number.isFinite(val) || val < 1) val = 1;
+    if (val > 20) val = 20;
+    const nextPace = { ...pace, [key]: val };
+    if (key === "poems_new") {
+      nextPace.poems_per_week = val;
+    }
+    const previous = store;
+    store = { ...store, content_config: normalizeContentConfig({ ...config,
+      learning_pace: nextPace }) };
+    activeLearningPlan = null;
+    if (!save()) { store = previous; return; }
+    dailyLearningPlan();
+    switchMod("settings", { tab: "learning" });
+  }
   settings.querySelectorAll("[data-learning-pace]").forEach((input) => {
     input.onchange = () => {
+      handlePaceUpdate(input.dataset.learningPace, input.value);
+    };
+  });
+  settings.querySelectorAll("[data-pace-step]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.dataset.paceStep;
+      const step = Number(btn.dataset.step) || 0;
+      const input = settings.querySelector(`input[data-learning-pace="${key}"]`);
+      const current = Number(input?.value) || 2;
+      handlePaceUpdate(key, current + step);
+    };
+  });
+  settings.querySelectorAll("[data-package-toggle]").forEach((input) => {
+    input.onchange = () => {
       if (!canWriteLearningState()) return;
+      const currentSelected = [...(config.package_ids || [selectedPackages[0].id])];
+      const pkgId = input.dataset.packageToggle;
+      let nextSelected;
+      if (input.checked) {
+        nextSelected = [...new Set([...currentSelected, pkgId])];
+      } else {
+        nextSelected = currentSelected.filter((id) => id !== pkgId);
+        if (nextSelected.length === 0) {
+          input.checked = true;
+          alert("至少需要保留 1 个学习包哦");
+          return;
+        }
+      }
       const previous = store;
-      store = { ...store, content_config: normalizeContentConfig({ ...config,
-        learning_pace: { ...pace, [input.dataset.learningPace]: Number(input.value) } }) };
+      store = { ...store, content_config: setContentPackageIds(store.content_config, nextSelected) };
       if (!save()) store = previous;
+      mathLevel = getMathPolicy(store.content_config.package_ids[0]).defaultMaxOperand;
       switchMod("settings", { tab: "learning" });
     };
   });
-  settings.querySelector("[data-package-id]").onchange = (event) => {
-    if (!canWriteLearningState()) return;
-    const previous = store;
-    store = { ...store, content_config: setContentPackageId(store.content_config, event.target.value) };
-    if (!save()) store = previous;
-    mathLevel = getMathPolicy(store.content_config.package_id).defaultMaxOperand;
-    switchMod("settings", { tab: "learning" });
-  };
   settings.querySelectorAll("[data-config-toggle='package']").forEach((input) => {
     input.onchange = () => {
       updateContentPackage(input.checked);
@@ -3068,7 +3569,10 @@ function renderGuide(){
    公共组件
    ========================================================= */
 function modTitle(iconName,t){
-  return $(`<div class="module-title"><span class="em">${icon(iconName)}</span><h2>${t}</h2></div>`);
+  const category = { chinese: "literacy", english: "english", math: "math", book: "book" }[CURRENT_MOD];
+  const title = $(`<div class="module-title-row"><div class="module-title"><span class="em">${icon(iconName)}</span><h2>${t}</h2></div>${category ? `<button class="btn-subtle" type="button" data-open-library>${icon("library")} 内容库</button>` : ""}</div>`);
+  title.querySelector("[data-open-library]")?.addEventListener("click", () => openContentLibrary(category));
+  return title;
 }
 function checkinBtn(mod,label){
   const done = isChecked(mod);
@@ -3080,6 +3584,7 @@ function checkinBtn(mod,label){
    ========================================================= */
 function switchMod(mod, options = {}){
   if (mod !== CURRENT_MOD) void usageAnalytics.record("view", { view: mod });
+  contentLibrary?.close();
   CURRENT_MOD = mod;
   removeWritingPrintRoot();
   stopPoemSpeech();
@@ -3131,8 +3636,52 @@ function switchMod(mod, options = {}){
       };
     });
   });
-  el("main").scrollTop=0;
+  el("main").scrollTop = 0;
+  window.scrollTo({ top: 0 });
+  updateBackToTopVisibility?.();
 }
+
+let updateBackToTopVisibility = null;
+function initBackToTop() {
+  let backBtn = document.getElementById("btnBackToTop");
+  if (!backBtn) {
+    backBtn = document.createElement("button");
+    backBtn.id = "btnBackToTop";
+    backBtn.className = "btn-back-to-top";
+    backBtn.type = "button";
+    backBtn.setAttribute("aria-label", "回到页面顶部");
+    backBtn.innerHTML = `${icon("arrowUp")}<span>顶部</span>`;
+    document.body.appendChild(backBtn);
+
+    backBtn.onclick = () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      const mainEl = el("main");
+      if (mainEl && mainEl.scrollTop > 0) {
+        mainEl.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      backBtn.blur();
+    };
+  }
+
+  const update = () => {
+    const mainEl = el("main");
+    const mainScroll = mainEl ? mainEl.scrollTop : 0;
+    const winScroll = window.scrollY || document.documentElement.scrollTop || 0;
+    const shouldShow = winScroll > 280 || mainScroll > 280;
+    backBtn.classList.toggle("visible", shouldShow);
+  };
+
+  window.addEventListener("scroll", update, { passive: true });
+  const mainEl = el("main");
+  if (mainEl) {
+    mainEl.addEventListener("scroll", update, { passive: true });
+  }
+
+  updateBackToTopVisibility = update;
+  return update;
+}
+
+initBackToTop();
 
 document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod));
 hydrateIcons();

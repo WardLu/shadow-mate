@@ -20,7 +20,7 @@ The temporary `window.learningDesk`, `window.growthLoop`, `window.learnerSession
 
 `src/content-learning.js` 在 `learning.extra.contentLearningV1` 保存内容引入、完成、家长反馈、跳过、撤回标记和每日计划候选。计划按未完成、到期重温和新体验的预算安排，首页与学科页共用同一计划。完成使用稳定 occurrence ID；取消模块打卡不删除内容事实。多端合并保留分歧计划和撤回标记，不把两端练习计数相加。内层账本和云端 envelope 都必须匹配当前孩子作用域，匿名导入需要明确的作用域迁移。
 
-写字保留 `rotation-v1` 四行快照，通过 `selectedItemIds` 接收统一计划的选题。材料不足四行时不随机补题；已发当天字帖继续复用。版本合并只接受同一 `setId` 下实际登记的内容版本，保留历史快照自己的 `packRef`。
+写字提供常驻四行字帖与 A4 打印；通过 `resolveWritingWorksheet()` 接收统一计划的选题并补齐四行（候选不足 4 个时补充简单入门字或标准空白田字格降级练习，空白行不产生虚假学习事实）。已发当天字帖继续复用。版本合并只接受同一 `setId` 下实际登记的内容版本，保留历史快照自己的 `packRef`。
 
 `src/spoken-language-courses.js` 分开定义目标语言、地区变体和课程身份。当前课程均为准备中，不提供完成入口，不计入有效打卡模块。粤语系统语音要求匹配目标声音，没有匹配声音时返回不可用。
 
@@ -58,3 +58,20 @@ At runtime `src/tencent-tts-player.js` reads that manifest and plays CDN audio. 
 - **Reusable reward catalog & 24h undo safety window**: The reward catalog operates as reusable agreement templates decoupled from single transaction fulfillment history. Once fulfilled, cards restore their main redeem action (`[再次兑换]` or `[兑换]`), allowing repeat redemptions. Fulfilled redemptions provide a secondary `[撤回兑现]` button with badge `已兑现 · 24小时内可撤回` within 24 hours (`FULFILL_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000`). Beyond 24 hours, the redemption is automatically archived and revocation entry points cleanly disappear.
 - **Authenticated mode (cloud synchronized)**: When associated with a Supabase household, redemptions use an outbox-driven two-phase protocol (`pending` -> `confirmed`) to prevent concurrent double-spending across multiple household devices. Offline redemptions show as "待联网确认" until confirmed by the server RPC `learning_redeem_reward`.
 - **Account adoption**: When an unauthenticated user subsequently registers or logs in, local data under `pending:pending` (including completed or pending redemptions) is rebound and merged into the authenticated cloud household via `adoptPending` without loss or ledger duplication.
+
+## UI 组件体系与设计规范 (UI Components & Design System)
+
+严禁在页面或模块中直接拼接、裸写未带样式的原生 HTML 标签（如默认 `<button>`、`<input>`、`<div>`），导致界面出现浏览器默认黑色线框、直角边缘与未经设计的凌乱排布。所有新增界面与数据展示模块必须遵循以下规范：
+
+1. **统一复用系统组件与卡片模式**：
+   - **统计与看板指标**：使用 `.stat-grid`、`.stat`（大号强调看板），或 `.footprint-summary-row` / `.footprint-stat-pill`（多列药丸统计），严禁裸写纯文本数字。
+   - **交互数据卡片与操作入口**：使用 `.footprint-card`（带头部图标、大数值、单位、次级描述与箭头指示的响应式卡片）或 `.card.card-action`，统一样式与点击反馈。
+   - **内容卡片**：复用 `.mini-card`（拼音/汉字）、`.word-card`（英语图片/发音）、`.poem-box`（古诗听读与翻页）。
+   - **徽标与状态胶囊**：使用 `.pill`、`.badge-*` 或 `.content-status-pill`，内圆角严格服从同心圆角规范。
+2. **强制使用语义化设计系统变量**：
+   - 颜色：`var(--bg)`、`var(--card)`、`var(--line)`、`var(--ink)`、`var(--ink-soft)`、`var(--green)`、`var(--green-deep)`、`var(--green-soft)` 等，确保自动完美适配暗色模式（Dark Mode）。
+   - 尺寸与形状：圆角使用 `var(--radius)` 或规范的 16px/18px/999px（胶囊），阴影统一使用 `var(--shadow)`。
+   - 动效与手感：交互卡片标配悬浮微位移（`transform: translateY(-2px);`）与按压微缩（`transform: scale(0.98);`），支持无障碍高对比度与减弱动效（`prefers-reduced-motion`）。
+3. **视觉验收铁律**：
+   - 任何涉及 HTML/CSS 结构变更的改动，必须使用 Playwright 脚本在桌面（1200px）与移动端（440px）视口生成实机渲染截图进行目视审查；
+   - 凡发现未带样式、挤压排版或错位的 UI 元素，一律视为未达到验收标准，严禁直接交付。

@@ -34,7 +34,12 @@ test.describe("Child-friendly math interactions", () => {
     for (const [packageId, maximum] of [["foundation-v2", 5], ["bridging-v1", 10]]) {
       await page.click('[data-mod="learning"]');
       await page.click('[data-go-settings="learning"]');
-      await page.locator("[data-package-id]").selectOption(packageId);
+      await page.locator(`[data-package-toggle="${packageId}"]`).check();
+      for (const id of ["foundation-v2", "bridging-v1"]) {
+        if (id !== packageId) {
+          await page.locator(`[data-package-toggle="${id}"]`).uncheck();
+        }
+      }
       await page.click('[data-mod="learning"]');
       await page.click('[data-go="math"]');
       await expect(page.locator(".lvl-btn[data-lvl]")).toHaveText(

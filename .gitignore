@@ -18,6 +18,9 @@ coverage/
 
 # Playwright MCP session artifacts (test snapshots/logs)
 .playwright-mcp/
+/assets/visual-audit/
+scripts/capture-*.mjs
+/supabase/proposals/
 
 # Unadopted branding and legacy assets are not release sources.
 assets/logo-candidates/

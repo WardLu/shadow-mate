@@ -1,6 +1,6 @@
 {
   "name": "shadow-mate",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -37,6 +37,7 @@
     "@sentry/browser": "11.6.0",
     "@supabase/supabase-js": "2.117.2",
     "@vercel/analytics": "^2.0.1",
+    "fflate": "0.8.3",
     "lucide": "^1.54.0",
     "pinyin-pro": "3.29.4"
   },

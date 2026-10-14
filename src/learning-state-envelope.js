@@ -1,4 +1,5 @@
 import { defaultContentConfig } from "./learning-content-package.js";
+import { decodeLearningStateArchive } from "./learning-state-codec.js";
 
 const LEGACY_STATE_KEYS = new Set([
   "checkins",
@@ -55,7 +56,12 @@ function isEnvelope(value) {
 }
 
 export function migrateLegacyLearningState(source, scope = {}) {
-  if (isEnvelope(source)) return structuredClone(source);
+  source = decodeLearningStateArchive(source);
+  if (isEnvelope(source)) {
+    const clone = structuredClone(source);
+    clone.product_id ||= "shadow-mate";
+    return clone;
+  }
 
   const legacy = isRecord(source) ? source : {};
   const sourceHash = hashString(stableStringify(legacy));

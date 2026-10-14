@@ -5,7 +5,9 @@ import { normalizeSpokenCourseSelection } from "./spoken-language-courses.js";
 // 孩子级启停配置保存在学习状态 envelope 的 learning.content_config 中，
 // 不新增内容包数据库表；本模块不产生积分流水。
 
-export const CONTENT_CONFIG_SCHEMA_VERSION = 1;
+export const CONTENT_CONFIG_SCHEMA_VERSION = 2;
+export const CONTENT_LEARNING_BUDGET = Object.freeze({ minimum: 1, maximum: 20, default: 2 });
+export const DEFAULT_CONTENT_LEARNING_PACE = Object.freeze({ literacy_new: 2, english_new: 2, poems_new: 2 });
 
 export const FOUNDATION_PACKAGE = Object.freeze({
   id: "foundation-v2",
@@ -65,15 +67,45 @@ export function getLearningPackageDefinition(packageId) {
   return LEARNING_PACKAGES.find((pkg) => pkg.id === packageId) || null;
 }
 
+export function normalizeContentPackageIds(packageIds, legacyPackageId) {
+  const selected = Array.isArray(packageIds)
+    ? LEARNING_PACKAGES.filter((pkg) => packageIds.includes(pkg.id)).map((pkg) => pkg.id)
+    : [];
+  if (selected.length) return selected;
+  const legacy = getLearningPackageDefinition(legacyPackageId);
+  return [legacy?.id || FOUNDATION_PACKAGE.id];
+}
+
+export function getActiveLearningPackages(config) {
+  return normalizeContentConfig(config).package_ids.map(getLearningPackageDefinition);
+}
+
 export function getActiveLearningPackage(config) {
-  const normalized = normalizeContentConfig(config);
-  return getLearningPackageDefinition(normalized.package_id) || FOUNDATION_PACKAGE;
+  return getActiveLearningPackages(config)[0];
+}
+
+export function isValidContentLearningBudget(value) {
+  return Number.isInteger(value) && value >= CONTENT_LEARNING_BUDGET.minimum && value <= CONTENT_LEARNING_BUDGET.maximum;
+}
+
+export function getContentLearningPace(config) {
+  const source = isRecord(config?.learning_pace) ? config.learning_pace : {};
+  const poemBudget = source.poems_new !== undefined ? source.poems_new : source.poems_per_week;
+  const poemValue = isValidContentLearningBudget(poemBudget) ? poemBudget : DEFAULT_CONTENT_LEARNING_PACE.poems_new;
+  return {
+    literacy_new: isValidContentLearningBudget(source.literacy_new) ? source.literacy_new : DEFAULT_CONTENT_LEARNING_PACE.literacy_new,
+    english_new: isValidContentLearningBudget(source.english_new) ? source.english_new : DEFAULT_CONTENT_LEARNING_PACE.english_new,
+    poems_new: poemValue,
+    poems_per_week: poemValue,
+  };
 }
 
 export function defaultContentConfig(packageId = FOUNDATION_PACKAGE.id) {
-  const pkg = getLearningPackageDefinition(packageId) || FOUNDATION_PACKAGE;
+  const packageIds = normalizeContentPackageIds(Array.isArray(packageId) ? packageId : undefined, packageId);
+  const pkg = getLearningPackageDefinition(packageIds[0]);
   return {
     schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
+    package_ids: packageIds,
     package_id: pkg.id,
     package_version: pkg.version,
     enabled: true,
@@ -88,7 +120,8 @@ export function defaultContentConfig(packageId = FOUNDATION_PACKAGE.id) {
 
 export function normalizeContentConfig(raw = {}) {
   const source = isRecord(raw) ? raw : {};
-  const pkg = getLearningPackageDefinition(source.package_id) || FOUNDATION_PACKAGE;
+  const packageIds = normalizeContentPackageIds(source.package_ids, source.package_id);
+  const pkg = getLearningPackageDefinition(packageIds[0]);
   const modules = {};
   for (const module of FOUNDATION_PACKAGE.modules) {
     modules[module.id] = source.modules?.[module.id] !== false;
@@ -100,6 +133,7 @@ export function normalizeContentConfig(raw = {}) {
   }
   const result = {
     schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
+    package_ids: packageIds,
     package_id: pkg.id,
     package_version: pkg.version,
     enabled: source.enabled !== false,
@@ -108,13 +142,7 @@ export function normalizeContentConfig(raw = {}) {
   if (Array.isArray(source.spoken_courses)) {
     result.spoken_courses = normalizeSpokenCourseSelection(source.spoken_courses);
   }
-  if (isRecord(source.learning_pace)) {
-    result.learning_pace = {
-      literacy_new: source.learning_pace.literacy_new === 1 ? 1 : 2,
-      english_new: source.learning_pace.english_new === 1 ? 1 : 2,
-      poems_per_week: source.learning_pace.poems_per_week === 1 ? 1 : 2,
-    };
-  }
+  if (isRecord(source.learning_pace)) result.learning_pace = getContentLearningPace(source);
   return result;
 }
 
@@ -143,13 +171,21 @@ export function setContentPackageEnabled(config, enabled) {
   return normalized;
 }
 
-export function setContentPackageId(config, packageId) {
+export function setContentPackageIds(config, packageIds) {
   const normalized = normalizeContentConfig(config);
-  const target = getLearningPackageDefinition(packageId);
-  if (!target) return normalized;
-  normalized.package_id = target.id;
-  normalized.package_version = target.version;
+  const selected = Array.isArray(packageIds)
+    ? LEARNING_PACKAGES.filter((pkg) => packageIds.includes(pkg.id)).map((pkg) => pkg.id)
+    : [];
+  if (!selected.length) return normalized;
+  normalized.package_ids = selected;
+  const primary = getLearningPackageDefinition(selected[0]);
+  normalized.package_id = primary.id;
+  normalized.package_version = primary.version;
   return normalized;
+}
+
+export function setContentPackageId(config, packageId) {
+  return setContentPackageIds(config, [packageId]);
 }
 
 export function setContentModuleEnabled(config, moduleId, enabled) {

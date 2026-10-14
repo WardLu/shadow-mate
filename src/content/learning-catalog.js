@@ -2,6 +2,7 @@ import { HANZI, literacyItemId } from "./literacy.js";
 import { POEMS, ENGLISH, poemSpeechIds, englishItemId, englishWordSpeechId } from "./core-learning-speech.js";
 import { BOOKS } from "./books.js";
 import { getActiveHanziWritingPack } from "./hanzi-writing/manifest.js";
+import { LEARNING_PACKAGES } from "../learning-content-package.js";
 
 export const LEARNING_CATALOG_VERSION = "age-aware-content-1";
 export const LEARNING_CONTENT_SOURCES = Object.freeze({
@@ -18,7 +19,7 @@ export const LEARNING_CONTENT_SOURCES = Object.freeze({
   },
 });
 
-const packages = Object.freeze(["foundation-v2", "bridging-v1"]);
+const packages = Object.freeze(LEARNING_PACKAGES.map((pkg) => pkg.id));
 const recommendedPackages = (packageId) => packageId === "bridging-v1" ? ["bridging-v1"] : [...packages];
 const freezeItems = (items) => Object.freeze(items.map((item) => Object.freeze(item)));
 
@@ -63,11 +64,16 @@ const indexes = {
   writing: new Map(writing.map((item) => [item.id, item])),
 };
 
-export function getLearningCatalog(packageId = "foundation-v2") {
-  if (!packages.includes(packageId)) throw new Error(`unknown-learning-package:${packageId}`);
+export function getLearningCatalog(packageIds = "foundation-v2") {
+  const requested = Array.isArray(packageIds) ? packageIds : [packageIds];
+  if (!requested.length || requested.some((id) => !packages.includes(id))) {
+    throw new Error(`unknown-learning-package:${requested.join(",")}`);
+  }
+  const selected = new Set(requested);
   return Object.freeze({
     version: LEARNING_CATALOG_VERSION,
-    ...Object.fromEntries(Object.entries(all).map(([kind, items]) => [kind, Object.freeze(items.filter((item) => item.agePackages.includes(packageId)))])),
+    ...Object.fromEntries(Object.entries(all).map(([kind, items]) => [kind,
+      Object.freeze(items.filter((item) => item.agePackages.some((id) => selected.has(id))))])),
   });
 }
 

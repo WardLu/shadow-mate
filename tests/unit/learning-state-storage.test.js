@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getLearningStateStorageKey, migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
 import { resolveDailyLearningPlan, recordContentCompletion } from "../../src/content-learning.js";
+import { encodeLearningStateArchive } from "../../src/learning-state-codec.js";
 import {
   clearLearningDeskStorage,
   adoptPendingLearningState,
@@ -70,7 +71,7 @@ describe("learning state storage", () => {
     const pending = loadLearningStateEnvelope(storage);
     expect(envelope.learning.checkins).toEqual({});
     expect(pending.learning.checkins).toEqual({ "2026-08-14": { "chinese-literacy": true } });
-    expect(storage.getItem(scopedKey)).toBe(JSON.stringify(envelope));
+    expect(storage.getItem(scopedKey)).toBe(JSON.stringify(encodeLearningStateArchive(envelope)));
     expect(storage.getItem("shadow_mate_workbench_v1")).toBe(legacyRaw);
 
     const secondChild = loadLearningStateEnvelope(storage, {
@@ -92,7 +93,7 @@ describe("learning state storage", () => {
       profileId: "profile-2",
     });
     expect(otherChildAfterAdoption.learning.checkins).toEqual({});
-    expect(storage.getItem("shadow_mate_learning_v2:pending")).toBe(JSON.stringify(pending));
+    expect(storage.getItem("shadow_mate_learning_v2:pending")).toBe(JSON.stringify(encodeLearningStateArchive(pending)));
   });
 
   it("rebinds only pending anonymous content learning to the explicitly selected child", () => {
@@ -187,7 +188,7 @@ describe("learning state storage", () => {
 
     expect(loaded.scope).toEqual({ household_id: "household-1", profile_id: "profile-2" });
     expect(loaded.learning.checkins).toEqual({});
-    expect(storage.getItem(scopedKey)).toBe(JSON.stringify(loaded));
+    expect(storage.getItem(scopedKey)).toBe(JSON.stringify(encodeLearningStateArchive(loaded)));
   });
 
   it("backs up malformed legacy content by its raw value and remains idempotent", () => {

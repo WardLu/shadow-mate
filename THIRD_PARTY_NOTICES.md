@@ -18,6 +18,7 @@
 | `@sentry/browser` | `11.6.0` | MIT | [getsentry/sentry-javascript](https://github.com/getsentry/sentry-javascript) |
 | `@supabase/supabase-js` | `2.117.2` | MIT | [supabase-js](https://github.com/supabase/supabase-js) |
 | `@vercel/analytics` | `2.0.1` | MIT | [vercel/analytics](https://github.com/vercel/analytics) |
+| `fflate` | `0.8.3` | MIT | [101arrowz/fflate](https://github.com/101arrowz/fflate) |
 | `lucide` | `1.54.0` | ISC | [lucide](https://github.com/lucide-icons/lucide) |
 | `pinyin-pro` | `3.29.4` | MIT | [zh-lx/pinyin-pro](https://github.com/zh-lx/pinyin-pro) |
 
