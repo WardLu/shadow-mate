@@ -65,6 +65,20 @@ export function selectScope({ eventName, event, expectedSha, repository, git = d
         return full("pr_merge_parent_mismatch", checkedSha);
       }
       baseSha = parents[1];
+      const headSha = parents[2];
+
+      if (pr?.base?.ref === "production" && pr?.head?.ref === "main") {
+        const divergence = git(["diff", "--no-renames", "--name-only", "-z", headSha, checkedSha, "--"])
+          .split("\0").filter(Boolean);
+        if (divergence.length === 0) {
+          return {
+            mode: "release",
+            releaseContracts: true,
+            checkedSha,
+            reason: "production_promotion_fast_forward",
+          };
+        }
+      }
     } else if (eventName === "push") {
       baseSha = event?.before;
       if (event?.after !== checkedSha || !SHA.test(baseSha || "") || /^0+$/.test(baseSha)) {

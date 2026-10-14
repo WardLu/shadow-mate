@@ -12,6 +12,7 @@
     "public:check": "node scripts/public-check.mjs",
     "security:check": "node scripts/security-check.mjs",
     "release:check": "node scripts/release-check.mjs",
+    "release:promote": "node scripts/release/promote-to-production.mjs",
     "release:production": "bash scripts/release/deploy-production.sh",
     "seo:audit": "node scripts/seo/audit-prerendered-html.mjs",
     "seo:live": "node scripts/seo/audit-live-site.mjs",
