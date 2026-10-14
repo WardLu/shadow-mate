@@ -68,7 +68,15 @@ if [ -n "$WORKTREE_STATUS" ]; then
 fi
 HEAD_SHA="$(git rev-parse HEAD)"
 TRACKING_SHA="$(git rev-parse "origin/$CURRENT_BRANCH")"
-LIVE_REMOTE_LINE="$(git ls-remote --exit-code origin "refs/heads/$CURRENT_BRANCH")"
+LIVE_REMOTE_LINE=""
+for attempt in 1 2 3; do
+  if LIVE_REMOTE_LINE="$(git ls-remote --exit-code origin "refs/heads/$CURRENT_BRANCH" 2>/dev/null)"; then
+    break
+  fi
+  if [ "$attempt" -lt 3 ]; then
+    sleep "$attempt"
+  fi
+done
 LIVE_REMOTE_SHA="${LIVE_REMOTE_LINE%%[[:space:]]*}"
 if [ "$HEAD_SHA" != "$TRACKING_SHA" ] || [ "$HEAD_SHA" != "$LIVE_REMOTE_SHA" ]; then
   echo "❌ 拒绝发布: HEAD 与 origin/$CURRENT_BRANCH 或真实远端不一致" >&2
@@ -155,11 +163,21 @@ echo "✅ 本次构建指纹: $FINGERPRINTS"
 
 verify_domain() { # $1 = 域名, $2 = 轮询预算（秒）；0 = 通过, 1 = 未通过
   local domain="$1" budget="$2" url="https://$1${ACCEPT_PATH}"
-  local deadline body header code missing
+  local deadline body header code missing remaining
   deadline=$(( $(date +%s) + budget ))
   body="$(mktemp)"; header="$(mktemp)"
   while :; do
-    code="$(curl -sS -L -o "$body" -D "$header" -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
+    remaining=$(( deadline - $(date +%s) ))
+    if [ "$remaining" -le 0 ]; then
+      echo "   ❌ ${url} 验收未通过：超时预算耗尽"
+      rm -f "$body" "$header"
+      return 1
+    fi
+    local curl_max=10
+    if [ "$remaining" -lt 10 ]; then
+      curl_max="$remaining"
+    fi
+    code="$(curl -sS -L --connect-timeout 5 --max-time "$curl_max" --retry 2 --retry-delay 1 --noproxy "$domain,*.vercel.app" -o "$body" -D "$header" -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
     missing=""
     if [ "$code" = "200" ]; then
       if [ -n "$BODY_INCLUDES" ] && ! grep -qF "$BODY_INCLUDES" "$body"; then

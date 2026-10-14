@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, preview]
@@ -30,33 +34,42 @@ jobs:
         id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
       - name: Select CI scope
         id: scope
         run: node scripts/ci-scope.mjs
 
-      - name: Install locked dependencies
-        id: install
-        run: npm ci
-
       - name: Test CI scope and required gate
         id: ci_scope_tests
         run: node --test tests/ci/*.test.mjs
 
+      - name: Run lightweight docs security checks
+        id: docs_verify
+        if: ${{ steps.scope.outputs.mode == 'docs' }}
+        run: node scripts/public-check.mjs && node scripts/security-check.mjs
+
+      - name: Install locked dependencies
+        id: install
+        if: ${{ steps.scope.outputs.mode != 'docs' }}
+        run: npm ci
+
       - name: Verify source and build
         id: source
+        if: ${{ steps.scope.outputs.mode != 'docs' }}
         run: npm run verify
         env:
           SECURITY_CHECK_HISTORY: "1"
 
       - name: Validate release metadata baseline
         id: release_metadata
+        if: ${{ steps.scope.outputs.mode != 'docs' }}
         run: npm run release:check
 
       - name: Audit dependencies
         id: audit
+        if: ${{ steps.scope.outputs.mode != 'docs' }}
         run: npm audit --audit-level=high
 
       - name: Test release contracts
@@ -137,6 +150,16 @@ jobs:
         id: mobile_e2e
         if: ${{ steps.scope.outputs.mode == 'full' }}
         run: npm run test:e2e:mobile
+
+      - name: Explain verification dispositions
+        id: verification_dispositions
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          CI_MODE: ${{ steps.scope.outputs.mode }}
+          RELEASE_CONTRACTS: ${{ steps.scope.outputs.release_contracts }}
+          STEP_RESULTS: ${{ toJSON(steps) }}
+        run: node scripts/ci/verification-dispositions.mjs
 
       - name: Enforce selected CI scope
         if: ${{ always() }}
