@@ -62,7 +62,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await expect(miniCard.locator(".label")).toBeVisible();
 
     // 2. Click poem title
-    const poemTitle = page.locator(".poem-title");
+    const poemTitle = page.locator(".poem-title").first();
     await expect(poemTitle).toBeVisible();
     await poemTitle.click();
 
@@ -161,8 +161,8 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
       return (await page.evaluate(() => window.__speechUtterances.length));
     }).toBe(1);
 
-    // Complete the first planned word to populate the past words history
-    await page.locator('[data-content-observation="complete"]').first().click();
+    // Complete the planned words to populate the past words history
+    await page.locator('[data-cmod="english-vocabulary"]').click();
 
     // Past word chip
     const chip = page.locator('.mr-chip[data-word]').first();

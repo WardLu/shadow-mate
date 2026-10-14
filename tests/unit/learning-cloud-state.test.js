@@ -3,6 +3,7 @@ import {
   buildCloudSavePayload,
   normalizeCloudLearningState,
 } from "../../src/learning-cloud-state.js";
+import { LEARNING_WRITE_PROTOCOL } from "../../src/learning-state-codec.js";
 
 const SCOPE = { household_id: "household-1", profile_id: "profile-2" };
 
@@ -72,8 +73,9 @@ describe("cloud learning state contract", () => {
     };
 
     expect(buildCloudSavePayload(state, 12)).toEqual({
-      p_state: state,
+      p_state: expect.objectContaining({ schema_version: 3, archive: expect.any(Object) }),
       p_expected_version: 12,
+      p_write_protocol: LEARNING_WRITE_PROTOCOL,
     });
   });
 });

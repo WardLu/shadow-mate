@@ -3,6 +3,26 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.7.0 - 2026-10-14
+
+### Added
+
+- Learning completion flow: Clean, distraction-free cards with a single unified check-in button at the bottom of each activity. Quiet "completed today" status with unobtrusive more-options popups (skip, restore, revoke, parent observation).
+- Collapsible cards with state persistence: All learning modules (Chinese literacy, poems, writing, math, English vocabulary, picture books) now feature collapsible cards that remember open/closed state and expand automatically on tab navigation.
+- Unified Content Library: Accessible from the top right of learning views for cross-module discovery, topic filtering, status inspection, and self-paced completion.
+- Always-available 4-row writing worksheet: Chinese handwriting now guarantees 4-row worksheets and A4 printable practice sheets by padding with beginner characters or standard Tianzige grids.
+- Growth learning footprint: Comprehensive overview of active learning days, total experiences, and per-subject history (characters, poems, vocabulary, writing rows, books read).
+- English visual cognition: Original accessible SVG illustrations and situational visual cues for all vocabulary words.
+- Activity prompts & audio guidance: Hands-on number sense games and English daily prompts now support speech playback of instructions and dynamic math questions.
+- Adaptive pacing & multi-package selection: Configurable 1–20 daily new item limits, multiple package selection with deduplicated merge, and independent poem budgets.
+- Navigation & back-to-top: Sticky tab bar for smooth navigation across long sections, accompanied by an adaptive 44px back-to-top floating button.
+
+### Fixed
+
+- Fix vertical scroll lock caused by scroll-triggered re-anchoring on long pages.
+- Fix absolute positioning collisions between action pills and collapse toggles on ancient poetry and picture book cards; center poetry pagers cleanly inside the card body.
+- Fix stacking context issues where opened more-options dropdowns in grid layouts were clipped or obscured by following sibling cards.
+
 ## v1.6.1 - 2026-10-13
 
 ### Fixed

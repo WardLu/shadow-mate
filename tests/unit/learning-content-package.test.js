@@ -47,6 +47,7 @@ describe("content package registry", () => {
   it("defaults every module and the package to enabled, keeping speaking disabled", () => {
     expect(defaultContentConfig()).toEqual({
       schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
+      package_ids: ["foundation-v2"],
       package_id: "foundation-v2",
       package_version: 2,
       enabled: true,
@@ -115,7 +116,7 @@ describe("content package registry", () => {
     const config = normalizeContentConfig({ learning_pace: { literacy_new: 1, english_new: 1, poems_per_week: 1 } });
     expect(setContentPackageId(config, "bridging-v1").learning_pace).toEqual(config.learning_pace);
     expect(normalizeContentConfig({ learning_pace: { literacy_new: 99, english_new: -1, poems_per_week: "1", other: 1 } }).learning_pace)
-      .toEqual({ literacy_new: 2, english_new: 2, poems_per_week: 2 });
+      .toEqual({ literacy_new: 2, english_new: 2, poems_new: 2, poems_per_week: 2 });
   });
 
   it("ignores unknown module ids and never leaks unknown config keys", () => {
@@ -123,6 +124,7 @@ describe("content package registry", () => {
     expect(getEnabledModuleIds(config)).toEqual(["chinese", "math", "english", "book"]);
     expect(normalizeContentConfig({ modules: { chinese: false, junk: true } })).toEqual({
       schema_version: CONTENT_CONFIG_SCHEMA_VERSION,
+      package_ids: ["foundation-v2"],
       package_id: "foundation-v2",
       package_version: 2,
       enabled: true,

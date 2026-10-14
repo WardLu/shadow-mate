@@ -1,3 +1,5 @@
+import { numberSenseSpeech } from "./content/math-speech.js";
+
 const MAX_MATH_LEVEL = 10000;
 const NUMBER_SENSE_KINDS = Object.freeze([
   "count",
@@ -73,7 +75,9 @@ function shuffled(values, random) {
 }
 
 export function getMathPolicy(packageId) {
-  return MATH_POLICIES[packageId] || MATH_POLICIES["foundation-v2"];
+  const selected = Array.isArray(packageId) ? packageId : [packageId];
+  const id = selected.includes("foundation-v2") ? "foundation-v2" : selected.includes("bridging-v1") ? "bridging-v1" : "foundation-v2";
+  return MATH_POLICIES[id];
 }
 
 export function buildMentalQuestion(level, seedOrRandom) {
@@ -206,7 +210,7 @@ function boundedNumberSenseLimit(packageId) {
   return getMathPolicy(packageId).defaultMaxResult;
 }
 
-export function buildNumberSenseActivity(seed, packageId = "foundation-v2") {
+function numberSenseActivity(seed, packageId) {
   const random = createRandom(seed);
   const policy = getMathPolicy(packageId);
   const maximum = boundedNumberSenseLimit(packageId);
@@ -265,7 +269,7 @@ export function buildNumberSenseActivity(seed, packageId = "foundation-v2") {
     return {
       kind,
       prompt: "找出数列的规律，下一个数字是什么？",
-      illustration: { type: "number-sequence", text: `${values.slice(0, 3).join("，")}，？` },
+      illustration: { type: "number-sequence", values: Object.freeze(values.slice(0, 3)), text: `${values.slice(0, 3).join("，")}，？` },
       options: shuffledOptions(answer, distractors, random),
       answer,
     };
@@ -273,16 +277,16 @@ export function buildNumberSenseActivity(seed, packageId = "foundation-v2") {
 
   if (kind === "spatial") {
     const scenes = [
-      { text: "台灯放在桌面上。", prompt: "台灯在桌子的上面还是下面？", options: ["上面", "下面"], answer: "上面" },
-      { text: "小猫躲在桌子底下。", prompt: "小猫在桌子的上面还是下面？", options: ["上面", "下面"], answer: "下面" },
-      { text: "从左往右摆：球　积木", prompt: "球在积木的左边还是右边？", options: ["左边", "右边"], answer: "左边" },
-      { text: "从左往右摆：积木　球", prompt: "球在积木的左边还是右边？", options: ["左边", "右边"], answer: "右边" },
+      { subject: "lamp", text: "台灯放在桌面上。", prompt: "台灯在桌子的上面还是下面？", options: ["上面", "下面"], answer: "上面" },
+      { subject: "cat", text: "小猫躲在桌子底下。", prompt: "小猫在桌子的上面还是下面？", options: ["上面", "下面"], answer: "下面" },
+      { subject: "ball", text: "从左往右摆：球　积木", prompt: "球在积木的左边还是右边？", options: ["左边", "右边"], answer: "左边" },
+      { subject: "ball", text: "从左往右摆：积木　球", prompt: "球在积木的左边还是右边？", options: ["左边", "右边"], answer: "右边" },
     ];
     const scene = scenes[integerBetween(random, 0, scenes.length - 1)];
     return {
       kind,
       prompt: scene.prompt,
-      illustration: { type: "spatial-scene", text: scene.text },
+      illustration: { type: "spatial-scene", subject: scene.subject, text: scene.text },
       options: shuffled(scene.options, random),
       answer: scene.answer,
     };
@@ -295,8 +299,13 @@ export function buildNumberSenseActivity(seed, packageId = "foundation-v2") {
   return {
     kind,
     prompt: `${total}可以分成${first}和多少？`,
-    illustration: { type: "number-bond", text: `${first} + ？ = ${total}` },
+    illustration: { type: "number-bond", first, total, text: `${first} + ？ = ${total}` },
     options: shuffledOptions(answer, distractors, random),
     answer,
   };
+}
+
+export function buildNumberSenseActivity(seed, packageId = "foundation-v2") {
+  const activity = numberSenseActivity(seed, packageId);
+  return { ...activity, ...numberSenseSpeech(activity) };
 }

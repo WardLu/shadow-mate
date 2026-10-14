@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.6.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.7.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -201,7 +201,7 @@ The current source catalog offers two parent-selected packages. These are availa
 | Optional writing characters | 64 | 128 |
 | Physical picture-book recommendations | 16 | 16 |
 
-The packages share content, so their counts must not be added together. There are also 24 reading-list recommendations. Writing can offer up to four suitable rows; fewer available rows do not produce a four-row print sheet. Speaking courses remain in preparation and do not count toward the check-in denominator.
+The packages support multi-selection (at least 1 package selected); shared content is deduplicated automatically. There are also 24 reading-list recommendations. Writing provides an ever-present four-row worksheet and A4 printable sheet (supplemented with beginner characters or blank Tianzige practice rows when fewer than 4 candidates are available). Speaking courses remain in preparation and do not count toward the check-in denominator.
 
 The complete source speech catalog is built by `buildTencentSpeechCatalog` from the active writing pack and `CORE_LEARNING_SPEECH_ENTRIES`. The latter is a supplemental set of 2,001 entries; it does not include the 384 glyph, English, and meaning entries generated for the 128-item writing pack. The offline `npm run tts:catalog` dry run builds the complete catalog of 2,385 entries and compares it with the committed CDN manifest: all 2,385 entries match the published manifest, with no added, changed, or removed items. All audio files are generated during release preparation, uploaded to COS, and verified through CDN readback. Missing CDN audio uses the system-speech fallback below.
 

@@ -35,15 +35,15 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
-    const title = await page.locator(".poem-title").innerText();
+    const title = await page.locator(".poem-title").first().innerText();
     await page.locator(".poem-line").first().click();
     expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
     await page.clock.setFixedTime(new Date("2026-10-20T02:00:00.000Z"));
     await page.reload();
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
-    await expect(page.locator(".poem-title")).toHaveText(title);
-    await expect(page.locator(".poem-box")).toContainText("继续上次");
+    await expect(page.locator(".poem-title").first()).toHaveText(title);
+    await expect(page.locator('.poem-box[data-content-reason="continue"]').first()).toBeVisible();
     expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
   });
 
@@ -53,7 +53,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
 
-    const poemBox = page.locator(".poem-box");
+    const poemBox = page.locator(".poem-box").first();
     await expect(poemBox).toBeVisible();
 
     const lines = poemBox.locator(".poem-line");
@@ -78,7 +78,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
 
-    const poemBox = page.locator(".poem-box");
+    const poemBox = page.locator(".poem-box").first();
     await expect(poemBox).toBeVisible();
 
     const readAllBtn = poemBox.locator(".poem-read-all");

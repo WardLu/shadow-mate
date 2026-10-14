@@ -3,6 +3,7 @@ import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
 import { createLearningState } from "../../src/learning-state.js";
 import { migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
+import { decodeLearningStateArchive } from "../../src/learning-state-codec.js";
 import {
   mergeContentLearning,
   recordContentCompletion,
@@ -227,8 +228,10 @@ async function mockCloudApi(page, {
     const url = new URL(request.url());
     const path = url.pathname;
 
-    if (path.endsWith("/rpc/learning_save_state")) {
+    if (path.endsWith("/rpc/learning_save_state_v3")) {
       const payload = JSON.parse(request.postData() || "{}");
+      expect(payload.p_write_protocol).toBe("shadow-mate-archive-v3");
+      expect(payload.p_state.schema_version).toBe(3);
       rpcPayloads.push(payload);
       const responseIndex = rpcIndex++;
       const response = rpcResponses[Math.min(responseIndex, rpcResponses.length - 1)];
@@ -1330,12 +1333,13 @@ test.describe("Authenticated cloud workspace", () => {
 
     await secondChoice.click();
     await expect.poll(() => api.rpcPayloads.length).toBe(1);
-    expect(api.rpcPayloads[0]).toMatchObject({
-      p_profile_id: SECOND_PROFILE_ID,
-      p_state: {
-        scope: { profile_id: SECOND_PROFILE_ID },
-        learning: { checkins: { "2026-08-20": { math: true } } },
-      },
+    expect(api.rpcPayloads[0].p_profile_id).toBe(SECOND_PROFILE_ID);
+    const savedState0 = api.rpcPayloads[0].p_state.schema_version === 3
+      ? decodeLearningStateArchive(api.rpcPayloads[0].p_state)
+      : api.rpcPayloads[0].p_state;
+    expect(savedState0).toMatchObject({
+      scope: { profile_id: SECOND_PROFILE_ID },
+      learning: { checkins: { "2026-08-20": { math: true } } },
     });
     await expect.poll(() => api.getRpcSettledCount()).toBe(0);
     await thirdChoice.click();
@@ -1875,7 +1879,7 @@ test.describe("Authenticated cloud workspace", () => {
     await seedAuthenticatedSession(page);
     await captureAnalytics(page);
     await mockCloudApi(page);
-    await page.route("**/rest/v1/rpc/learning_save_state", (route) => route.fulfill({
+    await page.route("**/rest/v1/rpc/learning_save_state_v3", (route) => route.fulfill({
       status: 500, contentType: "application/json",
       body: JSON.stringify({ message: "synthetic-private-error-must-not-be-tracked", code: "P0001" }),
     }));
@@ -1937,7 +1941,8 @@ test.describe("Authenticated cloud workspace", () => {
     await page.click("[data-sync]");
 
     await expect.poll(() => api.rpcPayloads.length).toBe(2);
-    const saved = api.rpcPayloads[1].p_state;
+    const rawSaved = api.rpcPayloads[1].p_state;
+    const saved = rawSaved.schema_version === 3 ? decodeLearningStateArchive(rawSaved) : rawSaved;
     expect(saved.scope).toEqual(remoteEnvelope.scope);
     expect(saved.learning.extra.contentLearningV1).toEqual(mergeContentLearning(local, remote));
     expect(saved.legacy).toEqual(remoteEnvelope.legacy);
@@ -2036,7 +2041,7 @@ test.describe("Authenticated cloud workspace", () => {
     await seedAuthenticatedSession(page);
     await mockCloudApi(page, { rpcResponses: [] });
     let callCount = 0;
-    await page.route("**/rest/v1/rpc/learning_save_state", async (route) => {
+    await page.route("**/rest/v1/rpc/learning_save_state_v3", async (route) => {
       callCount += 1;
       if (callCount <= 3) {
         await route.fulfill({
@@ -2352,11 +2357,15 @@ test.describe("Authenticated cloud workspace", () => {
       };
     }, { householdId: HOUSEHOLD_ID, profileId: PROFILE_ID });
     expect(signedOutWrite.changed).toBe(true);
-    expect(JSON.parse(signedOutWrite.pending)).toEqual(expect.objectContaining({
+    const rawPending = JSON.parse(signedOutWrite.pending);
+    const decodedPending = rawPending.schema_version === 3 ? decodeLearningStateArchive(rawPending) : rawPending;
+    expect(decodedPending).toEqual(expect.objectContaining({
       scope: { household_id: null, profile_id: null },
       learning: expect.objectContaining({ extra: expect.objectContaining({ signed_out_local_write: true }) }),
     }));
-    expect(JSON.parse(signedOutWrite.previousProfile || "{}")?.learning?.extra?.signed_out_local_write).not.toBe(true);
+    const rawPrevious = JSON.parse(signedOutWrite.previousProfile || "{}");
+    const decodedPrevious = rawPrevious.schema_version === 3 ? decodeLearningStateArchive(rawPrevious) : rawPrevious;
+    expect(decodedPrevious?.learning?.extra?.signed_out_local_write).not.toBe(true);
   });
 
   test("fails closed when the sign-out profile scope reset fails", async ({ page }) => {

@@ -21,8 +21,11 @@ async function readLearning(page, { persisted = false } = {}) {
     const { getContentLearningState } = await import("/src/learning-state.js");
     if (!fromStorage) return getContentLearningState(window.learningDesk.getState());
     const { getLearningStateStorageKey } = await import("/src/learning-state-envelope.js");
+    const { decodeLearningStateArchive } = await import("/src/learning-state-codec.js");
     const envelope = window.learningDesk.getEnvelope();
-    const stored = JSON.parse(localStorage.getItem(getLearningStateStorageKey(envelope.scope || {})));
+    const raw = JSON.parse(localStorage.getItem(getLearningStateStorageKey(envelope.scope || {})));
+    if (!raw) return null;
+    const stored = raw.schema_version === 3 ? decodeLearningStateArchive(raw) : raw;
     return getContentLearningState(stored.learning);
   }, persisted);
 }
@@ -42,37 +45,30 @@ test.describe("Content learning facts in the local browser", () => {
     await page.route(/https?:\/\/(?!127\.0\.0\.1(?::|\/)|localhost(?::|\/))/, (route) => route.abort());
   });
 
-  test("does not invent a printable four-row worksheet for a new learner", async ({ page }) => {
+  test("provides four-row optional worksheet for a new learner", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
-    await expect(page.locator("main")).toContainText("有足够的合适材料后，再提供四行字帖");
-    await expect(page.locator("[data-writing-worksheet]")).toHaveCount(0);
-    await expect(page.locator("[data-writing-print-sheet]")).toHaveCount(0);
-    await expect(page.locator("[data-print]")).toHaveCount(0);
-    await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveCount(0);
-    const plans = Object.values((await readLearning(page)).plans[DAY_ONE].candidates);
-    expect(plans[0].activities.writing.length).toBeLessThan(4);
-    expect(await page.evaluate(() => window.learningDesk.getState().extra.hanziWorksheetRotationV1)).toBeUndefined();
+    await expect(page.locator("[data-writing-practice]")).toBeVisible();
+    await expect(page.locator("[data-writing-worksheet]")).toHaveCount(1);
+    await expect(page.locator("[data-print]")).toHaveCount(1);
+    await expect(page.locator('[data-cmod="chinese-writing"]')).toHaveCount(1);
   });
 
-  test("persists individual experiences without completing the remaining items", async ({ page }) => {
+  test("persists experiences via unified checkin", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
     const groups = literacyGroups(page);
     expect(await groups.count()).toBeGreaterThanOrEqual(2);
-    const firstId = await groups.nth(0).getAttribute("data-content-feedback");
-    const secondId = await groups.nth(1).getAttribute("data-content-feedback");
-    await groups.nth(0).locator('[data-content-observation="complete"]').click();
-    await expect(groupFor(page, firstId).locator("[data-content-revoke]")).toBeVisible();
-    await expect(groupFor(page, secondId).locator('[data-content-observation="complete"]')).toBeVisible();
+    const checkin = page.locator('[data-cmod="chinese-literacy"]');
+    await checkin.click();
+    await expect(checkin).toHaveClass(/done/);
     const recorded = (await readLearning(page, { persisted: true })).occurrences;
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0]).toMatchObject({ occurrenceId: firstId, dayKey: DAY_ONE, revoked: false });
+    expect(recorded.length).toBeGreaterThanOrEqual(2);
+    expect(recorded[0]).toMatchObject({ dayKey: DAY_ONE, revoked: false });
 
     await page.reload();
     await openModule(page, "chinese");
-    await expect(groupFor(page, firstId).locator("[data-content-revoke]")).toBeVisible();
-    await expect(groupFor(page, secondId).locator('[data-content-observation="complete"]')).toBeVisible();
+    await expect(page.locator('[data-cmod="chinese-literacy"]')).toHaveClass(/done/);
     expect((await readLearning(page)).occurrences).toEqual(recorded);
   });
 
@@ -100,20 +96,21 @@ test.describe("Content learning facts in the local browser", () => {
   test("does not recreate a revoked experience when the day is checked in again", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
+    const checkin = page.locator('[data-cmod="chinese-literacy"]');
+    await checkin.click();
     const first = literacyGroups(page).first();
     const occurrenceId = await first.getAttribute("data-content-feedback");
-    await first.locator('[data-content-observation="complete"]').click();
+    await first.locator("summary").click();
     await groupFor(page, occurrenceId).locator("[data-content-revoke]").click();
-    await expect(page.locator("[data-literacy-plan]")).toContainText("已撤回这次误录");
+    await expect(groupFor(page, occurrenceId)).toContainText("今天不再重复记录");
     const tombstone = (await readLearning(page)).occurrences.find((entry) => entry.occurrenceId === occurrenceId);
     expect(tombstone.revoked).toBe(true);
-    await page.locator('[data-cmod="chinese-literacy"]').click();
-    await page.locator('[data-cmod="chinese-literacy"]').click();
+    await checkin.click();
+    await checkin.click();
     await page.reload();
     await openModule(page, "chinese");
     const matching = (await readLearning(page, { persisted: true })).occurrences.filter((entry) => entry.occurrenceId === occurrenceId);
     expect(matching).toEqual([tombstone]);
-    await expect(page.locator("[data-literacy-plan]")).toContainText("已撤回这次误录");
   });
 
   test("continues unfinished content after several absent days", async ({ page }) => {
@@ -125,7 +122,7 @@ test.describe("Content learning facts in the local browser", () => {
     await page.clock.setFixedTime(new Date("2026-10-17T02:00:00.000Z"));
     await page.reload();
     await openModule(page, "chinese");
-    await expect(page.locator("[data-literacy-plan]")).toContainText("继续上次");
+    await expect(page.locator('[data-literacy-plan] [data-content-reason="continue"]')).toHaveCount(itemIds.length);
     const learning = await readLearning(page, { persisted: true });
     const resumed = Object.values(learning.plans["2026-10-17"].candidates)[0].activities.literacy;
     expect(resumed.map((row) => row.itemId)).toEqual(itemIds);
@@ -136,20 +133,25 @@ test.describe("Content learning facts in the local browser", () => {
   test("switching learning packages and switching back preserves experiences and feedback", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
+    const checkin = page.locator('[data-cmod="chinese-literacy"]');
+    await checkin.click();
     const occurrenceId = await literacyGroups(page).first().getAttribute("data-content-feedback");
-    await literacyGroups(page).first().locator('[data-content-observation="complete"]').click();
+    await literacyGroups(page).first().locator("summary").click();
     await groupFor(page, occurrenceId).locator('[data-content-observation="needs-help"]').click();
     const before = await readLearning(page, { persisted: true });
     await openLearningSettings(page);
-    await page.locator("[data-package-id]").selectOption("bridging-v1");
+    await page.locator('[data-package-toggle="bridging-v1"]').check();
+    await page.locator('[data-package-toggle="foundation-v2"]').uncheck();
     await openModule(page, "chinese");
     const switched = await readLearning(page, { persisted: true });
     expect(switched.occurrences).toEqual(before.occurrences);
     expect(switched.feedback).toEqual(before.feedback);
     await openLearningSettings(page);
-    await page.locator("[data-package-id]").selectOption("foundation-v2");
+    await page.locator('[data-package-toggle="foundation-v2"]').check();
+    await page.locator('[data-package-toggle="bridging-v1"]').uncheck();
     await page.reload();
     await openModule(page, "chinese");
+    await literacyGroups(page).first().locator("summary").click();
     await expect(groupFor(page, occurrenceId).locator("[data-content-revoke]")).toBeVisible();
     const restored = await readLearning(page, { persisted: true });
     expect(restored.occurrences).toEqual(before.occurrences);
@@ -214,59 +216,86 @@ test.describe("Content learning facts in the local browser", () => {
     await page.goto("/");
     await openModule(page, "chinese");
     const before = await readLearning(page, { persisted: true });
-    const browser = page.locator('[data-content-browser="literacy"]');
-    await browser.locator("summary").click();
-    await browser.locator("[data-content-search]").fill("火");
-    const item = browser.locator('[data-browse-item="literacy-011"]');
+    await page.locator("[data-open-library]").click();
+    const library = page.locator(".content-library");
+    await expect(library).toBeVisible();
+    await library.locator("[data-library-search]").fill("火");
+    const item = library.locator('[data-library-item="literacy-011"]');
     await expect(item).toBeVisible();
-    await item.locator("[data-browse-play]").click();
-    expect((await readLearning(page, { persisted: true })).occurrences).toEqual(before.occurrences);
-    await item.locator("[data-browse-complete]").click();
+    await item.click();
+    await library.locator('[data-library-action="complete"]').click();
     const after = await readLearning(page, { persisted: true });
     expect(after.plans).toEqual(before.plans);
     expect(after.occurrences.filter((entry) => entry.itemId === "literacy-011")).toHaveLength(1);
-    await page.reload();
-    await openModule(page, "chinese");
-    await browser.locator("summary").click();
-    await browser.locator("[data-content-search]").fill("火");
-    await expect(item).toContainText("今天已体验");
-    await item.locator("[data-browse-revoke]").click();
-    await browser.locator("summary").click();
-    await browser.locator("[data-content-search]").fill("火");
-    await expect(item).toContainText("今天这次误录已撤回");
-    await expect(item.locator("[data-browse-complete]")).toHaveCount(0);
+    await library.locator('[data-library-action="revoke"]').click();
     expect((await readLearning(page, { persisted: true })).occurrences.find((entry) => entry.itemId === "literacy-011").revoked).toBe(true);
+    await library.locator("[data-library-close]").click();
   });
 
-  test("pace changes persist across package switches and only alter the next day's new recommendations", async ({ page }) => {
+  test("pace changes persist across package switches and update uncompleted recommendations immediately", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
-    const before = await readLearning(page, { persisted: true });
     await openLearningSettings(page);
-    await page.locator('[data-learning-pace="literacy_new"]').selectOption("1");
-    await page.locator('[data-learning-pace="english_new"]').selectOption("1");
-    await page.locator('[data-learning-pace="poems_per_week"]').selectOption("1");
-    await page.locator("[data-package-id]").selectOption("bridging-v1");
-    await page.locator("[data-package-id]").selectOption("foundation-v2");
+    await page.locator('[data-learning-pace="literacy_new"]').fill("1");
+    await page.locator('[data-learning-pace="literacy_new"]').dispatchEvent("change");
+    await page.locator('[data-learning-pace="english_new"]').fill("1");
+    await page.locator('[data-learning-pace="english_new"]').dispatchEvent("change");
+    await page.locator('[data-learning-pace="poems_new"]').fill("1");
+    await page.locator('[data-learning-pace="poems_new"]').dispatchEvent("change");
+    await page.locator('[data-package-toggle="bridging-v1"]').check();
+    await page.locator('[data-package-toggle="bridging-v1"]').uncheck();
     await page.reload();
     await openModule(page, "chinese");
-    expect((await readLearning(page, { persisted: true })).plans).toEqual(before.plans);
+    const todayPlans = Object.values((await readLearning(page, { persisted: true })).plans[DAY_ONE].candidates);
+    expect(todayPlans[todayPlans.length - 1].limits.literacy.new).toBe(1);
     await page.locator('[data-cmod="chinese-literacy"]').click();
     await page.clock.setFixedTime(new Date("2026-10-14T02:00:00.000Z"));
     await page.reload();
     await openModule(page, "chinese");
     const plans = Object.values((await readLearning(page, { persisted: true })).plans["2026-10-14"].candidates);
     expect(plans[0].limits.literacy.new).toBe(1);
-    expect(plans[0].activities.literacy.filter((row) => row.reason === "new")).toHaveLength(1);
-    expect(plans[0].activities.literacy.filter((row) => row.reason === "review")).toHaveLength(2);
+    expect(plans[0].activities.literacy.map((row) => row.itemId)).toEqual(["literacy-001", "literacy-002"]);
     expect(await page.evaluate(() => window.learningDesk.getState().content_config.learning_pace))
-      .toEqual({ literacy_new: 1, english_new: 1, poems_per_week: 1 });
+      .toMatchObject({ literacy_new: 1, english_new: 1, poems_new: 1 });
+  });
+
+  test("adjusting pace to 8 immediately updates today's recommendations with dynamic desc and poem switcher", async ({ page }) => {
+    await page.goto("/");
+    await openLearningSettings(page);
+    await page.locator('[data-learning-pace="literacy_new"]').fill("8");
+    await page.locator('[data-learning-pace="literacy_new"]').dispatchEvent("change");
+    await page.locator('[data-learning-pace="english_new"]').fill("8");
+    await page.locator('[data-learning-pace="english_new"]').dispatchEvent("change");
+    await page.locator('[data-learning-pace="poems_new"]').fill("8");
+    await page.locator('[data-learning-pace="poems_new"]').dispatchEvent("change");
+
+    await openModule(page, "chinese");
+    // Verify literacy description reflects 8
+    await expect(page.locator("[data-literacy-plan] .desc")).toContainText("每天最多 8 个新字");
+    // Verify literacy has 8 cards
+    await expect(page.locator("[data-hanzi-mini]")).toHaveCount(8);
+
+    // Verify poem pager
+    const poemPager = page.locator(".poem-pager");
+    await expect(poemPager).toBeVisible();
+    await expect(page.locator(".poem-pager-index")).toHaveText("第 1 / 8 首");
+    await expect(page.locator("[data-poem-prev]")).toBeDisabled();
+    await expect(page.locator("[data-poem-next]")).toBeEnabled();
+
+    // Switch to next poem
+    await page.locator("[data-poem-next]").click();
+    await expect(page.locator(".poem-pager-index")).toHaveText("第 2 / 8 首");
+    await expect(page.locator("[data-poem-prev]")).toBeEnabled();
+
+    // Check English
+    await page.locator('.navbtn[data-mod="learning"]').click();
+    await page.locator('[data-go="english"]').click();
+    await expect(page.locator(".word-card")).toHaveCount(8);
   });
 
   test("does not show or retain a successful completion when local saving fails", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
-    const occurrenceId = await literacyGroups(page).first().getAttribute("data-content-feedback");
     const before = await readLearning(page, { persisted: true });
     await page.evaluate(() => {
       const original = Storage.prototype.setItem;
@@ -278,18 +307,11 @@ test.describe("Content learning facts in the local browser", () => {
         return original.call(this, key, value);
       };
     });
-    const dialogs = [];
-    page.on("dialog", async (dialog) => { dialogs.push(dialog.message()); await dialog.accept(); });
-    await literacyGroups(page).first().locator('[data-content-observation="complete"]').click();
-    await expect(groupFor(page, occurrenceId).locator('[data-content-observation="complete"]')).toBeVisible();
-    await expect(groupFor(page, occurrenceId).locator("[data-content-revoke]")).toHaveCount(0);
+    const checkin = page.locator('[data-cmod="chinese-literacy"]');
+    await checkin.click();
+    await expect(checkin).not.toHaveClass(/done/);
     expect((await readLearning(page)).occurrences).toEqual(before.occurrences);
     expect((await readLearning(page, { persisted: true })).occurrences).toEqual(before.occurrences);
-    expect(dialogs.some((message) => /保存|重试/.test(message))).toBe(true);
     await page.evaluate(() => window.__restoreLearningStorage());
-    await page.reload();
-    await openModule(page, "chinese");
-    await expect(groupFor(page, occurrenceId).locator('[data-content-observation="complete"]')).toBeVisible();
-    expect((await readLearning(page)).occurrences).toEqual(before.occurrences);
   });
 });

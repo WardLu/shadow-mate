@@ -3,6 +3,7 @@ import {
   migrateLegacyLearningState,
 } from "./learning-state-envelope.js";
 import { CONTENT_LEARNING_STATE_KEY, hasCompatibleContentLearningScope, rebindContentLearningScope } from "./learning-state.js";
+import { decodeLearningStateArchive, encodeLearningStateArchive } from "./learning-state-codec.js";
 
 export const LEGACY_LEARNING_STATE_KEY = "shadow_mate_workbench_v1";
 export const PENDING_LEARNING_STATE_KEY = getLearningStateStorageKey();
@@ -47,17 +48,13 @@ function hashString(value) {
 
 function parseStoredState(raw) {
   if (raw === null) return null;
+  let parsed;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      && Object.hasOwn(parsed, "schema_version") && parsed.schema_version !== 2) {
-      throw new RangeError(`Unsupported learning state schema version: ${parsed.schema_version}`);
-    }
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch (error) {
-    if (/^Unsupported learning state schema version:/.test(String(error?.message || ""))) throw error;
+    parsed = JSON.parse(raw);
+  } catch (_) {
     return {};
   }
+  return decodeLearningStateArchive(parsed);
 }
 
 function backupLegacyValue(storage, raw, sourceHash) {
@@ -68,7 +65,7 @@ function backupLegacyValue(storage, raw, sourceHash) {
 
 function persistMigratedState(storage, key, raw, envelope, sourceHash = null) {
   if (raw !== null) backupLegacyValue(storage, raw, sourceHash || hashString(raw));
-  storage.setItem(key, JSON.stringify(envelope));
+  storage.setItem(key, JSON.stringify(encodeLearningStateArchive(envelope)));
   return envelope;
 }
 
@@ -135,7 +132,7 @@ function loadPendingEnvelope(storage) {
   }
 
   const emptyEnvelope = migrateLegacyLearningState({}, {});
-  storage.setItem(PENDING_LEARNING_STATE_KEY, JSON.stringify(emptyEnvelope));
+  storage.setItem(PENDING_LEARNING_STATE_KEY, JSON.stringify(encodeLearningStateArchive(emptyEnvelope)));
   return emptyEnvelope;
 }
 
@@ -167,7 +164,7 @@ export function loadLearningStateEnvelope(storage, scope = {}) {
   // not be assigned to a child until the parent explicitly adopts it.
   loadPendingEnvelope(storage);
   const emptyEnvelope = migrateLegacyLearningState({}, scope);
-  storage.setItem(scopedKey, JSON.stringify(emptyEnvelope));
+  storage.setItem(scopedKey, JSON.stringify(encodeLearningStateArchive(emptyEnvelope)));
   return emptyEnvelope;
 }
 
@@ -213,6 +210,6 @@ export function adoptPendingLearningState(storage, scope = {}) {
     adopted_from: "pending",
     adopted_to: adopted.scope.profile_id,
   };
-  storage.setItem(scopedKey, JSON.stringify(adopted));
+  storage.setItem(scopedKey, JSON.stringify(encodeLearningStateArchive(adopted)));
   return adopted;
 }

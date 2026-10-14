@@ -1,4 +1,8 @@
 import { LITERACY_SPEECH_ENTRIES } from "./literacy-speech.js";
+import { LEARNING_PROMPT_SPEECH_ENTRIES } from "./learning-prompts.js";
+import { chineseNumber, MATH_SPEECH_ENTRIES } from "./math-speech.js";
+
+export { chineseNumber } from "./math-speech.js";
 
 export const POEMS = Object.freeze([
   {g:"一年级上",t:"咏鹅",a:"骆宾王",c:["鹅，鹅，鹅，","曲项向天歌。","白毛浮绿水，","红掌拨清波。"]},
@@ -114,18 +118,6 @@ export const ENGLISH = Object.freeze([
   ["begin","/bɪˈɡɪn/","开始","动作","bridging-v1","original-vocabulary-curation"],["finish","/ˈfɪn.ɪʃ/","完成","动作","bridging-v1","original-vocabulary-curation"],["forget","/fəˈɡet/","忘记","动作","bridging-v1","original-vocabulary-curation"],["practice","/ˈpræk.tɪs/","练习","动作","bridging-v1","original-vocabulary-curation"],["tired","/ˈtaɪəd/","累的","感受","bridging-v1","original-vocabulary-curation"],["thirsty","/ˈθɜː.sti/","口渴的","感受","bridging-v1","original-vocabulary-curation"],["hungry","/ˈhʌŋ.ɡri/","饿的","感受","bridging-v1","original-vocabulary-curation"],["surprised","/səˈpraɪzd/","惊讶的","感受","bridging-v1","original-vocabulary-curation"],
 ]);
 
-const CHINESE_DIGITS = Object.freeze(["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]);
-
-export function chineseNumber(value) {
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0 || number > 100) throw new Error("unsupported-speech-number");
-  if (number < 10) return CHINESE_DIGITS[number];
-  if (number === 100) return "一百";
-  const tens = Math.floor(number / 10);
-  const ones = number % 10;
-  return `${tens === 1 ? "" : CHINESE_DIGITS[tens]}十${ones ? CHINESE_DIGITS[ones] : ""}`;
-}
-
 export function poemSpeechIds(poemIndex) {
   const prefix = POEMS[poemIndex]?.id || `poem-${String(poemIndex + 1).padStart(3, "0")}`;
   return {
@@ -154,10 +146,8 @@ export function mathSpeechContentIds(question) {
   ];
 }
 
+// Keep published legacy entries immutable; current screens use the versioned prompts.
 const fixedEntries = [
-  { contentId: "math:operator-plus", locale: "zh-CN", text: "加" },
-  { contentId: "math:operator-minus", locale: "zh-CN", text: "减" },
-  { contentId: "math:question-result", locale: "zh-CN", text: "等于几？" },
   { contentId: "prompt:math-sequence", locale: "zh-CN", text: "点击问号格，选出它应该是哪个数字，按一递增顺序。" },
   { contentId: "prompt:sudoku", locale: "zh-CN", text: "把一到四填入每行每列，四乘四入门版，含比较、分类、形状思维。" },
   { contentId: "prompt:english-daily", locale: "zh-CN", text: "拼读并朗读下面的单词，读完点完成今日打卡。" },
@@ -182,12 +172,6 @@ const englishEntries = ENGLISH.map((word, wordIndex) => ({
   text: word[0],
 }));
 
-const mathNumberEntries = Array.from({ length: 101 }, (_, number) => ({
-  contentId: `math:number-${String(number).padStart(3, "0")}`,
-  locale: "zh-CN",
-  text: chineseNumber(number),
-}));
-
 const reviewPromptEntries = Array.from({ length: 28 }, (_, index) => {
   const days = index + 1;
   return {
@@ -202,6 +186,7 @@ export const CORE_LEARNING_SPEECH_ENTRIES = Object.freeze([
   ...fixedEntries,
   ...poemEntries,
   ...englishEntries,
-  ...mathNumberEntries,
+  ...LEARNING_PROMPT_SPEECH_ENTRIES,
+  ...MATH_SPEECH_ENTRIES,
   ...reviewPromptEntries,
 ]);

@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   Award,
   BadgeCheck,
   BookMarked,
@@ -11,6 +12,8 @@ import {
   ChartNoAxesColumnIncreasing,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   CircleCheck,
   CircleX,
@@ -19,6 +22,7 @@ import {
   Compass,
   Construction,
   createElement,
+  Dices,
   Download,
   Eraser,
   Flame,
@@ -53,6 +57,7 @@ import {
 } from "lucide";
 
 const ICONS = {
+  arrowUp: ArrowUp,
   award: Award,
   badge: BadgeCheck,
   book: BookOpen,
@@ -65,12 +70,15 @@ const ICONS = {
   check: Check,
   checkCircle: CircleCheck,
   chevronDown: ChevronDown,
+  chevronLeft: ChevronLeft,
+  chevronRight: ChevronRight,
   circleX: CircleX,
   alert: CircleAlert,
   help: CircleHelp,
   compass: Compass,
   construction: Construction,
   cloudCheck: CloudCheck,
+  dice: Dices,
   download: Download,
   eraser: Eraser,
   flame: Flame,

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.6.1</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.7.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -175,7 +175,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴本仓库版本为 v1.6.1；线上版本以已完成的受控发布及验收记录为准，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录页面访问数据；正式域名配置后，VibeCafé 页面浏览统计还会使用保存在浏览器中的随机访客标识参与公开作品榜单。正式站点还使用 Sentry 记录固定使用事件和经过过滤的未处理错误，默认开启，可在“设置 → 隐私”关闭。查看入口、免费额度与分析局限见 [使用统计说明](docs/usage-analytics.md)。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴本仓库版本为 v1.7.0；线上版本以已完成的受控发布及验收记录为准，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录页面访问数据；正式域名配置后，VibeCafé 页面浏览统计还会使用保存在浏览器中的随机访客标识参与公开作品榜单。正式站点还使用 Sentry 记录固定使用事件和经过过滤的未处理错误，默认开启，可在“设置 → 隐私”关闭。查看入口、免费额度与分析局限见 [使用统计说明](docs/usage-analytics.md)。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 VibeCafé 统计只在构建时设置 `VITE_VIBECAFE_AUTH_KEY` 且站点为 `https://sm.shadow.wang` 时加载。该客户端 Key 会出现在浏览器产物中，必须在 VibeCafé 将允许上报的 Origin 限定为正式域名。本地和预览环境不会发送榜单事件。配置生产构建环境后，仍须使用仓库的受控发布流程部署；只改环境变量不会更新已部署产物。
 第三方脚本已通过子资源完整性哈希固定；如果 VibeCafé 更新 `telemetry/v1.js`，先审查实际上报内容和隐私行为，再更新 `src/channel-telemetry.js` 中的哈希并重新发布。
@@ -194,7 +194,7 @@ VibeCafé 统计只在构建时设置 `VITE_VIBECAFE_AUTH_KEY` 且站点为 `htt
 | 可选写字条目 | 64 | 128 |
 | 实体绘本推荐 | 16 | 16 |
 
-两个包共享内容，数量不能相加。另有 24 个阅读书单推荐。写字最多提供四行适合材料；不足四行时不生成四行打印字帖。语言听说课程仍在准备中，不计入打卡分母。
+两个包支持多选（至少选 1 项），共享内容自动去重，不重复推荐。另有 24 个阅读书单推荐。写字提供常驻四行字帖与 A4 打印（候选字不足 4 个时由入门简单字或标准空白田字格补齐四行）。语言听说课程仍在准备中，不计入打卡分母。
 
 完整源码语音目录由 `buildTencentSpeechCatalog` 使用当前写字包和 `CORE_LEARNING_SPEECH_ENTRIES` 构建。后者是 2,001 条补充语音；它不包含 128 个写字条目生成的 384 条汉字、英文和字意语音。离线命令 `npm run tts:catalog` 会构建完整的 2,385 条目录，并与已提交的 CDN manifest 比较：全量 2,385 条均已与已发布清单完全匹配（0 条新增、0 条变更、0 条删除）。所有音频文件在发布准备阶段生成、上传至对象存储，并通过 CDN 回读完成校验。CDN 缺少音频时使用下文的系统语音降级。
 

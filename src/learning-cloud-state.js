@@ -1,4 +1,5 @@
 import { migrateLegacyLearningState } from "./learning-state-envelope.js";
+import { encodeLearningStateArchive, LEARNING_WRITE_PROTOCOL } from "./learning-state-codec.js";
 
 function normalizeScope(scope = {}) {
   return {
@@ -24,7 +25,7 @@ export function normalizeCloudLearningState(row = {}, scope = {}) {
   const requestedScope = normalizeScope(scope);
   const rawState = row?.state;
   const state = migrateLegacyLearningState(rawState, requestedScope);
-  const isVersionedEnvelope = rawState?.schema_version === 2 && rawState?.learning;
+  const isVersionedEnvelope = [2, 3].includes(rawState?.schema_version);
 
   if (isVersionedEnvelope && !sameScope(state.scope, requestedScope)) {
     return {
@@ -48,7 +49,8 @@ export function normalizeCloudLearningState(row = {}, scope = {}) {
  */
 export function buildCloudSavePayload(state, expectedVersion = null) {
   return {
-    p_state: structuredClone(state),
+    p_state: encodeLearningStateArchive(migrateLegacyLearningState(state)),
     p_expected_version: expectedVersion,
+    p_write_protocol: LEARNING_WRITE_PROTOCOL,
   };
 }

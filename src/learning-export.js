@@ -1,3 +1,5 @@
+import { decodeLearningStateArchive } from './learning-state-codec.js';
+
 const EXPORT_SCHEMA_VERSION = 1;
 const PRODUCT_ID = "shadow-mate";
 
@@ -48,7 +50,8 @@ function pick(source, keys) {
 }
 
 function exportLearner(learner) {
-  return pick(learner, [
+  const source = learner?.state === undefined ? learner : { ...learner, state: decodeLearningStateArchive(learner.state) };
+  return pick(source, [
     "id",
     "household_id",
     "display_name",

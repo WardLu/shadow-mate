@@ -3,6 +3,7 @@ import { createLearningDesk } from '../../src/learning-desk.js';
 import { getLearningStateStorageKey, migrateLegacyLearningState } from '../../src/learning-state-envelope.js';
 import { LEGACY_LEARNING_STATE_KEY } from '../../src/learning-state-storage.js';
 import { resolveDailyLearningPlan } from '../../src/content-learning.js';
+import { decodeLearningStateArchive } from '../../src/learning-state-codec.js';
 
 const A = { household_id: 'h', profile_id: 'a' };
 const B = { household_id: 'h', profile_id: 'b' };
@@ -177,7 +178,7 @@ it('atomically replaces scoped envelope metadata while keeping the learner scope
     migration: remoteEnvelope.migration,
   });
   const saved = JSON.parse(localStorage.getItem(getLearningStateStorageKey(A)));
-  expect(saved).toMatchObject({ legacy: remoteEnvelope.legacy, extensions: remoteEnvelope.extensions, migration: remoteEnvelope.migration });
+  expect(decodeLearningStateArchive(saved)).toMatchObject({ legacy: remoteEnvelope.legacy, extensions: remoteEnvelope.extensions, migration: remoteEnvelope.migration });
   desk.replaceState(state, { persist: true });
   expect(desk.getEnvelope()).toMatchObject({ learning: { checkins: state.checkins }, extensions: remoteEnvelope.extensions });
   const reopened = createLearningDesk({ storage: localStorage });

@@ -141,6 +141,7 @@ function renderPrintPhraseRow(row) {
 }
 
 function renderPrintCard(row, index) {
+  if (row?.kind === "blank") return `<article class="writing-print-card" data-writing-row data-writing-blank><div class="writing-print-card-head"><span class="writing-print-number">${String(index + 1).padStart(2, "0")}</span><strong>自由练习</strong></div><div class="writing-print-body"><div class="writing-print-practice"><div class="writing-print-practice-row"><span class="writing-print-practice-label">练习</span><div class="writing-print-cells">${Array.from({ length: 8 }, () => renderPrintCell("", "empty")).join("")}</div></div></div></div></article>`;
   const phrase = Array.isArray(row?.exampleWords) && row.exampleWords.length > 0
     ? row.exampleWords[0]
     : row?.exampleWord;
@@ -174,6 +175,7 @@ function renderPrintCard(row, index) {
 }
 
 function renderRow(row, { includeSpeech = false, print = false } = {}) {
+  if (row?.kind === "blank") return `<article class="writing-row hanzi-learning-card" data-writing-row data-writing-blank><h3>空白田字格 · 自由练习</h3><div class="writing-print-cells">${Array.from({ length: 8 }, () => renderPrintCell("", "empty")).join("")}</div><p class="desc">此行不记录内容学习，可由家长选择练习。</p></article>`;
   const sentenceSpeech = includeSpeech
     ? ` data-speech-tap data-speech-text="${text(`例句：${row?.sentence}`)}" role="button" tabindex="0" aria-label="点读例句：${text(row?.sentence)}"`
     : "";
@@ -210,6 +212,13 @@ function renderRows(worksheet, options) {
   return rowsOf(worksheet).map((row) => renderRow(row, options)).join("");
 }
 
+export function createOptionalWritingLayout({ rows = [], dayKey } = {}) {
+  if (!Array.isArray(rows) || rows.length > 3 || typeof dayKey !== "string") throw new TypeError("Invalid optional writing layout");
+  return { kind: "optional-writing-layout", dayKey, layoutVersion: "optional-four-rows-v1",
+    rows: [...rows.map(row => ({ ...structuredClone(row), kind: "content" })),
+      ...Array.from({ length: 4 - rows.length }, () => ({ kind: "blank" }))] };
+}
+
 export function renderWritingWorksheetHtml(worksheet) {
   const attributes = worksheetAttributes(worksheet);
   return `<section class="writing-worksheet" data-writing-worksheet data-writing-assignment-id="${attributes.assignmentId}" data-writing-day-key="${attributes.dayKey}" data-writing-pack-id="${attributes.packSetId}" data-writing-pack-version="${attributes.packVersion}" data-writing-layout-version="${attributes.layoutVersion}">
@@ -235,7 +244,7 @@ export function renderWritingPrintSheetHtml(worksheet) {
           <div><span>日期</span><strong>${printDate(attributes.dayKey)}</strong></div>
           <div><span>姓名</span><span class="writing-print-line"></span></div>
           <div><span>用时</span><span class="writing-print-line short"></span><span>分</span></div>
-          <div><span>今日练习</span><strong>${rows.length} 字</strong><span class="writing-print-stars">☆ ☆ ☆</span></div>
+          <div><span>今日练习</span><strong>${rows.filter(row => row.kind !== "blank").length} 字 · 4 行</strong><span class="writing-print-stars">☆ ☆ ☆</span></div>
         </div>
       </header>
       <section class="writing-print-lesson-strip" aria-label="练习说明和本页生字">

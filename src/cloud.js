@@ -1668,7 +1668,7 @@ async function saveCloudState(manual = false, {
         break;
       }
       requestState = normalizedRequest.state;
-      const { data, error } = await supabase.rpc("learning_save_state", {
+      const { data, error } = await supabase.rpc("learning_save_state_v3", {
         p_profile_id: saveProfile.id,
         ...buildCloudSavePayload(requestState, requestVersion),
       });

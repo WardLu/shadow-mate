@@ -1,6 +1,7 @@
 import { createLearningState, hasCompatibleContentLearningScope, transitionLearningState } from './learning-state.js';
 import { getLearningStateStorageKey, migrateLegacyLearningState } from './learning-state-envelope.js';
 import { loadLearningStateEnvelope, adoptPendingLearningState, clearLearningDeskStorage, LEGACY_LEARNING_STATE_KEY } from './learning-state-storage.js';
+import { decodeLearningStateArchive, encodeLearningStateArchive } from './learning-state-codec.js';
 
 const learningFrom = envelope => envelope?.schema_version === 2 && envelope.learning ? envelope.learning : envelope;
 const isEnvelope = value => value?.schema_version === 2 && value.learning && typeof value.learning === 'object';
@@ -42,6 +43,7 @@ export function createLearningDesk({ storage, canWrite = () => true, canTransiti
       learning: nextState,
     });
     assertContentLearningScope(nextState, committedEnvelope);
+    const serialized = JSON.stringify(encodeLearningStateArchive(committedEnvelope));
     const scopedKey = getLearningStateStorageKey(committedEnvelope.scope || {});
     const previousScopedRaw = priorScopedRaw !== undefined ? priorScopedRaw : storage.getItem(scopedKey);
     const previousLegacyRaw = storage.getItem(LEGACY_LEARNING_STATE_KEY);
@@ -49,7 +51,7 @@ export function createLearningDesk({ storage, canWrite = () => true, canTransiti
     let legacyWriteAttempted = false;
     try {
       scopedWriteAttempted = true;
-      storage.setItem(scopedKey, JSON.stringify(committedEnvelope));
+      storage.setItem(scopedKey, serialized);
       // Retain v1 readers without exporting the new Growth Loop ledger into points.
       legacyWriteAttempted = true;
       storage.setItem(LEGACY_LEARNING_STATE_KEY, JSON.stringify({ ...nextState, points: {} }));
@@ -124,6 +126,7 @@ export function createLearningDesk({ storage, canWrite = () => true, canTransiti
     replaceState(next, { persist: write = false, render = true } = {}) {
       assertStorageAvailable();
       if (!canWrite()) return false;
+      next = decodeLearningStateArchive(next);
       const nextEnvelope = isEnvelope(next) ? structuredClone(next) : getEnvelope();
       if (isEnvelope(next) && !sameScope(nextEnvelope.scope, envelope.scope)) return false;
       const nextLearning = isEnvelope(next) ? learningFrom(nextEnvelope) : next;

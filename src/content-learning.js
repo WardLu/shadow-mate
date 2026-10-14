@@ -1,11 +1,23 @@
+import { LEARNING_PACKAGES, getContentLearningPace, normalizeContentConfig } from "./learning-content-package.js";
+import { normalizeRotationState } from "./hanzi-worksheet-rotation.js";
+
 export const CONTENT_LEARNING_STATE_KEY = "contentLearningV1";
 export const CONTENT_LEARNING_ACTIVITIES = Object.freeze(["literacy", "poem", "english", "book", "writing"]);
+export const CONTENT_LEARNING_PLAN_VERSION = 2;
+export const WRITING_PLAN_PURPOSES = Object.freeze(["scheduled", "supplemental", "introductory"]);
 export const CONTENT_LEARNING_LIMITS = Object.freeze({
   literacy: Object.freeze({ new: 2, review: 2, continue: 2, total: 4 }),
   poem: Object.freeze({ new: 1, review: 1, continue: 1, total: 1, newPerIsoWeek: 2 }),
   english: Object.freeze({ new: 2, review: 2, continue: 2, total: 4 }),
   book: Object.freeze({ new: 1, review: 1, continue: 1, total: 1 }),
   writing: Object.freeze({ rows: 4 }),
+});
+const MAX_LIMITS = Object.freeze({
+  literacy: { new: 20, review: 2, continue: 20, total: 22 },
+  poem: { new: 20, review: 1, continue: 20, total: 21 },
+  english: { new: 20, review: 2, continue: 20, total: 22 },
+  book: { new: 1, review: 1, continue: 1, total: 1 },
+  writing: { rows: 4 },
 });
 
 const MAX_PAYLOAD_BYTES = 550 * 1024;
@@ -181,14 +193,27 @@ function normalizeActivities(value = CONTENT_LEARNING_ACTIVITIES) {
   return [...new Set(value.map(requireActivity))].sort(compareText);
 }
 
-function normalizeLimits(raw = {}) {
+export function normalizeLimits(raw = {}, { legacy = false } = {}) {
   if (!isRecord(raw)) throw new TypeError("Invalid limits");
   return Object.fromEntries(CONTENT_LEARNING_ACTIVITIES.map((activity) => {
-    const defaults = CONTENT_LEARNING_LIMITS[activity];
     const overrides = raw[activity] ?? {};
     if (!isRecord(overrides)) throw new TypeError("Invalid activity limits");
-    const limits = Object.fromEntries(Object.entries(defaults).map(([key, maximum]) => {
-      const limit = overrides[key] ?? maximum;
+    const defaults = legacy && activity === "poem"
+      ? { new: 1, review: 1, continue: 1, total: 1, newPerIsoWeek: 2 }
+      : CONTENT_LEARNING_LIMITS[activity];
+    const newBudget = overrides.new;
+    const resolvedDefaults = newBudget !== undefined && !legacy && ["literacy", "english", "poem"].includes(activity)
+      ? {
+          ...defaults,
+          new: newBudget,
+          continue: overrides.continue ?? newBudget,
+          total: overrides.total ?? (newBudget + defaults.review),
+          ...(activity === "poem" ? { newPerIsoWeek: overrides.newPerIsoWeek ?? Math.min(20, newBudget * 7) } : {}),
+        }
+      : defaults;
+    const limits = Object.fromEntries(Object.entries(resolvedDefaults).map(([key, fallback]) => {
+      const limit = overrides[key] ?? fallback;
+      const maximum = key === "newPerIsoWeek" ? 20 : MAX_LIMITS[activity][key];
       if (!Number.isInteger(limit) || limit < 0 || limit > maximum) throw new RangeError(`Invalid limit: ${activity}.${key}`);
       return [key, limit];
     }));
@@ -196,36 +221,61 @@ function normalizeLimits(raw = {}) {
   }));
 }
 
+function normalizePlanPackageIds(packageIds, packageId) {
+  if (packageIds === undefined) return [requireString(packageId, "packageId")];
+  if (!Array.isArray(packageIds) || !packageIds.length || packageIds.some((id) => !LEARNING_PACKAGES.some((pkg) => pkg.id === id))) {
+    throw new TypeError("Invalid packageIds");
+  }
+  return LEARNING_PACKAGES.filter((pkg) => packageIds.includes(pkg.id)).map((pkg) => pkg.id);
+}
+
 function planSignature(plan) {
-  return canonical({ learnerScope: plan.learnerScope, packageId: plan.packageId, contentVersion: plan.contentVersion,
-    enabledActivities: plan.enabledActivities, limits: plan.limits });
+  return canonical({ learnerScope: plan.learnerScope, packageIds: plan.packageIds ?? [plan.packageId], contentVersion: plan.contentVersion,
+    enabledActivities: plan.enabledActivities, limits: plan.limits, planVersion: plan.planVersion ?? 1,
+    ...(plan.worksheetRef ? { worksheetRef: plan.worksheetRef } : {}) });
 }
 
 function normalizePlan(raw, learnerScope) {
   if (!isRecord(raw)) throw new TypeError("Invalid daily learning plan");
   dayOrdinal(raw.dayKey);
+  if (raw.planVersion !== undefined && raw.planVersion !== CONTENT_LEARNING_PLAN_VERSION) throw new RangeError("Unsupported daily learning plan version");
+  const packageIds = normalizePlanPackageIds(raw.packageIds, raw.packageId);
   const plan = {
     planId: requireString(raw.planId, "planId"),
     learnerScope: requireScope(raw.learnerScope),
     dayKey: raw.dayKey,
-    packageId: requireString(raw.packageId, "packageId"),
+    packageId: packageIds[0],
+    ...(raw.packageIds !== undefined ? { packageIds } : {}),
+    ...(raw.planVersion !== undefined ? { planVersion: raw.planVersion } : {}),
     contentVersion: requireString(raw.contentVersion, "contentVersion"),
     enabledActivities: normalizeActivities(raw.enabledActivities),
-    limits: normalizeLimits(raw.limits),
+    limits: normalizeLimits(raw.limits, { legacy: raw.planVersion === undefined }),
     activities: {},
   };
+  if (raw.worksheetRef !== undefined) {
+    if (raw.planVersion !== CONTENT_LEARNING_PLAN_VERSION || !isRecord(raw.worksheetRef)) throw new TypeError("Invalid worksheet reference");
+    plan.worksheetRef = {
+      assignmentId: requireString(raw.worksheetRef.assignmentId, "assignmentId"),
+      setId: requireString(raw.worksheetRef.setId, "worksheet setId"),
+      contentVersion: requireString(raw.worksheetRef.contentVersion, "worksheet contentVersion"),
+    };
+  }
   if (learnerScope && plan.learnerScope !== learnerScope) throw new RangeError("Daily learning plan scope mismatch");
   for (const activity of CONTENT_LEARNING_ACTIVITIES) {
     const rows = raw.activities?.[activity];
-    if (!Array.isArray(rows) || rows.length > 4) throw new TypeError("Invalid daily learning plan rows");
+    const maximumRows = activity === "writing" ? MAX_LIMITS.writing.rows : MAX_LIMITS[activity].total;
+    if (!Array.isArray(rows) || rows.length > maximumRows) throw new TypeError("Invalid daily learning plan rows");
     if (!plan.enabledActivities.includes(activity) && rows.length) throw new TypeError("Disabled activity has plan rows");
     plan.activities[activity] = rows.map((row) => {
       const item = normalizeItemRef(row);
       if (item.activityId !== activity || !["new", "continue", "review"].includes(row.reason)) throw new TypeError("Invalid daily learning plan row");
       const occurrenceId = contentLearningOccurrenceId(activity, item.itemId, plan.dayKey);
       if (row.occurrenceId !== occurrenceId) throw new TypeError("Invalid plan occurrenceId");
+      if (row.purpose !== undefined && (activity !== "writing" || raw.planVersion !== CONTENT_LEARNING_PLAN_VERSION ||
+        !WRITING_PLAN_PURPOSES.includes(row.purpose))) throw new TypeError("Invalid writing purpose");
       return { ...item, occurrenceId, reason: row.reason,
         ...(row.optional === true ? { optional: true } : {}),
+        ...(row.purpose !== undefined ? { purpose: row.purpose } : {}),
         ...(row.role !== undefined ? { role: requireString(row.role, "writing role", 128) } : {}) };
     });
     if (new Set(plan.activities[activity].map((row) => row.itemId)).size !== rows.length) throw new TypeError("Duplicate plan items");
@@ -265,6 +315,35 @@ function mergePlans(left, right, learnerScope, referenceDay) {
   }));
 }
 
+function normalizeDailyContext(raw, learnerScope, dayKey) {
+  if (!isRecord(raw) || raw.schemaVersion !== 1 || raw.learnerScope !== learnerScope || raw.dayKey !== dayKey) {
+    throw new TypeError("Invalid daily learning context scope or day");
+  }
+  if (raw.mathLevel !== null && (!Number.isInteger(raw.mathLevel) || raw.mathLevel < 0 || raw.mathLevel > 10000)) {
+    throw new TypeError("Invalid daily learning context mathLevel");
+  }
+  const contentConfig = normalizeContentConfig(raw.contentConfig);
+  contentConfig.learning_pace = getContentLearningPace(contentConfig);
+  return { schemaVersion: 1, learnerScope, dayKey, contentConfig, mathLevel: raw.mathLevel,
+    ...(raw.planId !== undefined ? { planId: requireString(raw.planId, "context planId") } : {}) };
+}
+
+function mergeDailyContexts(left, right, learnerScope, referenceDay) {
+  const contexts = {};
+  for (const source of [left, right]) {
+    if (source === undefined) continue;
+    if (!isRecord(source)) throw new TypeError("Invalid dailyContexts");
+    for (const [dayKey, raw] of Object.entries(source)) {
+      dayOrdinal(dayKey);
+      const context = normalizeDailyContext(raw, learnerScope, dayKey);
+      if (referenceDay && dayOrdinal(referenceDay) - dayOrdinal(dayKey) >= RETAINED_PLAN_DAYS) continue;
+      const previous = contexts[dayKey];
+      contexts[dayKey] = previous && canonical(previous) < canonical(context) ? previous : context;
+    }
+  }
+  return Object.fromEntries(Object.entries(contexts).sort(([a], [b]) => compareText(a, b)));
+}
+
 function ensureBudget(learning) {
   const byteLength = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
   let bytes = byteLength(learning);
@@ -289,7 +368,8 @@ export function normalizeContentLearning(raw, expectedScope) {
   if (raw != null && !isRecord(raw)) throw new TypeError("Invalid content learning ledger");
   const source = raw ?? {};
   if (source.schemaVersion !== undefined && source.schemaVersion !== 1) throw new RangeError("Unsupported content learning ledger version");
-  if (!source.learnerScope && (hasContentLearningData(source) || (isRecord(source.plans) && Object.keys(source.plans).length > 0))) {
+  if (!source.learnerScope && (hasContentLearningData(source) ||
+    [source.plans, source.dailyContexts].some((value) => isRecord(value) && Object.keys(value).length > 0))) {
     throw new TypeError("Content learning data has no learnerScope");
   }
   const learnerScope = requireScope(source.learnerScope ?? expectedScope ?? "anonymous");
@@ -300,9 +380,11 @@ export function normalizeContentLearning(raw, expectedScope) {
   const skips = unionRecords(normalizeArray(source, "skips", normalizeSkip), [], itemKey, chooseStamped);
   if (source.referenceDay !== undefined) dayOrdinal(source.referenceDay);
   const referenceDay = [source.referenceDay, ...introductions.map((entry) => entry.firstPlannedDay), ...occurrences.map((entry) => entry.dayKey),
-    ...Object.keys(source.plans ?? {})].filter(Boolean).sort(compareText).at(-1);
+    ...Object.keys(source.plans ?? {}), ...Object.keys(source.dailyContexts ?? {})].filter(Boolean).sort(compareText).at(-1);
   const plans = mergePlans(source.plans, undefined, learnerScope, referenceDay);
+  const dailyContexts = mergeDailyContexts(source.dailyContexts, undefined, learnerScope, referenceDay);
   return ensureBudget({ schemaVersion: 1, learnerScope, introductions, occurrences, feedback, skips, plans,
+    ...(Object.keys(dailyContexts).length ? { dailyContexts } : {}),
     ...(referenceDay ? { referenceDay } : {}) });
 }
 
@@ -322,7 +404,10 @@ export function migrateAnonymousContentLearning(learning, learnerScope) {
     }
     plans[dayKey] = { canonicalPlanId: Object.keys(candidates).sort(compareText)[0] ?? null, candidates };
   }
-  return normalizeContentLearning({ ...source, learnerScope: targetScope, plans }, targetScope);
+  const dailyContexts = Object.fromEntries(Object.entries(source.dailyContexts ?? {}).map(([dayKey, context]) => [dayKey,
+    { ...context, learnerScope: targetScope, ...(plans[dayKey] ? { planId: plans[dayKey].canonicalPlanId } : {}) }]));
+  return normalizeContentLearning({ ...source, learnerScope: targetScope, plans,
+    ...(Object.keys(dailyContexts).length ? { dailyContexts } : {}) }, targetScope);
 }
 
 export function mergeContentLearning(left, right) {
@@ -339,6 +424,7 @@ export function mergeContentLearning(left, right) {
     feedback: unionRecords(a.feedback, b.feedback, (entry) => entry.occurrenceId, chooseStamped),
     skips: unionRecords(a.skips, b.skips, itemKey, chooseStamped),
     plans: mergePlans(a.plans, b.plans, a.learnerScope, referenceDay),
+    ...((a.dailyContexts || b.dailyContexts) ? { dailyContexts: mergeDailyContexts(a.dailyContexts, b.dailyContexts, a.learnerScope, referenceDay) } : {}),
     ...(referenceDay ? { referenceDay } : {}),
   });
 }
@@ -423,24 +509,36 @@ function normalizeCatalog(raw) {
   return catalog;
 }
 
-function selectRows(activity, candidates, limits, weeklyNewPoems, exposedGlyphs = new Set()) {
-  if (activity === "writing") {
-    if (limits.rows === 0) return [];
-    const selected = [];
-    const roles = new Set();
-    const add = (candidate) => {
-      const role = candidate.item.role ?? candidate.item.id;
-      if (roles.has(role)) return;
-      roles.add(role);
-      selected.push(candidate);
-    };
-    for (const candidate of candidates) {
-      if (candidate.reason === "new" && !exposedGlyphs.has(candidate.item.glyph)) continue;
-      add(candidate);
-      if (selected.length >= limits.rows) return selected;
-    }
-    return selected;
+function selectWritingRows(items, candidates, limits, dayKey, context, exposedGlyphs) {
+  if (limits.rows === 0) return [];
+  const selected = [];
+  const selectedGlyphs = new Set();
+  const add = (candidate) => {
+    const glyph = candidate.item.glyph ?? candidate.item.id;
+    if (selectedGlyphs.has(glyph) || selected.length >= limits.rows) return;
+    selectedGlyphs.add(glyph);
+    selected.push(candidate);
+  };
+  for (const candidate of candidates) {
+    if (candidate.reason === "new" && !exposedGlyphs.has(candidate.item.glyph)) continue;
+    add({ ...candidate, purpose: "scheduled" });
   }
+  const available = items.filter((item) => item.excluded !== true && item.status !== "inactive" &&
+    context.skips.get(itemKey({ activityId: "writing", itemId: item.id })) !== true);
+  const strokeOrder = (left, right) => (left.strokeCount ?? Infinity) - (right.strokeCount ?? Infinity) ||
+    left.order - right.order || compareText(left.id, right.id);
+  const familiar = available.filter((item) => exposedGlyphs.has(item.glyph) ||
+    context.introductions.has(itemKey({ activityId: "writing", itemId: item.id })) ||
+    (context.histories.get(itemKey({ activityId: "writing", itemId: item.id })) ?? []).some((entry) => entry.dayKey <= dayKey));
+  for (const item of familiar.sort(strokeOrder)) {
+    const key = itemKey({ activityId: "writing", itemId: item.id });
+    const hasHistory = (context.histories.get(key) ?? []).some((entry) => entry.dayKey <= dayKey);
+    add({ item, reason: hasHistory ? "review" : context.introductions.has(key) ? "continue" : "new", purpose: "supplemental" });
+  }
+  return selected;
+}
+
+function selectRows(activity, candidates, limits, weeklyNewPoems = 0) {
   const continues = candidates.filter((entry) => entry.reason === "continue");
   const reviews = candidates.filter((entry) => entry.reason === "review");
   const newItems = candidates.filter((entry) => entry.reason === "new");
@@ -454,25 +552,29 @@ function selectRows(activity, candidates, limits, weeklyNewPoems, exposedGlyphs 
     ? 0
     : Math.max(0, limits.new - selectedContinues);
   const newLimit = Math.max(0, Math.min(freshContentBudget, limits.total - selected.length,
-    activity === "poem" ? limits.newPerIsoWeek - weeklyNewPoems : limits.new));
+    activity === "poem" && limits.newPerIsoWeek !== undefined ? limits.newPerIsoWeek - weeklyNewPoems : limits.new));
   selected.push(...newItems.slice(0, newLimit));
   return selected;
 }
 
-export function resolveDailyLearningPlan({ learning, learnerScope, dayKey, packageId, catalog,
+export function resolveDailyLearningPlan({ learning, learnerScope, dayKey, packageId, packageIds, catalog,
   enabledActivities = CONTENT_LEARNING_ACTIVITIES, deviceId = "local", limits } = {}) {
   requireScope(learnerScope);
-  requireString(packageId, "packageId");
+  const selectedPackages = normalizePlanPackageIds(packageIds, packageId);
   requireString(deviceId, "deviceId");
   dayOrdinal(dayKey);
   const nextLearning = normalizeContentLearning(learning, learnerScope);
   const content = normalizeCatalog(catalog);
   const enabled = normalizeActivities(enabledActivities);
   const resolvedLimits = normalizeLimits(limits);
-  const plan = { learnerScope, dayKey, packageId, contentVersion: content.version, enabledActivities: enabled,
+  const plan = { learnerScope, dayKey, packageId: selectedPackages[0],
+    ...(selectedPackages.every((id) => LEARNING_PACKAGES.some((pkg) => pkg.id === id)) ? { packageIds: selectedPackages } : {}),
+    planVersion: CONTENT_LEARNING_PLAN_VERSION, contentVersion: content.version, enabledActivities: enabled,
     limits: resolvedLimits, activities: Object.fromEntries(CONTENT_LEARNING_ACTIVITIES.map((activity) => [activity, []])) };
-  const saved = Object.values(nextLearning.plans[dayKey]?.candidates ?? {})
-    .filter((candidate) => planSignature(candidate) === planSignature(plan)).sort((a, b) => compareText(a.planId, b.planId))[0];
+  const savedDay = nextLearning.plans[dayKey];
+  const saved = (nextLearning.dailyContexts?.[dayKey]?.planId && savedDay?.candidates[nextLearning.dailyContexts[dayKey].planId]) ||
+    Object.values(savedDay?.candidates ?? {})
+      .filter((candidate) => planSignature(candidate) === planSignature(plan)).sort((a, b) => compareText(a.planId, b.planId))[0];
   if (saved) return { plan: structuredClone(saved), nextLearning };
   if (!enabled.length) {
     plan.planId = `plan-${stableHash(canonical(plan)).toString(36)}`;
@@ -483,22 +585,30 @@ export function resolveDailyLearningPlan({ learning, learnerScope, dayKey, packa
     isoWeek(entry.firstPlannedDay) === isoWeek(dayKey)).length;
   for (const activity of enabled) {
     const exposedGlyphs = activity === "writing"
-      ? new Set(content.literacy.filter((item) => context.introductions.has(itemKey({ activityId: "literacy", itemId: item.id })))
-        .map((item) => item.glyph).filter((glyph) => typeof glyph === "string" && glyph.length > 0))
+      ? new Set(content.literacy.filter((item) => {
+        const key = itemKey({ activityId: "literacy", itemId: item.id });
+        return context.introductions.get(key) <= dayKey ||
+          (context.histories.get(key) ?? []).some((entry) => entry.dayKey <= dayKey);
+      }).map((item) => item.glyph).filter((glyph) => typeof glyph === "string" && glyph.length > 0))
       : new Set();
     const candidates = content[activity].map((item) => classifyItem(activity, item, dayKey, context)).filter(Boolean).sort(sortCandidates);
-    const selected = selectRows(activity, candidates, resolvedLimits[activity], weeklyNewPoems, exposedGlyphs);
-    plan.activities[activity] = selected.map(({ item, reason }) => {
+    const selected = activity === "writing"
+      ? selectWritingRows(content.writing, candidates, resolvedLimits.writing, dayKey, context, exposedGlyphs)
+      : selectRows(activity, candidates, resolvedLimits[activity], weeklyNewPoems);
+    plan.activities[activity] = selected.map(({ item, reason, purpose }) => {
       const key = itemKey({ activityId: activity, itemId: item.id });
       if (!context.introductions.has(key)) {
         nextLearning.introductions.push({ activityId: activity, itemId: item.id, firstPlannedDay: dayKey });
         context.introductions.set(key, dayKey);
       }
       return { activityId: activity, itemId: item.id, occurrenceId: contentLearningOccurrenceId(activity, item.id, dayKey), reason,
-        ...(activity === "writing" ? { role: item.role ?? item.id, ...((item.optional === true || reason === "new") ? { optional: true } : {}) } : {}) };
+        ...(activity === "writing" ? { role: item.role ?? item.id, purpose, optional: true } : {}) };
     });
   }
   plan.planId = `plan-${stableHash(canonical(plan)).toString(36)}-${stableHash(`${canonical(plan)}\0content-plan-v1`).toString(36)}`;
+  if (!savedDay?.candidates?.[plan.planId] && Object.keys(savedDay?.candidates ?? {}).length >= MAX_PLAN_CANDIDATES) {
+    throw new RangeError("Daily plan candidate limit exceeded");
+  }
   nextLearning.plans[dayKey] ||= { candidates: {} };
   nextLearning.plans[dayKey].candidates[plan.planId] = plan;
   nextLearning.referenceDay = [nextLearning.referenceDay, dayKey].filter(Boolean).sort(compareText).at(-1);
@@ -509,31 +619,110 @@ function nextRevision(records, key, keyOf) {
   return records.filter((entry) => keyOf(entry) === key).reduce((maximum, entry) => Math.max(maximum, entry.revision), -1) + 1;
 }
 
-export function recordContentCompletion({ learning, plan, activityId, itemId, dayKey, deviceId = "local", feedback, completedAt } = {}) {
+export function ensureWorksheetLearningPlan({ learning, learnerScope, dayKey, plan, rotationState, worksheet, pack } = {}) {
+  requireScope(learnerScope);
+  dayOrdinal(dayKey);
+  const next = normalizeContentLearning(learning, learnerScope);
+  const snapshot = retainedCompletionPlan(next, plan, dayKey);
+  if (!snapshot.enabledActivities.includes("writing")) throw new RangeError("Writing is disabled in the daily plan");
+  const rotation = normalizeRotationState(rotationState, { expectedLearnerScope: learnerScope, pack,
+    packRef: rotationState?.activePack, referenceDayKey: dayKey });
+  const retained = rotation.assignments[dayKey]?.candidates[worksheet?.assignmentId];
+  if (!retained || worksheet.dayKey !== dayKey || canonical(retained) !== canonical(worksheet)) {
+    throw new RangeError("Writing plan requires a retained worksheet candidate for this scope and day");
+  }
+  const context = buildContext(next);
+  const existingRows = new Map(snapshot.activities.writing.map((row) => [row.itemId, row]));
+  const contentPlan = { ...snapshot, planVersion: CONTENT_LEARNING_PLAN_VERSION,
+    limits: normalizeLimits(snapshot.limits), worksheetRef: { assignmentId: retained.assignmentId, ...retained.packRef },
+    activities: { ...snapshot.activities, writing: retained.rows.map((row) => {
+      const previous = existingRows.get(row.itemId);
+      if (previous) return { ...previous, optional: true, purpose: previous.purpose ?? "scheduled" };
+      const key = itemKey({ activityId: "writing", itemId: row.itemId });
+      const known = context.introductions.has(key);
+      const hasHistory = (context.histories.get(key) ?? []).some((entry) => entry.dayKey <= dayKey);
+      return { activityId: "writing", itemId: row.itemId,
+        occurrenceId: contentLearningOccurrenceId("writing", row.itemId, dayKey),
+        reason: hasHistory ? "review" : known ? "continue" : "new", optional: true,
+        role: row.itemId, purpose: hasHistory || known ? "supplemental" : "introductory" };
+    }) },
+  };
+  if (snapshot.worksheetRef?.assignmentId === retained.assignmentId && canonical(snapshot.activities.writing) === canonical(contentPlan.activities.writing)) {
+    return { plan: structuredClone(snapshot), nextLearning: next };
+  }
+  delete contentPlan.planId;
+  const signature = canonical(contentPlan);
+  contentPlan.planId = `plan-${stableHash(signature).toString(36)}-${stableHash(`${signature}\0content-plan-v2`).toString(36)}`;
+  next.plans[dayKey].candidates[contentPlan.planId] = contentPlan;
+  const introductions = new Set(next.introductions.map(itemKey));
+  for (const row of contentPlan.activities.writing) {
+    if (!introductions.has(itemKey(row))) next.introductions.push({ activityId: "writing", itemId: row.itemId, firstPlannedDay: dayKey });
+  }
+  return { plan: structuredClone(contentPlan), nextLearning: normalizeContentLearning(next, learnerScope) };
+}
+
+function retainedCompletionPlan(learning, plan, dayKey) {
+  const snapshot = normalizePlan(plan, learning.learnerScope);
+  const retained = learning.plans[snapshot.dayKey]?.candidates[snapshot.planId];
+  if (!retained || canonical(retained) !== canonical(snapshot)) throw new RangeError("Completion requires a retained daily plan candidate");
+  return snapshot;
+}
+
+export function recordContentCompletions({ learning, learnerScope, plan, activityId, itemIds, dayKey,
+  deviceId = "local", completedAt } = {}) {
+  requireActivity(activityId);
+  requireScope(learnerScope);
+  requireString(deviceId, "deviceId");
+  dayOrdinal(dayKey);
+  const next = normalizeContentLearning(learning, learnerScope);
+  const snapshot = retainedCompletionPlan(next, plan, dayKey);
+  const available = snapshot.activities[activityId];
+  if (itemIds !== undefined && (!Array.isArray(itemIds) || new Set(itemIds).size !== itemIds.length ||
+    itemIds.some((id) => typeof id !== "string" || !available.some((row) => row.itemId === id)))) {
+    throw new RangeError("Completion items must belong to the displayed daily plan");
+  }
+  const selectedIds = itemIds === undefined ? null : new Set(itemIds);
+  const skips = new Set(next.skips.filter((entry) => entry.skipped).map(itemKey));
+  const occurrences = new Map(next.occurrences.map((entry) => [entry.occurrenceId, entry]));
+  const introductions = new Set(next.introductions.map(itemKey));
+  const rows = available.filter((row) => (!selectedIds || selectedIds.has(row.itemId)) && !skips.has(itemKey(row)) &&
+    !occurrences.get(contentLearningOccurrenceId(activityId, row.itemId, dayKey))?.revoked);
+  const timestamp = requireTimestamp(completedAt ?? `${dayKey}T00:00:00.000Z`);
+  const inserted = [];
+  for (const row of rows) {
+    const occurrenceId = contentLearningOccurrenceId(activityId, row.itemId, dayKey);
+    if (occurrences.has(occurrenceId)) continue;
+    next.occurrences.push({ occurrenceId, activityId, itemId: row.itemId, dayKey,
+      completedAt: timestamp, revision: 0, deviceId, revoked: false });
+    inserted.push(occurrenceId);
+    const key = itemKey(row);
+    if (!introductions.has(key)) {
+      next.introductions.push({ activityId, itemId: row.itemId, firstPlannedDay: snapshot.dayKey });
+      introductions.add(key);
+    }
+  }
+  if (rows.length) next.referenceDay = [next.referenceDay, dayKey].filter(Boolean).sort(compareText).at(-1);
+  return { nextLearning: normalizeContentLearning(next, learnerScope), eligibleCount: rows.length, insertedCount: inserted.length,
+    occurrenceIds: rows.map((row) => contentLearningOccurrenceId(activityId, row.itemId, dayKey)) };
+}
+
+export function recordContentCompletion({ learning, learnerScope, plan, activityId, itemId, dayKey, deviceId = "local", feedback, completedAt } = {}) {
   requireActivity(activityId);
   requireString(deviceId, "deviceId");
   dayOrdinal(dayKey);
-  const next = normalizeContentLearning(learning);
-  const snapshot = normalizePlan(plan, next.learnerScope);
+  const next = normalizeContentLearning(learning, learnerScope);
+  const snapshot = retainedCompletionPlan(next, plan, dayKey);
   const rows = snapshot.activities[activityId].filter((row) => itemId === undefined || row.itemId === itemId);
   if (rows.length !== 1) throw new RangeError("Completion requires one item from the selected daily plan");
   const selected = rows[0];
-  if (next.skips.some((entry) => itemKey(entry) === itemKey(selected) && entry.skipped)) {
-    throw new RangeError("A skipped item cannot be completed");
-  }
   const occurrenceId = contentLearningOccurrenceId(activityId, selected.itemId, dayKey);
+  if (next.skips.some((entry) => itemKey(entry) === itemKey(selected) && entry.skipped)) throw new RangeError("A skipped item cannot be completed");
   const previous = next.occurrences.find((entry) => entry.occurrenceId === occurrenceId);
   if (previous?.revoked) throw new RangeError("A revoked completion cannot be recreated for the same learning day");
   if (feedback !== undefined && !FEEDBACK_VALUES.includes(feedback)) throw new TypeError("Invalid feedback");
-  if (!previous) {
-    next.occurrences.push({ occurrenceId, activityId, itemId: selected.itemId, dayKey,
-      completedAt: requireTimestamp(completedAt ?? `${dayKey}T00:00:00.000Z`), revision: 0, deviceId, revoked: false });
-    if (!next.introductions.some((entry) => itemKey(entry) === itemKey(selected))) {
-      next.introductions.push({ activityId, itemId: selected.itemId, firstPlannedDay: snapshot.dayKey });
-    }
-  }
-  next.referenceDay = [next.referenceDay, dayKey].filter(Boolean).sort(compareText).at(-1);
-  return feedback !== undefined ? setContentFeedback({ learning: next, occurrenceId, feedback, deviceId }) : normalizeContentLearning(next);
+  const result = recordContentCompletions({ learning: next, learnerScope: next.learnerScope, plan: snapshot,
+    activityId, itemIds: [selected.itemId], dayKey, deviceId, completedAt });
+  return feedback !== undefined ? setContentFeedback({ learning: result.nextLearning, occurrenceId, feedback, deviceId }) : result.nextLearning;
 }
 
 export function recordManualContentCompletion({ learning, learnerScope, activityId, itemId, dayKey,

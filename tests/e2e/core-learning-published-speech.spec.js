@@ -52,7 +52,7 @@ test.describe("Core learning published speech", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
-    const button = page.locator(".poem-read-all");
+    const button = page.locator(".poem-read-all").first();
     await button.click();
     await expectPublishedPlays(page, 1);
     await expect(button).toBeDisabled();
@@ -92,7 +92,7 @@ test.describe("Core learning published speech", () => {
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
 
-    await page.locator(".poem-title").click();
+    await page.locator(".poem-title").first().click();
     await expectPublishedPlays(page, 1);
     await page.locator(".poem-line").first().click();
     await expectPublishedPlays(page, 2);
@@ -103,7 +103,7 @@ test.describe("Core learning published speech", () => {
     await expectPublishedPlays(page, 3);
     await page.locator("[data-speak]").first().click();
     await expectPublishedPlays(page, 4);
-    await page.locator('[data-content-observation="complete"]').first().click();
+    await page.locator('[data-cmod="english-vocabulary"]').click();
     await page.locator(".mr-chip[data-word]").first().click();
     await expectPublishedPlays(page, 5);
   });

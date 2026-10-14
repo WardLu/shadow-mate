@@ -60,7 +60,8 @@ describe("learning state machine", () => {
       peanutLog: [],
       peanutRead: {},
       content_config: {
-        schema_version: 1,
+        schema_version: 2,
+        package_ids: ["foundation-v2"],
         package_id: "foundation-v2",
         package_version: 2,
         enabled: true,
@@ -110,7 +111,8 @@ describe("learning state machine", () => {
       peanutLog: [],
       peanutRead: {},
       content_config: {
-        schema_version: 1,
+        schema_version: 2,
+        package_ids: ["foundation-v2"],
         package_id: "foundation-v2",
         package_version: 2,
         enabled: true,
@@ -139,7 +141,8 @@ describe("learning state machine", () => {
       peanutLog: [],
       peanutRead: {},
       content_config: {
-        schema_version: 1,
+        schema_version: 2,
+        package_ids: ["foundation-v2"],
         package_id: "foundation-v2",
         package_version: 2,
         enabled: true,
@@ -421,7 +424,8 @@ describe("learning state machine", () => {
       peanutLog: [],
       peanutRead: {},
       content_config: {
-        schema_version: 1,
+        schema_version: 2,
+        package_ids: ["foundation-v2"],
         package_id: "foundation-v2",
         package_version: 2,
         enabled: true,
