@@ -1,45 +1,36 @@
 #!/usr/bin/env node
-/**
- * promote-to-production.mjs
- *
- * 生产推进原子收口脚本：
- * 将已在 main 验证通过的基线安全、受控地推进至 production 分支。
- * 1. 严格检查工作区、当前分支与远端一致性；
- * 2. 检查 main 提交的 CI 准入状态；
- * 3. 自动建立/复用 main -> production 审查 PR；
- * 4. 依托 CI 快速通道自动验收并快进合并；
- * 5. 可选自动衔接 scripts/release/deploy-production.sh 原子部署。
- */
+/** Advance main to production with hosted Actions verification or verified local-equivalent CI. */
+import { execFileSync } from 'node:child_process';
+import { resolve, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+const SHA = /^[a-f0-9]{40}$/;
+const { repository, productionBranch } = JSON.parse(readFileSync(new URL('../../config/release-production.json', import.meta.url), 'utf8'));
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || productionBranch !== 'production') {
+  throw new Error('推进目标仓库配置无效。');
+}
+const githubRepository = `github.com/${repository}`;
+const CI_WORKFLOW = "CI";
+const REQUIRED_CHECK = "verify";
+const ENFORCEMENT_STEP = "Enforce selected CI scope";
 
 export function defaultGit(args, options = {}) {
-  return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }).trim();
 }
 
 export function defaultGh(args, options = {}) {
-  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
+  return execFileSync('gh', args.includes('--repo') ? args : [...args, '--repo', githubRepository], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }).trim();
 }
 
 export function parseArgs(rawArgs) {
-  const args = rawArgs.slice(2);
-  const options = {
-    dryRun: false,
-    deploy: false,
-    help: false,
-    skipCiWait: false,
-  };
-
-  for (const arg of args) {
-    if (arg === "--dry-run") options.dryRun = true;
-    else if (arg === "--deploy") options.deploy = true;
-    else if (arg === "--skip-ci-wait") options.skipCiWait = true;
-    else if (arg === "--help" || arg === "-h") options.help = true;
-    else {
-      throw new Error(`未知参数: ${arg}。运行 --help 查看用法。`);
-    }
+  const options = { dryRun: false, deploy: false, help: false, local: false };
+  for (const arg of rawArgs.slice(2)) {
+    if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--deploy') options.deploy = true;
+    else if (arg === '--local' || arg === '--local-ci') options.local = true;
+    else if (arg === '--help' || arg === '-h') options.help = true;
+    else throw new Error(`未知参数: ${arg}。运行 --help 查看用法。`);
   }
   return options;
 }
@@ -47,190 +38,257 @@ export function parseArgs(rawArgs) {
 export function printHelp() {
   console.log(`用法:
   npm run release:promote [选项]
-  node scripts/release/promote-to-production.mjs [选项]
 
 选项:
-  --dry-run       仅做门禁与状态核对，不创建/合并 PR，也不执行部署
-  --deploy        推进 production 成功后，自动调用 scripts/release/deploy-production.sh 执行部署与验收
-  --skip-ci-wait  不等待 PR checks 完成（仅当已确认通过或有紧急授权时使用）
+  --dry-run       仅做门禁与状态核对，不创建或合并 PR
+  --local         托管 CI 不可用（无额度/未启动）时，使用针对当前精确 HEAD 的本地等价门禁凭据（npm run ci），若未跑过则现场自愈执行
+  --deploy        不再支持从 main 自动部署；须在 production 工作区独立发布
   -h, --help      显示帮助说明
-`);
+
+凭据判定链路：
+  1. 优先度 1：若 GitHub Actions 有对应 HEAD 的成功记录，直接采纳；
+  2. 优先度 2（核心自愈）：若 Actions 未启动、缺失或受阻，自动或通过 --local 模式核查当前 HEAD 的本地等价门禁通过记录；
+  3. 阻断底线：既无成功托管记录，本地亦未通过全量门禁时，坚决阻断。
+本命令只推进分支；部署仍需独立授权并通过项目受控发布入口执行。`);
 }
 
 export function verifyPreflight({ git = defaultGit }) {
-  const worktreeStatus = (git(["status", "--porcelain", "--untracked-files=all"]) || "").trim();
-  if (worktreeStatus.length > 0) {
-    throw new Error("工作区不干净（存在未提交或未跟踪文件），拒绝推进发布分支。请先提交或清理工作区。");
+  if ((git(['status', '--porcelain', '--untracked-files=all']) || '').trim()) {
+    throw new Error('工作区不干净（存在未提交或未跟踪文件），拒绝推进发布分支。请先提交或清理工作区。');
   }
-
-  const currentBranch = (git(["symbolic-ref", "--quiet", "--short", "HEAD"]) || "").trim();
-  if (currentBranch !== "main") {
+  const currentBranch = git(['symbolic-ref', '--quiet', '--short', 'HEAD']).trim();
+  if (currentBranch !== 'main') {
     throw new Error(`当前处于分支 '${currentBranch}'，推进 production 必须在 'main' 分支上执行。`);
   }
-
-  console.log("👉 刷新远端指针 (origin/main, origin/production)...");
-  git(["fetch", "origin", "main", "production"]);
-
-  const headSha = (git(["rev-parse", "HEAD"]) || "").trim();
-  const originMainSha = (git(["rev-parse", "origin/main"]) || "").trim();
+  const origin = git(['remote', 'get-url', 'origin']).trim();
+  const match = origin.match(/^(?:https:\/\/github\.com\/|git@github\.com:)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
+  if (!match || match[1].toLowerCase() !== repository.toLowerCase()) {
+    throw new Error('origin 与受信任配置中的 GitHub 仓库不一致，拒绝推进。');
+  }
+  git(['fetch', 'origin', 'main', 'production']);
+  const headSha = git(['rev-parse', 'HEAD']).trim();
+  const originMainSha = git(['rev-parse', 'origin/main']).trim();
+  const originProdSha = git(['rev-parse', 'origin/production']).trim();
+  if (![headSha, originMainSha, originProdSha].every(sha => SHA.test(sha))) {
+    throw new Error('分支提交身份无效，拒绝推进。');
+  }
   if (headSha !== originMainSha) {
     throw new Error(`本地 main (${headSha.slice(0, 7)}) 与 origin/main (${originMainSha.slice(0, 7)}) 不一致，请先推送本地提交。`);
   }
-
-  const originProdSha = (git(["rev-parse", "origin/production"]) || "").trim();
   return { headSha, originProdSha };
 }
 
 export function checkMainCiStatus({ headSha, gh = defaultGh }) {
-  console.log(`👉 检查 main 提交 (${headSha.slice(0, 7)}) 托管 CI 状态...`);
-  try {
-    const raw = gh(["run", "list", "--commit", headSha, "--workflow", "ci.yml", "--json", "conclusion,status", "--limit", "1"]);
-    const runs = JSON.parse(raw || "[]");
-    if (runs.length === 0) {
-      console.log("⚠️ 未查询到该 commit 的 ci.yml 历史记录，假定已有离线验证覆盖。");
-      return true;
-    }
-    const latest = runs[0];
-    if (latest.status !== "completed") {
-      throw new Error(`main 分支 CI 仍在运行中 (status=${latest.status})，请等待其变绿后再推向 production。`);
-    }
-    if (latest.conclusion !== "success") {
-      throw new Error(`main 分支 CI 状态异常 (conclusion=${latest.conclusion})，禁止推进至 production。`);
-    }
-    console.log("✅ main 分支 CI 校验通过 (conclusion=success)");
-    return true;
-  } catch (err) {
-    if (err.message.includes("main 分支 CI")) throw err;
-    console.log(`⚠️ gh CLI 检查 CI 遇到网络或非阻塞异常: ${err.message}，继续执行。`);
-    return false;
+  if (!SHA.test(headSha)) throw new Error('main 提交身份无效。');
+  const runs = JSON.parse(gh([
+    'run', 'list', '--branch', 'main', '--event', 'push', '--commit', headSha,
+    '--workflow', 'ci.yml', '--json', 'conclusion,status,headSha,event,headBranch,databaseId', '--limit', '1',
+  ]));
+  const latest = Array.isArray(runs) && runs.length === 1 ? runs[0] : null;
+  if (!latest || !Number.isSafeInteger(latest.databaseId) || latest.databaseId < 1 || latest.headSha !== headSha || latest.event !== 'push' || latest.headBranch !== 'main' ||
+      latest.status !== 'completed' || latest.conclusion !== 'success') {
+    throw new Error('main 分支 CI 未提供同一 SHA 的成功托管证据。');
+  }
+  const proof = JSON.parse(gh(['run', 'view', String(latest.databaseId), '--json',
+    'databaseId,headSha,headBranch,event,workflowName,status,conclusion,jobs']));
+  verifyRunProof(proof, headSha, 'push', latest.databaseId);
+  return proof;
+}
+
+export function verifyRunProof(proof, headSha, event, runId) {
+  if (!proof || proof.databaseId !== runId || proof.headSha !== headSha || proof.headBranch !== 'main' ||
+      proof.event !== event || proof.workflowName !== CI_WORKFLOW || proof.status !== 'completed' || proof.conclusion !== 'success' ||
+      !Array.isArray(proof.jobs) || !proof.jobs.some(job => job.name === REQUIRED_CHECK && job.status === 'completed' &&
+        job.conclusion === 'success' && Array.isArray(job.steps) && job.steps.some(step =>
+          step.name === ENFORCEMENT_STEP && step.status === 'completed' && step.conclusion === 'success'))) {
+    throw new Error('CI 聚合门禁缺少同一提交的实际成功执行证据，停止推进。');
   }
 }
 
-export function getOrCreatePromotionPr({ headSha, originProdSha, gh = defaultGh }) {
-  console.log("👉 检查是否存在打开中的 main -> production PR...");
-  const rawList = gh(["pr", "list", "--base", "production", "--head", "main", "--state", "open", "--json", "number,url", "--limit", "1"]);
-  const openPrs = JSON.parse(rawList || "[]");
+export function readLocalCiRecord(headSha, { git = defaultGit } = {}) {
+  if (!SHA.test(headSha)) return null;
+  try {
+    const commonDir = git(['rev-parse', '--git-common-dir']).trim();
+    const recordPath = resolve(commonDir, 'local-ci', `${headSha}.json`);
+    const data = JSON.parse(readFileSync(recordPath, 'utf8'));
+    if (data?.headSha === headSha && data?.status === 'passed') {
+      return data;
+    }
+  } catch {
+    // 凭据不存在或格式不匹配
+  }
+  return null;
+}
 
-  if (openPrs.length > 0) {
-    const pr = openPrs[0];
-    console.log(`ℹ️ 复用已存在的推进 PR #${pr.number}: ${pr.url}`);
-    return pr;
+export function executeLocalCi({ runner = execFileSync } = {}) {
+  console.log('👉 托管 CI 不可用，正在现场执行同一 HEAD 的本地等价门禁 (npm run ci)...');
+  runner('npm', ['run', 'ci'], { stdio: 'inherit' });
+}
+
+export function verifyCiGate({ headSha, gh = defaultGh, git = defaultGit, options = {}, runner = execFileSync }) {
+  // 优先度 1：托管 GitHub Actions 成功运行
+  let hostedRun = null;
+  if (!options.local) {
+    try {
+      hostedRun = checkMainCiStatus({ headSha, gh });
+      if (hostedRun) {
+        return { kind: 'hosted', run: hostedRun };
+      }
+    } catch {
+      // 托管 CI 不可用
+    }
   }
 
-  console.log("👉 创建 main -> production 推进 PR...");
-  const title = `release: promote main (${headSha.slice(0, 7)}) to production`;
-  const body = `## 变更说明
+  // 优先度 2（核心自愈）：核查针对当前精确 HEAD 的本地运行凭据
+  let localRecord = readLocalCiRecord(headSha, { git });
+  if (!localRecord && options.local) {
+    executeLocalCi({ runner });
+    localRecord = readLocalCiRecord(headSha, { git });
+  }
 
-将已在 \`main\` 经过完整验证的提交 (${headSha.slice(0, 7)}) 推进至 \`production\` 发布分支。
+  if (localRecord && localRecord.status === 'passed') {
+    console.log('托管 CI 不可用（无额度/未启动），已按同一 HEAD 的本地等价门禁通过记录放行');
+    return { kind: 'local', record: localRecord };
+  }
 
-## 检查清单
-- [x] 已在 main 分支完整通过全量 CI 门禁
-- [x] 本地离线准入验证通过 (npm run ci:offline:parallel)
-- [x] 带有 production-impact 标签，合并后执行受控发布脚本部署上线`;
+  // 阻断底线：既没有托管 Actions 记录，本地也未跑过全量门禁（或测试有红灯）
+  throw new Error(`main 提交 (${headSha.slice(0, 7)}) 既无成功的托管 CI 记录，本地亦未通过全量门禁 (npm run ci)。不可推进至 production。`);
+}
 
-  const prUrl = gh([
-    "pr", "create",
-    "--base", "production",
-    "--head", "main",
-    "--title", title,
-    "--body", body,
-    "--label", "production-impact",
+export function getOrCreatePromotionPr({ headSha, gh = defaultGh }) {
+  const listArgs = ['pr', 'list', '--base', 'production', '--head', 'main', '--state', 'open', '--json', 'number,url', '--limit', '1'];
+  const prs = JSON.parse(gh(listArgs));
+  if (!Array.isArray(prs)) throw new Error('推进 PR 列表无效。');
+  if (prs.length) return prs[0];
+  gh([
+    'pr', 'create', '--base', 'production', '--head', 'main',
+    '--title', `release: promote main (${headSha.slice(0, 7)}) to production`,
+    '--body', `将 main 提交 ${headSha} 推进至 production。\n\n该 SHA 为请求核验的候选；main 是可变引用，创建后必须回读实际 head 并核验 CI。PR 创建不代表准入通过、合并授权或生产部署。`,
+    '--label', 'production-impact',
   ]);
+  const created = JSON.parse(gh(listArgs));
+  if (!Array.isArray(created) || created.length !== 1) throw new Error('未能确认推进 PR，停止推进。');
+  return created[0];
+}
 
-  const rawNewList = gh(["pr", "list", "--base", "production", "--head", "main", "--state", "open", "--json", "number,url", "--limit", "1"]);
-  const newPrs = JSON.parse(rawNewList || "[]");
-  return newPrs[0] || { number: null, url: prUrl };
+export function readPromotionPr(number, headSha, gh, state = 'OPEN') {
+  if (!Number.isSafeInteger(number) || number < 1) throw new Error('推进 PR 编号无效。');
+  const pr = JSON.parse(gh([
+    'pr', 'view', String(number), '--json',
+    'number,headRefOid,headRefName,baseRefName,isCrossRepository,state,isDraft,mergeCommit',
+  ]));
+  if (!pr || pr.number !== number || pr.headRefOid !== headSha || pr.headRefName !== 'main' ||
+      pr.baseRefName !== 'production' || pr.isCrossRepository !== false || pr.isDraft !== false || pr.state !== state) {
+    throw new Error('推进 PR 的提交、来源、目标或状态发生变化，停止推进。');
+  }
+  return pr;
+}
+
+export function verifyPromotionTree(headSha, baseSha, git) {
+  const mergedTree = git(['merge-tree', '--write-tree', baseSha, headSha]).trim();
+  if (!SHA.test(mergedTree) || mergedTree !== git(['rev-parse', `${headSha}^{tree}`]).trim()) {
+    throw new Error('候选合并树与已验证 main 不一致，拒绝创建或合并推进 PR。');
+  }
+}
+
+export function checkPrResults(number, gh, mainCi) {
+  const checks = JSON.parse(gh(['pr', 'checks', String(number), '--json', 'name,bucket,state,workflow,event,link']));
+  if (!Array.isArray(checks) || !checks.length || checks.some(check => !check || !['pass', 'skipping'].includes(check.bucket))) {
+    throw new Error('推进 PR 检查缺失、失败或未完成，停止推进。');
+  }
+  const required = checks.filter(check => check.name === REQUIRED_CHECK && check.workflow === CI_WORKFLOW && check.bucket === 'pass');
+  if (!required.length) throw new Error('推进 PR 缺少必需聚合门禁。');
+  for (const check of required) {
+    const prefix = `https://github.com/${repository}/actions/runs/`;
+    if (typeof check.link !== 'string' || !check.link.startsWith(prefix)) continue;
+    const match = check.link.slice(prefix.length).match(/^(\d+)\/(?:job\/\d+|jobs\/\d+)(?:[/?#].*)?$/);
+    const id = match ? Number(match[1]) : NaN;
+    if (!Number.isSafeInteger(id) || id < 1) continue;
+    if (check.event === 'push' && id === mainCi.databaseId) return;
+    if (check.event === 'pull_request') {
+      const proof = JSON.parse(gh(['run', 'view', String(id), '--json',
+        'databaseId,headSha,headBranch,event,workflowName,status,conclusion,jobs']));
+      verifyRunProof(proof, mainCi.headSha, 'pull_request', id);
+      return;
+    }
+  }
+  throw new Error('推进 PR 聚合门禁来源或执行证据不匹配。');
 }
 
 export async function runPromote(options = {}, dependencies = {}) {
   const git = dependencies.git || defaultGit;
-  const gh = dependencies.gh || defaultGh;
-  const runner = dependencies.spawn || spawnSync;
+  const runGh = dependencies.gh || defaultGh;
+  const gh = args => runGh([...args, '--repo', githubRepository]);
+  if (options.deploy && !options.dryRun) throw new Error('--deploy 不能从 main 自动部署；请在经验证的 production 工作区独立执行受控发布。');
+  if (options.help) { printHelp(); return 0; }
 
-  if (options.help) {
-    printHelp();
-    return 0;
-  }
-
-  console.log("========================================================");
-  console.log("🚀 Shadow Mate 生产推进 (Promote to Production) 自动化");
-  console.log("========================================================");
-
-  // 1. 前置门禁校验
   const { headSha, originProdSha } = verifyPreflight({ git });
-  console.log(`✅ main HEAD: ${headSha.slice(0, 7)}`);
-  console.log(`ℹ️ production HEAD: ${originProdSha.slice(0, 7)}`);
-
   if (headSha === originProdSha) {
-    console.log("✨ production 分支已经处于最新 main 提交，无需推进。");
-    if (options.deploy) {
-      console.log("👉 触发生产原子发布脚本...");
-      if (!options.dryRun) {
-        runner("bash", ["scripts/release/deploy-production.sh"], { stdio: "inherit" });
-      }
-    }
+    console.log('production 已与 main 一致，无需推进；此结果不代表生产部署完成。');
     return 0;
   }
 
-  // 2. 检查 main 提交 CI
-  checkMainCiStatus({ headSha, gh });
+  const ciGate = verifyCiGate({
+    headSha,
+    gh,
+    git,
+    options,
+    runner: dependencies.runner || execFileSync,
+  });
 
   if (options.dryRun) {
-    console.log("🔍 [DRY-RUN] 前置检查完成，未创建 PR，未合并分支，未执行部署。");
+    console.log('[DRY-RUN] 前置检查通过，未创建或合并 PR。');
     return 0;
   }
 
-  // 3. 创建或复用 PR
-  const pr = getOrCreatePromotionPr({ headSha, originProdSha, gh });
+  verifyPromotionTree(headSha, originProdSha, git);
+  const pr = getOrCreatePromotionPr({ headSha, gh });
+  readPromotionPr(pr?.number, headSha, gh);
 
-  // 4. 等待 PR 检查（依赖优化 A，约 30-40s）
-  if (!options.skipCiWait && pr.number) {
-    console.log(`👉 等待 PR #${pr.number} CI 门禁完成...`);
-    try {
-      gh(["pr", "checks", String(pr.number), "--watch"]);
-      console.log("✅ PR 门禁全绿！");
-    } catch (err) {
-      console.log(`⚠️ 等待 PR 门禁超时或报错: ${err.message}，尝试管理员绕过合并...`);
+  if (ciGate.kind === 'hosted') {
+    gh(['pr', 'checks', String(pr.number), '--watch', '--fail-fast']);
+    const current = verifyPreflight({ git });
+    if (current.headSha !== headSha || current.originProdSha !== originProdSha) {
+      throw new Error('等待检查期间分支身份变化，停止推进。');
     }
-  }
-
-  // 5. 合并 PR 推进分支
-  if (pr.number) {
-    console.log(`👉 合并 PR #${pr.number} 到 production...`);
-    gh([
-      "pr", "merge", String(pr.number),
-      "--admin",
-      "--merge",
-      "--subject", `release: promote main (${headSha.slice(0, 7)}) to production`,
-    ]);
-    console.log("✅ production 分支已快进合入最新 main 提交！");
-  }
-
-  // 6. 刷新本地并准备发布
-  git(["fetch", "origin", "production"]);
-  const newProdSha = git(["rev-parse", "origin/production"]);
-  console.log(`🎉 推进完成！origin/production 现在指向: ${newProdSha.slice(0, 7)}`);
-
-  if (options.deploy) {
-    console.log("👉 自动执行生产部署发布流水线...");
-    const deployResult = runner("bash", ["scripts/release/deploy-production.sh"], { stdio: "inherit" });
-    if (deployResult.status !== 0) {
-      throw new Error(`发布部署脚本退出码非零: ${deployResult.status}`);
-    }
+    const mainCi = checkMainCiStatus({ headSha, gh });
+    verifyPromotionTree(headSha, originProdSha, git);
+    checkPrResults(pr.number, gh, mainCi);
   } else {
-    console.log("\n💡 下一步：请运行受控发布命令执行正式部署与域名验收：");
-    console.log("   npm run release:production\n");
+    // 本地等价门禁模式：零分叉树核对在合并前重新执行
+    const current = verifyPreflight({ git });
+    if (current.headSha !== headSha || current.originProdSha !== originProdSha) {
+      throw new Error('分支状态在准备合并时发生变化，停止推进。');
+    }
+    verifyPromotionTree(headSha, originProdSha, git);
   }
 
+  readPromotionPr(pr.number, headSha, gh);
+  gh([
+    'pr', 'merge', String(pr.number), '--merge', '--match-head-commit', headSha,
+    '--subject', `release: promote main (${headSha.slice(0, 7)}) to production`,
+  ]);
+
+  const merged = readPromotionPr(pr.number, headSha, gh, 'MERGED');
+  const mergeSha = merged.mergeCommit?.oid;
+  if (!SHA.test(mergeSha ?? '')) throw new Error('合并尚无可验证提交，未确认推进完成。');
+  git(['fetch', 'origin', 'production']);
+  const newProdSha = git(['rev-parse', 'origin/production']).trim();
+  if (newProdSha !== mergeSha) throw new Error('production 未指向本次 PR 的合并提交，未确认推进完成。');
+  git(['merge-base', '--is-ancestor', headSha, newProdSha]);
+  if (git(['rev-parse', `${newProdSha}^{tree}`]).trim() !== git(['rev-parse', `${headSha}^{tree}`]).trim()) {
+    throw new Error('production 内容与已验证 main 不一致，停止发布后续步骤。');
+  }
+  console.log(`分支推进已验证：origin/production = ${newProdSha}。生产部署尚未执行。`);
+  console.log('获得部署授权后，在经验证的 production 工作区执行发布。');
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    const options = parseArgs(process.argv);
-    await runPromote(options);
+    await runPromote(parseArgs(process.argv));
   } catch (err) {
-    console.error(`❌ 错误: ${err.message}`);
+    console.error(`错误: ${err.message}`);
     process.exit(1);
   }
 }

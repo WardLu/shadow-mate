@@ -264,3 +264,7 @@ The code is released under the [MIT License](LICENSE). Third-party content, mode
 发布入口以 `config/release-production.json` 为项目与团队身份的唯一事实源。缺少本地 `.vercel/project.json` 时按配置创建；已有链接或 `VERCEL_PROJECT_ID` / `VERCEL_ORG_ID` 与配置冲突时立即中止，不覆盖错误链接、不创建替代项目。先核对冲突来源和正式项目 ID，再修复本地环境。
 
 `pull` 后及上传前再次核对链接，Promote 前回读部署所属项目、团队和 Ready/Production 状态。校验失败不得手工 Promote 或直接调用部署 CLI 绕过；本地测试使用合成数据和 CLI mock，不触发实际部署。
+
+## 生产分支推进
+
+`npm run release:promote` 的准入、拒绝条件及部署授权边界见 [生产分支推进门禁](docs/release-promotion.md)。源码或本地测试通过不代表生产已发布。
