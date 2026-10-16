@@ -34,7 +34,8 @@
     "test:e2e:mobile": "node scripts/run-e2e.mjs --project=mobile-360 --project=mobile-390 --project=tablet-portrait --project=tablet-landscape",
     "tts:catalog": "node scripts/tencent-tts-prewarm.mjs --dry-run",
     "tts:prewarm": "node --env-file-if-exists=.env.tts.local scripts/tencent-tts-prewarm.mjs",
-    "tts:smoke": "node scripts/tencent-tts-smoke.mjs"
+    "tts:smoke": "node scripts/tencent-tts-smoke.mjs",
+    "ci": "npm run ci:offline && node scripts/ci/record-local-ci.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

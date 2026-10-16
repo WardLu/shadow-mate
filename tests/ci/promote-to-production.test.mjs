@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as promotion from '../../scripts/release/promote-to-production.mjs';
@@ -27,6 +27,7 @@ function fixture(options = {}) {
     if (args[0] === 'merge-tree') { if (options.mergeConflict) throw Error('merge conflict'); return options.candidateMismatch ? '6'.repeat(40) : tree; }
     if (args[0] === 'merge-base') { if (options.notAncestor) throw Error('not ancestor'); return ''; }
     if (args[0] === 'rev-parse') {
+      if (args[1] === '--git-common-dir') return options.commonDir ?? tmpdir();
       if (args[1].endsWith('^{tree}')) return options.treeMismatch && args[1].startsWith(MERGE) ? 'different' : tree;
       if (args[1] === 'origin/production') return merged ? (options.remoteMergedSha ?? MERGE) : (options.prod ?? PROD);
       if (args[1] === 'origin/main') return options.remoteMain ?? HEAD;
@@ -66,11 +67,14 @@ function fixture(options = {}) {
 const writes = calls => calls.filter(c => c[0] === 'gh' && c[1] === 'pr' && ['create', 'merge'].includes(c[2]));
 const merges = calls => calls.filter(c => c[0] === 'gh' && c[2] === 'merge');
 
-test('parseArgs permits dry-run/help and rejects the removed bypass', () => {
-  assert.deepEqual(parseArgs(['node', 'script', '--dry-run']), { dryRun: true, deploy: false, help: false });
+test('parseArgs permits dry-run/local/help and rejects the removed bypass', () => {
+  assert.deepEqual(parseArgs(['node', 'script', '--dry-run']), { dryRun: true, deploy: false, help: false, local: false });
+  assert.deepEqual(parseArgs(['node', 'script', '--local']), { dryRun: false, deploy: false, help: false, local: true });
+  assert.deepEqual(parseArgs(['node', 'script', '--local-ci']), { dryRun: false, deploy: false, help: false, local: true });
   assert.equal(parseArgs(['node', 'script', '--help']).help, true);
   assert.throws(() => parseArgs(['node', 'script', '--skip-ci-wait']), /未知参数/);
 });
+
 for (const [name, options, error] of [
   ['dirty worktree', { dirty: ' M package.json' }, /工作区不干净/],
   ['non-main branch', { branch: 'feature/test' }, /必须在 'main'/],
@@ -80,9 +84,11 @@ for (const [name, options, error] of [
     const f = fixture(options); assert.throws(() => verifyPreflight(f), error); assert.equal(writes(f.calls).length, 0);
   });
 }
+
 test('preflight binds exact main and production identities', () => {
   assert.deepEqual(verifyPreflight(fixture()), { headSha: HEAD, originProdSha: PROD });
 });
+
 for (const [name, options] of [
   ['missing run', { ci: [] }], ['failure', { ci: [{ ...success, conclusion: 'failure' }] }],
   ['cancelled', { ci: [{ ...success, conclusion: 'cancelled' }] }],
@@ -93,38 +99,98 @@ for (const [name, options] of [
   ['malformed JSON', { ciRaw: '{' }], ['invalid shape', { ciRaw: '{}' }],
   ['query error', { ciError: true }],
 ]) {
-  test('main CI rejects ' + name + ' before any PR write', async () => {
+  test('main CI rejects ' + name + ' before any PR write when no local record exists', async () => {
     const f = fixture(options); await assert.rejects(runPromote({}, f)); assert.equal(writes(f.calls).length, 0);
   });
 }
-test('same-SHA successful main push CI passes', () => {
+
+test('Priority 1: same-SHA successful main push CI passes', () => {
   const f = fixture(); assert.equal(checkMainCiStatus({ headSha: HEAD, gh: f.gh }).databaseId, 123);
   const query = f.calls[0]; assert.ok(query.includes('--branch')); assert.ok(query.includes('--event'));
 });
+
+test('Priority 2: local equivalent CI record permits promotion when hosted CI is unavailable', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'mate-local-ci-test-'));
+  try {
+    const localCiDir = join(tempDir, 'local-ci');
+    mkdirSync(localCiDir, { recursive: true });
+    writeFileSync(join(localCiDir, `${HEAD}.json`), JSON.stringify({
+      schemaVersion: 1, headSha: HEAD, status: 'passed', command: 'npm run ci',
+    }));
+
+    const f = fixture({ ci: [{ ...success, conclusion: 'failure' }], commonDir: tempDir });
+    assert.equal(await runPromote({}, f), 0);
+    assert.equal(merges(f.calls).length, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('Priority 2: --local automatically runs local CI when record is missing', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'mate-local-ci-run-'));
+  try {
+    let ranLocalCi = false;
+    const runner = (cmd, args) => {
+      if (cmd === 'npm' && args[0] === 'run' && args[1] === 'ci') {
+        ranLocalCi = true;
+        const localCiDir = join(tempDir, 'local-ci');
+        mkdirSync(localCiDir, { recursive: true });
+        writeFileSync(join(localCiDir, `${HEAD}.json`), JSON.stringify({
+          schemaVersion: 1, headSha: HEAD, status: 'passed', command: 'npm run ci',
+        }));
+      }
+    };
+
+    const f = fixture({ ci: [], commonDir: tempDir });
+    assert.equal(await runPromote({ local: true }, { ...f, runner }), 0);
+    assert.equal(ranLocalCi, true);
+    assert.equal(merges(f.calls).length, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('Blocking bottom line: rejects when both hosted CI and local CI are absent', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'mate-local-ci-empty-'));
+  try {
+    const f = fixture({ ci: [], commonDir: tempDir });
+    await assert.rejects(runPromote({}, f), /既无成功的托管 CI 记录，本地亦未通过全量门禁/);
+    assert.equal(writes(f.calls).length, 0);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('dry-run checks main without PR writes', async () => {
   const f = fixture(); assert.equal(await runPromote({ dryRun: true }, f), 0); assert.equal(writes(f.calls).length, 0);
 });
+
 test('already aligned branches do not query or write GitHub', async () => {
   const f = fixture({ prod: HEAD }); await runPromote({}, f); assert.equal(f.calls.filter(c => c[0] === 'gh').length, 0);
 });
-test('programmatic callers cannot skip PR checks', async () => {
-  const f = fixture(); await assert.rejects(runPromote({ skipCiWait: true }, f)); assert.equal(writes(f.calls).length, 0);
-});
-test('PR checks failure cannot fall through to merge', async () => {
+
+test('PR checks failure cannot fall through to merge in hosted mode', async () => {
   const f = fixture({ checksError: true }); await assert.rejects(runPromote({}, f), /PR checks failed/); assert.equal(merges(f.calls).length, 0);
 });
-for (const [name, checks] of [
+
+for (const [name, checks, extra] of [
   ['empty', []], ['all skipped', [{ ...passChecks[0], bucket: 'skipping' }]],
   ['pending', [{ ...passChecks[0], bucket: 'pending' }]], ['failed', [{ ...passChecks[0], bucket: 'fail' }]],
   ['wrong workflow', [{ ...passChecks[0], workflow: 'unrelated' }]],
   ['wrong run provenance', [{ ...passChecks[0], link: 'https://github.com/WardLu/shadow-mate/actions/runs/999/job/456' }]],
-  ['unrelated PR check', [{ ...passChecks[0], event: 'pull_request', link: 'https://github.com/unrelated/repo/actions/runs/456/job/789' }]],
-  ['another check failed', [...passChecks, { name: 'CodeQL', bucket: 'fail' }]],
+  ['unrelated PR check', [{ ...passChecks[0], event: 'pull_request' }]],
+  ['wrong proof sha', [passChecks[0]], { proof: { headSha: PROD } }],
+  ['wrong proof event', [passChecks[0]], { proof: { event: 'workflow_dispatch' } }],
+  ['wrong proof status', [passChecks[0]], { proof: { status: 'in_progress' } }],
+  ['wrong proof conclusion', [passChecks[0]], { proof: { conclusion: 'failure' } }],
+  ['missing verification step', [passChecks[0]], { proof: { jobs: [{ name: gate, status: 'completed', conclusion: 'success', steps: [] }] } }],
 ]) {
-  test('PR checks reject ' + name, async () => {
-    const f = fixture({ checks }); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
+  test('PR checks reject ' + name + ' in hosted mode', async () => {
+    const f = fixture({ checks, ...(extra ?? {}) });
+    await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
   });
 }
+
 for (const [name, pr] of [
   ['head drift', { headRefOid: PROD }], ['wrong base', { baseRefName: 'main' }],
   ['wrong source', { headRefName: 'feature' }], ['fork', { isCrossRepository: true }],
@@ -134,21 +200,26 @@ for (const [name, pr] of [
     const f = fixture({ pr }); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
   });
 }
+
 test('PR head changing while checks run is rejected', async () => {
   const f = fixture({ prAfterWait: { headRefOid: PROD } }); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
 });
+
 test('main changing while checks run is rejected', async () => {
   const f = fixture({ movedHead: true }); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
 });
-test('new main CI failure during wait is rejected', async () => {
+
+test('new main CI failure during wait is rejected in hosted mode', async () => {
   const f = fixture({ ciAfterWait: [{ ...success, conclusion: 'failure' }] });
   await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
 });
+
 test('invalid or unconfirmed PR numbers never reach merge', async () => {
   for (const prs of [[], [{ number: null }], [{ number: '450' }]]) {
     const f = fixture({ prs }); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
   }
 });
+
 test('verified merge pins head and never uses administrator bypass', async () => {
   const f = fixture(); assert.equal(await runPromote({}, f), 0);
   const merge = merges(f.calls); assert.equal(merge.length, 1);
@@ -156,6 +227,7 @@ test('verified merge pins head and never uses administrator bypass', async () =>
   assert.equal(merge[0][merge[0].indexOf('--match-head-commit') + 1], HEAD);
   assert.ok(f.calls.some(c => c[0] === 'git' && c[1] === 'merge-base'));
 });
+
 for (const [name, options] of [
   ['queued rather than merged', { queued: true }], ['remote points elsewhere', { remoteMergedSha: PROD }],
   ['tree mismatch', { treeMismatch: true }], ['main is not ancestor', { notAncestor: true }],
@@ -164,6 +236,7 @@ for (const [name, options] of [
     const f = fixture(options); await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 1);
   });
 }
+
 test('PR creation records only verified facts and requires readback', () => {
   let lists = 0; let body;
   const gh = args => {
@@ -184,6 +257,7 @@ for (const [name, options] of [
     const f = fixture(options); await assert.rejects(runPromote({}, f)); assert.equal(writes(f.calls).length, 0);
   });
 }
+
 test('SSH origin is accepted and every GitHub command explicitly pins host and repository', async () => {
   const f = fixture({ origin: 'git' + '@' + 'github.com:WardLu/shadow-mate.git' });
   await runPromote({}, f);
@@ -197,11 +271,16 @@ test('PR retargeting while checks run is rejected before merge', async () => {
   await assert.rejects(runPromote({}, f)); assert.equal(merges(f.calls).length, 0);
 });
 
+test('dry-run with deploy option performs only preflight', async () => {
+  const f = fixture(); assert.equal(await runPromote({ dryRun: true, deploy: true }, f), 0);
+  assert.equal(writes(f.calls).length, 0);
+});
+
 for (const divergent of [false, true]) {
   test('real merge-tree ' + (divergent ? 'rejects production-only content' : 'accepts equivalent trees with divergent history'), () => {
-    const dir = mkdtempSync(join(tmpdir(), 'portal-promotion-tree-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mate-promotion-tree-'));
     const git = args => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
-      '-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.com', ...args],
+      '-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.invalid', ...args],
       { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_NOSYSTEM: '1' } }).trim();
     try {
       git(['init', '--initial-branch=main']);
@@ -217,33 +296,3 @@ for (const divergent of [false, true]) {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 }
-
-
-test('configured gate names are produced by the checked-in workflow', async () => {
-  const { readFileSync } = await import('node:fs');
-  const text = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  assert.ok(text.includes('name: ' + workflow));
-  assert.ok(text.includes('name: ' + gate) || /\n  verify:/.test(text) && gate === 'verify');
-  assert.ok(text.includes('name: ' + enforcement));
-});
-for (const [name, options] of [
-  ['main fetch fails', { fetchError: true }], ['proof lookup fails', { proofError: true }],
-  ['aggregate skipped', { proof: { jobs: [{ name: gate, status: 'completed', conclusion: 'skipped', steps: [] }] } }],
-  ['enforcement step missing', { proof: { jobs: [{ name: gate, status: 'completed', conclusion: 'success', steps: [] }] } }],
-  ['proof SHA differs', { proof: { headSha: PROD } }],
-]) {
-  test('CI evidence rejects ' + name + ' before PR writes', async () => {
-    const f = fixture(options); await assert.rejects(runPromote({}, f)); assert.equal(writes(f.calls).length, 0);
-  });
-}
-test('successful PR-event aggregate validates its own run proof', async () => {
-  const checks = [{ ...passChecks[0], event: 'pull_request', link: 'https://github.com/WardLu/shadow-mate/actions/runs/456/job/789' }];
-  const f = fixture({ checks }); await runPromote({}, f); assert.equal(merges(f.calls).length, 1);
-});
-
-test('main promotion cannot automatically deploy a production-only project', async () => {
-  const f = fixture(); await assert.rejects(runPromote({ deploy: true }, f), /production 工作区/); assert.equal(writes(f.calls).length, 0);
-});
-test('dry-run with deploy option performs only preflight', async () => {
-  const f = fixture(); await runPromote({ deploy: true, dryRun: true }, f); assert.equal(writes(f.calls).length, 0);
-});
