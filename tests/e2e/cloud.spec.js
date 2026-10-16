@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openSection } from "./helpers/sections.js";
 import { createLearningState } from "../../src/learning-state.js";
 import { migrateLegacyLearningState } from "../../src/learning-state-envelope.js";
 import { decodeLearningStateArchive } from "../../src/learning-state-codec.js";
@@ -864,6 +865,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => page.evaluate(() => window.cloudSync.getProfileCommitState().cloud_version)).not.toBeNull();
     await seedIssuedWritingPlan(page, { reload: false });
     await openModule(page, "chinese");
+    await openSection(page, "section-chinese-writing");
 
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
     const beforeCheckin = await readWritingSnapshot(page);
@@ -904,6 +906,7 @@ test.describe("Authenticated cloud workspace", () => {
     await expect.poll(() => page.evaluate(() => window.cloudSync.getProfileCommitState().cloud_version)).not.toBeNull();
     await seedIssuedWritingPlan(page, { reload: false });
     await openModule(page, "chinese");
+    await openSection(page, "section-chinese-writing");
     await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
 
     const before = await readWritingSnapshot(page);
@@ -2666,7 +2669,7 @@ test.describe("Email OTP sign-in", () => {
     await page.click('#emailOtpForm button[type="submit"]');
 
     await expect(page.locator("#passwordEditorForm")).toBeVisible();
-    await expect(page.locator("#cloudPanel")).toContainText("适用于使用同一账号的 Shadow 系列产品");
+    await expect(page.locator("#cloudPanel")).toContainText("可登录同一账号下的其他 Shadow 产品");
     await page.locator('#passwordEditorForm input[name="newPassword"]').fill("SharedPassword123!");
     await page.locator('#passwordEditorForm input[name="confirmPassword"]').fill("SharedPassword123!");
     await page.click('#passwordEditorForm button[type="submit"]');

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.7.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.8.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -35,7 +35,8 @@ Shadow Mate is designed around a family's daily learning routine: what was learn
 ## What it does
 
 - **Four learning modules**: Chinese, mathematics, English, and picture books; tasks can be checked in or cancelled independently.
-- **One learning entry**: open “学习” (Learning) in the left navigation first, then choose Chinese, mathematics, English, or picture books; Points, Growth, Guide, and Settings remain separate top-level pages.
+- **One learning entry**: open “学习” (Learning) from the navigation (left sidebar on desktop, bottom bar on phones), then choose Chinese, mathematics, English, or picture books; Points and Growth are separate top-level pages.
+- **Child and parent spaces**: children use Home, Learning, Points, and Growth on their own; settings, point and reward setup, the user guide, and account sync live in the Parent Area, opened by a 3-second press-and-hold to prevent accidental taps.
 - **Growth records & reward loop**: 30-day module consistency tracking, with family reward redemptions that work locally offline before sign-in and sync automatically across devices after sign-in.
 - **Points calendar**: behavior points are recorded separately from learning modules and can be reviewed or backfilled by date.
 - **Family space**: one parent manages multiple learners, with records loaded for the active learner.

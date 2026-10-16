@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 const STORAGE_KEY = "shadow_mate_sound_settings_v1";
 
@@ -29,13 +31,19 @@ test.describe("Sound effects settings and playback", () => {
     ), { method });
   }
 
+  // 测试把长按缩短到 30ms，门禁起始音尚未播完；等它结束，避免防叠加门控吞掉随后要断言的音效。
+  async function unlockParentQuietly(page, trigger) {
+    await openParentArea(page, trigger);
+    await page.waitForTimeout(300);
+  }
+
   async function storedSettings(page) {
     return page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
   }
 
   async function openSoundSettings(page) {
     await page.goto("/");
-    await page.click('[data-mod="settings"]');
+    await openParentArea(page, '[data-mod="settings"]');
     await page.click('[data-tab="sound"]');
   }
 
@@ -144,7 +152,7 @@ test.describe("Sound effects settings and playback", () => {
     await page.goto("/");
     await installPlaySpies(page);
     await page.click('[data-mod="points"]');
-    await page.click('[data-go-settings="points"]');
+    await unlockParentQuietly(page, '[data-go-settings="points"]');
 
     // 创建正分项并加分 → points_earned
     await page.fill('#pointItemForm input[name="name"]', "自己刷牙");
@@ -165,7 +173,7 @@ test.describe("Sound effects settings and playback", () => {
 
     // 创建减分项并扣分 → points_deducted
     await page.waitForTimeout(600);
-    await page.click('[data-go-settings="points"]');
+    await unlockParentQuietly(page, '[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "不收玩具");
     await page.fill('#pointItemForm input[name="points"]', "-1");
     await page.click('#pointItemForm button[type="submit"]');
@@ -191,7 +199,7 @@ test.describe("Sound effects settings and playback", () => {
 
     // 1. 打卡累积积分
     await page.click('[data-mod="points"]');
-    await page.click('[data-go-settings="points"]');
+    await unlockParentQuietly(page, '[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "整理书桌");
     await page.fill('#pointItemForm input[name="points"]', "10");
     await page.click('#pointItemForm button[type="submit"]');
@@ -203,11 +211,12 @@ test.describe("Sound effects settings and playback", () => {
     // 2. 进入成长页兑换奖励 → 播放 points_deducted
     await page.waitForTimeout(600);
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await unlockParentQuietly(page, '[data-go-settings="growth"]');
     await page.fill('#rewardForm input[name="name"]', "听故事");
     await page.fill('#rewardForm input[name="cost"]', "5");
     await page.click('#rewardForm button[type="submit"]');
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
     const rewardCard = page.locator(".reward-card").filter({ hasText: "听故事" });
     await expect(rewardCard).toBeVisible();
     await rewardCard.locator(".reward-redeem").click();

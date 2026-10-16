@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { LEGACY_BOOK_IDS, LEGACY_READING_LIST_IDS } from "../../src/content/books.js";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 const DAY_ONE = "2026-10-13";
 const FIXED_NOW = new Date(`${DAY_ONE}T02:00:00.000Z`);
@@ -13,7 +15,7 @@ async function openModule(page, module) {
 
 async function openLearningSettings(page) {
   await page.locator('.navbtn[data-mod="learning"]').click();
-  await page.locator('[data-go-settings="learning"]').click();
+  await openParentArea(page, '[data-go-settings="learning"]');
 }
 
 async function readLearning(page, { persisted = false } = {}) {
@@ -48,6 +50,7 @@ test.describe("Content learning facts in the local browser", () => {
   test("provides four-row optional worksheet for a new learner", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "chinese");
+    await openSection(page, "section-chinese-writing");
     await expect(page.locator("[data-writing-practice]")).toBeVisible();
     await expect(page.locator("[data-writing-worksheet]")).toHaveCount(1);
     await expect(page.locator("[data-print]")).toHaveCount(1);
@@ -168,8 +171,8 @@ test.describe("Content learning facts in the local browser", () => {
     await expect(page.locator("main")).toContainText("准备中");
     await expect(page.locator('[data-cmod="speaking-practice"]')).toHaveCount(0);
     await page.locator('.navbtn[data-mod="home"]').click();
-    await expect(page.locator(".banner")).toContainText("0/4 个学习模块");
-    await expect(page.locator(".stat").filter({ hasText: "今日打卡" }).locator(".n")).toHaveText("0/4");
+    await expect(page.locator(".hero .hero-sum")).toContainText("0/4 个学习模块");
+    await expect(page.locator(".stat").filter({ hasText: "今日打卡" }).locator("b")).toHaveText("0/4");
     await page.locator('.navbtn[data-mod="grow"]').click();
     await expect(page.locator('[data-cmod="speaking-practice"]')).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText("语言听说累计打卡");
@@ -276,6 +279,7 @@ test.describe("Content learning facts in the local browser", () => {
     await expect(page.locator("[data-hanzi-mini]")).toHaveCount(8);
 
     // Verify poem pager
+    await openSection(page, "section-chinese-poem");
     const poemPager = page.locator(".poem-pager");
     await expect(poemPager).toBeVisible();
     await expect(page.locator(".poem-pager-index")).toHaveText("第 1 / 8 首");

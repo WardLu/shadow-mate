@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openParentTab } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 async function installSpeechMocks(page) {
   await page.route("**/*manifest.json*", (route) => route.fulfill({ status: 503, body: "fallback" }));
@@ -62,6 +64,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await expect(miniCard.locator(".label")).toBeVisible();
 
     // 2. Click poem title
+    await openSection(page, "section-chinese-poem");
     const poemTitle = page.locator(".poem-title").first();
     await expect(poemTitle).toBeVisible();
     await poemTitle.click();
@@ -80,6 +83,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-writing");
 
     const worksheet = page.locator('[data-writing-worksheet]');
     await expect(worksheet).toBeVisible();
@@ -121,10 +125,11 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="math"]');
 
-    // Number sense read prompt
-    const mathPrompts = page.locator('.btn-read-prompt');
-    await expect(mathPrompts.first()).toBeVisible();
-    await mathPrompts.first().click();
+    // Number sense read prompt（数字规律与简单数独分属两个页签）
+    await openSection(page, "section-math-sequence");
+    const sequencePrompt = page.locator('#section-math-sequence .btn-read-prompt');
+    await expect(sequencePrompt).toBeVisible();
+    await sequencePrompt.click();
 
     await expect.poll(async () => {
       return (await page.evaluate(() => window.__speechUtterances.length));
@@ -134,7 +139,8 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     expect(firstUtterance).toContain("点击问号格");
 
     // Sudoku read prompt
-    const sudokuPrompt = mathPrompts.nth(1);
+    await openSection(page, "section-math-sudoku");
+    const sudokuPrompt = page.locator('#section-math-sudoku .btn-read-prompt');
     await expect(sudokuPrompt).toBeVisible();
     await sudokuPrompt.click();
 
@@ -165,6 +171,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
     await page.locator('[data-cmod="english-vocabulary"]').click();
 
     // Past word chip
+    await openSection(page, "section-english-review");
     const chip = page.locator('.mr-chip[data-word]').first();
     await expect(chip).toBeVisible();
     await chip.click();
@@ -176,7 +183,7 @@ test.describe("Child-friendly voice prompts across learning modules", () => {
 
   test("renders updated guide page with speech, growth loop and sound sections", async ({ page }) => {
     await page.goto("/");
-    await page.click('[data-mod="guide"]');
+    await openParentTab(page, "guide");
 
     await expect(page.locator('[data-guide-section="recommendations"]')).toBeVisible();
     await expect(page.locator('[data-guide-section="recommendations"]')).toContainText("Chrome");
