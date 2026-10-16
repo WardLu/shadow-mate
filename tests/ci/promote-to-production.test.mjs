@@ -280,7 +280,7 @@ for (const divergent of [false, true]) {
   test('real merge-tree ' + (divergent ? 'rejects production-only content' : 'accepts equivalent trees with divergent history'), () => {
     const dir = mkdtempSync(join(tmpdir(), 'mate-promotion-tree-'));
     const git = args => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
-      '-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.invalid', ...args],
+      '-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.com', ...args],
       { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_NOSYSTEM: '1' } }).trim();
     try {
       git(['init', '--initial-branch=main']);
