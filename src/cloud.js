@@ -117,6 +117,8 @@ const growthLoopRetryScheduler = createGrowthLoopRetryScheduler({
 });
 
 const accountButton = document.querySelector("#accountButton");
+// 顶栏孩子胶囊与账户按钮同一入口：未登录弹出登录，已登录管理家庭空间或切换孩子。
+const topKidButton = document.querySelector("#topKid");
 const dialog = document.querySelector("#cloudDialog");
 const panel = document.querySelector("#cloudPanel");
 const toast = document.querySelector("#syncToast");
@@ -483,7 +485,7 @@ function renderPasswordEditor({ mode = "setup" } = {}) {
       <h2>${icon("cloudCheck")} ${title}</h2>
       ${isRecovery ? "" : `<button class="icon-button" type="button" data-password-close aria-label="关闭密码设置">${icon("close")}</button>`}
     </div>
-    <p>此密码属于当前 Supabase 账号，适用于使用同一账号的 Shadow 系列产品。密码至少 6 位。</p>
+    <p>此密码属于 Shadow 系列产品的共享账号，可登录同一账号下的其他 Shadow 产品。密码至少 6 位。</p>
     <form id="passwordEditorForm">
       ${isChange ? `<label class="cloud-field">当前密码<div class="password-input-row"><input name="currentPassword" type="password" autocomplete="current-password" required><button class="cloud-action secondary compact" type="button" data-toggle-password="currentPassword">显示</button></div></label>` : ""}
       <label class="cloud-field">新密码<div class="password-input-row"><input name="newPassword" type="password" autocomplete="new-password" minlength="6" required><button class="cloud-action secondary compact" type="button" data-toggle-password="newPassword">显示</button></div></label>
@@ -613,25 +615,31 @@ function readRememberedProfileId() {
 
 function setAccountState() {
   if (!accountButton) return;
-  const subEl = document.querySelector(".topbar .sub");
+  const kidName = document.querySelector("#topKid .top-kid-name");
+  const bandKid = document.querySelector("#parentBandKid");
+  const setKid = (name, meta) => {
+    if (kidName) kidName.innerHTML = `${escapeHtml(name)} <small>· ${escapeHtml(meta)}</small>`;
+    if (topKidButton) topKidButton.title = session ? "切换孩子或管理家庭空间" : "点击登录，开启云端跨设备同步";
+    if (bandKid) bandKid.textContent = name ? ` · ${name}` : "";
+  };
   if (session && activeProfile) {
     accountButton.dataset.state = "online";
-    accountButton.innerHTML = `${icon("cloud")}<span>云端</span>`;
+    accountButton.innerHTML = `${icon("cloudCheck")}<span>云端已连接</span>`;
     accountButton.setAttribute("aria-label", "账户与云端同步，当前已连接");
     accountButton.title = `${activeProfile.display_name} · 云端已连接`;
-    if (subEl) subEl.innerHTML = `${icon("learner")} ${escapeHtml(activeProfile.display_name)} · ${gradeLabel(activeProfile.grade_level)}`;
+    setKid(activeProfile.display_name, gradeLabel(activeProfile.grade_level));
   } else if (session) {
     accountButton.dataset.state = "online";
-    accountButton.innerHTML = `${icon("learner")}<span>账户</span>`;
+    accountButton.innerHTML = `${icon("learner")}<span>选择孩子</span>`;
     accountButton.setAttribute("aria-label", "账户与云端同步，选择学习者");
     accountButton.title = "已登录，待选择学习者";
-    if (subEl) subEl.textContent = "已登录 · 点击右上角选择孩子";
+    setKid("待选择孩子", "已登录");
   } else {
     accountButton.dataset.state = "local";
-    accountButton.innerHTML = `${icon("learner")}<span>登录</span>`;
+    accountButton.innerHTML = `${icon("construction")}<span>本机保存</span>`;
     accountButton.setAttribute("aria-label", "账户与云端同步，登录");
     accountButton.title = "点击登录，开启云端跨设备同步";
-    if (subEl) subEl.textContent = "家庭成长工作台 · 陪伴有方法，成长有动力";
+    setKid("本机宝贝", "未登录");
   }
 }
 
@@ -767,7 +775,7 @@ function renderSignedOut(mode = "otp", prefillEmail = "") {
         <button class="cloud-action danger" type="button" data-clear-local>清除本机数据</button>
       </div>
     </form>
-    <p class="cloud-hint">${icon("hint")} ${otpMode ? "验证码可用于首次注册或登录。" : "密码属于共享账号，可用于使用同一 Supabase Auth 的 Shadow 系列产品；尚未设置密码时请使用邮箱验证码。"}</p>
+    <p class="cloud-hint">${icon("hint")} ${otpMode ? "验证码可用于首次注册或登录。" : "密码属于 Shadow 系列产品的共享账号，可登录同一账号下的其他 Shadow 产品；尚未设置密码时请使用邮箱验证码。"}</p>
     ${
       cloudEnabled
         ? ""
@@ -1887,6 +1895,7 @@ async function onAuthChange(nextSession, event = "") {
 }
 
 accountButton?.addEventListener("click", openDialog);
+topKidButton?.addEventListener("click", openDialog);
 dialog?.addEventListener("click", (event) => {
   if (event.target === dialog) closeDialog();
 });

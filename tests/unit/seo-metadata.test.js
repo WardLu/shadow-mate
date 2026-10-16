@@ -7,14 +7,15 @@ describe("public SEO and GEO contract", () => {
     const html = await readFile(resolve(process.cwd(), "index.html"), "utf8");
     const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
 
-    expect(html).toContain("<h1>影伴 Shadow Mate</h1>");
-    expect(html).toContain('<div class="sub">家庭成长工作台 · 陪伴有方法，成长有动力</div>');
+    const heading = html.match(/<h1>([\s\S]*?)<\/h1>/);
+    expect(heading?.[1]).toBe('影伴<span class="vh"> Shadow Mate</span>');
+    expect(html).toContain("<small>陪伴有方法，成长有动力</small>");
     expect(match).not.toBeNull();
 
     const schema = JSON.parse(match[1]);
     const application = schema["@graph"].find((item) => item["@type"] === "WebApplication");
     expect(application["@id"]).toBe("https://sm.shadow.wang/#application");
-    expect(application.softwareVersion).toBe("1.7.0");
+    expect(application.softwareVersion).toBe("1.8.0");
     expect(application.datePublished).toBe("2026-08-01T08:00:00+08:00");
     expect(application.dateModified).toBeTruthy();
     expect(application.publisher).toEqual({

@@ -81,7 +81,7 @@ Release 必须在 Tag 上执行，不把普通 PR 当作发布验收：
 
 ### production 分支与生产部署
 
-`production` 是发布分支：内容应对应已验收的 Release commit，不在其上直接提交开发内容。GitHub Release 工作流只更新分支指针；将 `main` 经 PR 合并进 `production` 时，也必须单独执行受控发布脚本。Vercel 项目设置关闭 Git 创建部署，`vercel.json` 关闭所有分支自动部署。
+`production` 是发布分支：内容应对应已验收的 Release commit，不在其上直接提交开发内容。GitHub Release 工作流只更新分支指针；将 `main` 推进到 `production` 时，推荐使用原子推进指令 `npm run release:promote`（自动前置检查、复用/创建零分叉快速通道 PR、秒级 CI 并合入）。推进后必须单独执行受控发布脚本 `npm run release:production`（或使用 `npm run release:promote -- --deploy` 一步式执行）。Vercel 项目设置关闭 Git 创建部署，`vercel.json` 关闭所有分支自动部署。
 
 - **触发**：GitHub Release 发布（`release: published`）后自动快进；需要补发/重跑时可手动 `workflow_dispatch` 指定同一个 Tag（同样只允许 fast-forward）。
 - **安全**：只允许 strict fast-forward——目标 commit 必须是当前 `production` 指针的后代，否则工作流失败并明确报错，绝不 force。发布前仍需先通过 `Release verification`（见上第 2、3 条），创建 GitHub Release 即代表该 Tag 已验收。

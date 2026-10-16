@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openSection } from "./helpers/sections.js";
 
 async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-Ting" }]) {
   await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
@@ -35,6 +36,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
     const title = await page.locator(".poem-title").first().innerText();
     await page.locator(".poem-line").first().click();
     expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
@@ -42,6 +44,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.reload();
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
     await expect(page.locator(".poem-title").first()).toHaveText(title);
     await expect(page.locator('.poem-box[data-content-reason="continue"]').first()).toBeVisible();
     expect(await page.evaluate(() => window.learningDesk.getState().extra.contentLearningV1.occurrences)).toEqual([]);
@@ -52,6 +55,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
 
     const poemBox = page.locator(".poem-box").first();
     await expect(poemBox).toBeVisible();
@@ -77,6 +81,7 @@ test.describe("Ancient poetry interactive reading", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
 
     const poemBox = page.locator(".poem-box").first();
     await expect(poemBox).toBeVisible();

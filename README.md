@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.7.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.8.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -35,7 +35,8 @@ Shadow Mate is designed around a family's daily learning routine: what was learn
 ## What it does
 
 - **Four learning modules**: Chinese, mathematics, English, and picture books; tasks can be checked in or cancelled independently.
-- **One learning entry**: open “学习” (Learning) in the left navigation first, then choose Chinese, mathematics, English, or picture books; Points, Growth, Guide, and Settings remain separate top-level pages.
+- **One learning entry**: open “学习” (Learning) from the navigation (left sidebar on desktop, bottom bar on phones), then choose Chinese, mathematics, English, or picture books; Points and Growth are separate top-level pages.
+- **Child and parent spaces**: children use Home, Learning, Points, and Growth on their own; settings, point and reward setup, the user guide, and account sync live in the Parent Area, opened by a 3-second press-and-hold to prevent accidental taps.
 - **Growth records & reward loop**: 30-day module consistency tracking, with family reward redemptions that work locally offline before sign-in and sync automatically across devices after sign-in.
 - **Points calendar**: behavior points are recorded separately from learning modules and can be reviewed or backfilled by date.
 - **Family space**: one parent manages multiple learners, with records loaded for the active learner.
@@ -81,7 +82,7 @@ npm run dev
 
 Open the local URL printed by Vite. Do not open `index.html` directly with `file://`; browser modules require the development server.
 
-Node 22 is the local and release runtime (`mise.toml`); CI validates on Node 24, and `package.json` requires `node >= 22`.
+Node 22 is the local, release, and CI runtime (`mise.toml`, `.github/workflows/ci.yml`), and `package.json` requires `node >= 22`.
 
 The local privacy page is available at [http://localhost:5173/privacy](http://localhost:5173/privacy). It is served by the same Vite development server as the main application.
 
@@ -264,3 +265,7 @@ The code is released under the [MIT License](LICENSE). Third-party content, mode
 发布入口以 `config/release-production.json` 为项目与团队身份的唯一事实源。缺少本地 `.vercel/project.json` 时按配置创建；已有链接或 `VERCEL_PROJECT_ID` / `VERCEL_ORG_ID` 与配置冲突时立即中止，不覆盖错误链接、不创建替代项目。先核对冲突来源和正式项目 ID，再修复本地环境。
 
 `pull` 后及上传前再次核对链接，Promote 前回读部署所属项目、团队和 Ready/Production 状态。校验失败不得手工 Promote 或直接调用部署 CLI 绕过；本地测试使用合成数据和 CLI mock，不触发实际部署。
+
+## 生产分支推进
+
+`npm run release:promote` 的准入、拒绝条件及部署授权边界见 [生产分支推进门禁](docs/release-promotion.md)。源码或本地测试通过不代表生产已发布。

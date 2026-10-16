@@ -40,6 +40,21 @@ describe("installRapidActionGuard", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("lets view-only toggles collapse and expand on consecutive clicks", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `<button class="card-collapse-toggle"></button><button role="tab"></button><button class="stepper-btn"></button>`;
+    document.body.append(root);
+    installRapidActionGuard(root, 1000);
+
+    for (const control of root.querySelectorAll("button")) {
+      const listener = vi.fn();
+      control.addEventListener("click", listener);
+      control.click();
+      control.click();
+      expect(listener).toHaveBeenCalledTimes(2);
+    }
+  });
+
   it("blocks a rapid second form submission", () => {
     const root = document.createElement("div");
     const form = document.createElement("form");

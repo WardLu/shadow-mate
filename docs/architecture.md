@@ -61,17 +61,14 @@ At runtime `src/tencent-tts-player.js` reads that manifest and plays CDN audio. 
 
 ## UI 组件体系与设计规范 (UI Components & Design System)
 
-严禁在页面或模块中直接拼接、裸写未带样式的原生 HTML 标签（如默认 `<button>`、`<input>`、`<div>`），导致界面出现浏览器默认黑色线框、直角边缘与未经设计的凌乱排布。所有新增界面与数据展示模块必须遵循以下规范：
+界面采用“触感玩具箱”（Tactile Toybox）设计系统：温暖奶油底色、实体按压按钮（按压底边 + 下沉位移）、同心圆角与双色图标。
 
-1. **统一复用系统组件与卡片模式**：
-   - **统计与看板指标**：使用 `.stat-grid`、`.stat`（大号强调看板），或 `.footprint-summary-row` / `.footprint-stat-pill`（多列药丸统计），严禁裸写纯文本数字。
-   - **交互数据卡片与操作入口**：使用 `.footprint-card`（带头部图标、大数值、单位、次级描述与箭头指示的响应式卡片）或 `.card.card-action`，统一样式与点击反馈。
-   - **内容卡片**：复用 `.mini-card`（拼音/汉字）、`.word-card`（英语图片/发音）、`.poem-box`（古诗听读与翻页）。
-   - **徽标与状态胶囊**：使用 `.pill`、`.badge-*` 或 `.content-status-pill`，内圆角严格服从同心圆角规范。
-2. **强制使用语义化设计系统变量**：
-   - 颜色：`var(--bg)`、`var(--card)`、`var(--line)`、`var(--ink)`、`var(--ink-soft)`、`var(--green)`、`var(--green-deep)`、`var(--green-soft)` 等，确保自动完美适配暗色模式（Dark Mode）。
-   - 尺寸与形状：圆角使用 `var(--radius)` 或规范的 16px/18px/999px（胶囊），阴影统一使用 `var(--shadow)`。
-   - 动效与手感：交互卡片标配悬浮微位移（`transform: translateY(-2px);`）与按压微缩（`transform: scale(0.98);`），支持无障碍高对比度与减弱动效（`prefers-reduced-motion`）。
-3. **视觉验收铁律**：
-   - 任何涉及 HTML/CSS 结构变更的改动，必须使用 Playwright 脚本在桌面（1200px）与移动端（440px）视口生成实机渲染截图进行目视审查；
-   - 凡发现未带样式、挤压排版或错位的 UI 元素，一律视为未达到验收标准，严禁直接交付。
+1. **样式分层**（按 `index.html` 加载顺序）：
+   - `src/legacy-components.css`：`@layer legacy` 中保留的业务组件样式（内容库、积分流水、成长足迹、使用指南、语音资源、字帖打印等），优先级最低。
+   - `src/cloud.css`、`src/app.css`：账户面板与页面级样式。
+   - `src/toybox.css`：设计系统外壳与通用组件——顶栏、Dock 导航（手机底部，768px 起平板窄侧栏，1100px 起桌面宽侧栏，可收起为仅图标）、卡片、按钮、胶囊开关、弹窗 `.sheet` 与色调类 `.t-green`/`.t-orange`/`.t-blue`/`.t-teal`/`.t-purple`/`.t-sun`/`.t-rose`/`.t-ink`。
+   - `src/toybox-icons.js` 提供双色图标 sprite（主线条 `currentColor`，`.i2` 浅色填充）；`src/toybox-art.js` 提供装饰插画（`aria-hidden`）。
+2. **双模态空间**：`body.parent-mode` 区分孩子模式与家长区。首页、学习、积分、成长属于孩子模式；设置各分页（家庭与账户、学习设置、积分规则、愿望成长、声音音效、隐私、使用指南、关于与反馈）属于家长区，需经 `#parentGateDialog` 长按 3 秒进入。UI 门禁只防误触，不是授权边界；数据访问仍由 RLS 与家庭成员关系约束。
+3. **组件复用**：新增界面复用现有卡片、按钮、胶囊、`.tb-icon` 图标与色调类，不裸写未带样式的原生控件；启用/禁用统一使用胶囊开关（`role="switch"`）。
+4. **设计变量**：颜色使用语义变量（`var(--surface)`、`var(--line)`、`var(--ink)`、`var(--green)` 等与色调变量 `--c`/`--c-f`/`--c-e`），承载白字的按钮填充对比度不低于 4.5:1；触控目标不小于 44px；支持 `prefers-reduced-motion`。
+5. **视觉验收**：涉及 HTML/CSS 结构变更时，在手机（390px）、平板（768px）与桌面（1440px）视口生成实机渲染截图并操作关键交互；出现未带样式、挤压、截断或水平溢出的元素视为未达标。

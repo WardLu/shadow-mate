@@ -3,6 +3,29 @@
 > This file lists user-visible product changes for each published version.
 
 
+## v1.8.0 - 2026-10-17
+
+### Added
+
+- Tactile Toybox redesign: A warm, child-friendly look with pressable buttons, consistent rounded shapes, and two-tone icons across Home, Learning, Points, Growth, and the parent area. All existing features are kept.
+- Child and parent spaces: Children use Home, Learning, Points, and Growth on their own. Settings, point and reward setup, the user guide, and account sync now live in the Parent Area, which opens after a 3-second press-and-hold to prevent accidental taps.
+- Collapsible desktop sidebar that shrinks to icons and remembers its state; mobile uses a bottom navigation bar.
+- Tap the child chip in the top bar to sign in, or to switch children and manage the family space when signed in. Tap the logo to return Home.
+- About & Feedback now shows the official WeChat, Xiaohongshu, Douyin, and X icons.
+
+### Changed
+
+- Home panels now align to equal heights; Growth reward cards use a compact horizontal layout.
+- Sound event settings use right-aligned toggle switches; the content library now counts items as "learned".
+- Sign-in copy now describes a shared Shadow account instead of technical service names.
+- The Xinquji link is no longer listed in About & Feedback (it stays in the page footer).
+
+### Fixed
+
+- Toggling a setting no longer scrolls the page back to the top.
+- Collapsible cards no longer need two taps to open or close.
+- Icons are centered correctly inside their buttons.
+
 ## v1.7.0 - 2026-10-14
 
 ### Added

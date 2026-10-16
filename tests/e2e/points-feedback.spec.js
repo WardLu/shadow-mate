@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 test.describe("Points and reward redemption feedback animations", () => {
   test.use({ serviceWorkers: "block" });
@@ -29,6 +31,7 @@ test.describe("Points and reward redemption feedback animations", () => {
       // Undo the deduction
       await subToggle.click();
       await page.click('[data-mod="grow"]');
+      await openSection(page, "section-grow-ledger");
       const historyList = page.locator(".growth-history-list");
       await expect(historyList).toBeVisible();
       await expect(historyList).toContainText("（撤销）");
@@ -49,13 +52,14 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // Go to grow page
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
 
     // Add a cheap reward to guarantee redeemability
     await page.fill('#rewardForm input[name="name"]', "小红花贴纸");
     await page.fill('#rewardForm input[name="cost"]', "1");
     await page.click('#rewardForm button[type="submit"]');
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
 
     const redeemBtn = page.locator('.reward-card .reward-redeem:not([disabled])').first();
     await expect(redeemBtn).toBeVisible();
@@ -95,13 +99,14 @@ test.describe("Points and reward redemption feedback animations", () => {
 
     // Go to grow page
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
 
     // Add a reward
     await page.fill('#rewardForm input[name="name"]', "绘本自选");
     await page.fill('#rewardForm input[name="cost"]', "1");
     await page.click('#rewardForm button[type="submit"]');
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
 
     const rewardCard = page.locator(".reward-card").filter({ hasText: "绘本自选" });
     await expect(rewardCard).toBeVisible();

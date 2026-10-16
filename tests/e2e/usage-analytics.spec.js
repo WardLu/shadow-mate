@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics } from "./helpers/analytics.js";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 test.use({ serviceWorkers: "block" });
 
@@ -24,7 +26,7 @@ async function mockCollector(page, { fail = false } = {}) {
 }
 
 async function allowUsage(page) {
-  await page.click('[data-mod="settings"]');
+  await openParentArea(page, '[data-mod="settings"]');
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
   await page.getByRole("switch", { name: "使用统计", exact: true }).check();
 }
@@ -54,7 +56,7 @@ test("new browsers collect by default and switching off stops collection", async
   const id = events[0].distinct_id;
   expect(events.every(e => e.distinct_id === id)).toBe(true);
   expect(events.every(e => Object.keys(e.properties).sort().join() === "product,sentry.environment,sentry.sdk.name,sentry.sdk.version,usage.browser_id,usage.day,usage.event,usage.mode")).toBe(true);
-  await page.click('[data-mod="settings"]');
+  await openParentArea(page, '[data-mod="settings"]');
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
   await page.getByRole("switch", { name: "使用统计", exact: true }).uncheck();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("shadow_mate_usage_v1"))).toBeNull();
@@ -83,10 +85,11 @@ test("failed reporting leaves a successful local check-in usable", async ({ page
 test("unconfigured settings disclose disabled collection", async ({ page }, testInfo) => {
   await captureAnalytics(page);
   await page.goto("/");
-  await page.click('[data-mod="settings"]');
+  await openParentArea(page, '[data-mod="settings"]');
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
   await expect(page.getByRole("switch", { name: "使用统计", exact: true })).toBeDisabled();
   await expect(page.getByText("收集使用数据，帮助改进产品体验。", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-usage-hint]")).toContainText("仅在正式站点 sm.shadow.wang 启用");
   await expect(page.getByRole("link", { name: "隐私政策", exact: true }).first()).toHaveAttribute("href", "/privacy");
   await page.screenshot({ path: testInfo.outputPath("usage-privacy-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -99,7 +102,7 @@ test("ordinary points, local redemption and fulfillment emit separate categories
   await page.goto("/");
   await allowUsage(page);
   await page.click('[data-mod="points"]');
-  await page.click('[data-go-settings="points"]');
+  await openParentArea(page, '[data-go-settings="points"]');
   await page.fill('#pointItemForm input[name="name"]', "合成积分项目");
   await page.fill('#pointItemForm input[name="points"]', "2");
   await page.click('#pointItemForm button[type="submit"]');
@@ -109,11 +112,12 @@ test("ordinary points, local redemption and fulfillment emit separate categories
   await expect(item).toHaveClass(/done/);
   await expect.poll(() => events.some(e => e.event === "sm_local_point_recorded")).toBe(true);
   await page.click('[data-mod="grow"]');
-  await page.click('[data-go-settings="growth"]');
+  await openParentArea(page, '[data-go-settings="growth"]');
   await page.fill('#rewardForm input[name="name"]', "合成奖励");
   await page.fill('#rewardForm input[name="cost"]', "2");
   await page.click('#rewardForm button[type="submit"]');
   await page.click('[data-mod="grow"]');
+  await openSection(page, "section-grow-rewards");
   const reward = page.locator(".reward-card").filter({ hasText: "合成奖励" });
   await reward.locator(".reward-redeem").click();
   await expect.poll(() => events.some(e => e.event === "sm_local_reward_redeemed")).toBe(true);
@@ -128,7 +132,7 @@ test("a previous opt-out stays off after reload", async ({ page }) => {
   const events = await mockCollector(page);
   await page.addInitScript(() => localStorage.setItem("shadow_mate_usage_consent_v1", "0"));
   await page.goto("/");
-  await page.click('[data-mod="settings"]');
+  await openParentArea(page, '[data-mod="settings"]');
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
   await expect(page.getByRole("switch", { name: "使用统计", exact: true })).not.toBeChecked();
   await page.reload();
@@ -168,7 +172,7 @@ test("unhandled errors reach a mock Sentry with sensitive data stripped and opt-
   expect(errors[0].exception.values[0].type).toBe("TypeError");
   expect(errors[0].sdk.settings.infer_ip).toBe("never");
   expect(JSON.stringify(errors)).not.toMatch(/synthetic-private|child name|token=|breadcrumbs|request|usage.browser_id/);
-  await page.click('[data-mod="settings"]');
+  await openParentArea(page, '[data-mod="settings"]');
   await page.getByRole("tab", { name: "隐私", exact: true }).click();
   await page.getByRole("switch", { name: "使用统计", exact: true }).uncheck();
   await dispatch();

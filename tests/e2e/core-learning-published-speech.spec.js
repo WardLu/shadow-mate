@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openSection } from "./helpers/sections.js";
 import { CORE_LEARNING_SPEECH_ENTRIES } from "../../src/content/core-learning-speech.js";
 
 async function installPublishedSpeechOnly(page) {
@@ -52,6 +53,7 @@ test.describe("Core learning published speech", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
     const button = page.locator(".poem-read-all").first();
     await button.click();
     await expectPublishedPlays(page, 1);
@@ -74,16 +76,27 @@ test.describe("Core learning published speech", () => {
     await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
-    const targets = page.locator('[data-hanzi-mini], [data-writing-worksheet] [data-speech-tap]:not([data-hanzi-meaning-row])');
-    const count = await targets.count();
+    // 识字卡与写字练习单分属两个页签，依次切换后逐个点读。
+    const literacyTargets = page.locator("[data-hanzi-mini]");
+    const worksheetTargets = page.locator("[data-writing-worksheet] [data-speech-tap]:not([data-hanzi-meaning-row])");
+    const literacyCount = await literacyTargets.count();
+    const count = literacyCount + await worksheetTargets.count();
     expect(count).toBeGreaterThanOrEqual(22);
-    for (let index = 0; index < count; index++) {
-      await targets.nth(index).click();
-      await expectPublishedPlays(page, index + 1);
-      await expect(targets.nth(index)).not.toHaveAttribute("data-speech-failure", "true");
+    let plays = 0;
+    for (const [sectionId, targets] of [["section-chinese-literacy", literacyTargets], ["section-chinese-writing", worksheetTargets]]) {
+      await openSection(page, sectionId);
+      const sectionCount = await targets.count();
+      for (let index = 0; index < sectionCount; index++) {
+        await targets.nth(index).click();
+        plays += 1;
+        await expectPublishedPlays(page, plays);
+        await expect(targets.nth(index)).not.toHaveAttribute("data-speech-failure", "true");
+      }
     }
-    await expect(page.locator('[data-hanzi-mini="0"] .big')).toBeVisible();
+    expect(plays).toBe(count);
     await expect(page.locator('.hanzi-visual-value').first()).toBeVisible();
+    await openSection(page, "section-chinese-literacy");
+    await expect(page.locator('[data-hanzi-mini="0"] .big')).toBeVisible();
   });
 
   test("covers poetry, prompts and English without Web Speech API", async ({ page }) => {
@@ -91,6 +104,7 @@ test.describe("Core learning published speech", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-poem");
 
     await page.locator(".poem-title").first().click();
     await expectPublishedPlays(page, 1);
@@ -104,6 +118,7 @@ test.describe("Core learning published speech", () => {
     await page.locator("[data-speak]").first().click();
     await expectPublishedPlays(page, 4);
     await page.locator('[data-cmod="english-vocabulary"]').click();
+    await openSection(page, "section-english-review");
     await page.locator(".mr-chip[data-word]").first().click();
     await expectPublishedPlays(page, 5);
   });
