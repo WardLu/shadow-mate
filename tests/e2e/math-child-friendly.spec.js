@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 async function installSystemSpeech(page, voices = [{ lang: "zh-CN", name: "Ting-Ting" }]) {
   await page.route("**/tts/tencent-v1-manifest.json", (route) => route.fulfill({ status: 503, body: "test-system-fallback" }));
@@ -33,7 +35,7 @@ test.describe("Child-friendly math interactions", () => {
     await page.goto("/");
     for (const [packageId, maximum] of [["foundation-v2", 5], ["bridging-v1", 10]]) {
       await page.click('[data-mod="learning"]');
-      await page.click('[data-go-settings="learning"]');
+      await openParentArea(page, '[data-go-settings="learning"]');
       await page.locator(`[data-package-toggle="${packageId}"]`).check();
       for (const id of ["foundation-v2", "bridging-v1"]) {
         if (id !== packageId) {
@@ -154,6 +156,7 @@ test.describe("Child-friendly math interactions", () => {
     await page.goto("/");
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="math"]');
+    await openSection(page, "section-math-sequence");
 
     const missCell = page.locator(".num-cell.miss");
     await expect(missCell).toBeVisible();

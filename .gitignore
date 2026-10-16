@@ -34,6 +34,13 @@ assets/readme/logo-mark-green.svg
 current-preview.png
 shadow-wang-home.png
 
+# Design prototypes and their audit scripts stay local; the shipped app is the source of truth.
+/prototype/
+/scripts/audit-existing-pages.mjs
+/scripts/audit-revamp-prototype.mjs
+/scripts/verify-revamp-prototype.mjs
+/scripts/preview-screenshots.mjs
+
 # Local-only internal planning and deployment docs
 /TODO.md
 /ROADMAP.md

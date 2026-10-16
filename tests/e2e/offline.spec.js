@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openParentArea, openParentTab } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 const PIPER_LIFECYCLE_FIXTURE = {
   id: "test-piper-lifecycle",
@@ -81,7 +83,23 @@ test.describe("Offline mode (no login)", () => {
     await page.goto("/");
     await expect(page).toHaveTitle("影伴 Shadow Mate - 免费家庭成长工作台 | 陪伴有方法，成长有动力");
     await expect(page.locator(".topbar h1")).toHaveText("影伴 Shadow Mate");
-    await expect(page.locator(".topbar .sub")).toHaveText("家庭成长工作台 · 陪伴有方法，成长有动力");
+    await expect(page.locator("#topKid .top-kid-name")).toHaveText("本机宝贝 · 未登录");
+    await expect(page.locator(".dock-brand small")).toHaveText("陪伴有方法，成长有动力");
+  });
+
+  test("desktop sidebar collapses to icons and remembers the choice", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    const toggle = page.locator("[data-nav-collapse]");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator('.navbtn[data-mod="home"] .dock-label')).toHaveCSS("width", "1px");
+    await page.reload();
+    await expect(page.locator("[data-nav-collapse]")).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "积分", exact: true }).click();
+    await expect(page.locator('.navbtn[data-mod="points"]')).toHaveClass(/active/);
+    await page.locator("[data-nav-collapse]").click();
+    await expect(page.locator('.navbtn[data-mod="home"] .dock-label')).toBeVisible();
   });
 
   test("service-worker activation retains a completed Piper package without a second resource GET", async ({ page, context }) => {
@@ -174,7 +192,8 @@ test.describe("Offline mode (no login)", () => {
 
   test("home page shows banner and stats", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".banner")).toBeVisible();
+    await expect(page.locator(".hero")).toBeVisible();
+    await expect(page.locator(".hero .hero-sum")).toContainText("今日已打卡 0/4 个学习模块");
     await expect(page.locator(".stat-grid .stat")).toHaveCount(5);
   });
 
@@ -203,21 +222,24 @@ test.describe("Offline mode (no login)", () => {
 
   test("footer exposes social links and the WeChat QR dialog", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".site-footer")).toBeVisible();
-    await expect(page.locator('a[href="https://shadow.wang/"]')).toHaveAttribute("target", "_blank");
-    await expect(page.locator(".site-footer-links > .site-footer-link").first()).toContainText("Shadow Lab");
-    await expect(page.locator('a[href="/privacy"]')).toHaveAttribute("target", "_blank");
-    await expect(page.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
-    await expect(page.locator('a[href="https://v.douyin.com/1y06PMohfoE/"]')).toBeVisible();
-    await expect(page.locator('a[href="https://x.com/Gollumgulu"]')).toHaveAccessibleName("打开 X");
+    // 儿童空间不展示站外链接；外链收在家长区「关于与反馈」。
+    await expect(page.locator(".site-footer")).toBeHidden();
+    await openParentTab(page, "about");
+    const about = page.locator("[data-settings-about]");
+    await expect(about.locator('a[href="https://shadow.wang/"]')).toHaveAttribute("target", "_blank");
+    await expect(about.locator(".links > *").first()).toContainText("Shadow Lab");
+    await expect(about.locator('a[href="/privacy"]')).toHaveAttribute("target", "_blank");
+    await expect(about.locator('a[href="https://xhslink.cn/m/4W1NWyRrxv5"]')).toBeVisible();
+    await expect(about.locator('a[href="https://v.douyin.com/1y06PMohfoE/"]')).toBeVisible();
+    await expect(about.locator('a[href="https://x.com/Gollumgulu"]')).toHaveAccessibleName("打开 X");
 
-    await page.locator("#wechatButton").click();
+    await about.locator("[data-open-wechat]").click();
     await expect(page.locator("#wechatDialog")).toBeVisible();
     await expect(page.locator("#wechatDialog img")).toHaveAttribute("src", "/brand_assets/wechat-public-account.png");
     await expect(page.locator("#wechatDialog img")).toHaveAttribute("alt", "Ward的AI产品实战微信公众号二维码");
     await page.locator("#wechatDialogClose").click();
     await expect(page.locator("#wechatDialog")).toBeHidden();
-    await expect(page.locator("#wechatButton")).toBeFocused();
+    await expect(about.locator("[data-open-wechat]")).toBeFocused();
   });
 
   test("local privacy route serves the standalone policy page", async ({ page }) => {
@@ -237,6 +259,11 @@ test.describe("Offline mode (no login)", () => {
 
     await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
     await expect(page.locator("body")).toHaveCSS("background-color", "rgb(14, 28, 20)");
+    await expect(page.locator(".panel.a-route")).toHaveCSS("background-color", "rgb(24, 39, 29)");
+    await expect(page.locator(".panel .sec-h h2").first()).toHaveCSS("color", "rgb(238, 247, 239)");
+    await expect(page.locator(".hero .hero-sum")).toHaveCSS("color", "rgb(173, 193, 178)");
+
+    await openModule(page, "chinese");
     await expect(page.locator(".card").first()).toHaveCSS("background-color", "rgb(24, 39, 29)");
     await expect(page.locator(".card h3").first()).toHaveCSS("color", "rgb(238, 247, 239)");
     await expect(page.locator(".card .desc").first()).toHaveCSS("color", "rgb(173, 193, 178)");
@@ -251,7 +278,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".lvl-btn").first()).toHaveCSS("background-color", "rgb(26, 56, 36)");
     await expect(page.locator(".num-cell.miss")).toHaveCSS("background-color", "rgb(24, 39, 29)");
 
-    await page.click('[data-mod="guide"]');
+    await openParentTab(page, "guide");
     await expect(page.locator(".guide-card").first()).toHaveCSS("background-color", "rgb(24, 39, 29)");
   });
 
@@ -268,7 +295,9 @@ test.describe("Offline mode (no login)", () => {
     await page.goto("/");
     const btn = page.locator("#accountButton");
     await expect(btn).toBeVisible();
-    await expect(btn).toContainText("登录");
+    // 未登录时顶栏显示「本机保存」状态，无障碍名称仍指向登录入口。
+    await expect(btn).toContainText("本机保存");
+    await expect(btn).toHaveAccessibleName("账户与云端同步，登录");
   });
 
   test("cloud error toast stays visible inside the open account dialog", async ({ page }) => {
@@ -292,8 +321,8 @@ test.describe("Offline mode (no login)", () => {
   test("keeps exact top-level navigation and enters subjects from learning", async ({ page }) => {
     await page.goto("/");
     const topLevelNav = page.locator(".navbtn");
-    await expect(topLevelNav).toHaveCount(6);
-    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "指南", "设置"]);
+    await expect(topLevelNav).toHaveCount(5);
+    await expect(topLevelNav).toHaveText(["首页", "学习", "积分", "成长", "家长"]);
     for (const mod of ["chinese", "math", "english", "book"]) {
       await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveCount(0);
     }
@@ -312,22 +341,22 @@ test.describe("Offline mode (no login)", () => {
       ["book", "绘本"],
     ]) {
       await openModule(page, mod);
-      await page.waitForSelector(".module-title h2",{timeout:5000});
-      await expect(page.locator(".module-title h2")).toContainText(label);
+      await page.waitForSelector("[data-page-title]",{timeout:5000});
+      await expect(page.locator("[data-page-title]")).toContainText(label);
     }
     for (const [mod, label] of [
       ["points", "积分"],
       ["grow", "成长"],
     ]) {
       await page.click(`[data-mod="${mod}"]`);
-      await page.waitForSelector(".module-title h2",{timeout:5000});
-      await expect(page.locator(".module-title h2")).toContainText(label);
+      await page.waitForSelector("[data-page-title]",{timeout:5000});
+      await expect(page.locator("[data-page-title]")).toContainText(label);
     }
   });
 
   test("usage guide explains setup and manages browser-scoped speech resources", async ({ page }) => {
     await page.goto("/");
-    await page.click('[data-mod="guide"]');
+    await openParentTab(page, "guide");
     await expect(page.locator(".guide-page")).toBeVisible();
     await expect(page.locator(".guide-page h2")).toContainText("使用指南");
     await expect(page.locator('[data-guide-section="speech"]')).toContainText("发音来源与备用系统语音");
@@ -418,6 +447,7 @@ test.describe("Offline mode (no login)", () => {
     await page.goto("/");
     await seedIssuedWritingPlan(page);
     await openModule(page, "chinese");
+    await openSection(page, "section-chinese-writing");
     await page.clock.pauseAt(new Date("2026-09-01T02:00:00.000Z"));
 
     const readWorksheetSnapshot = () => page.evaluate(() => {
@@ -524,13 +554,15 @@ test.describe("Offline mode (no login)", () => {
 
   test("growth and points calendars explain their status colors", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".banner .d")).toContainText("/4");
+    await expect(page.locator(".hero .hero-sum")).toContainText("/4");
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-overview");
     await expect(page.locator(".cal-legend")).toContainText("未打卡");
     await expect(page.locator(".cal-legend")).toContainText("4/4");
     await expect(page.locator(".cal-cell.today")).toBeVisible();
 
     await page.click('[data-mod="points"]');
+    await openSection(page, "section-points-calendar");
     await expect(page.locator(".cal")).toHaveCSS("display", "grid");
     await expect(page.locator(".cal-legend + .cal")).toHaveCSS("margin-top", "12px");
     await expect(page.locator(".cal-legend")).toContainText("有加分");
@@ -538,6 +570,7 @@ test.describe("Offline mode (no login)", () => {
     await expect(page.locator(".cal-legend")).toContainText("当前选中");
     await expect(page.locator(".cal-chip.active")).toHaveAttribute("aria-pressed", "true");
 
+    await openSection(page, "section-points-checkin");
     await page.locator(".pts-toggle").first().click();
     await expect(page.locator(".cal-chip.active")).toHaveClass(/pos/);
   });
@@ -555,6 +588,7 @@ test.describe("Offline mode (no login)", () => {
   test("book shelf marks read status", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "book");
+    await openSection(page, "section-book-shelf");
     const card = page.locator("[data-bk]").first();
     await expect(card).toBeVisible();
     await expect(card).toHaveCSS("opacity", "0.55");
@@ -567,6 +601,7 @@ test.describe("Offline mode (no login)", () => {
   test("reading log can be added and deleted", async ({ page }) => {
     await page.goto("/");
     await openModule(page, "book");
+    await openSection(page, "section-book-log");
     await page.fill("#pbTitle", "E2E Test Book");
     await page.locator('.pstar[data-n="5"]').click();
     await page.click("#pbAdd");
@@ -587,7 +622,7 @@ test.describe("Offline mode (no login)", () => {
     await toggle.click();
     await expect(card).toHaveClass(/done/);
     page.once("dialog", (dialog) => dialog.accept());
-    await page.click('[data-go-settings="points"]');
+    await openParentArea(page, '[data-go-settings="points"]');
     await page.click("#ptclear");
     await page.click('[data-mod="points"]');
     await expect(card).not.toHaveClass(/done/);

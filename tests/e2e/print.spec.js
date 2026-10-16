@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openSection } from "./helpers/sections.js";
 
 const FIXED_NOW = new Date("2026-09-01T02:00:00.000Z");
 const TIME_ZONE = "Asia/Singapore";
@@ -20,6 +21,7 @@ async function openChineseAtFixedTime(page) {
   await page.goto("/");
   await seedIssuedWritingPlan(page);
   await openLearningModule(page, "chinese");
+  await openSection(page, "section-chinese-writing");
   await expect(page.locator("[data-writing-worksheet]")).toBeVisible();
   await page.clock.pauseAt(FIXED_NOW);
 }

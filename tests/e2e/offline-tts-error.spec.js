@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openSection } from "./helpers/sections.js";
 
 test.describe("Published voice errors", () => {
   test.use({ serviceWorkers: "block" });
@@ -32,6 +33,7 @@ test.describe("Published voice errors", () => {
     await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-writing");
     const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await button.click();
 
@@ -58,6 +60,7 @@ test.describe("Published voice errors", () => {
     await seedIssuedWritingPlan(page);
     await page.click('[data-mod="learning"]');
     await page.click('[data-go="chinese"]');
+    await openSection(page, "section-chinese-writing");
     const button = page.locator('[data-hanzi-speak][data-speech-locale="zh-CN"]').first();
     await button.evaluate((element) => { window.__detachedSpeechButton = element; });
     await button.click();

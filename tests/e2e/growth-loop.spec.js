@@ -1,10 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { openParentArea } from "./helpers/parent-gate.js";
+import { openSection } from "./helpers/sections.js";
 
 test.describe("Growth Loop local-first boundary", () => {
   test("lets an unauthenticated parent create a custom point item, redeem and fulfill a reward locally", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
-    await page.click('[data-go-settings="points"]');
+    await openParentArea(page, '[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "自己刷牙");
     await page.fill('#pointItemForm input[name="points"]', "2");
     await page.click('#pointItemForm button[type="submit"]');
@@ -16,11 +18,12 @@ test.describe("Growth Loop local-first boundary", () => {
     await expect(customCard).toHaveClass(/done/);
 
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
     await page.fill('#rewardForm input[name="name"]', "选一个故事");
     await page.fill('#rewardForm input[name="cost"]', "2");
     await page.click('#rewardForm button[type="submit"]');
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
     const reward = page.locator(".reward-card").filter({ hasText: "选一个故事" });
     await expect(reward).toBeVisible();
     await reward.locator(".reward-redeem").click();
@@ -40,7 +43,7 @@ test.describe("Growth Loop local-first boundary", () => {
   test("cancels an unauthenticated redemption with immediate local refund", async ({ page }) => {
     await page.goto("/");
     await page.click('[data-mod="points"]');
-    await page.click('[data-go-settings="points"]');
+    await openParentArea(page, '[data-go-settings="points"]');
     await page.fill('#pointItemForm input[name="name"]', "整理书架");
     await page.fill('#pointItemForm input[name="points"]', "5");
     await page.click('#pointItemForm button[type="submit"]');
@@ -48,11 +51,12 @@ test.describe("Growth Loop local-first boundary", () => {
     await page.locator(".pts-card").filter({ hasText: "整理书架" }).locator(".pts-toggle").click();
 
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
     await page.fill('#rewardForm input[name="name"]', "取消测试奖励");
     await page.fill('#rewardForm input[name="cost"]', "5");
     await page.click('#rewardForm button[type="submit"]');
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
     const reward = page.locator(".reward-card").filter({ hasText: "取消测试奖励" });
     await reward.locator(".reward-redeem").click();
     await expect(reward).toContainText("待兑现");
@@ -82,6 +86,7 @@ test.describe("Growth Loop local-first boundary", () => {
       });
     });
     await page.click('[data-mod="grow"]');
+    await openSection(page, "section-grow-rewards");
     const reward = page.locator(".reward-card").filter({ hasText: "云端奖励" });
     await expect(reward).toBeVisible();
     await reward.locator(".reward-redeem").click();
@@ -181,7 +186,7 @@ test.describe("Growth Loop local-first boundary", () => {
     await page.goto("/");
 
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
     const card = page.locator(".growth-opening-card");
     await expect(card).toContainText("恢复旧积分");
     await expect(card).toContainText("10"); // 2+2+3+3 合计
@@ -203,7 +208,7 @@ test.describe("Growth Loop local-first boundary", () => {
           : { status: "confirmed" },
       },
     }));
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
     await expect(card).toContainText("旧积分导入未完成");
     await expect(card).toContainText("云端拒绝了这次导入");
     await expect(card.locator("#legacyImportBtn")).toContainText("重新导入");
@@ -222,7 +227,7 @@ test.describe("Growth Loop local-first boundary", () => {
     });
     await page.goto("/");
     await page.click('[data-mod="grow"]');
-    await page.click('[data-go-settings="growth"]');
+    await openParentArea(page, '[data-go-settings="growth"]');
     const card = page.locator(".growth-opening-card");
     page.on("dialog", (dialog) => dialog.accept());
     await card.locator("#legacyImportBtn").click();

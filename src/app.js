@@ -32,6 +32,7 @@ import { installRapidActionGuard } from "./action-lock.js";
 import { mountPiperResourceManager } from "./piper-resource-ui.js";
 import { createPublishedSpeechPlayer } from "./tencent-tts-player.js";
 import { icon, hydrateIcons } from "./icons.js";
+import { mascot, kidAvatar } from "./toybox-art.js";
 import {
   getHanziRotationState,
   getContentLearningState,
@@ -190,6 +191,8 @@ const growthLoopController = createGrowthLoopController({
 });
 let growthLoopSnapshot = growthLoopController.getSnapshot();
 let CURRENT_MOD = "home";
+// 双模态状态：默认儿童模式，门禁解锁后进入家长模式
+let currentAppMode = "child";
 window.growthLoop = growthLoopController;
 window.switchMod = switchMod;
 
@@ -308,6 +311,12 @@ function plannedContent(activityId) {
 
 function contentReasonLabel(reason) {
   return reason === "review" ? "复习" : "";
+}
+
+// 条目卡左上角的推荐原因胶囊：新内容 / 复习 / 上次没学完
+function contentReasonTag(row, newLabel) {
+  const label = { new: newLabel, review: "复习", continue: "继续学" }[row.reason];
+  return label ? `<span class="chip reason-tag">${label}</span>` : "";
 }
 
 function contentFeedbackHtml(row) {
@@ -755,6 +764,12 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
     button?.dataset.speechTap !== undefined ||
     (button && button.firstElementChild && !button.matches(".btn, .speak-btn, .checkin, .btn-read-prompt, .btn-read-q"))
   );
+  // 纯图标圆按钮（如首页问候）只换图标，状态文字放进 aria-label / title，避免文字撑破圆形
+  const iconOnly = Boolean(button && !isContainer && button.matches(".btn.round"));
+  const setButtonContent = (iconName, text) => {
+    button.innerHTML = iconOnly ? icon(iconName) : buttonContent(iconName, text);
+    if (iconOnly) button.title = text;
+  };
   let shouldRestoreButtonFocus = false;
   const restoreButtonFocus = () => {
     if (!button || !shouldRestoreButtonFocus) return;
@@ -775,7 +790,7 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
         button.removeAttribute("data-speech-in-flight");
         restoreButtonFocus();
       } else {
-        button.innerHTML = buttonContent("volume", originalLabel);
+        setButtonContent("volume", originalLabel);
         button.setAttribute("aria-label", originalAriaLabel);
         if (originalTitle) button.title = originalTitle;
         else button.removeAttribute("title");
@@ -803,7 +818,7 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
       button.title = message;
       shake(button, { durationMs: 400 });
     } else {
-      button.innerHTML = buttonContent("alert", message);
+      setButtonContent("alert", message);
       button.setAttribute("aria-label", message);
       button.title = message;
       button.dataset.speechFailure = "true";
@@ -829,7 +844,7 @@ async function speak(t, button, locale = "en-US", contentId = "", options = {}){
       return;
     }
     button.dataset.label = originalLabel;
-    button.innerHTML = buttonContent("volume", label);
+    setButtonContent("volume", label);
     button.setAttribute("aria-label", originalAriaLabel);
     if (originalTitle) button.title = originalTitle;
     else button.removeAttribute("title");
@@ -881,14 +896,28 @@ function renderHome(){
   const checkedToday = enabled.filter(isChecked).length;
   const main = el("main");
   main.innerHTML = "";
-  main.appendChild($(`
-    <div class="banner">
-      <div class="t">${icon("construction")} 挖掘机小队长，今天也要加油哦！</div>
-      <div class="d">${learningOn
-        ? `今日已打卡 ${checkedToday}/${enabled.length} 个学习模块${summaries.length ? ` · ${escapeHtml(summaries.join(" · "))}` : ""}`
-        : `学习包还没有启用，去「学习」页为这个孩子开启学习模块吧`}</div>
-    </div>
-  `));
+  const home = $(`<div class="home"></div>`);
+  main.appendChild(home);
+
+  const banner = $(`
+    <section class="panel hero a-hero" aria-label="今日问候">
+      <span class="mascot-wrap">${mascot()}<span class="chip solid t-orange">队长</span></span>
+      <div class="hero-body">
+        <div class="bubble"><p>挖掘机小队长，今天也要加油哦！</p><button class="btn round sm t-blue" type="button" id="speakGreetingBtn" aria-label="朗读问候语">${icon("volume")}</button></div>
+        <span class="chip t-orange" style="justify-self:start">${icon("flame")} ${streak("chinese") > 0 ? `连胜 ${streak("chinese")} 天！全家为你点赞` : "今天打卡，开启连胜！"}</span>
+        <div class="hero-sum">${learningOn
+          ? `今日已打卡 ${checkedToday}/${enabled.length} 个学习模块${summaries.length ? ` · ${escapeHtml(summaries.join(" · "))}` : ""}`
+          : `学习包还没有启用，去「学习」页为这个孩子开启学习模块吧`}</div>
+      </div>
+    </section>
+  `);
+  home.appendChild(banner);
+  const speakGreetingBtn = banner.querySelector("#speakGreetingBtn");
+  if (speakGreetingBtn) {
+    speakGreetingBtn.onclick = () => {
+      speak("挖掘机小队长，今天也要加油哦！", speakGreetingBtn, "zh-CN");
+    };
+  }
 
   const accountBtn = document.querySelector("#accountButton");
   const isOnline = accountBtn?.dataset?.state === "online";
@@ -897,28 +926,83 @@ function renderHome(){
     guestDismissed = sessionStorage.getItem("shadow_mate_guest_banner_dismissed") === "1";
   } catch (_) {}
 
+  // 今天的学习：彩虹能量条 + 学科卡（直达学科页）
+  if (learningOn) {
+    const route = $(`
+      <section class="panel a-route" aria-labelledby="h-route">
+        <div class="sec-h t-green"><h2 id="h-route">${icon("graduation")} 今天的学习</h2><span class="sp"></span><span class="meta">已完成 ${checkedToday} / ${enabled.length}</span></div>
+        <div class="energy"><div class="energy-bar" style="--n:${enabled.length}" role="img" aria-label="今日已充能 ${checkedToday}/${enabled.length}">${enabled.map((module) => `<i class="${HOME_SUBJECTS[module]?.tone || "t-green"} ${isChecked(module) ? "on" : ""}"></i>`).join("")}</div>${icon("gift")}</div>
+        <div class="route">${enabled.map((module) => {
+          const meta = HOME_SUBJECTS[module] || { tone: "t-green", icon: "graduation", short: contentModuleLabel(module), teaser: "" };
+          const done = isChecked(module);
+          return `<button class="press ${meta.tone}" type="button" data-go="${module}" aria-label="${contentModuleLabel(module)}，${done ? "今日已打卡" : "今日待打卡"}">
+            <span class="blob solid">${icon(meta.icon)}</span><b>${meta.short}</b>
+            <span class="teaser">${escapeHtml(homeTeaser(module) || meta.teaser)}</span>
+            <span class="chip state ${done ? "t-green" : meta.tone}">${done ? `${icon("checkCircle")} 已打卡` : "去学习"}</span>
+            ${done ? `<span class="stamp">${icon("check")}已打卡</span>` : ""}
+          </button>`;
+        }).join("")}</div>
+      </section>
+    `);
+    home.appendChild(route);
+  } else {
+    home.appendChild($(`
+      <div class="empty a-route">${mascot()}<div><b>学习包还没有启用</b><p class="hint">去「学习」页为这个孩子开启学习模块吧。</p><div class="t-green" style="margin-top:10px"><button class="btn sm" type="button" data-go="learning">${icon("graduation")} 去学习页</button></div></div></div>
+    `));
+  }
+
+  // 积分打卡
+  const todayPoints = dayTotal(new Date().getDate());
+  const pointsState = pointDayState(new Date().getDate());
+  const pointsDone = pointsState.positive || pointsState.negative;
+  const month = monthTotal();
+  home.appendChild($(`
+    <section class="panel t-sun stars-card a-stars" aria-label="积分打卡">
+      <span class="blob lg solid">${icon("star")}</span>
+      <div class="nums"><div class="big-num"><b>${todayPoints > 0 ? "+" : ""}${todayPoints}</b><span>今天的积分</span></div><div class="big-num"><b>${month > 0 ? "+" : ""}${month}</b><span>本月积分</span></div></div>
+      <span class="chip ${pointsDone ? "t-green" : "line"}">${pointsDone ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡"}</span>
+      <button class="btn block" type="button" data-go="points">${icon("star")} 去积分打卡 · 加分减分</button>
+    </section>
+  `));
+
+  // 今日成长数据
+  if (learningOn) {
+    const stats = $(`
+      <section class="panel a-stats" aria-labelledby="h-stats">
+        <div class="sec-h t-teal"><h2 id="h-stats">${icon("sprout")} 今日成长数据</h2><span class="sp"></span><span class="chip">${checkedToday}/${enabled.length} 已充能</span></div>
+        <div class="stats stat-grid" style="--n:${enabled.length + 1}">
+          <div class="stat t-green">${icon("checkCircle")}<b>${checkedToday}<small>/${enabled.length}</small></b><span>今日打卡</span></div>
+          ${enabled.map((module) => {
+            const meta = HOME_SUBJECTS[module] || { tone: "t-green", icon: "graduation", short: contentModuleLabel(module) };
+            return module === "chinese"
+              ? `<div class="stat ${meta.tone}">${icon("flame")}<b>${streak("chinese")}<small>天</small></b><span>语文连续</span></div>`
+              : `<div class="stat ${meta.tone}">${icon(meta.icon)}<b>${totalChecked(module)}<small>天</small></b><span>${meta.short}累计</span></div>`;
+          }).join("")}
+        </div>
+      </section>
+    `);
+    home.appendChild(stats);
+  }
+
   if (!isOnline && !guestDismissed) {
     const isWeChat = typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent || "");
     const guestCard = $(`
-      <div class="guest-sync-prompt" data-guest-card>
-        <div class="guest-onboarding-header">
-          <div class="guest-onboarding-badge">${icon("cloud")} 离线试用中 · 本机保存</div>
-          <button class="guest-onboarding-close" type="button" aria-label="暂不提醒" data-dismiss-guest>×</button>
+      <section class="panel notice a-notice" data-guest-card aria-labelledby="h-notice">
+        <div class="notice-top">
+          <span class="blob sm t-green">${icon("cloud")}</span>
+          <div>
+            <span class="chip t-green">离线试用中 · 本机保存</span>
+            <h3 id="h-notice">开启家庭空间，打卡记录换手机不丢失</h3>
+            <p class="hint">当前数据仅保存在此设备。家长免费登录后即可建立家庭档案，手机、平板或电脑跨端同步。</p>
+            ${isWeChat ? `<p class="hint notice-wechat">在微信里打开的？点击右上角「···」，选择在系统浏览器中打开，体验完整发音并可添加到桌面。</p>` : ""}
+          </div>
+          <button class="x-btn" type="button" aria-label="暂不提醒" data-dismiss-guest>${icon("close")}</button>
         </div>
-        <div class="guest-onboarding-title">开启家庭空间，打卡记录换手机不丢失</div>
-        <div class="guest-onboarding-desc">
-          当前数据仅保存在此设备。家长免费登录后即可建立家庭档案，手机、平板或电脑跨端实时同步。
+        <div class="acts t-green">
+          <button class="btn sm" type="button" data-action="guest-login">${icon("learner")} 家长登录 / 开启家庭空间</button>
+          <button class="btn white sm" type="button" data-action="guest-guide">${icon("compass")} 使用指南</button>
         </div>
-        ${isWeChat ? `<div class="guest-onboarding-wechat">${icon("compass")} 微信提示：点击右上角「···」在系统浏览器中打开，体验完整发音并可添加到桌面独立使用。</div>` : ""}
-        <div class="guest-onboarding-actions">
-          <button class="guest-onboarding-btn primary" type="button" data-action="guest-login">
-            ${icon("learner")} 家长登录 / 开启家庭空间
-          </button>
-          <button class="guest-onboarding-btn secondary" type="button" data-action="guest-guide">
-            ${icon("compass")} 使用指南
-          </button>
-        </div>
-      </div>
+      </section>
     `);
     const loginBtn = guestCard.querySelector("[data-action='guest-login']");
     if (loginBtn) {
@@ -937,48 +1021,47 @@ function renderHome(){
         guestCard.remove();
       };
     }
-    main.appendChild(guestCard);
+    home.appendChild(guestCard);
   }
 
-  if (learningOn) {
-    const moduleStats = enabled.map((module) => ({
-      value: module === "chinese" ? streak("chinese") : totalChecked(module),
-      caption: module === "chinese" ? "语文连续(天)" : `${contentModuleLabel(module)}累计打卡`,
-    }));
-    const stat = $(`
-      <div class="card">
-        <h3>${icon("chart")} 今日成长数据</h3>
-        <div class="stat-grid">
-          <div class="stat"><div class="n">${checkedToday}/${enabled.length}</div><div class="t">今日打卡</div></div>
-          ${moduleStats.map((s) => `<div class="stat"><div class="n">${s.value}</div><div class="t">${s.caption}</div></div>`).join("")}
-        </div>
-        <div class="progressbar"><i></i></div>
-      </div>
-    `);
-    main.appendChild(stat);
-    stat.querySelector(".progressbar i").style.width = (checkedToday/enabled.length*100)+"%";
-  }
+  home.appendChild($(`<div class="a-foot"><p class="foot-note">${icon("construction")} 本机离线保存 · 家长登录后自动同步云端</p></div>`));
+  home.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
+}
 
-  // 统一学习入口 + 积分
-  const mk = (mod,iconName,t,d,pillText)=>$(`
-    <button class="card card-action" type="button" data-go="${mod}">
-      <h3>${icon(iconName)} ${t}</h3>
-      <div class="desc">${d}</div>
-      <span class="pill">${pillText || (isChecked(mod)?`${icon("checkCircle")} 今日已打卡`:"今日待打卡")}</span>
-    </button>
-  `);
-  main.appendChild(mk("learning","graduation","学习", learningOn ? "语文 · 数学 · 英语 · 绘本，按孩子启停" : "学习包未启用，点此开启", learningOn ? "学习" : "未启用"));
-  main.appendChild(mk("points","star","积分打卡","加分减分 · 月度行为积分表"));
-  main.querySelectorAll("[data-go]").forEach(c=>c.onclick=()=>switchMod(c.dataset.go));
-  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 家长登录后自动同步云端</div>`));
+// 首页学科卡的色调、图标与默认预告；预告优先使用当天计划内容
+const HOME_SUBJECTS = {
+  chinese: { tone: "t-orange", icon: "zi", short: "语文", teaser: "识字 · 古诗 · 写字" },
+  math: { tone: "t-blue", icon: "calculator", short: "数学", teaser: "口算 · 数感 · 规律 · 数独" },
+  english: { tone: "t-teal", icon: "languages", short: "英语", teaser: "今日单词 · 往期回看" },
+  book: { tone: "t-purple", icon: "book", short: "绘本", teaser: "今日绘本 · 书架 · 书单" },
+  speaking: { tone: "t-rose", icon: "chat", short: "听说", teaser: "跟读 · 对话练习" },
+};
+function homeTeaser(module) {
+  if (module === "chinese") {
+    const parts = [];
+    const literacy = plannedContent("literacy");
+    const poems = plannedContent("poem");
+    if (literacy.length) parts.push(`识字「${literacy.map((row) => row.item.glyph).join("、")}」`);
+    if (poems.length) parts.push(`古诗《${poems[0].item.title || poems[0].item.t}》`);
+    return parts.join(" · ");
+  }
+  if (module === "english") {
+    const words = plannedContent("english");
+    return words.length ? `英语「${words.map((row) => row.item.word).join("、")}」` : "";
+  }
+  if (module === "book") {
+    const books = plannedContent("book");
+    return books.length ? `共读《${books[0].item.t}》` : "";
+  }
+  return "";
 }
 
 function renderLearning(){
   const main = el("main"); main.innerHTML="";
   const titleRow = $(`
-    <div class="module-title-row">
-      <div class="module-title"><span class="em">${icon("graduation")}</span><h2>学习</h2></div>
-      <div class="module-title-actions"><button class="btn-subtle" type="button" data-open-library>${icon("library")} 内容库</button><button class="btn-subtle" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button></div>
+    <div class="page-h">
+      <h1><span class="blob sm solid t-green">${icon("graduation")}</span>学习</h1><span class="sp"></span>
+      <div class="acts t-green"><button class="btn soft sm" type="button" data-open-library>${icon("library")} 内容库</button><button class="btn soft sm" type="button" data-go-settings="learning" aria-label="学习设置">${icon("settings")} 学习设置</button></div>
     </div>
   `);
   main.appendChild(titleRow);
@@ -988,35 +1071,40 @@ function renderLearning(){
   if (enabled.length) {
     const entries = enabled.map((moduleId) => {
       const module = getContentModuleDefinition(moduleId);
+      const meta = HOME_SUBJECTS[moduleId] || { tone: "t-green", icon: module.icon_key };
       const available = availableModuleIds().includes(moduleId);
       const done = available && isChecked(moduleId);
-      return `<button class="card card-action" type="button" data-go="${escapeHtml(module.content_entry)}">
-        <h3>${icon(module.icon_key)} ${escapeHtml(module.name)}</h3>
-        <div class="desc">${available ? `${done ? "今日已完成" : "今日待打卡"} · 累计 ${totalChecked(moduleId)} 天 · 连续 ${streak(moduleId)} 天` : "课程准备中，暂不计入打卡统计"}</div>
-        <span class="pill">${available ? (done ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡") : "准备中"}</span>
+      const tone = available ? meta.tone : "t-ink";
+      return `<button class="press subj-card ${tone}" type="button" data-go="${escapeHtml(module.content_entry)}">
+        <span class="blob lg ${available ? "solid" : ""}">${icon(meta.icon)}</span><b>${escapeHtml(module.name)}</b>
+        <span class="sub">${available ? (SUBJECT_TASK_SUMMARY[moduleId] || "") : "课程准备中"}</span>
+        <span class="row">${available
+          ? `<span class="chip ${done ? "t-green" : tone}">${done ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡"}</span><span class="chip line">累计 ${totalChecked(moduleId)} 天 · 连续 ${streak(moduleId)} 天</span>`
+          : `<span class="chip line">准备中 · 暂不计入打卡统计</span>`}</span>
+        ${done ? `<span class="stamp">${icon("check")}已打卡</span>` : ""}
       </button>`;
     }).join("");
-    main.appendChild($(`
-      <div class="card">
-        <h3>${icon("list")} 学习模块</h3>
-        ${entries}
-      </div>
-    `));
+    main.appendChild($(`<p class="hint">每个任务单独打卡，再点一次同一个打卡按钮就能取消。点读和播放不会自动记成完成。</p>`));
+    main.appendChild($(`<div class="tb-grid g2-t">${entries}</div>`));
     main.querySelectorAll("[data-go]").forEach((c) => (c.onclick = () => switchMod(c.dataset.go)));
   } else {
     main.appendChild($(`
-      <div class="card">
-        <h3>${icon("sprout")} 学习模块未启用</h3>
-        <div class="desc">当前孩子的启蒙学习包未开启或各学科已关闭。可在「学习设置」中开启学习包并勾选需要的学科。</div>
-        <button class="checkin" type="button" data-go-settings="learning">${icon("settings")} 前往设置开启模块</button>
-      </div>
+      <div class="empty">${mascot()}<div><b>学习模块未启用</b><p class="hint">由家长在学习设置里开启学习包并勾选需要的学科，关闭期间历史记录都会保留。</p><div class="t-green" style="margin-top:10px"><button class="btn sm" type="button" data-go-settings="learning">${icon("settings")} 前往设置开启模块</button></div></div></div>
     `));
   }
   main.querySelectorAll("[data-go-settings]").forEach((btn) => {
     btn.onclick = () => switchMod("settings", { tab: btn.dataset.goSettings });
   });
-  main.appendChild($(`<div class="footer">${icon("construction")} 本机离线保存 · 登录后跨设备同步</div>`));
+  main.appendChild($(`<p class="foot-note">${icon("construction")} 本机离线保存 · 登录后跨设备同步</p>`));
 }
+
+const SUBJECT_TASK_SUMMARY = {
+  chinese: "识字 · 古诗 · 写字",
+  math: "口算 · 数感 · 规律 · 数独",
+  english: "今日单词 · 往期回看",
+  book: "今日绘本 · 书架 · 书单 · 记录",
+  speaking: "亲子听说",
+};
 
 /* =========================================================
    渲染：语文
@@ -1042,12 +1130,12 @@ function stopPoemSpeech() {
 
 function renderChinese(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("book","语文学习"));
+  main.appendChild(subjectHero("chinese"));
 
   const chineseSections = [
-    { id: "section-chinese-literacy", label: "识字打卡", icon: "pen" },
-    { id: "section-chinese-poem", label: "古诗听读", icon: "bookMarked" },
-    { id: "section-chinese-writing", label: "写字练习", icon: "pencil" },
+    { id: "section-chinese-literacy", label: "识字", icon: "zi", checkin: "chinese-literacy" },
+    { id: "section-chinese-poem", label: "古诗", icon: "scroll", checkin: "chinese-poem" },
+    { id: "section-chinese-writing", label: "写字", icon: "pencil", checkin: "chinese-writing" },
   ];
   const tabs = renderSectionTabs(chineseSections);
   if (tabs) main.appendChild(tabs);
@@ -1062,7 +1150,7 @@ function renderChinese(){
   const card1 = $(`
     <div class="card card-collapsible" data-literacy-plan id="section-chinese-literacy">
       <div class="card-collapse-header">
-        <h3>${icon("pen")} 识字打卡 <span class="pill">生活识字 · 按实际记录复习</span></h3>
+        <h3>${icon("zi")} 识字打卡 <span class="pill">生活识字 · 按实际记录复习</span></h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起识字打卡">
           <span class="card-collapse-label">收起</span>
           <span class="card-collapse-icon">${icon("chevronDown")}</span>
@@ -1072,10 +1160,12 @@ function renderChinese(){
         <div class="desc">每天最多 ${litLimits.new} 个新字和 ${litLimits.review} 个复习字。未完成的内容继续保留，点读不代表已经掌握。</div>
         <div class="grid2">${literacyRows.map((row, index) => `
           <div class="mini-card speech-tap" role="button" tabindex="0" data-hanzi-mini="${index}" data-content-reason="${row.reason}" aria-label="点读生字：${escapeHtml(row.item.glyph)}，${escapeHtml(row.item.word)}">
+            ${contentReasonTag(row, "新字")}
             ${contentFeedbackHtml(row)}
             <div class="big">${escapeHtml(row.item.glyph)}</div>
             <div class="py">${escapeHtml(row.item.pinyin)}</div>
-            <div class="label">${escapeHtml(row.item.word)}${row.reason === "review" ? " · 复习" : ""}</div>
+            <div class="label">${escapeHtml(row.item.word)}</div>
+            <span class="tap-hint" aria-hidden="true">${icon("volume")} 点一下听</span>
           </div>`).join("")}</div>
         ${literacyRows.length ? checkinBtn("chinese-literacy","识字") : '<div class="desc">今天没有安排新的或到期的识字内容，可以在生活中找找熟悉的字。</div>'}
       </div>
@@ -1403,13 +1493,13 @@ function mathSpeechText(q) {
 }
 function renderMath(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("calculator","数学与数感"));
+  main.appendChild(subjectHero("math"));
 
   const mathSections = [
-    { id: "section-math-mental", label: "口算打卡", icon: "calculator" },
-    { id: "section-math-sense", label: "生活数感", icon: "brain" },
-    { id: "section-math-sequence", label: "数字规律", icon: "dice" },
-    { id: "section-math-sudoku", label: "简单数独", icon: "grid" },
+    { id: "section-math-mental", label: "口算", icon: "calculator", checkin: "math-mental" },
+    { id: "section-math-sense", label: "生活数感", icon: "apple" },
+    { id: "section-math-sequence", label: "数字规律", icon: "beads" },
+    { id: "section-math-sudoku", label: "简单数独", icon: "grid", checkin: "math-sense" },
   ];
   const tabs = renderSectionTabs(mathSections);
   if (tabs) main.appendChild(tabs);
@@ -1685,10 +1775,15 @@ function buildSudoku(){
 function renderEnglish(){
   const rows = plannedContent("english");
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("languages","英语学习"));
+  main.appendChild(subjectHero("english"));
+  const tabs = renderSectionTabs([
+    { id: "section-english-today", label: "今日单词", icon: "languages", checkin: "english-vocabulary" },
+    { id: "section-english-review", label: "往期回看", icon: "calendar" },
+  ]);
+  if (tabs) main.appendChild(tabs);
   // 每日快照与首页共享，未体验的单词继续保留。
   const card1 = $(`
-    <div class="card card-collapsible">
+    <div class="card card-collapsible" id="section-english-today">
       <div class="card-collapse-header">
         <h3>${icon("languages")} 今日主题单词 <span class="pill">每日推送</span></h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起今日主题单词">
@@ -1701,15 +1796,16 @@ function renderEnglish(){
           <span>${escapeHtml(ENGLISH_DAILY_PROMPT.text)}</span>
           <button class="btn-read-prompt" type="button" aria-label="朗读今日单词要求">${icon("volume")} 读指引</button>
         </div>
-        ${rows.map((row, index) => `<div class="word-card" data-content-reason="${row.reason}">
+        <div class="word-grid">${rows.map((row, index) => `<div class="word-card" data-content-reason="${row.reason}">
+          ${contentReasonTag(row, "新词")}
           ${contentFeedbackHtml(row)}
           ${renderEnglishVisual(row.item.word, row.item.theme, row.item.meaning)}
           <div class="word-en">${escapeHtml(row.item.word)}</div>
           <div class="word-ph">${escapeHtml(row.item.phonetic)}</div>
-          <div class="word-cn">${escapeHtml(row.item.meaning)} · ${escapeHtml(row.item.theme)}${row.reason === "review" ? " · 复习" : ""}</div>
+          <div class="word-cn">${escapeHtml(row.item.meaning)} · ${escapeHtml(row.item.theme)}</div>
           <div class="desc">${escapeHtml(row.item.prompt || "和家长一起听一听，在生活中找找它。")}</div>
           <button class="speak-btn" type="button" data-speak="${index}" data-label="听发音">${buttonContent("volume", "听发音")}</button>
-        </div>`).join("")}
+        </div>`).join("")}</div>
         <div class="spacer-10"></div>
         ${rows.length ? checkinBtn("english-vocabulary","单词") : '<div class="desc">今天没有安排新的或到期的词卡，可以在生活中听听、说说熟悉的词。</div>'}
       </div>
@@ -1740,7 +1836,7 @@ function renderEnglish(){
   const historyWords = completedIds.map((id) => getLearningItem("english", id)).filter(Boolean);
   const chips = historyWords.map((item) => `<span class="mr-chip speech-tap" role="button" tabindex="0" data-word="${escapeHtml(item.word)}" data-word-id="${escapeHtml(item.speechId)}" aria-label="听发音：${escapeHtml(item.word)}">${escapeHtml(item.word)}</span>`).join("");
   const card2 = $(`
-    <div class="card card-collapsible">
+    <div class="card card-collapsible" id="section-english-review">
       <div class="card-collapse-header">
         <h3>${icon("calendar")} 往期单词回看 <span class="pill">已学记录</span></h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起往期单词回看">
@@ -1911,96 +2007,72 @@ function makeCollapsible(cardEl, storageKey, defaultCollapsed = false) {
   }
 }
 
+// 学科、积分、成长页的分段页签：同一时刻只显示一个分区，并按模块记住上次选择
+const SECTION_TAB_MEMORY = {};
+const SECTION_TAB_TONES = { chinese: "t-orange", math: "t-blue", english: "t-teal", book: "t-purple", points: "t-sun", grow: "t-green" };
 function renderSectionTabs(sections) {
   if (!Array.isArray(sections) || sections.length === 0) return null;
-  const container = document.createElement("nav");
-  container.className = "section-nav-tabs";
-  container.setAttribute("role", "tablist");
-  container.setAttribute("aria-label", "页面板块快速跳转");
-
-  let isClickScrolling = false;
-  let clickTimeout = null;
-
-  const setActiveTab = (targetId) => {
-    container.querySelectorAll(".section-nav-tab").forEach((t) => {
-      const match = t.dataset.targetSection === targetId;
-      t.classList.toggle("active", match);
-      t.setAttribute("aria-selected", match ? "true" : "false");
-      if (match) {
-        // 仅在横向溢出时轻量调整 TAB 容器自身的 scrollLeft，严禁调用 t.scrollIntoView 阻断页面纵向滚动
-        const cRect = container.getBoundingClientRect();
-        const tRect = t.getBoundingClientRect();
-        if (tRect.left < cRect.left) {
-          container.scrollLeft += (tRect.left - cRect.left) - 8;
-        } else if (tRect.right > cRect.right) {
-          container.scrollLeft += (tRect.right - cRect.right) + 8;
-        }
-      }
-    });
-  };
-
-  sections.forEach((sec, idx) => {
-    const tabBtn = document.createElement("button");
-    tabBtn.type = "button";
-    tabBtn.className = `section-nav-tab ${idx === 0 ? "active" : ""}`;
-    tabBtn.setAttribute("role", "tab");
-    tabBtn.setAttribute("aria-selected", idx === 0 ? "true" : "false");
-    tabBtn.setAttribute("data-target-section", sec.id);
-    tabBtn.innerHTML = `${sec.icon ? icon(sec.icon) : ""} <span>${escapeHtml(sec.label)}</span>`;
-
-    tabBtn.onclick = () => {
-      const target = document.getElementById(sec.id);
-      if (!target) return;
-
-      isClickScrolling = true;
-      if (clickTimeout) clearTimeout(clickTimeout);
-      setActiveTab(sec.id);
-
-      const toggleBtn = target.querySelector('.card-collapse-toggle[aria-expanded="false"]');
-      if (toggleBtn) {
-        toggleBtn.click();
-      }
-
-      if (typeof target.scrollIntoView === "function") {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-      clickTimeout = setTimeout(() => {
-        isClickScrolling = false;
-      }, 800);
-    };
-
+  const group = CURRENT_MOD;
+  const ids = sections.map((sec) => sec.id);
+  const tone = SECTION_TAB_TONES[group] || "t-green";
+  const container = $(`<div class="seg section-nav-tabs ${tone} ${sections.length === 4 ? "n4" : ""}" ${sections.length === 4 ? "" : `style="--n:${sections.length}"`} role="tablist" aria-label="分区" data-section-tabs="${group}"></div>`);
+  sections.forEach((sec) => {
+    const done = sec.checkin && isChecked(sec.checkin);
+    const tabBtn = $(`<button class="section-nav-tab" type="button" role="tab" id="tab-${sec.id}" aria-controls="${sec.id}" data-target-section="${sec.id}">${sec.icon ? icon(sec.icon) : ""}<span>${escapeHtml(sec.label)}</span>${done ? `<span class="badge" aria-label="已打卡">${icon("check")}</span>` : ""}</button>`);
     container.appendChild(tabBtn);
   });
 
-  let ticking = false;
-  const onScroll = () => {
-    if (isClickScrolling) return;
-    if (!ticking) {
-      window.requestAnimationFrame(() => {
-        if (!container.isConnected) {
-          window.removeEventListener("scroll", onScroll);
-          return;
-        }
-        const scrollPosition = window.scrollY + 130;
-        let currentSectionId = sections[0].id;
-
-        for (let i = 0; i < sections.length; i++) {
-          const el = document.getElementById(sections[i].id);
-          if (el) {
-            const top = el.getBoundingClientRect().top + window.scrollY;
-            if (scrollPosition >= top) {
-              currentSectionId = sections[i].id;
-            }
-          }
-        }
-        setActiveTab(currentSectionId);
-        ticking = false;
-      });
-      ticking = true;
-    }
+  const show = (targetId, { focus = false } = {}) => {
+    SECTION_TAB_MEMORY[group] = targetId;
+    container.querySelectorAll("[data-target-section]").forEach((tab) => {
+      const selected = tab.dataset.targetSection === targetId;
+      tab.classList.toggle("active", selected);
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focus) tab.focus();
+    });
+    const main = container.parentElement;
+    main?.querySelectorAll("[data-section-group]").forEach((node) => {
+      node.classList.toggle("is-tab-hidden", node.dataset.sectionGroup !== targetId);
+    });
+    const target = document.getElementById(targetId);
+    target?.querySelector('.card-collapse-toggle[aria-expanded="false"]')?.click();
   };
 
-  window.addEventListener("scroll", onScroll, { passive: true });
+  container.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-target-section]");
+    if (tab) show(tab.dataset.targetSection);
+  });
+  container.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const index = ids.indexOf(SECTION_TAB_MEMORY[group]);
+    show(ids[(index + step + ids.length) % ids.length], { focus: true });
+  });
+
+  // 渲染函数同步追加完全部卡片后，再把页签之后的元素归入各自分区。
+  // 不带分区 id 的卡片（如古诗打卡卡）归入它前面最近的分区；底部说明始终显示。
+  queueMicrotask(() => {
+    const main = container.parentElement;
+    if (!main) return;
+    let current = null;
+    let afterTabs = false;
+    for (const node of main.children) {
+      if (node === container) { afterTabs = true; continue; }
+      if (!afterTabs) continue;
+      const owner = ids.find((id) => node.id === id || node.querySelector?.(`#${id}`));
+      if (owner) current = owner;
+      if (current && !node.matches(".foot-note, .footer")) {
+        node.dataset.sectionGroup = current;
+        if (node.id === current) {
+          node.setAttribute("role", "tabpanel");
+          node.setAttribute("aria-labelledby", `tab-${current}`);
+        }
+      }
+    }
+    show(ids.includes(SECTION_TAB_MEMORY[group]) ? SECTION_TAB_MEMORY[group] : ids[0]);
+  });
 
   return container;
 }
@@ -2009,8 +2081,8 @@ function renderGrow(){
   const main = el("main"); main.innerHTML="";
   const titleRow = $(`
     <div class="module-title-row">
-      <div class="module-title"><span class="em">${icon("sprout")}</span><h2>成长记录</h2></div>
-      <button class="btn-subtle" type="button" data-go-settings="growth" aria-label="成长设置">${icon("settings")} 成长设置</button>
+      <div class="module-title"><span class="em blob sm solid t-green">${icon("sprout")}</span><h2 data-page-title>成长记录</h2></div>
+      <div class="t-green"><button class="btn soft sm" type="button" data-go-settings="growth" aria-label="成长设置">${icon("settings")} 成长设置</button></div>
     </div>
   `);
   main.appendChild(titleRow);
@@ -2509,19 +2581,12 @@ function renderPoints(){
   const main = el("main"); main.innerHTML="";
   const titleRow = $(`
     <div class="module-title-row">
-      <div class="module-title"><span class="em">${icon("star")}</span><h2>积分打卡</h2></div>
-      <button class="btn-subtle" type="button" data-go-settings="points" aria-label="积分设置">${icon("settings")} 积分设置</button>
+      <div class="module-title"><span class="em blob sm solid t-sun">${icon("star")}</span><h2 data-page-title>积分打卡</h2></div>
+      <div class="t-sun"><button class="btn soft sm" type="button" data-go-settings="points" aria-label="积分设置">${icon("settings")} 积分设置</button></div>
     </div>
   `);
   main.appendChild(titleRow);
   titleRow.querySelector("[data-go-settings]").onclick = () => switchMod("settings", { tab: "points" });
-
-  const pointsSections = [
-    { id: "section-points-checkin", label: "习惯打卡", icon: "checkCircle" },
-    { id: "section-points-calendar", label: "打卡日历", icon: "calendar" },
-  ];
-  const tabs = renderSectionTabs(pointsSections);
-  if (tabs) main.appendChild(tabs);
 
   const currentDate = new Date();
   const today = currentDate.getDate();
@@ -2535,21 +2600,22 @@ function renderPoints(){
   const dt = getPointDayTotal(growthLoopSnapshot, dateKeyForDay(activeDay));
   const pointItems = visiblePointItems();
 
-  // 挖掘机主题横幅
-  main.appendChild($(`<div class="exc-banner">
-      <div class="em">${icon("construction")}</div>
-      <div><div class="t">挖掘机小队长 · 积分打卡榜</div><div class="d">完成好习惯就点亮小星星，绿挖挖帮你攒积分！</div></div>
-      <div class="badge">${icon("star")} ${mt>0?'+':''}${mt} 分</div>
-    </div>`));
-
-  // 顶部统计
-  main.appendChild($(`<div class="card">
-      <h3>${icon("construction")} 本月积分</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="n">${mt>0?'+':''}${mt}</div><div class="t">本月累计</div></div>
-        <div class="stat"><div class="n">${dt>0?'+':''}${dt}</div><div class="t">${activeDay}日积分</div></div>
+  // 挖掘机主题积分概览：本月累计与所选日期积分，放在分段页签之前始终可见
+  main.appendChild($(`<section class="panel pts-sum t-sun" aria-label="积分概览">
+      <span class="blob solid">${icon("star")}</span>
+      <div class="pts-sum-txt"><b>挖掘机小队长 · 积分打卡榜</b><p class="hint">完成好习惯就点亮小星星，绿挖挖帮你攒积分！</p></div>
+      <div class="nums">
+        <div class="big-num"><b>${mt>0?'+':''}${mt}</b><span>本月积分</span></div>
+        <div class="big-num"><b>${dt>0?'+':''}${dt}</b><span>${activeDay} 日积分</span></div>
       </div>
-    </div>`));
+    </section>`));
+
+  const pointsSections = [
+    { id: "section-points-checkin", label: "习惯打卡", icon: "checkCircle" },
+    { id: "section-points-calendar", label: "打卡日历", icon: "calendar" },
+  ];
+  const tabs = renderSectionTabs(pointsSections);
+  if (tabs) main.appendChild(tabs);
 
   // 1. 打卡区（卡片化，置顶核心）
   const isToday = activeDay===today;
@@ -2620,7 +2686,14 @@ function renderPoints(){
    ========================================================= */
 function renderBook(){
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("library","绘本读物"));
+  main.appendChild(subjectHero("book"));
+  const tabs = renderSectionTabs([
+    { id: "section-book-today", label: "今日绘本", icon: "book", checkin: "book-reading" },
+    { id: "section-book-shelf", label: "小书架", icon: "bookMarked" },
+    { id: "section-book-peanut", label: "参考书单", icon: "list" },
+    { id: "section-book-log", label: "阅读记录", icon: "pencil" },
+  ]);
+  if (tabs) main.appendChild(tabs);
 
   const migrated = migrateLegacyBookState(store);
   if (JSON.stringify(migrated.bookShelf) !== JSON.stringify(store.bookShelf) ||
@@ -2635,7 +2708,7 @@ function renderBook(){
   // 推荐实体绘本，不提供书内正文或插图。
   if (b) {
   const card1 = $(`
-    <div class="card card-collapsible">
+    <div class="card card-collapsible" id="section-book-today">
       <div class="card-collapse-header">
         <h3>${icon("book")} 今日绘本${bookRows[0].reason === "review" ? ' <span class="pill">复习</span>' : ""}</h3>
         <div class="card-collapse-actions">
@@ -2659,7 +2732,7 @@ function renderBook(){
   makeCollapsible(card1, "book_today", false);
 
   } else {
-    const emptyBookCard = $(`<div class="card card-collapsible">
+    const emptyBookCard = $(`<div class="card card-collapsible" id="section-book-today">
       <div class="card-collapse-header">
         <h3>${icon("book")} 今日绘本</h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起今日绘本">
@@ -2686,7 +2759,7 @@ function renderBook(){
   }).join("");
   const readN = BOOKS.filter((item) => store.bookShelf[item.id]).length;
   const card2 = $(`
-    <div class="card card-collapsible">
+    <div class="card card-collapsible" id="section-book-shelf">
       <div class="card-collapse-header">
         <h3>${icon("bookMarked")} 我的小书架 <span class="pill">点击标记已读</span></h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起我的小书架">
@@ -2733,7 +2806,7 @@ function renderBook(){
   }).join("");
 
   const card3 = $(`
-    <div class="card card-collapsible">
+    <div class="card card-collapsible" id="section-book-peanut">
       <div class="card-collapse-header">
         <h3>${icon("bookOpenCheck")} 共读参考书单 <span class="pill">自由选读</span></h3>
         <button class="card-collapse-toggle" type="button" aria-label="展开或收起共读参考书单">
@@ -2742,10 +2815,24 @@ function renderBook(){
         </button>
       </div>
       <div class="card-collapse-body">
-        <div class="desc">按孩子的兴趣和当前阅读状态选择童书或分级读物，级别不代表年龄要求。点一下标记已读，也可添加自己的阅读记录。</div>
+        <div class="desc">按孩子的兴趣和当前阅读状态选择童书或分级读物，级别不代表年龄要求。点一下标记已读，也可在「阅读记录」添加自己的记录。</div>
         <div class="grid2">${peanutRead}</div>
-        <div class="spacer-12"></div>
-        <div class="pts-sec">${icon("notebook")} 我的阅读记录</div>
+      </div>
+    </div>
+  `);
+  main.appendChild(card3);
+  makeCollapsible(card3, "book_peanut", false);
+
+  const card4 = $(`
+    <div class="card card-collapsible" id="section-book-log">
+      <div class="card-collapse-header">
+        <h3>${icon("notebook")} 我的阅读记录</h3>
+        <button class="card-collapse-toggle" type="button" aria-label="展开或收起我的阅读记录">
+          <span class="card-collapse-label">收起</span>
+          <span class="card-collapse-icon">${icon("chevronDown")}</span>
+        </button>
+      </div>
+      <div class="card-collapse-body">
         <div class="peanut-form">
           <label class="peanut-label" for="pbTitle">阅读书名</label>
           <input class="peanut-input" id="pbTitle" aria-label="阅读书名" placeholder="输入书名（如：牛津阅读树 L3）">
@@ -2758,8 +2845,8 @@ function renderBook(){
       </div>
     </div>
   `);
-  main.appendChild(card3);
-  makeCollapsible(card3, "book_peanut", false);
+  main.appendChild(card4);
+  makeCollapsible(card4, "book_log", false);
 
   // 绑定：书单已读标记
   card3.querySelectorAll("[data-pb]").forEach(c=>{
@@ -2775,7 +2862,7 @@ function renderBook(){
   });
   // 绑定：评分星
   let rating = 3;
-  const starEls = card3.querySelectorAll(".pstar");
+  const starEls = card4.querySelectorAll(".pstar");
   const paintStars = (n)=>starEls.forEach(s=>{
     const active = +s.dataset.n <= n;
     s.innerHTML = icon("star", { filled: active });
@@ -2797,7 +2884,7 @@ function renderBook(){
     switchMod("book");
   };
   // 绑定：删除记录
-  card3.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
+  card4.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{
     if (!canWriteLearningState()) return;
     const i = +x.dataset.del;
     const previous = store;
@@ -2818,7 +2905,7 @@ function renderBook(){
    ========================================================= */
 function renderSpeaking() {
   const main = el("main"); main.innerHTML = "";
-  main.appendChild(modTitle("volume", "语言听说"));
+  main.appendChild(subjectHero("speaking"));
   main.appendChild($(`<div class="card">
     <h3>${icon("languages")} 粤语亲子听说 · 准备中</h3>
     <div class="desc">将从生活短句、亲子互动和对话接话开始。本次先保存可选模块设置，课程内容和合适的粤语音频验收完成后再开放学习。</div>
@@ -2831,66 +2918,154 @@ function renderSpeaking() {
 let currentSettingsTab = "learning";
 
 function renderSettings(options = {}){
+  // 同一分类内的原地重渲染（开关、步进器、表单提交）保留滚动位置
+  const previousTab = currentSettingsTab;
+  const keepScrollY = window.scrollY;
   if (options?.tab) {
     currentSettingsTab = options.tab;
   }
   const main = el("main"); main.innerHTML="";
-  main.appendChild(modTitle("settings","设置"));
+  main.appendChild(modTitle("settings","家长设置"));
 
   const tabs = [
-    { id: "learning", icon: "graduation", label: "学习设置" },
+    { id: "family", icon: "family", label: "家庭与账户" },
+    { id: "learning", icon: "settings", label: "学习设置" },
     { id: "points", icon: "star", label: "积分规则" },
-    { id: "growth", icon: "sprout", label: "愿望成长" },
+    { id: "growth", icon: "gift", label: "愿望成长" },
     { id: "sound", icon: "volume", label: "声音音效" },
     { id: "privacy", icon: "shield", label: "隐私" },
+    { id: "guide", icon: "compass", label: "使用指南" },
+    { id: "about", icon: "heart", label: "关于与反馈" },
   ];
-  const tabsBar = $(`
-    <div class="settings-tabs" role="tablist" aria-label="设置分类">
-      ${tabs.map((tab) => `
-        <button class="settings-tab ${currentSettingsTab === tab.id ? "active" : ""}" 
-                type="button" 
-                role="tab" 
-                data-tab="${tab.id}" 
-                aria-selected="${currentSettingsTab === tab.id}">
-          ${icon(tab.icon)} ${tab.label}
-        </button>
-      `).join("")}
+  if (!tabs.some((tab) => tab.id === currentSettingsTab)) currentSettingsTab = "learning";
+  const layout = $(`
+    <div class="p-layout">
+      <nav class="p-nav settings-tabs" role="tablist" aria-label="家长区分类">
+        ${tabs.map((tab) => `<button class="settings-tab ${currentSettingsTab === tab.id ? "active" : ""}" type="button" role="tab" id="settings-tab-${tab.id}" data-tab="${tab.id}" aria-controls="settingsPanel" aria-selected="${currentSettingsTab === tab.id}">${icon(tab.icon)}<span>${tab.label}</span></button>`).join("")}
+      </nav>
+      <div class="p-body t-green" id="settingsPanel" role="tabpanel" aria-labelledby="settings-tab-${currentSettingsTab}"></div>
     </div>
   `);
-  main.appendChild(tabsBar);
-  const activeTab = tabsBar.querySelector(".settings-tab.active");
-  const hiddenWidth = activeTab?.getBoundingClientRect().right - tabsBar.getBoundingClientRect().right;
-  if (hiddenWidth > 0) tabsBar.scrollLeft += hiddenWidth + 8;
+  main.appendChild(layout);
+  const tabsBar = layout.querySelector(".p-nav");
   tabsBar.querySelectorAll(".settings-tab").forEach((btn) => {
     btn.onclick = () => {
       currentSettingsTab = btn.dataset.tab;
       renderSettings();
     };
   });
+  tabsBar.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const index = tabs.findIndex((tab) => tab.id === currentSettingsTab);
+    tabsBar.querySelectorAll(".settings-tab")[(index + step + tabs.length) % tabs.length]?.click();
+    document.getElementById(`settings-tab-${currentSettingsTab}`)?.focus();
+  });
 
-  if (currentSettingsTab === "learning") {
-    renderSettingsLearning(main);
-  } else if (currentSettingsTab === "points") {
-    renderSettingsPoints(main);
-  } else if (currentSettingsTab === "growth") {
-    renderSettingsGrowth(main);
-  } else if (currentSettingsTab === "sound") {
-    renderSettingsSound(main);
-  } else if (currentSettingsTab === "privacy") {
-    renderSettingsPrivacy(main);
-  }
+  const body = layout.querySelector(".p-body");
+  const panels = {
+    family: renderSettingsFamily,
+    learning: renderSettingsLearning,
+    points: renderSettingsPoints,
+    growth: renderSettingsGrowth,
+    sound: renderSettingsSound,
+    privacy: renderSettingsPrivacy,
+    guide: renderGuide,
+    about: renderSettingsAbout,
+  };
+  panels[currentSettingsTab](body);
+  if (currentSettingsTab === previousTab) window.scrollTo({ top: keepScrollY });
+  else if (layout.getBoundingClientRect().top < 0) layout.scrollIntoView({ block: "start" });
+}
+
+// 家庭与账户：登录、家庭空间、孩子档案、导出与删除都在账户面板中完成，这里给出状态与入口。
+function renderSettingsFamily(main) {
+  const accountBtn = document.querySelector("#accountButton");
+  const state = accountBtn?.dataset?.state || "local";
+  const kidName = document.querySelector("#topKid .top-kid-name")?.textContent?.trim() || "";
+  const online = state === "online";
+  const card = $(`<section class="card p-card">
+    <h3>${icon(online ? "cloudCheck" : "cloud")} 账户与云端同步</h3>
+    <div class="p-row"><span class="blob sm">${icon(online ? "cloudCheck" : "construction")}</span><span class="t"><b>${online ? escapeHtml(accountBtn?.title || "云端已连接") : "离线试用中 · 本机保存"}</b><small>${online ? `当前学习者：${escapeHtml(kidName)}` : "登录后建立家庭档案，手机、平板、电脑跨设备同步。"}</small></span>
+      <button class="btn sm" type="button" data-open-account>${icon(online ? "settings" : "learner")} ${online ? "管理家庭与账户" : "家长登录"}</button></div>
+    <p class="hint">家庭空间、孩子档案、共享密码、导出家庭数据、清除本机数据与删除家庭数据都在账户面板中操作。学习者是家庭内的独立档案，不是登录账号。</p>
+  </section>`);
+  card.querySelector("[data-open-account]").onclick = () => accountBtn?.click();
+  main.appendChild(card);
+}
+
+// 关于与反馈：外链以页脚为唯一来源，儿童空间不展示站外链接。
+// 新趣集是作品收录站点，不属于影伴自身信息，家长区不展示（页脚 SEO 链接保留）。
+const ABOUT_HIDDEN_LINKS = [/^https:\/\/xinquji\.com/];
+const BRAND_LINK_PATTERNS = { xiaohongshu: /xhslink\.cn|xiaohongshu\.com/, douyin: /douyin\.com/, x: /^https:\/\/(x|twitter)\.com/ };
+// 社交平台标识：单色剪影，底色取各平台品牌色
+const BRAND_ICONS = {
+  wechat: `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9.2 3.5C5 3.5 1.6 6.3 1.6 9.8c0 2 1.1 3.8 2.9 5l-.7 2.2 2.6-1.3c.9.3 1.8.4 2.8.4h.5a5.6 5.6 0 0 1-.2-1.5c0-3.6 3.4-6.4 7.6-6.4h.5C16.9 5.4 13.4 3.5 9.2 3.5Zm-2.6 4.6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm5.2 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/><path fill="currentColor" d="M22.4 14.6c0-2.9-2.9-5.3-6.4-5.3s-6.4 2.4-6.4 5.3 2.9 5.3 6.4 5.3c.7 0 1.4-.1 2.1-.3l2.1 1.1-.6-1.8c1.7-1 2.8-2.5 2.8-4.3Zm-8.5-.9a.9.9 0 1 1 0-1.7.9.9 0 0 1 0 1.7Zm4.3 0a.9.9 0 1 1 0-1.7.9.9 0 0 1 0 1.7Z"/></svg>`,
+  xiaohongshu: `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><text x="12" y="15.6" text-anchor="middle" fill="currentColor" font-size="8.4" font-weight="900" font-family="PingFang SC, Microsoft YaHei, sans-serif">小红书</text></svg>`,
+  douyin: `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.5.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07Z"/></svg>`,
+  x: `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.59-6.64 7.59H.47l8.6-9.83L0 1.15h7.59l5.24 6.93Zm-1.29 19.5h2.04L6.49 3.24H4.3Z"/></svg>`,
+};
+function renderSettingsAbout(main) {
+  const card = $(`<section class="card p-card" data-settings-about>
+    <h3>${icon("heart")} 关于与反馈</h3>
+    <div class="links"></div>
+    <p class="hint">外部链接在新窗口打开。影伴由 Shadow Lab 出品，问题反馈会通过邮件发送给我们。</p>
+  </section>`);
+  const links = card.querySelector(".links");
+  // 按用途分组；分组只决定展示位置，链接本身仍逐条取自页脚
+  const groups = [
+    { title: "关于影伴", tone: "t-green", match: (href) => /^https:\/\/shadow\.wang/.test(href) },
+    { title: "关注我们", tone: "t-orange", match: (href, source) => source.id === "wechatButton" || /xhslink|douyin|x\.com/.test(href) },
+    { title: "帮助与隐私", tone: "t-blue", match: (href) => href.startsWith("mailto:") || href === "/privacy" },
+    { title: "更多", tone: "t-ink", match: () => true },
+  ].map((group) => ({ ...group, rows: [] }));
+  document.querySelectorAll(".site-footer-links > .site-footer-link").forEach((source) => {
+    const label = source.textContent.trim();
+    const href = source.getAttribute("href") || "";
+    if (ABOUT_HIDDEN_LINKS.some((pattern) => pattern.test(href))) return;
+    const group = groups.find((item) => item.match(href, source));
+    const brand = source.id === "wechatButton" ? "wechat" : Object.keys(BRAND_LINK_PATTERNS).find((key) => BRAND_LINK_PATTERNS[key].test(href));
+    const iconName = href.startsWith("mailto:") ? "mail" : href === "/privacy" ? "shield" : "externalLink";
+    const badge = brand
+      ? `<span class="blob sm brand-badge brand-${brand}">${BRAND_ICONS[brand]}</span>`
+      : `<span class="blob sm ${group.tone}">${icon(iconName)}</span>`;
+    const inner = `${badge}<span class="t"><b>${escapeHtml(label)}</b></span>${icon("chevronRight", { className: "link-row-go" })}`;
+    if (source.id === "wechatButton") {
+      const button = $(`<button class="link-row" type="button" aria-haspopup="dialog" data-open-wechat>${inner}</button>`);
+      button.onclick = () => source.click();
+      group.rows.push(button);
+      return;
+    }
+    const link = $(`<a class="link-row" href="${escapeHtml(href)}">${inner}</a>`);
+    ["target", "rel", "title", "aria-label"].forEach((name) => {
+      if (source.hasAttribute(name)) link.setAttribute(name, source.getAttribute(name));
+    });
+    group.rows.push(link);
+  });
+  groups.filter((group) => group.rows.length).forEach((group) => {
+    const section = $(`<div class="p-group"><div class="p-group-h"><b>${group.title}</b></div><div class="link-grid"></div></div>`);
+    section.querySelector(".link-grid").append(...group.rows);
+    links.appendChild(section);
+  });
+  main.appendChild(card);
 }
 
 function renderSettingsPrivacy(main) {
   const status = usageAnalytics.status();
-  const card = $(`<div class="card">
+  const card = $(`<section class="card p-card">
     <h3>${icon("shield")} 体验改进</h3>
-    <label class="switch-row">
-      <span class="switch-label"><strong>使用统计</strong><span class="desc">收集使用数据，帮助改进产品体验。</span></span>
-      <input id="usageConsent" type="checkbox" class="switch" role="switch" aria-label="使用统计" ${status.configured && status.consent ? "checked" : ""} ${status.configured ? "" : "disabled"}>
-    </label>
-    <a class="guide-link" href="/privacy" target="_blank" rel="noopener">隐私政策</a>
-  </div>`);
+    <div class="p-rows">
+      <label class="switch-row">
+        <span class="switch-label"><strong>使用统计</strong><span class="desc">收集使用数据，帮助改进产品体验。</span></span>
+        <input id="usageConsent" type="checkbox" class="switch" role="switch" aria-label="使用统计" ${status.configured && status.consent ? "checked" : ""} ${status.configured ? "" : "disabled"}>
+      </label>
+    </div>
+    <p class="hint" data-usage-hint>${status.configured
+      ? "只记录打开应用、模块切换、打卡、积分与奖励兑换等固定事件，不关联账号、家庭或孩子，不发送学习内容；关闭后同时停止错误上报。"
+      : "使用统计仅在正式站点 sm.shadow.wang 启用。当前是本地或预览环境，不收集使用数据，开关暂不可用。"}</p>
+    <a class="link-btn" href="/privacy" target="_blank" rel="noopener">${icon("externalLink")} 隐私政策</a>
+  </section>`);
   main.appendChild(card);
   card.querySelector("#usageConsent").onchange = (event) => {
     const enabled = event.target.checked;
@@ -2908,42 +3083,59 @@ function renderSettingsLearning(main){
   const selectedPackages = getActiveLearningPackages(config);
   const pace = getContentLearningPace(config);
   const settings = $(`
-    <div class="card">
-      <h3>${icon("grid")} 学习包设置</h3>
-      <div class="desc" style="font-weight:700;margin-top:8px;">推荐阶段（支持多选，至少选 1 项）</div>
-      <div class="package-list" role="group" aria-label="选择学习包">
-        ${LEARNING_PACKAGES.map((item) => `
+    <div class="p-stack">
+      <section class="card p-card">
+        <h3>${icon("grid")} 学习阶段</h3>
+        <p class="hint">按孩子年龄选择推荐学习包，支持多选，至少保留 1 项。</p>
+        <div class="package-list p-rows" role="group" aria-label="选择学习包">
+          ${LEARNING_PACKAGES.map((item) => `
+            <label class="switch-row">
+              <span class="switch-label"><strong>${escapeHtml(item.name)}</strong><span class="desc">建议年龄 ${escapeHtml(item.suggested_age)} 岁${item.description ? ` · ${escapeHtml(item.description)}` : ""}</span></span>
+              <input type="checkbox" class="switch" data-package-toggle="${item.id}" ${config.package_ids.includes(item.id) ? "checked" : ""} aria-label="选择 ${escapeHtml(item.name)}">
+            </label>
+          `).join("")}
+        </div>
+      </section>
+      <section class="card p-card">
+        <h3>${icon("calendar")} 每日学习节奏</h3>
+        <p class="hint">调整后将即时按新推荐节奏安排；已完成打卡的内容保持记录不变。复习间隔表示练习节奏，不表示掌握程度。</p>
+        <div class="p-rows">
+          ${[["literacy_new", "每天新学生字", "个"], ["english_new", "每天新学单词", "词"], ["poems_new", "每天新学古诗", "首"]].map(([key, label, unit]) => `
+            <div class="switch-row stepper-row">
+              <span class="switch-label">
+                <strong>${label}</strong>
+                <span class="desc">每天推荐 1–20 ${unit}，默认 2</span>
+              </span>
+              <div class="stepper-control" role="group" aria-label="${label}">
+                <button type="button" class="stepper-btn stepper-btn-minus" data-pace-step="${key}" data-step="-1" aria-label="减少${label}">−</button>
+                <input class="stepper-input" type="number" min="1" max="20" step="1" data-learning-pace="${key}" value="${pace[key] || 2}" aria-label="${label}">
+                <button type="button" class="stepper-btn stepper-btn-plus" data-pace-step="${key}" data-step="1" aria-label="增加${label}">+</button>
+                <span class="stepper-unit">${unit}/天</span>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+      <section class="card p-card">
+        <h3>${icon("list")} 学习模块</h3>
+        <p class="hint">按孩子独立启停。关闭模块只影响入口和统计，不会删除学习历史。</p>
+        <div class="p-rows">
           <label class="switch-row">
-            <span class="switch-label"><strong>${escapeHtml(item.name)}</strong><span class="desc">建议年龄 ${escapeHtml(item.suggested_age)} 岁 · ${escapeHtml(item.description)}</span></span>
-            <input type="checkbox" class="switch" data-package-toggle="${item.id}" ${config.package_ids.includes(item.id) ? "checked" : ""} aria-label="选择 ${escapeHtml(item.name)}">
+            <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
+            <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
           </label>
-        `).join("")}
-      </div>
-      <div class="desc">按孩子独立启停。关闭模块只影响入口和统计，不会删除学习历史。</div>
-      <div class="desc">调整后将即时按新推荐节奏安排；已完成打卡的内容保持记录不变。复习间隔表示练习节奏，不表示掌握程度。</div>
-      ${[["literacy_new", "每天新学生字", "个"], ["english_new", "每天新学单词", "词"], ["poems_new", "每天新学古诗", "首"]].map(([key, label, unit]) => `
-        <div class="switch-row stepper-row">
-          <span class="switch-label">
-            <strong>${label}</strong>
-            <span class="desc">每天推荐 1–20 ${unit}，默认 2</span>
-          </span>
-          <div class="stepper-control" role="group" aria-label="${label}">
-            <button type="button" class="stepper-btn stepper-btn-minus" data-pace-step="${key}" data-step="-1" aria-label="减少${label}">−</button>
-            <input class="stepper-input" type="number" min="1" max="20" step="1" data-learning-pace="${key}" value="${pace[key] || 2}" aria-label="${label}">
-            <button type="button" class="stepper-btn stepper-btn-plus" data-pace-step="${key}" data-step="1" aria-label="增加${label}">+</button>
-            <span class="stepper-unit">${unit}/天</span>
+        </div>
+        <div class="p-group">
+          <div class="p-group-h"><b>学科模块</b><small>${ALL_CONTENT_MODULES.filter((module) => config.modules[module.id]).length} / ${ALL_CONTENT_MODULES.length} 已启用</small></div>
+          <div class="p-rows">
+            ${ALL_CONTENT_MODULES.map((module) => `
+            <label class="switch-row">
+              <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">${module.id === "speaking" ? "可选 · 课程和音频准备中，暂不计入打卡统计" : `累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天`}</span></span>
+              <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
+            </label>`).join("")}
           </div>
         </div>
-      `).join("")}
-      <label class="switch-row">
-        <span class="switch-label"><strong>启用学习包</strong><span class="desc">关闭后首页和成长记录隐藏学习模块统计</span></span>
-        <input type="checkbox" class="switch" ${config.enabled ? "checked" : ""} data-config-toggle="package" aria-label="启用学习包">
-      </label>
-      ${ALL_CONTENT_MODULES.map((module) => `
-      <label class="switch-row">
-        <span class="switch-label"><strong>${icon(module.icon_key)} ${escapeHtml(module.name)}</strong><span class="desc">${module.id === "speaking" ? "可选 · 课程和音频准备中，暂不计入打卡统计" : `累计 ${totalChecked(module.id)} 天 · 连续 ${streak(module.id)} 天`}</span></span>
-        <input type="checkbox" class="switch" ${config.modules[module.id] ? "checked" : ""} data-config-toggle="module" data-module-id="${module.id}" aria-label="启用 ${escapeHtml(module.name)}">
-      </label>`).join("")}
+      </section>
     </div>
   `);
   main.appendChild(settings);
@@ -3019,21 +3211,27 @@ function renderSettingsLearning(main){
 function renderSettingsPoints(main){
   const customItems = (growthLoopSnapshot.items || []).filter(it => it.item_kind === "custom");
   const customCard = $(`
-    <div class="card growth-custom-card">
+    <section class="card p-card">
       <h3>${icon("pencil")} 自定义积分项</h3>
-      <div class="desc">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</div>
+      <p class="hint">把成长任务纳入积分管理：正数是加分，负数是扣分；每个孩子可以有自己的分值。</p>
       <form id="pointItemForm" class="growth-form">
         <label>项目名称<input name="name" maxlength="60" required placeholder="例如：自己刷牙"></label>
         <label>分值<input name="points" type="number" min="-1000" max="1000" step="1" required placeholder="例如：2"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加积分项</button>
+        <button class="btn" type="submit">${icon("plus")} 添加积分项</button>
       </form>
       ${customItems.length ? `
-        <div class="desc mt-12" style="font-weight:700;">已添加的自定义积分项：</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-          ${customItems.map(it => `<span class="pill" style="padding:4px 8px;font-size:12px;">${escapeHtml(it.name)} (${Number(it.default_points) > 0 ? '+' : ''}${it.default_points}分)</span>`).join("")}
+        <div class="p-group">
+          <div class="p-group-h"><b>已添加的自定义积分项</b><small>${customItems.length} 项</small></div>
+          <div class="p-rows">
+            ${customItems.map((it) => {
+              const positive = Number(it.default_points) > 0;
+              const tone = positive ? "t-green" : "t-rose";
+              return `<div class="p-row"><span class="blob sm ${tone}">${icon(positive ? "star" : "alert")}</span><span class="t"><b>${escapeHtml(it.name)}</b><small>${positive ? "加分项" : "扣分项"}</small></span><span class="chip ${tone}">${positive ? "+" : ""}${it.default_points} 分</span></div>`;
+            }).join("")}
+          </div>
         </div>
       ` : ""}
-    </div>
+    </section>
   `);
   main.appendChild(customCard);
   customCard.querySelector("#pointItemForm").onsubmit = async (event) => {
@@ -3146,7 +3344,7 @@ function renderSettingsGrowth(main){
         <div class="desc">没有找到可自动导入的旧积分记录。如需手动结转，由家长为当前孩子明确确认一次期初积分；确认后如需调整，请用普通积分调整流水。</div>
         <form id="openingBalanceForm" class="growth-form">
           <label>期初积分<input name="balance" type="number" min="1" max="1000000" step="1" required placeholder="例如：128"></label>
-          <button class="checkin" type="submit">${icon("check")} 确认期初积分</button>
+          <button class="btn" type="submit">${icon("check")} 确认期初积分</button>
         </form>
       </div>
     `);
@@ -3212,30 +3410,23 @@ function renderSettingsGrowth(main){
 
   const existingRewards = window.growthLoop?.getRewards?.() || [];
   const rewardCard = $(`
-    <div class="card growth-custom-card">
+    <section class="card p-card">
       <h3>${icon("gift")} 添加心愿奖品</h3>
-      <div class="desc">设定孩子期待兑换的心愿奖品与兑换所需积分。</div>
+      <p class="hint">设定孩子期待兑换的心愿奖品与兑换所需积分。</p>
       <form id="rewardForm" class="growth-form">
         <label>奖品名称<input name="name" maxlength="60" required placeholder="例如：去一次游乐园"></label>
         <label>所需积分<input name="cost" type="number" min="1" max="100000" step="1" required placeholder="例如：10"></label>
-        <button class="checkin" type="submit">${icon("plus")} 添加心愿奖品</button>
+        <button class="btn" type="submit">${icon("plus")} 添加心愿奖品</button>
       </form>
       ${existingRewards.length ? `
-        <div class="desc mt-12" style="font-weight:700;">已设定的心愿奖品：</div>
-        <div class="reward-list mt-8">
-          ${existingRewards.map(r => `
-            <div class="reward-card">
-              <div class="reward-icon">${icon(r.icon_key || "gift")}</div>
-              <div class="reward-info">
-                <strong>${escapeHtml(r.name)}</strong>
-                <span>${escapeHtml(r.description || "家庭约定奖励")}</span>
-              </div>
-              <span class="pts-badge">${r.cost_points || 0}分</span>
-            </div>
-          `).join("")}
+        <div class="p-group">
+          <div class="p-group-h"><b>已设定的心愿奖品</b><small>${existingRewards.length} 个</small></div>
+          <div class="p-rows">
+            ${existingRewards.map((r) => `<div class="p-row"><span class="blob sm t-sun">${icon(r.icon_key || "gift")}</span><span class="t"><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description || "家庭约定奖励")}</small></span><span class="chip t-sun">${r.cost_points || 0} 分</span></div>`).join("")}
+          </div>
         </div>
       ` : ""}
-    </div>
+    </section>
   `);
   main.appendChild(rewardCard);
   rewardCard.querySelector("#rewardForm").onsubmit = async (event) => {
@@ -3276,35 +3467,36 @@ function renderSettingsSound(main){
   const masterVol = Math.round((settings.volume ?? 0.6)*100);
   const masterLabelText = `总音量 ${masterVol}%${masterVol > 100 ? " (超额增强)" : ""}`;
   main.appendChild($(`
-    <div class="card">
-      <h3>${icon("volume")} 界面音效总开关与音量</h3>
-      <div class="sound-row">
-        <span class="sound-label">启用界面音效</span>
-        <button class="sound-switch ${settings.enabled?"on":""}" type="button" id="snd-master" role="switch" aria-checked="${settings.enabled}">${settings.enabled?"开":"关"}</button>
+    <section class="card p-card">
+      <h3>${icon("volume")} 界面音效</h3>
+      <div class="p-rows">
+        <label class="switch-row">
+          <span class="switch-label"><strong>启用界面音效</strong><span class="desc">控制点击、打卡、获得积分等界面操作音效。</span></span>
+          <input type="checkbox" class="switch" id="snd-master" role="switch" aria-label="启用界面音效" ${settings.enabled ? "checked" : ""}>
+        </label>
+        <div class="sound-row">
+          <span class="sound-label" id="snd-volume-label">${masterLabelText}</span>
+          <input class="sound-range" type="range" id="snd-volume" min="0" max="200" step="5" value="${masterVol}" aria-label="总音量" ${settings.enabled?"":"disabled"}>
+        </div>
       </div>
-      <div class="sound-row">
-        <span class="sound-label" id="snd-volume-label">${masterLabelText}</span>
-        <input class="sound-range" type="range" id="snd-volume" min="0" max="200" step="5" value="${masterVol}" aria-label="总音量" ${settings.enabled?"":"disabled"}>
-      </div>
-      <div class="desc">控制点击、打卡、获得积分等界面操作音效。</div>
-    </div>
+    </section>
   `));
   const speechVol = Math.round((settings.speechVolume ?? 0.6)*100);
   const speechLabelText = `朗读音量 ${speechVol}%${speechVol > 100 ? " (超额增强)" : ""}`;
   main.appendChild($(`
-    <div class="card">
-      <h3>${icon("volume")} 课程语音朗读音量</h3>
-      <div class="sound-row">
-        <span class="sound-label" id="speech-volume-label">${speechLabelText}</span>
-        <input class="sound-range" type="range" id="speech-volume" min="0" max="200" step="5" value="${speechVol}" aria-label="课程语音朗读音量">
+    <section class="card p-card">
+      <h3>${icon("volume")} 课程语音朗读</h3>
+      <p class="hint">控制汉字发音、英文单词和字意朗读的音量。</p>
+      <div class="p-rows">
+        <div class="sound-row">
+          <span class="sound-label" id="speech-volume-label">${speechLabelText}</span>
+          <input class="sound-range" type="range" id="speech-volume" min="0" max="200" step="5" value="${speechVol}" aria-label="课程语音朗读音量">
+          <button class="btn soft sm" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
+        </div>
       </div>
-      <div class="sound-event-controls" style="margin-top: 10px;">
-        <button class="checkin sound-preview" type="button" id="speech-preview">${icon("play")} 试听示范发音</button>
-      </div>
-      <div class="desc">控制汉字发音、英文单词和字意朗读的音量。</div>
-    </div>
+    </section>
   `));
-  const eventsCard = $(`<div class="card"><h3>${icon("list")} 事件音效</h3><div class="sound-events"></div></div>`);
+  const eventsCard = $(`<section class="card p-card"><h3>${icon("list")} 事件音效</h3><p class="hint">每个事件可以单独开关、选择音色并试听。</p><div class="sound-events p-rows"></div></section>`);
   main.appendChild(eventsCard);
   const list = eventsCard.querySelector(".sound-events");
   for (const key of SOUND_EVENT_KEYS) {
@@ -3314,28 +3506,28 @@ function renderSettingsSound(main){
       `<option value="${variantKey}" ${variantKey===eventSettings.variant?"selected":""}>${variant.name}</option>`
     ).join("");
     list.appendChild($(`
-      <div class="sound-event" data-event="${key}">
-        <div class="sound-event-head">
-          <span class="sound-label">${def.label}</span>
-          <button class="sound-switch ${eventSettings.enabled?"on":""}" type="button" data-event-enable="${key}" role="switch" aria-checked="${eventSettings.enabled}">${eventSettings.enabled?"开":"关"}</button>
-        </div>
+      <div class="sound-event switch-row" data-event="${key}">
+        <label class="sound-label" for="snd-event-${key}">${def.label}</label>
         <div class="sound-event-controls">
           <select data-event-variant="${key}" aria-label="${def.label}变体" ${eventSettings.enabled?"":"disabled"}>${variantOptions}</select>
-          <button class="checkin sound-preview" type="button" data-event-preview="${key}">${icon("play")} 试听</button>
+          <button class="btn white sm" type="button" data-event-preview="${key}">${icon("play")} 试听</button>
         </div>
+        <input type="checkbox" class="switch" id="snd-event-${key}" data-event-enable="${key}" role="switch" aria-label="启用${def.label}音效" ${eventSettings.enabled ? "checked" : ""}>
       </div>
     `));
   }
   main.appendChild($(`
-    <div class="card">
-      <button class="checkin danger" id="snd-reset" type="button">${icon("rotate")} 恢复默认设置</button>
-      <div class="desc">恢复为默认的总开关、音效音量、语音朗读音量与每个事件的变体选择。</div>
-    </div>
+    <section class="card p-card">
+      <div class="p-row">
+        <span class="t"><b>恢复默认设置</b><small>恢复为默认的总开关、音效音量、语音朗读音量与每个事件的变体选择。</small></span>
+        <button class="btn white sm" id="snd-reset" type="button">${icon("rotate")} 恢复默认</button>
+      </div>
+    </section>
   `));
   main.appendChild($(`<div class="footer">${icon("settings")} 声音设置只保存在当前设备，不会同步到云端。</div>`));
 
-  el("snd-master").onclick = () => {
-    soundEffects.setEnabled(!soundEffects.getSettings().enabled);
+  el("snd-master").onchange = (event) => {
+    soundEffects.setEnabled(event.target.checked);
     renderSettings({ tab: "sound" });
   };
   el("snd-volume").oninput = (event) => {
@@ -3372,8 +3564,8 @@ function renderSettingsSound(main){
     soundEffects.resetDefaults();
     renderSettings({ tab: "sound" });
   };
-  main.querySelectorAll("[data-event-enable]").forEach((button) => button.onclick = () => {
-    soundEffects.setEventEnabled(button.dataset.eventEnable, !soundEffects.getSettings().events[button.dataset.eventEnable].enabled);
+  main.querySelectorAll("[data-event-enable]").forEach((input) => input.onchange = () => {
+    soundEffects.setEventEnabled(input.dataset.eventEnable, input.checked);
     renderSettings({ tab: "sound" });
   });
   main.querySelectorAll("[data-event-variant]").forEach((select) => select.onchange = () => {
@@ -3385,12 +3577,12 @@ function renderSettingsSound(main){
   });
 }
 
-function renderGuide(){
+function renderGuide(container = null){
   const accountBtn = document.querySelector("#accountButton");
   const isOnline = accountBtn?.dataset?.state === "online";
 
-  const main = el("main");
-  main.innerHTML = "";
+  const main = container || el("main");
+  if (!container) main.innerHTML = "";
   main.appendChild($(`
     <div class="guide-page">
       <section class="guide-hero">
@@ -3568,9 +3760,24 @@ function renderGuide(){
 /* =========================================================
    公共组件
    ========================================================= */
+// 学科页头：返回学习 + 内容库，下方为学科色头卡（累计/连续/今日状态）
+function subjectHero(moduleId){
+  const meta = HOME_SUBJECTS[moduleId] || { tone: "t-green", icon: "graduation" };
+  const category = { chinese: "literacy", english: "english", math: "math", book: "book" }[moduleId];
+  const available = availableModuleIds().includes(moduleId);
+  const done = available && isChecked(moduleId);
+  const hero = $(`<div class="subject-head">
+    <div class="page-h"><button class="btn white sm" type="button" data-back-learning>${icon("chevronLeft")} 学习</button><span class="sp"></span>${category ? `<div class="${meta.tone}"><button class="btn soft sm" type="button" data-open-library>${icon("library")} 内容库</button></div>` : ""}</div>
+    <div class="subj-hero ${meta.tone}"><span class="blob lg solid">${icon(meta.icon)}</span><div><h1 data-page-title>${escapeHtml(contentModuleLabel(moduleId))}</h1><p>${available ? `累计 ${totalChecked(moduleId)} 天 · 连续 ${streak(moduleId)} 天` : "课程准备中"}</p></div><span class="sp"></span>
+      ${available ? `<span class="chip ${done ? "t-green" : ""}">${done ? `${icon("checkCircle")} 今日已打卡` : "今日待打卡"}</span>` : ""}</div>
+  </div>`);
+  hero.querySelector("[data-back-learning]").onclick = () => switchMod("learning");
+  hero.querySelector("[data-open-library]")?.addEventListener("click", () => openContentLibrary(category));
+  return hero;
+}
 function modTitle(iconName,t){
   const category = { chinese: "literacy", english: "english", math: "math", book: "book" }[CURRENT_MOD];
-  const title = $(`<div class="module-title-row"><div class="module-title"><span class="em">${icon(iconName)}</span><h2>${t}</h2></div>${category ? `<button class="btn-subtle" type="button" data-open-library>${icon("library")} 内容库</button>` : ""}</div>`);
+  const title = $(`<div class="module-title-row"><div class="module-title"><span class="em blob sm solid t-green">${icon(iconName)}</span><h2 data-page-title>${t}</h2></div>${category ? `<div class="t-green"><button class="btn soft sm" type="button" data-open-library>${icon("library")} 内容库</button></div>` : ""}</div>`);
   title.querySelector("[data-open-library]")?.addEventListener("click", () => openContentLibrary(category));
   return title;
 }
@@ -3583,17 +3790,32 @@ function checkinBtn(mod,label){
    导航切换
    ========================================================= */
 function switchMod(mod, options = {}){
+  if (mod === "settings" && currentAppMode !== "parent") {
+    openParentGate(options);
+    return;
+  }
+  if (mod !== "settings" && mod !== "guide" && currentAppMode === "parent") setAppMode("child");
   if (mod !== CURRENT_MOD) void usageAnalytics.record("view", { view: mod });
   contentLibrary?.close();
+  // 同一页面原地重渲染（打卡、开关、步进器）保留滚动位置；切换页面或从导航进入才回到顶部
+  const keepScrollY = mod === CURRENT_MOD && !options.resetScroll ? window.scrollY : 0;
   CURRENT_MOD = mod;
+  const rerenderOptions = { ...options, resetScroll: false };
   removeWritingPrintRoot();
   stopPoemSpeech();
+  // 学科页归属「学习」，Dock 上保持「学习」高亮
+  const navMod = ["chinese", "math", "english", "book", "speaking"].includes(mod) ? "learning" : mod;
   document.querySelectorAll(".navbtn").forEach(b=>{
-    const active = b.dataset.mod === mod;
+    const active = b.dataset.mod === navMod;
     b.classList.toggle("active", active);
     if(active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
+  // 学科页整页套用学科色调（分区标题图标、打卡按钮、档位按钮随之变色）；
+  // 积分页的黄色只用于局部，白字不能压在黄底上。
+  const mainEl = el("main");
+  Object.values(HOME_SUBJECTS).forEach((meta) => mainEl.classList.remove(meta.tone));
+  if (navMod === "learning" && HOME_SUBJECTS[mod]) mainEl.classList.add(HOME_SUBJECTS[mod].tone);
   if(mod==="home") renderHome();
   else if(mod==="learning") renderLearning();
   else if(mod==="chinese") renderChinese();
@@ -3610,7 +3832,7 @@ function switchMod(mod, options = {}){
     btn.onclick=()=>{
       const m=btn.dataset.cmod;
       toggleCheckin(m);
-      switchMod(mod, options);
+      switchMod(mod, rerenderOptions);
     };
   });
   el("main").querySelectorAll("[data-content-feedback]").forEach((group) => {
@@ -3632,12 +3854,12 @@ function switchMod(mod, options = {}){
             : setContentFeedback({ learning: getContentLearningState(store), occurrenceId, feedback: feedbackAction, deviceId: contentDeviceId() });
         store = replaceContentLearningState(store, learning);
         if (!save()) store = previous;
-        switchMod(mod, options);
+        switchMod(mod, rerenderOptions);
       };
     });
   });
   el("main").scrollTop = 0;
-  window.scrollTo({ top: 0 });
+  window.scrollTo({ top: keepScrollY });
   updateBackToTopVisibility?.();
 }
 
@@ -3683,8 +3905,35 @@ function initBackToTop() {
 
 initBackToTop();
 
-document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod));
+document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>switchMod(b.dataset.mod, { resetScroll: true }));
+document.querySelectorAll("[data-go-home]").forEach((b) => b.onclick = () => switchMod("home", { resetScroll: true }));
+
+// 平板/桌面侧栏可收起为仅图标；状态保存在本机。手机底部 Dock 不受影响（按钮在 CSS 中隐藏）。
+const DOCK_COLLAPSED_KEY = "shadow_mate_dock_collapsed";
+function setDockCollapsed(collapsed) {
+  document.querySelector(".app")?.classList.toggle("dock-collapsed", collapsed);
+  const toggle = document.querySelector("[data-nav-collapse]");
+  if (toggle) {
+    const label = collapsed ? "展开侧边栏" : "收起侧边栏";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", label);
+    toggle.title = label;
+    toggle.innerHTML = `${icon(collapsed ? "chevronRight" : "chevronLeft")}<span class="dock-label">${collapsed ? "展开" : "收起"}</span>`;
+  }
+  document.querySelectorAll(".dock-item").forEach((item) => {
+    if (collapsed) item.title = item.querySelector(".dock-label")?.textContent || "";
+    else item.removeAttribute("title");
+  });
+}
+let dockCollapsed = false;
+try { dockCollapsed = localStorage.getItem(DOCK_COLLAPSED_KEY) === "1"; } catch { /* unavailable */ }
+document.querySelector("[data-nav-collapse]")?.addEventListener("click", () => {
+  dockCollapsed = !dockCollapsed;
+  try { localStorage.setItem(DOCK_COLLAPSED_KEY, dockCollapsed ? "1" : "0"); } catch { /* unavailable */ }
+  setDockCollapsed(dockCollapsed);
+});
 hydrateIcons();
+setDockCollapsed(dockCollapsed);
 
 const wechatButton = document.querySelector("#wechatButton");
 const wechatDialog = document.querySelector("#wechatDialog");
@@ -3706,6 +3955,96 @@ wechatDialog?.addEventListener("close", () => {
   if (wechatDialogTrigger instanceof HTMLElement) wechatDialogTrigger.focus();
   wechatDialogTrigger = null;
 });
+
+function setAppMode(mode) {
+  currentAppMode = mode;
+  document.body.classList.toggle("parent-mode", mode === "parent");
+  document.body.classList.toggle("child-mode", mode === "child");
+  const gateBtn = document.getElementById("parentGateBtn");
+  if (gateBtn) gateBtn.hidden = mode !== "parent";
+}
+setAppMode("child");
+
+let pendingParentOptions = {};
+function openParentGate(options = {}) {
+  const gateDialog = document.getElementById("parentGateDialog");
+  pendingParentOptions = options;
+  if (gateDialog && !gateDialog.open) gateDialog.showModal();
+}
+
+(function initParentGate() {
+  const gateDialog = document.getElementById("parentGateDialog");
+  const gateBtn = document.getElementById("parentGateBtn");
+  const closeGateBtn = document.getElementById("closeGateBtn");
+  const gateX = document.getElementById("parentGateX");
+  const holdBtn = document.getElementById("holdUnlockBtn");
+  const holdBtnText = document.getElementById("holdBtnText");
+
+  if (!gateDialog || !gateBtn || !holdBtn) return;
+
+  gateBtn.addEventListener("click", () => switchMod("home"));
+  const closeGate = () => { if (gateDialog.open) gateDialog.close(); };
+  closeGateBtn?.addEventListener("click", closeGate);
+  gateX?.addEventListener("click", closeGate);
+
+  // E2E 可通过 window.__SM_PARENT_GATE_MS__ 缩短长按时长；门禁用于防误触，不是权限边界
+  const holdDuration = () => Number(window.__SM_PARENT_GATE_MS__) || 3000;
+  let holdFrame = 0;
+  let holdStartTime = 0;
+
+  function setProgress(progress) {
+    holdBtn.style.setProperty("--p", String(progress));
+    if (holdBtnText) {
+      holdBtnText.textContent = progress > 0 ? `再按 ${Math.ceil(3 - progress * 3)} 秒` : "长按 3 秒";
+    }
+  }
+  function tick() {
+    const progress = Math.min(1, (performance.now() - holdStartTime) / holdDuration());
+    setProgress(progress);
+    if (progress < 1) {
+      holdFrame = requestAnimationFrame(tick);
+      return;
+    }
+    holdFrame = 0;
+    closeGate();
+    setProgress(0);
+    setAppMode("parent");
+    soundEffects?.play?.("points_earned");
+    const options = pendingParentOptions;
+    pendingParentOptions = {};
+    switchMod("settings", options);
+  }
+  function startHold(event) {
+    if (holdFrame) return;
+    event.preventDefault();
+    holdStartTime = performance.now();
+    soundEffects?.play?.("action_completed");
+    holdFrame = requestAnimationFrame(tick);
+  }
+  function cancelHold() {
+    if (!holdFrame) return;
+    cancelAnimationFrame(holdFrame);
+    holdFrame = 0;
+    setProgress(0);
+  }
+
+  holdBtn.addEventListener("pointerdown", startHold);
+  holdBtn.addEventListener("pointerup", cancelHold);
+  holdBtn.addEventListener("pointerleave", cancelHold);
+  holdBtn.addEventListener("pointercancel", cancelHold);
+  holdBtn.addEventListener("contextmenu", (event) => event.preventDefault());
+  // 键盘用户：按住空格或回车同样需要满 3 秒
+  holdBtn.addEventListener("keydown", (event) => {
+    if ((event.key === " " || event.key === "Enter") && !event.repeat) startHold(event);
+    else if (event.key === " " || event.key === "Enter") event.preventDefault();
+  });
+  holdBtn.addEventListener("keyup", (event) => { if (event.key === " " || event.key === "Enter") cancelHold(); });
+  holdBtn.addEventListener("blur", cancelHold);
+  gateDialog.addEventListener("close", cancelHold);
+})();
+
+// 顶栏学习者头像
+document.querySelectorAll(".top-kid-ava").forEach((node) => { node.innerHTML = kidAvatar("#7CC8F2"); });
 
 // 日期显示
 (function(){

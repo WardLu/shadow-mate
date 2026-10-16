@@ -165,7 +165,7 @@ export function createContentLibrary({ getCatalog, getLearning, getDay, getScope
               <p class="hero-desc">按孩子的兴趣自由探索，点读学习不替换今天的每日推荐，自主学习不计入每日打卡。</p>
               <div class="content-library-stat-pills">
                 <span class="hero-pill">当前目录 <b>${items.length}</b> 项</span>
-                <span class="hero-pill accent">已体验 <b>${summary.activities[activity]?.learnedCatalogCount || 0}</b> 项</span>
+                <span class="hero-pill accent">已学习 <b>${summary.activities[activity]?.learnedCatalogCount || 0}</b> 项</span>
               </div>
             </div>
           </div>

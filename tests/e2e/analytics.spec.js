@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
+import { openParentTab } from "./helpers/parent-gate.js";
 
 test.use({ serviceWorkers: "block" });
 test.beforeEach(async ({ page }) => { await captureAnalytics(page); });
@@ -7,6 +8,8 @@ test.beforeEach(async ({ page }) => { await captureAnalytics(page); });
 test("records activation once per browser and exposes a feedback mail link", async ({ page }) => {
   await page.goto("/");
   await expect.poll(() => readAnalytics(page)).toEqual([{ name: "app_activated" }]);
+  // 儿童空间不展示站外链接，问题反馈收在家长区「关于与反馈」。
+  await openParentTab(page, "about");
   const feedback = page.getByRole("link", { name: "发送问题反馈邮件至 support@shadow.wang" });
   await expect(feedback).toBeVisible();
   await expect(feedback).toHaveAttribute("href", /^mailto:support@shadow\.wang\?subject=Shadow%20Mate/);

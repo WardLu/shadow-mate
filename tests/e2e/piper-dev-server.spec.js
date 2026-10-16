@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { openParentTab } from "./helpers/parent-gate.js";
 
 const PREVIEW_ORIGIN = "https://preview-sm.shadow.wang";
 
@@ -41,7 +42,7 @@ test.describe("Preview-only Piper resource smoke", () => {
       const registration = await navigator.serviceWorker.ready;
       return registration.active?.scriptURL || null;
     });
-    await page.click('[data-mod="guide"]');
+    await openParentTab(page, "guide");
     const packageRow = page.locator('[data-piper-resource="en_US-ljspeech-medium"]');
     await expect(packageRow).toBeVisible();
     await packageRow.getByRole("button", { name: "下载" }).click();
@@ -51,7 +52,7 @@ test.describe("Preview-only Piper resource smoke", () => {
 
     await context.setOffline(true);
     await page.reload();
-    await page.click('[data-mod="guide"]');
+    await openParentTab(page, "guide");
     await expect(packageRow.locator("[data-piper-resource-status]")).toHaveAttribute("data-piper-resource-status", "completed");
     await context.setOffline(false);
     expect(modelGetRequests).toBe(getRequestsAfterDownload);

@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { captureAnalytics, readAnalytics } from "./helpers/analytics.js";
 import { seedIssuedWritingPlan } from "./helpers/content-learning.js";
+import { openSection } from "./helpers/sections.js";
 
 async function openChinese(page) {
   await page.goto("/");
   await seedIssuedWritingPlan(page);
   await page.click('[data-mod="learning"]');
   await page.click('[data-go="chinese"]');
+  await openSection(page, "section-chinese-writing");
 }
 
 async function installSystemSpeech(page, voices = []) {

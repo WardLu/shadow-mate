@@ -1,11 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { openParentArea, openParentTab } from "./helpers/parent-gate.js";
 
 // roadmap「移动端学习体验」第 1 步：固化 360/390/平板横竖屏断点检查。
 // 断点由 playwright.config.js 的 mobile-360 / mobile-390 / tablet-portrait /
 // tablet-landscape project 提供（chromium 引擎仿真）。
 // 软键盘遮挡与真实刘海安全区无法在桌面仿真触发，归 L2 真机矩阵验收（roadmap 第 2 步）。
 
-const NAV_MODULES = ["learning", "points", "grow", "guide", "settings"];
+// 儿童 Dock 的四个空间；「家长」需长按门禁解锁，单独覆盖。
+const NAV_MODULES = ["home", "learning", "points", "grow"];
 
 async function expectNoHorizontalOverflow(page, label) {
   const overflow = await page.evaluate(() => ({
@@ -50,14 +52,16 @@ async function collectTouchTargets(page) {
 }
 
 test.describe("移动端视口检查", () => {
-  test("首页无横向溢出，页脚可达", async ({ page }) => {
+  test("首页无横向溢出，家长区外链可达", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".app")).toBeVisible();
     await expectNoHorizontalOverflow(page, "首页");
 
-    const footer = page.locator(".site-footer");
-    await footer.scrollIntoViewIfNeeded();
-    await expect(footer).toBeInViewport();
+    await openParentTab(page, "about");
+    const links = page.locator("[data-settings-about] .links");
+    await links.scrollIntoViewIfNeeded();
+    await expect(links).toBeInViewport();
+    await expectNoHorizontalOverflow(page, "关于与反馈");
   });
 
   test("全部主导航模块可打开且无横向溢出", async ({ page }) => {
@@ -69,11 +73,15 @@ test.describe("移动端视口检查", () => {
       await expect(btn).toHaveClass(/active/);
       await expectNoHorizontalOverflow(page, `模块 ${mod}`);
     }
+    await openParentArea(page, '.navbtn[data-mod="settings"]');
+    await expect(page.locator('.navbtn[data-mod="settings"]')).toHaveClass(/active/);
+    await expectNoHorizontalOverflow(page, "家长区");
   });
 
   test("二维码弹层可触屏打开并关闭", async ({ page }) => {
     await page.goto("/");
-    const trigger = page.locator("#wechatButton");
+    await openParentTab(page, "about");
+    const trigger = page.locator("[data-settings-about] [data-open-wechat]");
     await trigger.scrollIntoViewIfNeeded();
     await trigger.tap();
 
@@ -91,7 +99,7 @@ test.describe("移动端视口检查", () => {
 
   test("设置页分类标签可横向滚动触达", async ({ page }) => {
     await page.goto("/");
-    await page.locator('.navbtn[data-mod="settings"]').tap();
+    await openParentArea(page, '.navbtn[data-mod="settings"]');
     const tabs = page.locator(".settings-tab");
     const count = await tabs.count();
     expect(count).toBeGreaterThan(0);
@@ -107,11 +115,14 @@ test.describe("移动端视口检查", () => {
     await expect(page.locator(".app")).toBeVisible();
     const tooSmall = await collectTouchTargets(page);
 
-    for (const mod of ["learning", "grow", "settings"]) {
+    for (const mod of ["learning", "grow"]) {
       await page.locator(`.navbtn[data-mod="${mod}"]`).tap();
       await expect(page.locator(`.navbtn[data-mod="${mod}"]`)).toHaveClass(/active/);
       tooSmall.push(...(await collectTouchTargets(page)));
     }
+    await openParentArea(page, '.navbtn[data-mod="settings"]');
+    await expect(page.locator('.navbtn[data-mod="settings"]')).toHaveClass(/active/);
+    tooSmall.push(...(await collectTouchTargets(page)));
 
     expect(tooSmall, "存在小于 44px 的触控热区").toEqual([]);
   });

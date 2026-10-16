@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <code>v1.7.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
+  <code>v1.8.0</code> · <a href="./LICENSE">MIT License</a> · Vite + Vanilla JavaScript + Supabase
 </p>
 
 <p align="center">
@@ -30,7 +30,8 @@
 ## 它能做什么
 
 - **四个学习模块**：语文、数学、英语、绘本；每个模块内部的任务可以独立打卡和取消。
-- **统一学习入口**：先从左侧“学习”进入，再选择语文、数学、英语或绘本；积分、成长、指南和设置仍是独立的一级页面。
+- **统一学习入口**：从导航（桌面左侧、手机底部）进入“学习”，再选择语文、数学、英语或绘本；积分和成长是独立的一级页面。
+- **儿童/家长双模态空间**：孩子在首页、学习、积分、成长中自主使用；设置、积分与奖励配置、使用指南、账户与同步集中在“家长区”，长按 3 秒进入，防止误触。
 - **成长与约定兑现**：近 30 天按模块汇总学习成果；约定奖励在未登录单机即可即时兑换与兑现，登录后自动同步云端账本防多端并发。
 - **积分日历**：行为积分单独记录，与学习模块分开，支持按日期查看和补记。
 - **家庭空间**：一个家长管理多个学习者，切换孩子后加载对应的学习记录。
@@ -175,7 +176,7 @@ tests/e2e/                 离线、云端和数据生命周期测试
 
 ## 当前边界
 
-影伴本仓库版本为 v1.7.0；线上版本以已完成的受控发布及验收记录为准，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录页面访问数据；正式域名配置后，VibeCafé 页面浏览统计还会使用保存在浏览器中的随机访客标识参与公开作品榜单。正式站点还使用 Sentry 记录固定使用事件和经过过滤的未处理错误，默认开启，可在“设置 → 隐私”关闭。查看入口、免费额度与分析局限见 [使用统计说明](docs/usage-analytics.md)。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
+影伴本仓库版本为 v1.8.0；线上版本以已完成的受控发布及验收记录为准，生产地址为 [sm.shadow.wang](https://sm.shadow.wang/)。它是面向家庭的开源 PWA，不包含广告，也没有儿童独立账号体系。当前通过 [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) 记录页面访问数据；正式域名配置后，VibeCafé 页面浏览统计还会使用保存在浏览器中的随机访客标识参与公开作品榜单。正式站点还使用 Sentry 记录固定使用事件和经过过滤的未处理错误，默认开启，可在“设置 → 隐私”关闭。查看入口、免费额度与分析局限见 [使用统计说明](docs/usage-analytics.md)。数据范围和删除方式见 [隐私说明](PRIVACY.md)，安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
 VibeCafé 统计只在构建时设置 `VITE_VIBECAFE_AUTH_KEY` 且站点为 `https://sm.shadow.wang` 时加载。该客户端 Key 会出现在浏览器产物中，必须在 VibeCafé 将允许上报的 Origin 限定为正式域名。本地和预览环境不会发送榜单事件。配置生产构建环境后，仍须使用仓库的受控发布流程部署；只改环境变量不会更新已部署产物。
 第三方脚本已通过子资源完整性哈希固定；如果 VibeCafé 更新 `telemetry/v1.js`，先审查实际上报内容和隐私行为，再更新 `src/channel-telemetry.js` 中的哈希并重新发布。

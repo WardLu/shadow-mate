@@ -379,24 +379,6 @@
   color: var(--ink-soft);
 }
 
-@media (min-width: 820px) {
-  .app {
-    max-width: 980px;
-  }
-
-  .nav {
-    width: 92px;
-  }
-
-  .main {
-    padding-inline: 24px;
-  }
-
-  .stat-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 .learner-edit-btn {
   margin-left: 0;
   cursor: pointer;

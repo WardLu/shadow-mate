@@ -28,6 +28,7 @@ export function installRapidActionGuard(root = document, cooldownMs = 500) {
     ".navbtn",
     "[data-mod]",
     "[data-go]",
+    "[data-go-home]",
     "[data-lvl]",
     ".cal-chip",
     "[data-print]",
@@ -35,6 +36,12 @@ export function installRapidActionGuard(root = document, cooldownMs = 500) {
     "[data-auth-mode]",
     "[data-toggle-password]",
     "[data-toggle-login-password]",
+    // 纯界面切换：折叠、页签、筛选、侧栏伸缩；步进器每次点击都是独立的 ±1，连点是正常操作
+    ".card-collapse-toggle",
+    "[role='tab']",
+    ".ledger-filter-chip",
+    "[data-nav-collapse]",
+    ".stepper-btn",
   ].join(",");
 
   const shouldBlock = (target) => {
