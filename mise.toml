@@ -1,4 +1,4 @@
 # 本地开发与生产发布统一在 Node 22：scripts/release/deploy-production.sh 会自行 mount
-# `mise where node@22`。CI 仍用 Node 24（.github/workflows 里的 setup-node），不受本文件影响。
+# `mise where node@22`。.nvmrc 与 .github/workflows 里的 setup-node 同样固定为 22。
 [tools]
 node = "22"
